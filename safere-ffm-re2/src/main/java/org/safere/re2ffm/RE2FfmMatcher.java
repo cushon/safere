@@ -31,6 +31,7 @@ public final class RE2FfmMatcher {
   // [start0, end0, start1, end1, ...]
   private int[] matchByteOffsets;
   private boolean matched;
+  private boolean hasGroups;
 
   // Current search position in UTF-8 bytes.
   private int searchBytePos;
@@ -52,6 +53,7 @@ public final class RE2FfmMatcher {
     this.byteToCharMap = null;
     this.matchByteOffsets = new int[2 * (pattern.numGroups() + 1)];
     this.matched = false;
+    this.hasGroups = false;
     this.searchBytePos = 0;
     return this;
   }
@@ -59,6 +61,7 @@ public final class RE2FfmMatcher {
   /** Resets this matcher to the beginning of the current input. */
   public RE2FfmMatcher reset() {
     this.matched = false;
+    this.hasGroups = false;
     this.searchBytePos = 0;
     return this;
   }
@@ -69,27 +72,14 @@ public final class RE2FfmMatcher {
    * @return true if the entire input matches
    */
   public boolean matches() {
-    try (Arena arena = Arena.ofConfined()) {
-      MemorySegment textSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, inputUtf8);
-      matched = Re2Shim.fullMatch(pattern.nativeHandle(), textSeg, inputUtf8.length);
-      if (matched) {
-        // For full match, group 0 spans the entire input.
-        matchByteOffsets[0] = 0;
-        matchByteOffsets[1] = inputUtf8.length;
-        // Capture groups need a real find call.
-        if (pattern.numGroups() > 0) {
-          MemorySegment matchesSeg = arena.allocate(ValueLayout.JAVA_INT, matchByteOffsets.length);
-          Re2Shim.find(
-              pattern.nativeHandle(),
-              textSeg,
-              inputUtf8.length,
-              0,
-              matchesSeg,
-              pattern.numGroups());
-          MemorySegment.copy(
-              matchesSeg, ValueLayout.JAVA_INT, 0, matchByteOffsets, 0, matchByteOffsets.length);
-        }
-      }
+    matched =
+        Re2Shim.fullMatch(
+            pattern.nativeHandle(), MemorySegment.ofArray(inputUtf8), inputUtf8.length);
+    if (matched) {
+      // For full match, group 0 spans the entire input.
+      matchByteOffsets[0] = 0;
+      matchByteOffsets[1] = inputUtf8.length;
+      hasGroups = (pattern.numGroups() == 0);
     }
     return matched;
   }
@@ -100,27 +90,22 @@ public final class RE2FfmMatcher {
    * @return true if a match was found
    */
   public boolean find() {
-    try (Arena arena = Arena.ofConfined()) {
-      MemorySegment textSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, inputUtf8);
-      MemorySegment matchesSeg = arena.allocate(ValueLayout.JAVA_INT, matchByteOffsets.length);
-      matched =
-          Re2Shim.find(
-              pattern.nativeHandle(),
-              textSeg,
-              inputUtf8.length,
-              searchBytePos,
-              matchesSeg,
-              pattern.numGroups());
-      if (matched) {
-        MemorySegment.copy(
-            matchesSeg, ValueLayout.JAVA_INT, 0, matchByteOffsets, 0, matchByteOffsets.length);
-        // Advance past this match for the next find() call.
-        // If the match was empty, advance by one byte to avoid infinite loop.
-        if (matchByteOffsets[1] == matchByteOffsets[0]) {
-          searchBytePos = matchByteOffsets[1] + 1;
-        } else {
-          searchBytePos = matchByteOffsets[1];
-        }
+    matched =
+        Re2Shim.find(
+            pattern.nativeHandle(),
+            MemorySegment.ofArray(inputUtf8),
+            inputUtf8.length,
+            searchBytePos,
+            MemorySegment.ofArray(matchByteOffsets),
+            0); // Query group 0 only
+    if (matched) {
+      hasGroups = (pattern.numGroups() == 0);
+      // Advance past this match for the next find() call.
+      // If the match was empty, advance by one byte to avoid infinite loop.
+      if (matchByteOffsets[1] == matchByteOffsets[0]) {
+        searchBytePos = matchByteOffsets[1] + 1;
+      } else {
+        searchBytePos = matchByteOffsets[1];
       }
     }
     return matched;
@@ -137,6 +122,24 @@ public final class RE2FfmMatcher {
     return find();
   }
 
+  private void loadGroups() {
+    if (hasGroups) {
+      return;
+    }
+    boolean ok =
+        Re2Shim.find(
+            pattern.nativeHandle(),
+            MemorySegment.ofArray(inputUtf8),
+            inputUtf8.length,
+            matchByteOffsets[0],
+            MemorySegment.ofArray(matchByteOffsets),
+            pattern.numGroups());
+    if (!ok) {
+      throw new IllegalStateException("Failed to load capture groups");
+    }
+    hasGroups = true;
+  }
+
   /**
    * Returns the matched text for the given group.
    *
@@ -145,6 +148,9 @@ public final class RE2FfmMatcher {
    */
   public String group(int group) {
     checkMatch();
+    if (group > 0) {
+      loadGroups();
+    }
     int startByte = matchByteOffsets[2 * group];
     int endByte = matchByteOffsets[2 * group + 1];
     if (startByte < 0) {
@@ -170,6 +176,9 @@ public final class RE2FfmMatcher {
    */
   public int start(int group) {
     checkMatch();
+    if (group > 0) {
+      loadGroups();
+    }
     int startByte = matchByteOffsets[2 * group];
     if (startByte < 0) return -1;
     return byteOffsetToCharOffset(startByte);
@@ -188,6 +197,9 @@ public final class RE2FfmMatcher {
    */
   public int end(int group) {
     checkMatch();
+    if (group > 0) {
+      loadGroups();
+    }
     int endByte = matchByteOffsets[2 * group + 1];
     if (endByte < 0) return -1;
     return byteOffsetToCharOffset(endByte);

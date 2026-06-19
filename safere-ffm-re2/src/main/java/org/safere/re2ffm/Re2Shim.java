@@ -87,7 +87,8 @@ final class Re2Shim {
                 ValueLayout.JAVA_BOOLEAN,
                 ValueLayout.ADDRESS,
                 ValueLayout.ADDRESS,
-                ValueLayout.JAVA_INT));
+                ValueLayout.JAVA_INT),
+            Linker.Option.critical(true));
 
     // bool re2_find(const re2_pattern_t* p, const char* text, int text_len,
     //              int startpos, int32_t* matches_out, int nmatches)
@@ -101,7 +102,8 @@ final class Re2Shim {
                 ValueLayout.JAVA_INT,
                 ValueLayout.JAVA_INT,
                 ValueLayout.ADDRESS,
-                ValueLayout.JAVA_INT));
+                ValueLayout.JAVA_INT),
+            Linker.Option.critical(true));
 
     // int re2_replace_all(const re2_pattern_t* p, const char* text, int text_len,
     //                    const char* rewrite, int rewrite_len,
