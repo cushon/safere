@@ -114,6 +114,93 @@ class DeclarativeBenchmarkPlanTest {
   }
 
   @Test
+  void labeledAxisSeparatesStableIdentityFromPatternValue() {
+    DeclarativeBenchmarkPlan plan =
+        parse(
+            """
+            {
+              "schemaVersion": 1,
+              "inputs": [],
+              "workloads": [{
+                  "id": "Synthetic.unicode.{regex}",
+                  "operation": "compile",
+                  "patterns": ["{regex}"],
+                  "axes": {
+                    "regex": [{"id": "letter", "value": "\\\\p{L}+"}]
+                  },
+                  "inputRepresentations": ["javaString"],
+                  "resultConsumption": "compiledObject",
+                  "measurement": {"mode": "compileOnly", "timingUnit": "microseconds"}
+              }]
+            }
+            """);
+    DeclarativeBenchmarkPlan.EngineDeclaration engine =
+        engine("string", DeclarativeBenchmarkPlan.InputRepresentation.JAVA_STRING);
+
+    DeclarativeBenchmarkPlan.ExpandedPlan expanded =
+        plan.expand(List.of(engine), EnumSet.of(DeclarativeBenchmarkPlan.Operation.COMPILE));
+
+    assertThat(expanded.workloads())
+        .singleElement()
+        .satisfies(
+            workload -> {
+              assertThat(workload.id()).isEqualTo("Synthetic.unicode.letter");
+              assertThat(workload.patterns()).containsExactly("\\p{L}+");
+            });
+  }
+
+  @Test
+  void labeledAxisUsesRuntimeValueInRecipeAndOperationArguments() {
+    DeclarativeBenchmarkPlan plan =
+        parse(
+            """
+            {
+              "schemaVersion": 1,
+              "inputs": [{
+                "id": "generated.{text}",
+                "axes": {
+                  "text": [{"id": "greeting", "value": "hello"}]
+                },
+                "recipe": {"kind": "literal", "text": "{text}"}
+              }],
+              "workloads": [{
+                "id": "Synthetic.replace.{replacement}",
+                "operation": "replaceAll",
+                "patterns": ["x"],
+                "inputs": ["generated.greeting"],
+                "axes": {
+                  "replacement": [{"id": "bang", "value": "$0!"}]
+                },
+                "arguments": {"replacement": "{replacement}"},
+                "inputRepresentations": ["javaString"],
+                "resultConsumption": "string",
+                "measurement": {"mode": "averageTime", "timingUnit": "nanoseconds"}
+              }]
+            }
+            """);
+    DeclarativeBenchmarkPlan.EngineDeclaration engine =
+        engine(
+            "string",
+            DeclarativeBenchmarkPlan.InputRepresentation.JAVA_STRING,
+            DeclarativeBenchmarkPlan.Feature.REPLACE);
+
+    DeclarativeBenchmarkPlan.ExpandedPlan expanded =
+        plan.expand(List.of(engine), EnumSet.of(DeclarativeBenchmarkPlan.Operation.REPLACE_ALL));
+
+    assertThat(plan.inputs()).containsKey("generated.greeting");
+    assertThat(plan.inputs().get("generated.greeting").recipe().arguments().get("text"))
+        .isEqualTo(new DeclarativeBenchmarkPlan.RecipeString("hello"));
+    assertThat(expanded.workloads())
+        .singleElement()
+        .satisfies(
+            workload -> {
+              assertThat(workload.id()).isEqualTo("Synthetic.replace.bang");
+              assertThat(workload.arguments().get("replacement"))
+                  .isEqualTo(new DeclarativeBenchmarkPlan.RecipeString("$0!"));
+            });
+  }
+
+  @Test
   void addingWorkloadAndEngineAxesProducesEveryCompatiblePair() {
     DeclarativeBenchmarkPlan plan =
         parse(
