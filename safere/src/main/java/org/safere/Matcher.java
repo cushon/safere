@@ -1711,6 +1711,20 @@ public final class Matcher implements MatchResult {
         return applyFailedMatchResult();
       }
       effectiveStart = idx;
+    } else {
+      Pattern.Latin1PrefixInfo ccPrefixLatin1 = parentPattern.charClassPrefixLatin1();
+      if (options.startAcceleration()
+          && !prog.hasWordBoundary()
+          && ccPrefixLatin1 != null
+          && text != null) {
+        int idx =
+            indexOfCharClassLatin1(
+                text, ccPrefixLatin1.bitmap(), ccPrefixLatin1.matchesNonLatin1(), searchFrom);
+        if (idx < 0) {
+          return applyFailedMatchResult();
+        }
+        effectiveStart = idx;
+      }
     }
 
     Pattern.StartAcceleration startAcceleration = parentPattern.startAcceleration();
@@ -2236,6 +2250,25 @@ public final class Matcher implements MatchResult {
       }
       char ch = text.charAt(i);
       if (ch < 128 && asciiMap[ch]) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private static int indexOfCharClassLatin1(
+      String text, long[] mask, boolean matchesNonLatin1, int fromIndex) {
+    int len = text.length();
+    for (int i = fromIndex; i < len; i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char ch = text.charAt(i);
+      if (ch < 256) {
+        if ((mask[ch >>> 6] & (1L << (ch & 63))) != 0) {
+          return i;
+        }
+      } else if (matchesNonLatin1) {
         return i;
       }
     }

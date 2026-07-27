@@ -15,7 +15,7 @@ import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 
-/** Benchmarks for JDK-compatible {@code \p{java...}} character classes. */
+/** Benchmarks for character classes including non-ASCII Latin-1 character class prefiltering. */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @State(Scope.Thread)
@@ -28,6 +28,11 @@ public class JavaCharacterClassBenchmark {
   private org.safere.Pattern saferePattern;
   private java.util.regex.Pattern jdkPattern;
 
+  // Latin-1 Character Class Prefilter Test Case ([\u00C0-\u00FF][a-z]+)
+  private org.safere.Pattern safeLatin1;
+  private java.util.regex.Pattern jdkLatin1;
+  private String latin1Text;
+
   @Setup
   public void setup() {
     inputs = new String[INPUT_COUNT];
@@ -37,6 +42,17 @@ public class JavaCharacterClassBenchmark {
     }
     saferePattern = org.safere.Pattern.compile(JAVA_LETTER);
     jdkPattern = java.util.regex.Pattern.compile(JAVA_LETTER);
+
+    // Latin-1 character class prefilter matching ([\u00C0-\u00FF][a-z]+)
+    String latin1Pattern = "[\\u00C0-\\u00FF][a-z]+";
+    safeLatin1 = org.safere.Pattern.compile(latin1Pattern);
+    jdkLatin1 = java.util.regex.Pattern.compile(latin1Pattern);
+    StringBuilder sbLatin1 = new StringBuilder(10240);
+    while (sbLatin1.length() < 10230) {
+      sbLatin1.append("abcdefghijklmnopqrstuvwxyz ");
+    }
+    sbLatin1.append("\u00C9cole "); // \u00C9 = É (Latin-1 uppercase E acute)
+    latin1Text = sbLatin1.toString();
   }
 
   @Benchmark
@@ -59,6 +75,18 @@ public class JavaCharacterClassBenchmark {
   @Benchmark
   public boolean findJavaLetter_jdk() {
     return jdkPattern.matcher(nextInput()).find();
+  }
+
+  // ===== Latin-1 Character Class Prefilter Find =====
+
+  @Benchmark
+  public boolean latin1Find_safere() {
+    return safeLatin1.matcher(latin1Text).find();
+  }
+
+  @Benchmark
+  public boolean latin1Find_jdk() {
+    return jdkLatin1.matcher(latin1Text).find();
   }
 
   private String nextInput() {

@@ -132,6 +132,7 @@ public final class Pattern implements Serializable {
   private final transient boolean startsWithGraphemeClusterBoundary;
   private final transient boolean hasInternalGraphemeClusterBoundary;
   private final transient boolean[] charClassPrefixAscii;
+  private final transient Latin1PrefixInfo charClassPrefixLatin1;
   private final transient StartAcceleration startAcceleration;
   private final transient KeywordAlternation keywordAlternation;
   private final transient EnginePathOptions enginePathOptions;
@@ -274,6 +275,7 @@ public final class Pattern implements Serializable {
       boolean startsWithGraphemeClusterBoundary,
       boolean hasInternalGraphemeClusterBoundary,
       boolean[] charClassPrefixAscii,
+      Latin1PrefixInfo charClassPrefixLatin1,
       StartAcceleration startAcceleration,
       KeywordAlternation keywordAlternation,
       int[] charClassMatchRanges,
@@ -337,6 +339,7 @@ public final class Pattern implements Serializable {
     this.startsWithGraphemeClusterBoundary = startsWithGraphemeClusterBoundary;
     this.hasInternalGraphemeClusterBoundary = hasInternalGraphemeClusterBoundary;
     this.charClassPrefixAscii = charClassPrefixAscii;
+    this.charClassPrefixLatin1 = charClassPrefixLatin1;
     this.startAcceleration = startAcceleration;
     this.keywordAlternation = keywordAlternation;
     this.enginePathOptions = enginePathOptions;
@@ -468,6 +471,8 @@ public final class Pattern implements Serializable {
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
     // Extract character-class prefix for acceleration when no literal prefix exists.
     boolean[] ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
+    Latin1PrefixInfo ccPrefixLatin1 =
+        (prefix == null) ? extractCharClassPrefixLatin1(metadataAst) : null;
     StartAcceleration startAcceleration =
         (prefix == null && ccPrefixAscii == null) ? extractStartAcceleration(metadataAst) : null;
     KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
@@ -494,6 +499,7 @@ public final class Pattern implements Serializable {
         startsWithGcb,
         hasInternalGcb,
         ccPrefixAscii,
+        ccPrefixLatin1,
         startAcceleration,
         keywordAlternation,
         ccMatch != null ? ccMatch.ranges : null,
@@ -1103,6 +1109,10 @@ public final class Pattern implements Serializable {
    */
   boolean[] charClassPrefixAscii() {
     return charClassPrefixAscii;
+  }
+
+  Latin1PrefixInfo charClassPrefixLatin1() {
+    return charClassPrefixLatin1;
   }
 
   /** Returns conservative start-position acceleration data, or {@code null} if unavailable. */
@@ -2069,6 +2079,126 @@ public final class Pattern implements Serializable {
     }
 
     return bitmap;
+  }
+
+  @SuppressWarnings("ArrayRecordComponent")
+  record Latin1PrefixInfo(long[] bitmap, boolean matchesNonLatin1) {}
+
+  private static Latin1PrefixInfo extractCharClassPrefixLatin1(Regexp re) {
+    long[] bitmap = new long[4];
+    boolean[] matchesNonLatin1 = new boolean[1];
+    Deque<Regexp> work = new ArrayDeque<>();
+    work.add(re);
+
+    while (!work.isEmpty()) {
+      Regexp node = work.removeLast();
+
+      for (; ; ) {
+        node = unwrapCaptures(node);
+        if (node == null) {
+          return null;
+        }
+        if (node.op == RegexpOp.CONCAT && node.nsub() > 0) {
+          node = node.subs.getFirst();
+          continue;
+        }
+        if (node.op == RegexpOp.PLUS || (node.op == RegexpOp.REPEAT && node.min >= 1)) {
+          node = node.sub();
+          continue;
+        }
+        break;
+      }
+
+      switch (node.op) {
+        case LITERAL -> {
+          if (!addLiteralPrefixLatin1(node.rune, node.flags, bitmap, matchesNonLatin1)) {
+            return null;
+          }
+        }
+        case LITERAL_STRING -> {
+          if (node.runes == null
+              || node.runes.length == 0
+              || !addLiteralPrefixLatin1(node.runes[0], node.flags, bitmap, matchesNonLatin1)) {
+            return null;
+          }
+        }
+        case CHAR_CLASS -> {
+          if (!addCharClassPrefixLatin1(node.charClass, bitmap, matchesNonLatin1)) {
+            return null;
+          }
+        }
+        case ALTERNATE -> {
+          if (node.nsub() == 0) {
+            return null;
+          }
+          for (Regexp sub : node.subs) {
+            work.addLast(sub);
+          }
+        }
+        default -> {
+          return null;
+        }
+      }
+    }
+
+    if (bitmap[0] != 0
+        || bitmap[1] != 0
+        || bitmap[2] != 0
+        || bitmap[3] != 0
+        || matchesNonLatin1[0]) {
+      return new Latin1PrefixInfo(bitmap, matchesNonLatin1[0]);
+    }
+    return null;
+  }
+
+  private static boolean addLiteralPrefixLatin1(
+      int rune, int flags, long[] bitmap, boolean[] matchesNonLatin1) {
+    if ((flags & ParseFlags.FOLD_CASE) != 0) {
+      int lower = Character.toLowerCase(rune);
+      int upper = Character.toUpperCase(rune);
+      if (lower >= 256 || upper >= 256) {
+        matchesNonLatin1[0] = true;
+      }
+      if (lower < 256) {
+        setLatin1Bit(bitmap, lower);
+      }
+      if (upper < 256) {
+        setLatin1Bit(bitmap, upper);
+      }
+      return true;
+    }
+    if (rune >= 256) {
+      matchesNonLatin1[0] = true;
+      return true;
+    }
+    setLatin1Bit(bitmap, rune);
+    return true;
+  }
+
+  private static boolean addCharClassPrefixLatin1(
+      CharClass cc, long[] bitmap, boolean[] matchesNonLatin1) {
+    if (cc == null || cc.isEmpty()) {
+      return false;
+    }
+    int[] run = cc.flatRanges();
+    for (int i = 0; i < run.length; i += 2) {
+      int lo = run[i];
+      int hi = run[i + 1];
+      if (hi >= 256) {
+        matchesNonLatin1[0] = true;
+      }
+      if (lo < 256) {
+        int end = Math.min(hi, 255);
+        for (int c = lo; c <= end; c++) {
+          setLatin1Bit(bitmap, c);
+        }
+      }
+    }
+    return true;
+  }
+
+  private static void setLatin1Bit(long[] bitmap, int codePoint) {
+    bitmap[codePoint >>> 6] |= (1L << (codePoint & 63));
   }
 
   private static boolean addLiteralPrefixAscii(int r, int flags, boolean[] bitmap) {
