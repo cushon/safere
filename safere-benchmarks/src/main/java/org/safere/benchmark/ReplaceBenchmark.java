@@ -65,6 +65,12 @@ public class ReplaceBenchmark {
   private String emptyText;
   private String emptyReplacement;
 
+  // Full-string anchored replacement with capture references
+  private org.safere.Pattern safeAnchoredReplace;
+  private java.util.regex.Pattern jdkAnchoredReplace;
+  private String anchoredText;
+  private String anchoredReplacement;
+
   @Setup
   public void setup() {
     BenchmarkData data = BenchmarkData.get();
@@ -120,6 +126,12 @@ public class ReplaceBenchmark {
     jdkEmpty = java.util.regex.Pattern.compile(emptyPattern);
     re2jEmpty = com.google.re2j.Pattern.compile(emptyPattern);
     re2ffmEmpty = org.safere.re2ffm.RE2FfmPattern.compile(emptyPattern);
+
+    String anchoredPattern = "^([a-z]+)@([a-z]+)\\.com$";
+    anchoredText = "user@example.com";
+    anchoredReplacement = "$1 AT $2 DOT com";
+    safeAnchoredReplace = org.safere.Pattern.compile(anchoredPattern);
+    jdkAnchoredReplace = java.util.regex.Pattern.compile(anchoredPattern);
   }
 
   // ===== Simple literal replaceFirst =====
@@ -301,5 +313,17 @@ public class ReplaceBenchmark {
     }
     m.appendTail(sb);
     return sb.toString();
+  }
+
+  // ===== Full-string Anchored Replace =====
+
+  @Benchmark
+  public String anchoredReplace_safere() {
+    return safeAnchoredReplace.matcher(anchoredText).replaceAll(anchoredReplacement);
+  }
+
+  @Benchmark
+  public String anchoredReplace_jdk() {
+    return jdkAnchoredReplace.matcher(anchoredText).replaceAll(anchoredReplacement);
   }
 }
