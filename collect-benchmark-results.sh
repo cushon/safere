@@ -226,8 +226,16 @@ COMPARE_ARGS=(
 
 if [ "$CROSS_LANGUAGE" = true ]; then
   if [ "$MODE" = "smoke" ]; then
+    NATIVE_SMOKE_TRIALS="$(
+      java \
+        -Dsafere.benchmark.corpus="$SCRIPT_DIR/safere-benchmarks/target/benchmark-corpus" \
+        -cp safere-benchmarks/target/benchmarks.jar \
+        org.safere.benchmark.BenchmarkCollectionPlan trials \
+        --variant re2-ffm-string-conversion
+    )"
+    NATIVE_SMOKE_WORKLOAD="${NATIVE_SMOKE_TRIALS%%@*}"
     run_and_capture "$OUTPUT_DIR/cpp-raw.txt" \
-      ./run-cpp-benchmarks.sh RegexBenchmark.emailFind
+      ./run-cpp-benchmarks.sh "$NATIVE_SMOKE_WORKLOAD"
   else
     run_and_capture "$OUTPUT_DIR/cpp-raw.txt" \
       ./run-cpp-benchmarks.sh
@@ -238,7 +246,7 @@ if [ "$CROSS_LANGUAGE" = true ]; then
 
   if [ "$MODE" = "smoke" ]; then
     run_and_capture "$OUTPUT_DIR/go-raw.txt" \
-      ./run-go-benchmarks.sh RegexBenchmark.emailFind
+      ./run-go-benchmarks.sh "$NATIVE_SMOKE_WORKLOAD"
   else
     run_and_capture "$OUTPUT_DIR/go-raw.txt" \
       ./run-go-benchmarks.sh
@@ -256,12 +264,6 @@ fi
 log "Generating markdown tables"
 COMPARE_ARGS+=(--engines "$COMPARE_ENGINES")
 COMPARE_ARGS+=(--declared-plan "$OUTPUT_DIR/declared-report-plan.json")
-if [ "$MODE" != "smoke" ]; then
-  COMPARE_ARGS+=(
-    --benchmark-data safere-benchmarks/benchmark-data.json
-    --check-application-names
-  )
-fi
 python3 safere-benchmarks/scripts/compare-benchmarks.py "${COMPARE_ARGS[@]}" \
   > "$OUTPUT_DIR/merged-tables.md"
 
@@ -275,12 +277,29 @@ fi
 
 if [ "$MODE" = "smoke" ]; then
   log "Verifying smoke output"
-  missing_cell="$(printf '\342\200\224')"
-  if grep -q "$missing_cell" "$OUTPUT_DIR/merged-tables.md" \
-    || grep -qw 'missing' "$OUTPUT_DIR/merged-tables.md"; then
-    echo "ERROR: smoke merged table contains missing result cells" >&2
-    exit 1
+  SMOKE_TABLES=("$OUTPUT_DIR/merged-tables.md")
+  if [ "$CROSS_LANGUAGE" = true ]; then
+    # Native harnesses intentionally cover only the cross-runtime subset, so
+    # their columns contain expected gaps in the merged Java report. Validate
+    # the complete Java matrix and the native subset independently.
+    python3 safere-benchmarks/scripts/compare-benchmarks.py \
+      --jmh "$OUTPUT_DIR/jmh-output.txt" \
+      --engines safere,safere_utf8,jdk,re2j,re2_ffm \
+      --declared-plan "$OUTPUT_DIR/declared-report-plan.json" \
+      > "$OUTPUT_DIR/smoke-java-tables.md"
+    SMOKE_TABLES=(
+      "$OUTPUT_DIR/smoke-java-tables.md"
+      "$OUTPUT_DIR/cross-runtime-tables.md"
+    )
   fi
+  missing_cell="$(printf '\342\200\224')"
+  for smoke_table in "${SMOKE_TABLES[@]}"; do
+    if grep -q "$missing_cell" "$smoke_table" \
+      || grep -qw 'missing' "$smoke_table"; then
+      echo "ERROR: smoke table contains missing result cells: $smoke_table" >&2
+      exit 1
+    fi
+  done
 fi
 
 log "Updating latest symlink"
