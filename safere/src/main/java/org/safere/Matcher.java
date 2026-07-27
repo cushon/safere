@@ -2756,6 +2756,11 @@ public final class Matcher implements MatchResult {
       return fastResult;
     }
 
+    String anchoredOnePassResult = replaceAnchoredOnePass(template);
+    if (anchoredOnePassResult != null) {
+      return anchoredOnePassResult;
+    }
+
     String result = replaceDfaOptimized(template, 1);
     if (result != null) {
       return result;
@@ -2768,6 +2773,74 @@ public final class Matcher implements MatchResult {
     StringBuilder sb = new StringBuilder(text.length());
     appendReplacement(sb, replacement);
     appendTail(sb);
+    return sb.toString();
+  }
+
+  private String replaceAnchoredOnePass(LazyTemplate template) {
+    boolean regionActive = (regionStart != 0 || regionEnd != text.length());
+    boolean isFullAnchored =
+        parentPattern.prog().anchorStart()
+            && (parentPattern.prog().anchorEnd() || parentPattern.prog().dollarAnchorEnd());
+
+    if (!enginePathOptions().onePass()
+        || !parentPattern.canOnePassFind()
+        || !isFullAnchored
+        || text.length() > ONEPASS_ANCHORED_TEXT_LIMIT
+        || regionActive
+        || searchFrom != 0) {
+      return null;
+    }
+
+    String prefix = parentPattern.prefix();
+    if (enginePathOptions().startAcceleration() && prefix != null) {
+      boolean foldCase = parentPattern.prefixFoldCase();
+      int firstIdx = foldCase ? indexOfIgnoreCase(text, prefix, 0) : text.indexOf(prefix, 0);
+      if (firstIdx < 0) {
+        return text;
+      }
+    }
+
+    boolean[] ccPrefixAscii = parentPattern.charClassPrefixAscii();
+    if (enginePathOptions().startAcceleration()
+        && !parentPattern.prog().hasWordBoundary()
+        && ccPrefixAscii != null) {
+      int idx = indexOfCharClass(text, ccPrefixAscii, 0);
+      if (idx < 0) {
+        return text;
+      }
+    }
+
+    int numCaptures = parentPattern.prog().numCaptures();
+    if (groups == null || groups.length < 2 * numCaptures) {
+      groups = new int[2 * numCaptures];
+    }
+    Arrays.fill(groups, -1);
+
+    diagnosticParticipation(MatchStrategy.ONE_PASS, StrategyRole.CANDIDATE_VERIFICATION);
+    if (parentPattern.numGroups() > 0) {
+      diagnosticCapture(MatchStrategy.ONE_PASS);
+    }
+
+    InputScanner scanner = activeScanner();
+    int[] result =
+        parentPattern.onePass().search(scanner, 0, text.length(), false, numCaptures, groups);
+
+    if (result == null) {
+      diagnosticBoundary(MatchStrategy.ONE_PASS);
+      return text;
+    }
+    diagnosticBoundary(MatchStrategy.ONE_PASS);
+    diagnosticIncrementMatchCount();
+
+    int matchStart = result[0];
+    int matchEnd = result[1];
+
+    StringBuilder sb = new StringBuilder(text.length());
+    sb.append(text, 0, matchStart);
+    groupZeroResolved = true;
+    capturesResolved = true;
+    applyReplacementTemplate(sb, template.get());
+    sb.append(text, matchEnd, text.length());
     return sb.toString();
   }
 
@@ -3093,6 +3166,11 @@ public final class Matcher implements MatchResult {
     String fastResult = charClassReplaceFastPath(template, Integer.MAX_VALUE);
     if (fastResult != null) {
       return fastResult;
+    }
+
+    String anchoredOnePassResult = replaceAnchoredOnePass(template);
+    if (anchoredOnePassResult != null) {
+      return anchoredOnePassResult;
     }
 
     String result = replaceDfaOptimized(template, Integer.MAX_VALUE);
