@@ -159,6 +159,36 @@ class DiagnosticsTest {
   }
 
   @Test
+  void latin1CharacterClassStartAccelerationReportsSuccessfulParticipation() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile("[\\u00C0-\\u00FF]x");
+
+    assertThat(pattern.matcher("ascii\u00C9x").find()).isTrue();
+
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(
+            event ->
+                assertThat(event.auxiliaryStrategies())
+                    .contains(
+                        new StrategyParticipation(
+                            MatchStrategy.CHARACTER_CLASS, StrategyRole.START_ACCELERATION)));
+  }
+
+  @Test
+  void latin1CharacterClassStartAccelerationReportsFailedBoundary() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile("[\\u00C0-\\u00FF]x");
+
+    assertThat(pattern.matcher("ascii").find()).isFalse();
+
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(
+            event -> assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.CHARACTER_CLASS));
+  }
+
+  @Test
   void ordinaryReplacementLoopSuppressesNestedFindEvents() {
     Pattern.setDiagnostics(diagnostics);
     EnginePathOptions exactOnly =

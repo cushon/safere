@@ -60,7 +60,16 @@ class PatternInternalTest {
     boolean[] prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
     assertThat(prefix['A']).isTrue();
+    assertThat(p.charClassPrefixLatin1()).isNull();
     assertThat(p.charClassMatchRanges()).isNotNull();
+  }
+
+  @Test
+  void nonAsciiLatin1CharacterClassUsesLatin1PrefixMetadata() {
+    Pattern p = Pattern.compile("[\\u00C0-\\u00FF]+");
+
+    assertThat(p.charClassPrefixAscii()).isNull();
+    assertThat(p.charClassPrefixLatin1()).isNotNull();
   }
 
   @Test

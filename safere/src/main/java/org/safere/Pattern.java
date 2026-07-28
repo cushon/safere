@@ -492,7 +492,9 @@ public final class Pattern implements Serializable {
     // Extract character-class prefix for acceleration when no literal prefix exists.
     boolean[] ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
     Latin1PrefixInfo ccPrefixLatin1 =
-        (prefix == null) ? extractCharClassPrefixLatin1(metadataAst) : null;
+        (prefix == null && ccPrefixAscii == null)
+            ? extractCharClassPrefixLatin1(metadataAst)
+            : null;
     StartAcceleration startAcceleration =
         (prefix == null && ccPrefixAscii == null) ? extractStartAcceleration(metadataAst) : null;
     KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
@@ -2196,8 +2198,23 @@ public final class Pattern implements Serializable {
     return bitmap;
   }
 
-  @SuppressWarnings("ArrayRecordComponent")
-  record Latin1PrefixInfo(long[] bitmap, boolean matchesNonLatin1) {}
+  static final class Latin1PrefixInfo {
+    private final long[] bitmap;
+    private final boolean matchesNonLatin1;
+
+    Latin1PrefixInfo(long[] bitmap, boolean matchesNonLatin1) {
+      this.bitmap = bitmap;
+      this.matchesNonLatin1 = matchesNonLatin1;
+    }
+
+    long[] bitmap() {
+      return bitmap;
+    }
+
+    boolean matchesNonLatin1() {
+      return matchesNonLatin1;
+    }
+  }
 
   private static Latin1PrefixInfo extractCharClassPrefixLatin1(Regexp re) {
     long[] bitmap = new long[4];

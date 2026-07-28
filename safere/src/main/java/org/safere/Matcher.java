@@ -1726,10 +1726,12 @@ public final class Matcher implements MatchResult {
           && !prog.hasWordBoundary()
           && ccPrefixLatin1 != null
           && text != null) {
+        diagnosticParticipation(MatchStrategy.CHARACTER_CLASS, StrategyRole.START_ACCELERATION);
         int idx =
             indexOfCharClassLatin1(
                 text, ccPrefixLatin1.bitmap(), ccPrefixLatin1.matchesNonLatin1(), searchFrom);
         if (idx < 0) {
+          diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
           return applyFailedMatchResult();
         }
         effectiveStart = idx;
