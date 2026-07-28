@@ -41,11 +41,13 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[1]
 BENCHMARK_JAR = REPO_ROOT / "safere-benchmarks" / "target" / "benchmarks.jar"
+BENCHMARK_CORPUS = REPO_ROOT / "safere-benchmarks" / "target" / "benchmark-corpus"
 RE2_SHIM_DIR = REPO_ROOT / "safere-ffm-re2" / "build"
 
 JVM_ARGS = [
     "--enable-native-access=ALL-UNNAMED",
     f"-Dre2shim.library.path={RE2_SHIM_DIR}",
+    f"-Dsafere.benchmark.corpus={BENCHMARK_CORPUS}",
 ]
 
 ENGINE_SUFFIXES = collections.OrderedDict(
@@ -57,6 +59,12 @@ ENGINE_SUFFIXES = collections.OrderedDict(
     ]
 )
 COMPETITORS = ("jdk", "re2j", "re2ffm")
+CROSS_ENGINE_VARIANTS = {
+    "safere-string": "safere",
+    "jdk-string": "jdk",
+    "re2j-string": "re2j",
+    "re2-ffm-string-conversion": "re2ffm",
+}
 
 
 @dataclass(frozen=True)
@@ -72,6 +80,13 @@ class Task:
     params: tuple[tuple[str, str], ...] = ()
 
 
+def cross_engine_task(name: str, workload_id: str, scaling: bool = False) -> Task:
+    benchmark = "CrossEngineScalingBenchmark.run" if scaling else "CrossEngineBenchmark.run"
+    parameter = "crossEngineScalingTrial" if scaling else "crossEngineTrial"
+    trials = ",".join(f"{workload_id}@{variant}" for variant in CROSS_ENGINE_VARIANTS)
+    return Task(name, benchmark, ((parameter, trials),))
+
+
 CONFIGS = {
     "A0": Config("A0", ("-f", "0", "-wi", "0", "-i", "1", "-r", "100ms")),
     "A1": Config("A1", ("-f", "0", "-wi", "1", "-w", "100ms", "-i", "1", "-r", "100ms")),
@@ -85,16 +100,30 @@ CONFIGS = {
 }
 
 CALIBRATION_TASKS = [
-    Task("literalMatch", "RegexBenchmark.literalMatch_"),
-    Task("emailFind", "RegexBenchmark.emailFind_"),
-    Task("urlExtraction", "ApplicationBenchmark.urlExtraction_"),
-    Task("pigLatinReplaceAll", "ReplaceBenchmark.pigLatinReplaceAll_"),
-    Task("tagFind128", "Issue481ScalingBenchmark.tagFind_", (("textSize", "128"),)),
-    Task("tagFind1MiB", "Issue481ScalingBenchmark.tagFind_", (("textSize", "1048576"),)),
-    Task("schemeExtract128", "Issue481ScalingBenchmark.schemeExtract_", (("textSize", "128"),)),
-    Task("schemeExtract1MiB", "Issue481ScalingBenchmark.schemeExtract_", (("textSize", "1048576"),)),
-    Task("splitWords10KiB", "Issue481ScalingBenchmark.splitWords_", (("textSize", "10240"),)),
-    Task("searchEasyFail100KiB", "SearchScalingBenchmark.searchEasyFail_", (("textSize", "102400"),)),
+    cross_engine_task("literalMatch", "RegexBenchmark.literalMatch"),
+    cross_engine_task("emailFind", "RegexBenchmark.emailFind"),
+    cross_engine_task("urlExtraction", "ApplicationBenchmark.urlExtraction"),
+    cross_engine_task("pigLatinReplaceAll", "ReplaceBenchmark.pigLatinReplaceAll"),
+    cross_engine_task("tagFind128", "Issue481ScalingBenchmark.tagFind.128", scaling=True),
+    cross_engine_task(
+        "tagFind1MiB", "Issue481ScalingBenchmark.tagFind.1048576", scaling=True
+    ),
+    cross_engine_task(
+        "schemeExtract128", "Issue481ScalingBenchmark.schemeExtract.128", scaling=True
+    ),
+    cross_engine_task(
+        "schemeExtract1MiB",
+        "Issue481ScalingBenchmark.schemeExtract.1048576",
+        scaling=True,
+    ),
+    cross_engine_task(
+        "splitWords10KiB", "Issue481ScalingBenchmark.splitWords.10240", scaling=True
+    ),
+    cross_engine_task(
+        "searchEasyFail100KiB",
+        "SearchScalingBenchmark.searchEasyFail.102400",
+        scaling=True,
+    ),
 ]
 
 
@@ -122,6 +151,10 @@ def run_command(cmd: list[str], cwd: Path, log_path: Path | None = None) -> None
 
 def build_benchmarks() -> None:
     run_command(["mvn", "install", "-DskipTests", "-q", "-f", str(REPO_ROOT / "pom.xml")], REPO_ROOT)
+    run_command(
+        [str(REPO_ROOT / "materialize-benchmark-inputs.sh"), "--no-build"],
+        REPO_ROOT,
+    )
 
 
 def selected_configs(names: str) -> list[Config]:
@@ -193,12 +226,23 @@ def load_result_file(path: Path):
     with path.open() as fh:
         data = json.load(fh)
     for item in data:
-        engine, base = parse_engine(item["benchmark"])
+        params = item.get("params", {})
+        trial = params.get("crossEngineTrial", params.get("crossEngineScalingTrial"))
+        if trial:
+            base, variant = trial.rsplit("@", 1)
+            engine = CROSS_ENGINE_VARIANTS[variant]
+            params = {
+                key: value
+                for key, value in params.items()
+                if key not in {"crossEngineTrial", "crossEngineScalingTrial"}
+            }
+        else:
+            engine, base = parse_engine(item["benchmark"])
         metric = item["primaryMetric"]
         yield {
             "benchmark": base,
             "engine": engine,
-            "params": params_key(item.get("params", {})),
+            "params": params_key(params),
             "score": float(metric["score"]),
             "error": float(metric.get("scoreError") or 0.0),
             "unit": metric["scoreUnit"],

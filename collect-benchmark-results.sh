@@ -142,67 +142,61 @@ if [ "$MODE" = "long" ]; then
 fi
 
 if [ "$MODE" = "smoke" ]; then
-  run_and_capture "$OUTPUT_DIR/java-01-core.txt" \
-    ./run-java-benchmarks.sh --smoke '^org\.safere\.benchmark\.RegexBenchmark\.literalMatch_'
+  run_and_capture "$OUTPUT_DIR/java-declared.txt" \
+    ./run-java-benchmarks.sh \
+      --smoke \
+      --declared
 
   log "Combining Java JMH output"
-  cp "$OUTPUT_DIR/java-01-core.txt" "$OUTPUT_DIR/jmh-output.txt"
-
-  clean_benchmark_module
-  run_and_capture "$OUTPUT_DIR/java-memory.txt" \
-    ./run-java-memory-benchmarks.sh --smoke '^org\.safere\.benchmark\.RegexBenchmark\.literalMatch_'
-else
-  run_and_capture "$OUTPUT_DIR/java-01-core.txt" \
-    ./run-java-benchmarks.sh \
-      "${JAVA_MODE_ARGS[@]}" \
-      '^org\.safere\.benchmark\.RegexBenchmark\.' \
-      '^org\.safere\.benchmark\.ApplicationBenchmark\.' \
-      '^org\.safere\.benchmark\.RealWorldRegexBenchmark\.' \
-      '^org\.safere\.benchmark\.CompileBenchmark\.'
-
-  run_and_capture "$OUTPUT_DIR/java-02-scaling.txt" \
-    ./run-java-benchmarks.sh \
-      "${JAVA_MODE_ARGS[@]}" \
-      '^org\.safere\.benchmark\.SearchScalingBenchmark\.' \
-      '^org\.safere\.benchmark\.Issue481ScalingBenchmark\.' \
-      '^org\.safere\.benchmark\.CaptureScalingBenchmark\.'
-
-  run_and_capture "$OUTPUT_DIR/java-03-http-replace-fanout.txt" \
-    ./run-java-benchmarks.sh \
-      "${JAVA_MODE_ARGS[@]}" \
-      '^org\.safere\.benchmark\.HttpBenchmark\.' \
-      '^org\.safere\.benchmark\.ReplaceBenchmark\.' \
-      '^org\.safere\.benchmark\.FanoutBenchmark\.'
-
-  run_and_capture "$OUTPUT_DIR/java-04-pathological.txt" \
-    ./run-java-benchmarks.sh \
-      "${JAVA_MODE_ARGS[@]}" \
-      '^org\.safere\.benchmark\.PathologicalBenchmark\.' \
-      '^org\.safere\.benchmark\.PathologicalComparisonBenchmark\.'
-
-  run_and_capture "$OUTPUT_DIR/java-05-patternset.txt" \
-    ./run-java-benchmarks.sh "${JAVA_MODE_ARGS[@]}" '^org\.safere\.benchmark\.PatternSetBenchmark\.'
-
-  log "Combining Java JMH output"
-  cat \
-    "$OUTPUT_DIR/java-01-core.txt" \
-    "$OUTPUT_DIR/java-02-scaling.txt" \
-    "$OUTPUT_DIR/java-03-http-replace-fanout.txt" \
-    "$OUTPUT_DIR/java-04-pathological.txt" \
-    "$OUTPUT_DIR/java-05-patternset.txt" \
-    > "$OUTPUT_DIR/jmh-output.txt"
+  cp "$OUTPUT_DIR/java-declared.txt" "$OUTPUT_DIR/jmh-output.txt"
 
   clean_benchmark_module
   run_and_capture "$OUTPUT_DIR/java-memory.txt" \
     ./run-java-memory-benchmarks.sh \
-      '^org\.safere\.benchmark\.RegexBenchmark\.' \
-      '^org\.safere\.benchmark\.SearchScalingBenchmark\.' \
-      '^org\.safere\.benchmark\.MemoryScalingBenchmark\.'
+      --smoke \
+      --declared
+else
+  run_and_capture "$OUTPUT_DIR/java-declared.txt" \
+    ./run-java-benchmarks.sh \
+      "${JAVA_MODE_ARGS[@]}" \
+      --declared
+
+  log "Combining Java JMH output"
+  cp "$OUTPUT_DIR/java-declared.txt" "$OUTPUT_DIR/jmh-output.txt"
+
+  clean_benchmark_module
+  run_and_capture "$OUTPUT_DIR/java-memory.txt" \
+    ./run-java-memory-benchmarks.sh \
+      --declared
 fi
 
-run_and_capture "$OUTPUT_DIR/java-pattern-memory.txt" \
-  java -Xms256m -Xmx256m -cp safere-benchmarks/target/benchmarks.jar \
-    org.safere.benchmark.MemoryBenchmark
+PATTERN_MEMORY_COMMAND=(
+  java -Xms256m -Xmx256m
+  -Dsafere.benchmark.corpus="$SCRIPT_DIR/safere-benchmarks/target/benchmark-corpus"
+  -cp safere-benchmarks/target/benchmarks.jar
+  org.safere.benchmark.MemoryBenchmark
+)
+if [ "$MODE" = "smoke" ]; then
+  RETAINED_TRIALS="$(
+    java \
+      -Dsafere.benchmark.corpus="$SCRIPT_DIR/safere-benchmarks/target/benchmark-corpus" \
+      -cp safere-benchmarks/target/benchmarks.jar \
+      org.safere.benchmark.SpecializedBenchmarkPlan retained-memory
+  )"
+  PATTERN_MEMORY_COMMAND+=("${RETAINED_TRIALS%%,*}")
+fi
+run_and_capture "$OUTPUT_DIR/java-pattern-memory.txt" "${PATTERN_MEMORY_COMMAND[@]}"
+
+log "Writing declared report plan"
+REPORT_PLAN_ARGS=(report-plan)
+if [ "$MODE" = "smoke" ]; then
+  REPORT_PLAN_ARGS+=(--smoke)
+fi
+java \
+  -Dsafere.benchmark.corpus="$SCRIPT_DIR/safere-benchmarks/target/benchmark-corpus" \
+  -cp safere-benchmarks/target/benchmarks.jar \
+  org.safere.benchmark.BenchmarkCollectionPlan "${REPORT_PLAN_ARGS[@]}" \
+  > "$OUTPUT_DIR/declared-report-plan.json"
 
 if [ "$OPENJDK_REGEX" = true ]; then
   OPENJDK_REGEX_ARGS=()
@@ -225,18 +219,26 @@ if [ "$OPENJDK_REGEX" = true ]; then
     ./run-openjdk-regex-benchmarks.sh "${OPENJDK_REGEX_ARGS[@]}"
 fi
 
-COMPARE_ENGINES="safere,jdk,re2j,re2_ffm"
+COMPARE_ENGINES="safere,safere_utf8,jdk,re2j,re2_ffm"
 COMPARE_ARGS=(
   --jmh "$OUTPUT_DIR/jmh-output.txt"
 )
 
 if [ "$CROSS_LANGUAGE" = true ]; then
   if [ "$MODE" = "smoke" ]; then
+    NATIVE_SMOKE_TRIALS="$(
+      java \
+        -Dsafere.benchmark.corpus="$SCRIPT_DIR/safere-benchmarks/target/benchmark-corpus" \
+        -cp safere-benchmarks/target/benchmarks.jar \
+        org.safere.benchmark.BenchmarkCollectionPlan trials \
+        --variant re2-ffm-string-conversion
+    )"
+    NATIVE_SMOKE_WORKLOAD="${NATIVE_SMOKE_TRIALS%%@*}"
     run_and_capture "$OUTPUT_DIR/cpp-raw.txt" \
-      ./run-cpp-benchmarks.sh RegexBenchmark.literalMatch
+      ./run-cpp-benchmarks.sh "$NATIVE_SMOKE_WORKLOAD"
   else
     run_and_capture "$OUTPUT_DIR/cpp-raw.txt" \
-      ./run-cpp-benchmarks.sh Regex Application RealWorldRegex Compile SearchScaling Issue481Scaling CaptureScaling Http Replace Fanout Pathological
+      ./run-cpp-benchmarks.sh
   fi
 
   log "Extracting C++ JSONL"
@@ -244,10 +246,10 @@ if [ "$CROSS_LANGUAGE" = true ]; then
 
   if [ "$MODE" = "smoke" ]; then
     run_and_capture "$OUTPUT_DIR/go-raw.txt" \
-      ./run-go-benchmarks.sh RegexBenchmark.literalMatch
+      ./run-go-benchmarks.sh "$NATIVE_SMOKE_WORKLOAD"
   else
     run_and_capture "$OUTPUT_DIR/go-raw.txt" \
-      ./run-go-benchmarks.sh Regex Application RealWorldRegex Compile SearchScaling Issue481Scaling CaptureScaling Http Replace Fanout Pathological
+      ./run-go-benchmarks.sh
   fi
 
   log "Extracting Go JSONL"
@@ -256,27 +258,48 @@ if [ "$CROSS_LANGUAGE" = true ]; then
   COMPARE_ARGS+=(
     --json "$OUTPUT_DIR/cpp-results.jsonl" "$OUTPUT_DIR/go-results.jsonl"
   )
-  COMPARE_ENGINES="safere,jdk,re2j,re2_ffm,re2_cpp,go"
+  COMPARE_ENGINES="safere,safere_utf8,jdk,re2j,re2_ffm,re2_cpp,go"
 fi
 
 log "Generating markdown tables"
 COMPARE_ARGS+=(--engines "$COMPARE_ENGINES")
-if [ "$MODE" != "smoke" ]; then
-  COMPARE_ARGS+=(
-    --benchmark-data safere-benchmarks/benchmark-data.json
-    --check-application-names
-  )
-fi
+COMPARE_ARGS+=(--declared-plan "$OUTPUT_DIR/declared-report-plan.json")
 python3 safere-benchmarks/scripts/compare-benchmarks.py "${COMPARE_ARGS[@]}" \
   > "$OUTPUT_DIR/merged-tables.md"
 
+if [ "$CROSS_LANGUAGE" = true ]; then
+  log "Generating separate cross-runtime context tables"
+  python3 safere-benchmarks/scripts/compare-benchmarks.py \
+    --json "$OUTPUT_DIR/cpp-results.jsonl" "$OUTPUT_DIR/go-results.jsonl" \
+    --engines re2_cpp,go \
+    > "$OUTPUT_DIR/cross-runtime-tables.md"
+fi
+
 if [ "$MODE" = "smoke" ]; then
   log "Verifying smoke output"
-  missing_cell="$(printf '\342\200\224')"
-  if grep -q "$missing_cell" "$OUTPUT_DIR/merged-tables.md"; then
-    echo "ERROR: smoke merged table contains missing result cells" >&2
-    exit 1
+  SMOKE_TABLES=("$OUTPUT_DIR/merged-tables.md")
+  if [ "$CROSS_LANGUAGE" = true ]; then
+    # Native harnesses intentionally cover only the cross-runtime subset, so
+    # their columns contain expected gaps in the merged Java report. Validate
+    # the complete Java matrix and the native subset independently.
+    python3 safere-benchmarks/scripts/compare-benchmarks.py \
+      --jmh "$OUTPUT_DIR/jmh-output.txt" \
+      --engines safere,safere_utf8,jdk,re2j,re2_ffm \
+      --declared-plan "$OUTPUT_DIR/declared-report-plan.json" \
+      > "$OUTPUT_DIR/smoke-java-tables.md"
+    SMOKE_TABLES=(
+      "$OUTPUT_DIR/smoke-java-tables.md"
+      "$OUTPUT_DIR/cross-runtime-tables.md"
+    )
   fi
+  missing_cell="$(printf '\342\200\224')"
+  for smoke_table in "${SMOKE_TABLES[@]}"; do
+    if grep -q "$missing_cell" "$smoke_table" \
+      || grep -qw 'missing' "$smoke_table"; then
+      echo "ERROR: smoke table contains missing result cells: $smoke_table" >&2
+      exit 1
+    fi
+  done
 fi
 
 log "Updating latest symlink"
@@ -293,6 +316,7 @@ Point the agent at:
 
 Key files:
   jmh-output.txt
+  declared-report-plan.json
   merged-tables.md
   java-memory.txt
   java-pattern-memory.txt
@@ -302,6 +326,7 @@ if [ "$CROSS_LANGUAGE" = true ]; then
   cat <<EOF
   cpp-results.jsonl
   go-results.jsonl
+  cross-runtime-tables.md
 EOF
 fi
 
