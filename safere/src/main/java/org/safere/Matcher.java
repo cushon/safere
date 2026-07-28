@@ -2765,7 +2765,7 @@ public final class Matcher implements MatchResult {
       return fastResult;
     }
 
-    String anchoredOnePassResult = replaceAnchoredOnePass(template);
+    String anchoredOnePassResult = replaceAnchoredOnePass(template, false);
     if (anchoredOnePassResult != null) {
       return anchoredOnePassResult;
     }
@@ -2785,7 +2785,7 @@ public final class Matcher implements MatchResult {
     return sb.toString();
   }
 
-  private String replaceAnchoredOnePass(LazyTemplate template) {
+  private String replaceAnchoredOnePass(LazyTemplate template, boolean replaceAll) {
     boolean regionActive = (regionStart != 0 || regionEnd != text.length());
     boolean isFullAnchored =
         parentPattern.prog().anchorStart()
@@ -2798,25 +2798,6 @@ public final class Matcher implements MatchResult {
         || regionActive
         || searchFrom != 0) {
       return null;
-    }
-
-    String prefix = parentPattern.prefix();
-    if (enginePathOptions().startAcceleration() && prefix != null) {
-      boolean foldCase = parentPattern.prefixFoldCase();
-      int firstIdx = foldCase ? indexOfIgnoreCase(text, prefix, 0) : text.indexOf(prefix, 0);
-      if (firstIdx < 0) {
-        return text;
-      }
-    }
-
-    boolean[] ccPrefixAscii = parentPattern.charClassPrefixAscii();
-    if (enginePathOptions().startAcceleration()
-        && !parentPattern.prog().hasWordBoundary()
-        && ccPrefixAscii != null) {
-      int idx = indexOfCharClass(text, ccPrefixAscii, 0);
-      if (idx < 0) {
-        return text;
-      }
     }
 
     int numCaptures = parentPattern.prog().numCaptures();
@@ -2836,6 +2817,7 @@ public final class Matcher implements MatchResult {
 
     if (result == null) {
       diagnosticBoundary(MatchStrategy.ONE_PASS);
+      applyFailedMatchResult();
       return text;
     }
     diagnosticBoundary(MatchStrategy.ONE_PASS);
@@ -2843,13 +2825,22 @@ public final class Matcher implements MatchResult {
 
     int matchStart = result[0];
     int matchEnd = result[1];
+    applyFullMatchResult(result);
 
     StringBuilder sb = new StringBuilder(text.length());
     sb.append(text, 0, matchStart);
-    groupZeroResolved = true;
-    capturesResolved = true;
     applyReplacementTemplate(sb, template.get());
     sb.append(text, matchEnd, text.length());
+    appendPos = matchEnd;
+    if (replaceAll) {
+      applyFailedMatchResult();
+      if (matchStart == matchEnd) {
+        searchFrom = matchEnd < regionEnd ? matchEnd + 1 : regionEnd + 1;
+        findExhaustedAfterTerminalEmptyMatch = matchEnd >= regionEnd;
+      } else {
+        searchFrom = matchEnd;
+      }
+    }
     return sb.toString();
   }
 
@@ -3177,7 +3168,7 @@ public final class Matcher implements MatchResult {
       return fastResult;
     }
 
-    String anchoredOnePassResult = replaceAnchoredOnePass(template);
+    String anchoredOnePassResult = replaceAnchoredOnePass(template, true);
     if (anchoredOnePassResult != null) {
       return anchoredOnePassResult;
     }
