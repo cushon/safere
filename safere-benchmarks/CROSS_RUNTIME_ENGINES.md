@@ -1,9 +1,9 @@
 # Cross-runtime benchmark engines
 
-The cross-runtime matrix contains native C++ RE2, PCRE2 JIT, Go `regexp`, and
-Rust `regex`. All runners read the same materialized inputs, Java-canonical
-patterns and replacement templates, and stable workload identities from
-`benchmark-data.json`.
+The cross-runtime matrix contains native C++ RE2, PCRE2 JIT, Go `regexp`, Rust
+`regex`, and .NET non-backtracking. All runners read materialized inputs,
+Java-canonical patterns and replacement templates, and stable workload
+identities derived from `benchmark-data.json`.
 
 ## Workload coverage
 
@@ -17,13 +17,14 @@ under the `pcre2_jit` engine ID would be misleading. Filters are forwarded
 unchanged to the selected engines.
 
 Go `regexp` and Rust `regex` run every workload implemented by their respective
-harnesses. Engine-specific syntax is selected through declared pattern and
-replacement profiles; unsupported syntax is not rewritten by a runner. A new
-cross-runtime workload must be added to every capable harness, or its missing
-engine operation must remain explicit during review.
+harnesses. .NET consumes the expanded workload plan and reports an explicit
+reason for every workload it cannot execute. Engine-specific syntax is selected
+through declared pattern and replacement profiles; unsupported syntax is not
+rewritten by a runner.
 
 These measurements are cross-runtime context rather than controlled same-JVM
-comparisons. C++, Go, and Rust consume the materialized UTF-8 bytes directly.
+comparisons. C++, Go, and Rust consume the materialized UTF-8 bytes directly;
+.NET decodes them to strings before measurement.
 
 ## Shared prerequisites
 
@@ -121,9 +122,31 @@ Run every workload supported by the Rust harness:
 ./run-rust-benchmarks.sh
 ```
 
+## .NET non-backtracking
+
+The .NET runner uses
+[`RegexOptions.NonBacktracking`](https://learn.microsoft.com/dotnet/api/system.text.regularexpressions.regexoptions)
+with `RegexOptions.CultureInvariant`.
+
+Additional requirement:
+
+| Tool | Requirement | Installation |
+|---|---|---|
+| .NET SDK | .NET SDK 8 or newer | [.NET installation guide](https://learn.microsoft.com/dotnet/core/install/) |
+
+The runtime-only package is insufficient because the wrapper builds the
+benchmark harness.
+
+Run every workload supported by the .NET adapter, or inspect its exclusions:
+
+```bash
+./run-dotnet-benchmarks.sh
+./run-dotnet-benchmarks.sh --list-exclusions
+```
+
 ## Smoke tests
 
-CI runs matching and, where supported, memory smoke workloads for every native
+CI runs matching and, where supported, memory smoke workloads for every
 engine. Fast local engine self-tests verify compilation, captures, replacement,
 and PCRE2 JIT generation:
 
@@ -149,4 +172,5 @@ filter:
 ./run-cpp-benchmarks.sh --engine pcre2-jit RegexBenchmark.literalMatch
 ./run-go-benchmarks.sh RegexBenchmark.literalMatch
 ./run-rust-benchmarks.sh RegexBenchmark.literalMatch
+./run-dotnet-benchmarks.sh --smoke
 ```

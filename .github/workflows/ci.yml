@@ -266,3 +266,25 @@ jobs:
 
       - name: Smoke test Rust regex benchmarks
         run: ./run-rust-benchmarks.sh RegexBenchmark.literalMatch
+
+  benchmark-smoke-test-dotnet:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          java-version-file: .sdkmanrc
+          cache: maven
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Smoke test .NET non-backtracking benchmarks
+        run: ./run-dotnet-benchmarks.sh --smoke RegexBenchmark.literalMatch
