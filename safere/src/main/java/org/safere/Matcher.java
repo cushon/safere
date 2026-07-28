@@ -2765,6 +2765,11 @@ public final class Matcher implements MatchResult {
       return fastResult;
     }
 
+    String anchoredOnePassResult = replaceAnchoredOnePass(template, false);
+    if (anchoredOnePassResult != null) {
+      return anchoredOnePassResult;
+    }
+
     String result = replaceDfaOptimized(template, 1);
     if (result != null) {
       return result;
@@ -2777,6 +2782,65 @@ public final class Matcher implements MatchResult {
     StringBuilder sb = new StringBuilder(text.length());
     appendReplacement(sb, replacement);
     appendTail(sb);
+    return sb.toString();
+  }
+
+  private String replaceAnchoredOnePass(LazyTemplate template, boolean replaceAll) {
+    boolean regionActive = (regionStart != 0 || regionEnd != text.length());
+    boolean isFullAnchored =
+        parentPattern.prog().anchorStart()
+            && (parentPattern.prog().anchorEnd() || parentPattern.prog().dollarAnchorEnd());
+
+    if (!enginePathOptions().onePass()
+        || !parentPattern.canOnePassFind()
+        || !isFullAnchored
+        || text.length() > ONEPASS_ANCHORED_TEXT_LIMIT
+        || regionActive
+        || searchFrom != 0) {
+      return null;
+    }
+
+    int numCaptures = parentPattern.prog().numCaptures();
+    if (groups == null || groups.length < 2 * numCaptures) {
+      groups = new int[2 * numCaptures];
+    }
+    Arrays.fill(groups, -1);
+
+    diagnosticParticipation(MatchStrategy.ONE_PASS, StrategyRole.CANDIDATE_VERIFICATION);
+    if (parentPattern.numGroups() > 0) {
+      diagnosticCapture(MatchStrategy.ONE_PASS);
+    }
+
+    InputScanner scanner = activeScanner();
+    int[] result =
+        parentPattern.onePass().search(scanner, 0, text.length(), false, numCaptures, groups);
+
+    if (result == null) {
+      diagnosticBoundary(MatchStrategy.ONE_PASS);
+      applyFailedMatchResult();
+      return text;
+    }
+    diagnosticBoundary(MatchStrategy.ONE_PASS);
+    diagnosticIncrementMatchCount();
+
+    int matchStart = result[0];
+    int matchEnd = result[1];
+    applyFullMatchResult(result);
+
+    StringBuilder sb = new StringBuilder(text.length());
+    sb.append(text, 0, matchStart);
+    applyReplacementTemplate(sb, template.get());
+    sb.append(text, matchEnd, text.length());
+    appendPos = matchEnd;
+    if (replaceAll) {
+      applyFailedMatchResult();
+      if (matchStart == matchEnd) {
+        searchFrom = matchEnd < regionEnd ? matchEnd + 1 : regionEnd + 1;
+        findExhaustedAfterTerminalEmptyMatch = matchEnd >= regionEnd;
+      } else {
+        searchFrom = matchEnd;
+      }
+    }
     return sb.toString();
   }
 
@@ -3102,6 +3166,11 @@ public final class Matcher implements MatchResult {
     String fastResult = charClassReplaceFastPath(template, Integer.MAX_VALUE);
     if (fastResult != null) {
       return fastResult;
+    }
+
+    String anchoredOnePassResult = replaceAnchoredOnePass(template, true);
+    if (anchoredOnePassResult != null) {
+      return anchoredOnePassResult;
     }
 
     String result = replaceDfaOptimized(template, Integer.MAX_VALUE);

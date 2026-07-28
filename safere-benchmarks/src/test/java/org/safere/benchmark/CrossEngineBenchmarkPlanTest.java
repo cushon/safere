@@ -48,7 +48,7 @@ class CrossEngineBenchmarkPlanTest {
             "HttpBenchmark.httpFull",
             "SearchScalingBenchmark.searchEasyFail.1024",
             "FanoutBenchmark.fanoutUnicode.1024");
-    assertThat(ids).hasSize(408);
+    assertThat(ids).hasSize(409);
   }
 
   @Test
@@ -77,9 +77,9 @@ class CrossEngineBenchmarkPlanTest {
                   .map(CrossEngineBenchmarkPlan.Trial::variant))
           .containsAnyOf(RegexEngineVariant.SAFERE_STRING, RegexEngineVariant.SAFERE_UTF8);
     }
-    assertThat(allTrials).hasSize(1455);
-    assertThat(plan.exclusions()).hasSize(585);
-    assertThat(accounted).hasSize(408 * RegexEngineVariant.values().length);
+    assertThat(allTrials).hasSize(1459);
+    assertThat(plan.exclusions()).hasSize(586);
+    assertThat(accounted).hasSize(409 * RegexEngineVariant.values().length);
   }
 
   @Test
@@ -93,7 +93,7 @@ class CrossEngineBenchmarkPlanTest {
             second.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(825);
+        .hasSize(829);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
@@ -329,6 +329,9 @@ class CrossEngineBenchmarkPlanTest {
             "ReplaceBenchmark.literalReplaceFirst@safere-string",
             "ReplaceBenchmark.literalReplaceFirst@jdk-string",
             "ReplaceBenchmark.literalReplaceFirst@re2j-string",
+            "ReplaceBenchmark.anchoredReplace@safere-string",
+            "ReplaceBenchmark.anchoredReplace@jdk-string",
+            "ReplaceBenchmark.anchoredReplace@re2j-string",
             "ReplaceBenchmark.manualReplaceAll@safere-string",
             "ReplaceBenchmark.manualReplaceAll@jdk-string",
             "ReplaceBenchmark.manualReplaceAll@re2j-string",
@@ -396,8 +399,8 @@ class CrossEngineBenchmarkPlanTest {
         .allMatch(runner -> !runner.trialIds().isEmpty())
         .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
         .doesNotHaveDuplicates()
-        .hasSize(1494);
-    assertThat(plan.reportPlan().trials()).hasSize(1494);
+        .hasSize(1498);
+    assertThat(plan.reportPlan().trials()).hasSize(1498);
     assertThat(plan.reportPlan().exclusions()).isNotEmpty().doesNotHaveDuplicates();
     assertThat(
             plan.reportPlan(true).trials().stream()

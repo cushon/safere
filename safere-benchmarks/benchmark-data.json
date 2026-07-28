@@ -1598,6 +1598,13 @@
       }
     },
     {
+      "id": "replace.anchoredReplace.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "user@example.com"
+      }
+    },
+    {
       "id": "matcherApi.lookingAt.input",
       "recipe": {
         "kind": "literal",
@@ -4113,6 +4120,35 @@
       "arguments": {
         "replacement": "x"
       }
+    },
+    {
+      "id": "ReplaceBenchmark.anchoredReplace",
+      "operation": "replaceAll",
+      "patterns": [
+        "^([a-z]+)@([a-z]+)\\.com$"
+      ],
+      "inputs": [
+        "replace.anchoredReplace.input"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "javaStringWithTimedUtf8Conversion"
+      ],
+      "inputRepresentationReason": "The Matcher replacement fast path operates on Java strings; preexisting UTF-8 replacement uses a separate API.",
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "$1 AT $2 DOT com"
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
     },
     {
       "id": "ReplaceBenchmark.manualReplaceAll",

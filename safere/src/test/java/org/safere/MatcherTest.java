@@ -1455,6 +1455,45 @@ class MatcherTest {
     }
 
     @Test
+    @DisplayName("anchored OnePass replaceFirst preserves the matched occurrence")
+    void anchoredOnePassReplaceFirstPreservesMatchedOccurrence() {
+      Matcher m = Pattern.compile("^([a-z]+)$").matcher("abc");
+
+      assertThat(m.replaceFirst("[$1]")).isEqualTo("[abc]");
+
+      assertThat(m.start()).isZero();
+      assertThat(m.end()).isEqualTo(3);
+      assertThat(m.group(1)).isEqualTo("abc");
+      assertThat(m.find()).isFalse();
+    }
+
+    @Test
+    @DisplayName("anchored OnePass replaceFirst preserves the append position")
+    void anchoredOnePassReplaceFirstPreservesAppendPosition() {
+      Matcher m = Pattern.compile("^([a-z]+)$").matcher("abc\n");
+
+      assertThat(m.replaceFirst("[$1]")).isEqualTo("[abc]\n");
+      StringBuilder sb = new StringBuilder();
+      m.appendTail(sb);
+
+      assertThat(sb).hasToString("\n");
+    }
+
+    @Test
+    @DisplayName("anchored OnePass replaceAll leaves the matcher exhausted")
+    void anchoredOnePassReplaceAllLeavesMatcherExhausted() {
+      Matcher m = Pattern.compile("^([a-z]+)$").matcher("abc\n");
+
+      assertThat(m.replaceAll("[$1]")).isEqualTo("[abc]\n");
+      StringBuilder sb = new StringBuilder();
+      m.appendTail(sb);
+
+      assertThat(sb).hasToString("\n");
+      assertThat(m.find()).isFalse();
+      assertThatThrownBy(m::start).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     @DisplayName("replaceFirst() preserves dollar-anchor match before trailing line terminator")
     void replaceFirstPreservesDollarAnchorBeforeTrailingLineTerminator() {
       Matcher m = Pattern.compile("([^a](\\s\\s)+)*$").matcher("a\n");
