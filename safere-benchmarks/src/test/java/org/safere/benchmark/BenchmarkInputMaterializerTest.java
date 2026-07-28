@@ -191,7 +191,7 @@ class BenchmarkInputMaterializerTest {
                       planEntry ->
                           Set.of("runnable", "excluded")
                               .contains(planEntry.get("status").getAsString())))
-           .as(engineId)
+          .as(engineId)
           .hasSize(486);
     }
     assertThat(
