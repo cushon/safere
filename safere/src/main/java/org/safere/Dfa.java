@@ -86,6 +86,7 @@ final class Dfa {
    * recomputation.
    */
   private static final class State {
+    final int id;
     final int[] insts; // sorted NFA instruction IDs (CHAR_RANGE, EMPTY_WIDTH, and MATCH only)
     final int flags;
     final boolean isHighestPriorityMatch;
@@ -98,16 +99,14 @@ final class Dfa {
     /** Transitions indexed by equivalence class; null entry = not yet computed. */
     final State[] next;
 
-    State(int[] insts, int flags, int[] wordBoundaryMatchIds, int numClasses) {
-      this(insts, flags, wordBoundaryMatchIds, numClasses, false);
-    }
-
     State(
+        int id,
         int[] insts,
         int flags,
         int[] wordBoundaryMatchIds,
         int numClasses,
         boolean isHighestPriorityMatch) {
+      this.id = id;
       this.insts = insts;
       this.flags = flags;
       this.wordBoundaryMatchIds = wordBoundaryMatchIds;
@@ -162,6 +161,10 @@ final class Dfa {
   private final int maxStates;
   private final boolean longest;
   private final boolean hasGraphemeSemantics;
+
+  /** Whether consuming transitions can depend on the absolute input position. */
+  private final boolean hasPositionDependentTransitions;
+
   private final int stateEmptyFlagsMask;
   private final int startCacheEmptyFlagsMask;
   private final int anchoredCacheBit;
@@ -179,6 +182,11 @@ final class Dfa {
    * happen for valid ASCII).
    */
   private final int[] asciiClassMap;
+
+  /** Cache for mapping code points >= 128 to their equivalence class. */
+  private final int[] cacheCps = new int[256];
+
+  private final int[] cacheClasses = new int[256];
 
   /** State cache: maps instruction-set + flags to canonical State instance. */
   private final Map<StateKey, State> cache = new HashMap<>();
@@ -224,6 +232,10 @@ final class Dfa {
   /** Per-search grapheme context. Set only while a search method is active. */
   private GraphemeSupport.Context graphemeContext;
 
+  private int[] transitions;
+  private State[] offsetToState;
+  private int nextStateId;
+
   // ---------------------------------------------------------------------------
   // Construction
   // ---------------------------------------------------------------------------
@@ -253,6 +265,7 @@ final class Dfa {
     this.maxStates = maxStates;
     this.longest = longest;
     this.hasGraphemeSemantics = prog.hasGraphemeSemantics();
+    this.hasPositionDependentTransitions = hasGraphemeSemantics || prog.hasTextAnchor();
     this.stateEmptyFlagsMask =
         hasGraphemeSemantics
             ? EmptyOp.ALL_FLAGS
@@ -268,11 +281,42 @@ final class Dfa {
     this.boundaries = setup.boundaries;
     this.numClasses = setup.numClasses;
     this.asciiClassMap = setup.asciiClassMap;
+    Arrays.fill(this.cacheCps, -1);
     this.expandVisitedGen = new int[prog.size()];
     this.expandStack = new int[prog.size()];
     this.expandFrontier = new int[prog.size()];
     this.computeBuf = new int[prog.size()];
-    this.deadState = new State(new int[0], 0, null, numClasses);
+    this.deadState = new State(0, EMPTY_INSTS, 0, null, numClasses, false);
+    this.nextStateId = 1;
+    this.transitions = new int[1024];
+    this.offsetToState = new State[1024];
+    addStateToFlatArrays(deadState);
+  }
+
+  private void addStateToFlatArrays(State s) {
+    int minTransLen = (s.id + 1) * numClasses;
+    if (minTransLen > transitions.length) {
+      int newLen = Math.max(transitions.length * 2, minTransLen);
+      transitions = Arrays.copyOf(transitions, newLen);
+      offsetToState = Arrays.copyOf(offsetToState, newLen);
+    }
+    offsetToState[s.id * numClasses] = s;
+  }
+
+  private void setTransition(int fromId, int cls, int toId) {
+    int fromBase = fromId * numClasses;
+    State toState = offsetToState[toId * numClasses];
+    boolean isMatch = toState.isMatch();
+    int storedId = toId * numClasses;
+    if (isMatch) {
+      storedId = -storedId;
+    }
+    transitions[fromBase + cls] = storedId;
+  }
+
+  private void addTransition(State from, int cls, State to) {
+    from.next[cls] = to;
+    setTransition(from.id, cls, to.id);
   }
 
   /**
@@ -391,11 +435,15 @@ final class Dfa {
     if (cp < 128) {
       return asciiClassMap[cp];
     }
-    int idx = Arrays.binarySearch(boundaries, cp);
-    if (idx >= 0) {
-      return idx;
+    int cacheIdx = cp & 255;
+    if (cacheCps[cacheIdx] == cp) {
+      return cacheClasses[cacheIdx];
     }
-    return (-idx - 1) - 1;
+    int idx = Arrays.binarySearch(boundaries, cp);
+    int cls = (idx >= 0) ? idx : (-idx - 1) - 1;
+    cacheCps[cacheIdx] = cp;
+    cacheClasses[cacheIdx] = cls;
+    return cls;
   }
 
   // ---------------------------------------------------------------------------
@@ -632,7 +680,10 @@ final class Dfa {
     }
     boolean isHighestPriorityMatch =
         insts.length > 0 && prog.inst(insts[0]).opCode == InstOp.OP_MATCH;
-    s = new State(insts, flags, wordBoundaryMatchIds, numClasses, isHighestPriorityMatch);
+    s =
+        new State(
+            nextStateId++, insts, flags, wordBoundaryMatchIds, numClasses, isHighestPriorityMatch);
+    addStateToFlatArrays(s);
     cache.put(lookupKey.copy(), s);
     return s;
   }
@@ -644,11 +695,14 @@ final class Dfa {
    * prefix loop that the compiler generates. This keeps all start positions alive within the DFA
    * state without needing to restart at each position (unlike the NFA).
    */
-  private State startState(String text, int pos, boolean anchored) {
+  private State startState(InputScanner text, int pos, boolean anchored) {
     return startState(text, pos, anchored, false);
   }
 
-  private int emptyFlags(String text, int pos) {
+  private int emptyFlags(InputScanner text, int pos) {
+    if (!hasGraphemeSemantics && !prog.hasWordBoundary() && !prog.hasTextAnchor()) {
+      return 0;
+    }
     int flags =
         Nfa.emptyFlags(
             text,
@@ -689,7 +743,7 @@ final class Dfa {
    * @param reverseContext if true, FLAG_LAST_WORD is set based on the character AT pos (the char to
    *     the right of where a reverse scan begins), rather than the character BEFORE pos
    */
-  private State startState(String text, int pos, boolean anchored, boolean reverseContext) {
+  private State startState(InputScanner text, int pos, boolean anchored, boolean reverseContext) {
     int startInst = anchored ? prog.start() : prog.startUnanchored();
     if (startInst == 0) {
       return deadState;
@@ -765,43 +819,34 @@ final class Dfa {
    * transitions (near end-of-text) bypass the cache. The end-of-text sentinel ({@code cp < 0}) is
    * always safe to cache because it always represents "at text end".
    */
-  private int positionDependentThreshold(String text) {
+  private int positionDependentThreshold(InputScanner text) {
     if (hasGraphemeSemantics) {
       return 0;
     }
-    int len = text.length();
-    if (prog.unixLines()) {
-      return (len > 0 && text.charAt(len - 1) == '\n') ? len - 1 : len;
-    }
-    if (len >= 2 && text.charAt(len - 2) == '\r' && text.charAt(len - 1) == '\n') {
-      return len - 2;
-    }
-    if (len > 0 && Nfa.isLineTerminator(text.charAt(len - 1))) {
-      return len - 1;
-    }
-    return len;
+    // BEGIN_TEXT is represented by the start state, and BEGIN_LINE is normally derived from the
+    // consumed character. The only position-dependent transitions are therefore near text end:
+    // END_TEXT/DOLLAR_END, plus the exception that a final line terminator must not create a
+    // BEGIN_LINE assertion past the end of the input.
+    return trailingLineStart(text);
   }
 
-  /**
-   * Returns the start position of the trailing line terminator at the end of text, or {@code
-   * text.length()} if no trailing line terminator exists. This is the earliest position where
-   * non-multiline {@code $} can match before a trailing line terminator.
-   */
-  private int trailingLineStart(String text) {
+  private int trailingLineStart(InputScanner text) {
     int len = text.length();
     if (len == 0) {
       return len;
     }
-    if (prog.unixLines()) {
-      return (text.charAt(len - 1) == '\n') ? len - 1 : len;
+    int trailing = text.trailingLineTerminatorStart(prog.unixLines(), len);
+    return trailing >= 0 ? trailing : len;
+  }
+
+  private boolean transitionDependsOnPosition(int cp, int position, int threshold) {
+    if (!hasPositionDependentTransitions || cp < 0) {
+      return false;
     }
-    if (len >= 2 && text.charAt(len - 2) == '\r' && text.charAt(len - 1) == '\n') {
-      return len - 2;
-    }
-    if (Nfa.isLineTerminator(text.charAt(len - 1))) {
-      return len - 1;
-    }
-    return len;
+    // In the default line-ending mode, BEGIN_LINE after a carriage return depends on whether the
+    // following character is a line feed. A transition cached for CRLF therefore cannot be reused
+    // for a standalone carriage return, or vice versa.
+    return position >= threshold || (!prog.unixLines() && cp == '\r');
   }
 
   /**
@@ -811,7 +856,7 @@ final class Dfa {
    * Collects the successor instructions, expands them through empty transitions, and returns the
    * resulting state.
    */
-  private State computeNext(State s, int cp, String text, int nextPos) {
+  private State computeNext(State s, int cp, InputScanner text, int nextPos) {
     // At end of text, re-expand the current instruction set with end-of-text empty flags.
     // This allows empty-width assertions like $ and \b to fire.
     if (cp < 0) {
@@ -892,7 +937,7 @@ final class Dfa {
       endLineHere = Nfa.isLineTerminator(cp);
       // Don't fire END_LINE at the \n of an atomic \r\n pair. END_LINE fires before the \r
       // (the start of the pair), not between \r and \n.
-      if (endLineHere && cp == '\n' && nextPos >= 2 && text.charAt(nextPos - 2) == '\r') {
+      if (endLineHere && cp == '\n' && nextPos >= 2 && text.asciiAt(nextPos - 2) == '\r') {
         endLineHere = false;
       }
     }
@@ -1069,13 +1114,13 @@ final class Dfa {
    *     back to NFA)
    */
   static SearchResult search(Prog prog, String text, boolean anchored, boolean longest) {
-    return search(prog, text, 0, anchored, longest, DEFAULT_MAX_STATES);
+    return search(prog, new StringInputScanner(text), 0, anchored, longest, DEFAULT_MAX_STATES);
   }
 
   /** Search with explicit state budget, starting from position 0. */
   static SearchResult search(
       Prog prog, String text, boolean anchored, boolean longest, int maxStates) {
-    return search(prog, text, 0, anchored, longest, maxStates);
+    return search(prog, new StringInputScanner(text), 0, anchored, longest, maxStates);
   }
 
   /**
@@ -1091,6 +1136,25 @@ final class Dfa {
    */
   static SearchResult search(
       Prog prog, String text, int startPos, boolean anchored, boolean longest, int maxStates) {
+    return search(prog, new StringInputScanner(text), startPos, anchored, longest, maxStates);
+  }
+
+  static SearchResult search(Prog prog, InputScanner text, boolean anchored, boolean longest) {
+    return search(prog, text, 0, anchored, longest, DEFAULT_MAX_STATES);
+  }
+
+  static SearchResult search(
+      Prog prog, InputScanner text, boolean anchored, boolean longest, int maxStates) {
+    return search(prog, text, 0, anchored, longest, maxStates);
+  }
+
+  static SearchResult search(
+      Prog prog,
+      InputScanner text,
+      int startPos,
+      boolean anchored,
+      boolean longest,
+      int maxStates) {
     Dfa dfa = new Dfa(prog, maxStates, buildSetup(prog), longest);
     return dfa.doSearch(text, startPos, anchored, longest);
   }
@@ -1101,6 +1165,14 @@ final class Dfa {
    * @see #doSearch(String, int, boolean, boolean)
    */
   SearchResult doSearch(String text, boolean anchored, boolean longest) {
+    return doSearch(new StringInputScanner(text), 0, anchored, longest);
+  }
+
+  SearchResult doSearch(String text, int startPos, boolean anchored, boolean longest) {
+    return doSearch(new StringInputScanner(text), startPos, anchored, longest);
+  }
+
+  SearchResult doSearch(InputScanner text, boolean anchored, boolean longest) {
     return doSearch(text, 0, anchored, longest);
   }
 
@@ -1118,7 +1190,7 @@ final class Dfa {
    * @return search result with positions relative to {@code text}, or {@code null} if the DFA
    *     exceeded its state budget
    */
-  SearchResult doSearch(String text, int startPos, boolean anchored, boolean longest) {
+  SearchResult doSearch(InputScanner text, int startPos, boolean anchored, boolean longest) {
     graphemeContext = GraphemeSupport.Context.create(text, hasGraphemeSemantics);
     int textLen = text.length();
     // If the compiled program requires end-of-text matching (stripped $ or \z), enforce it.
@@ -1158,33 +1230,42 @@ final class Dfa {
       return new SearchResult(matched, matchEnd);
     }
 
+    int[] transitions = this.transitions;
+    State[] offsetToState = this.offsetToState;
+    int[] asciiClassMap = this.asciiClassMap;
     int pos = startPos;
     // Fast path: loop through ASCII characters (characters < 128)
     while (pos < textLen) {
       int limit = Math.min(textLen, posDepThreshold - 1);
+      int sId = s.id * numClasses;
       while (pos < limit) {
-        char ch = text.charAt(pos);
-        if (ch >= 128) {
+        int ch = text.asciiAt(pos);
+        if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
           break;
         }
         int cls = asciiClassMap[ch];
-        State ns = s.next[cls];
-        if (ns == null || ns == deadState) {
+        int nsId = transitions[sId + cls];
+        if (nsId == 0) {
           break;
         }
-        if (ns.isMatch() && !needEndMatch) {
-          boolean useBefore =
-              (ns.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
-          int endPos = useBefore ? pos : pos + 1;
-          if (!longest && ns.isHighestPriorityMatch) {
-            return new SearchResult(true, endPos);
+        if (nsId < 0) {
+          nsId = -nsId;
+          State ns = offsetToState[nsId];
+          if (ns.isMatch() && !needEndMatch) {
+            boolean useBefore =
+                (ns.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
+            int endPos = useBefore ? pos : pos + 1;
+            if (!longest && ns.isHighestPriorityMatch) {
+              return new SearchResult(true, endPos);
+            }
+            matched = true;
+            matchEnd = endPos;
           }
-          matched = true;
-          matchEnd = endPos;
         }
-        s = ns;
+        sId = nsId;
         pos++;
       }
+      s = offsetToState[sId];
 
       if (pos >= textLen) {
         break;
@@ -1193,8 +1274,8 @@ final class Dfa {
         break; // fall back to general loop for position-dependent flags
       }
 
-      char ch = text.charAt(pos);
-      if (ch >= 128) {
+      int ch = text.asciiAt(pos);
+      if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
         break; // fall back to general loop
       }
       int cls = asciiClassMap[ch];
@@ -1205,7 +1286,9 @@ final class Dfa {
         if (ns == null) {
           return null; // budget exceeded
         }
-        s.next[cls] = ns;
+        addTransition(s, cls, ns);
+        transitions = this.transitions;
+        offsetToState = this.offsetToState;
       }
       s = ns;
       if (s == deadState) {
@@ -1235,21 +1318,18 @@ final class Dfa {
       int nextPos;
       int cls;
       if (pos < textLen) {
-        char ch = text.charAt(pos);
-        if (ch < 128) {
-          // ASCII fast path: no surrogate handling, use pre-computed class map.
-          cp = ch;
+        int singleUnitCodePoint = text.singleUnitCodePointAt(pos);
+        if (singleUnitCodePoint >= 0) {
+          cp = singleUnitCodePoint;
           nextPos = pos + 1;
-          cls = asciiClassMap[ch];
-        } else if (Character.isHighSurrogate(ch)
-            && pos + 1 < textLen
-            && Character.isLowSurrogate(text.charAt(pos + 1))) {
-          cp = Character.toCodePoint(ch, text.charAt(pos + 1));
-          nextPos = pos + 2;
-          cls = classOf(cp);
+          cls =
+              singleUnitCodePoint < asciiClassMap.length
+                  ? asciiClassMap[singleUnitCodePoint]
+                  : classOf(singleUnitCodePoint);
         } else {
-          cp = ch;
-          nextPos = pos + 1;
+          long decoded = text.decodeForward(pos);
+          cp = InputScanner.codePoint(decoded);
+          nextPos = InputScanner.position(decoded);
           cls = classOf(cp);
         }
       } else {
@@ -1265,7 +1345,7 @@ final class Dfa {
       // is always safe to cache because it always means "at text end".
       int effectiveNextPos = Math.min(nextPos, textLen);
       State ns;
-      if (cp >= 0 && effectiveNextPos >= posDepThreshold) {
+      if (transitionDependsOnPosition(cp, effectiveNextPos, posDepThreshold)) {
         ns = computeNext(s, cp, text, effectiveNextPos);
         if (ns == null) {
           return null; // budget exceeded
@@ -1277,7 +1357,7 @@ final class Dfa {
           if (ns == null) {
             return null; // budget exceeded
           }
-          s.next[cls] = ns;
+          addTransition(s, cls, ns);
         }
       }
 
@@ -1349,6 +1429,11 @@ final class Dfa {
    */
   SearchResult doSearchReverse(
       String text, int endPos, int startLimit, boolean anchored, boolean longest) {
+    return doSearchReverse(new StringInputScanner(text), endPos, startLimit, anchored, longest);
+  }
+
+  SearchResult doSearchReverse(
+      InputScanner text, int endPos, int startLimit, boolean anchored, boolean longest) {
     graphemeContext = GraphemeSupport.Context.create(text, hasGraphemeSemantics);
     // The reversed program's "start of text" corresponds to endPos (the right edge of the match
     // region), and its "end of text" corresponds to startLimit (the left edge). We scan from
@@ -1384,51 +1469,61 @@ final class Dfa {
       return new SearchResult(matched, matchStart);
     }
 
+    int[] transitions = this.transitions;
+    State[] offsetToState = this.offsetToState;
+    int[] asciiClassMap = this.asciiClassMap;
     int pos = endPos;
     // Fast path: scan backward through ASCII characters
     while (pos > startLimit) {
       if (pos <= posDepThreshold) {
         int limit = startLimit;
+        int sId = s.id * numClasses;
         while (pos > limit) {
-          char ch = text.charAt(pos - 1);
-          if (ch >= 128) {
+          int ch = text.asciiAt(pos - 1);
+          if (ch < 0 || transitionDependsOnPosition(ch, pos - 1, posDepThreshold)) {
             break;
           }
           int cls = asciiClassMap[ch];
-          State ns = s.next[cls];
-          if (ns == null || ns == deadState) {
+          int nsId = transitions[sId + cls];
+          if (nsId == 0) {
             break;
           }
-          if (ns.isMatch()) {
-            if ((ns.flags & FLAG_MATCH_BEFORE) != 0) {
-              if (pos >= startLimit && (!needEndMatch || pos == startLimit)) {
-                boolean alreadyMatched = matched;
-                matched = true;
-                matchStart = longest && alreadyMatched ? Math.min(matchStart, pos) : pos;
-                ambiguous |= (ns.flags & FLAG_MATCH_AFTER_DEFERRED) != 0;
-                if (!longest && !needEndMatch) {
-                  return new SearchResult(true, matchStart, ambiguous);
+          if (nsId < 0) {
+            nsId = -nsId;
+            State ns = offsetToState[nsId];
+            if (ns.isMatch()) {
+              int flags = ns.flags;
+              if ((flags & FLAG_MATCH_BEFORE) != 0) {
+                if (pos >= startLimit && (!needEndMatch || pos == startLimit)) {
+                  boolean alreadyMatched = matched;
+                  matched = true;
+                  matchStart = longest && alreadyMatched ? Math.min(matchStart, pos) : pos;
+                  ambiguous |= (flags & FLAG_MATCH_AFTER_DEFERRED) != 0;
+                  if (!longest && !needEndMatch) {
+                    return new SearchResult(true, matchStart, ambiguous);
+                  }
                 }
               }
-            }
-            boolean hasOnlyBeforeMatch =
-                (ns.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
-            int prevPos = pos - 1;
-            if (!hasOnlyBeforeMatch) {
-              if (prevPos >= startLimit && (!needEndMatch || prevPos == startLimit)) {
-                boolean alreadyMatched = matched;
-                matched = true;
-                matchStart = longest && alreadyMatched ? Math.min(matchStart, prevPos) : prevPos;
-                ambiguous |= (ns.flags & FLAG_MATCH_AFTER_DEFERRED) != 0;
-                if (!longest && !needEndMatch) {
-                  return new SearchResult(true, matchStart, ambiguous);
+              boolean hasOnlyBeforeMatch =
+                  (flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
+              int prevPos = pos - 1;
+              if (!hasOnlyBeforeMatch) {
+                if (prevPos >= startLimit && (!needEndMatch || prevPos == startLimit)) {
+                  boolean alreadyMatched = matched;
+                  matched = true;
+                  matchStart = longest && alreadyMatched ? Math.min(matchStart, prevPos) : prevPos;
+                  ambiguous |= (flags & FLAG_MATCH_AFTER_DEFERRED) != 0;
+                  if (!longest && !needEndMatch) {
+                    return new SearchResult(true, matchStart, ambiguous);
+                  }
                 }
               }
             }
           }
-          s = ns;
+          sId = nsId;
           pos--;
         }
+        s = offsetToState[sId];
       }
 
       if (pos <= startLimit) {
@@ -1438,8 +1533,8 @@ final class Dfa {
         break; // fall back to general loop for position-dependent context
       }
 
-      char ch = text.charAt(pos - 1);
-      if (ch >= 128) {
+      int ch = text.asciiAt(pos - 1);
+      if (ch < 0 || transitionDependsOnPosition(ch, pos - 1, posDepThreshold)) {
         break; // fall back
       }
       int cls = asciiClassMap[ch];
@@ -1450,7 +1545,9 @@ final class Dfa {
         if (ns == null) {
           return null; // budget exceeded
         }
-        s.next[cls] = ns;
+        addTransition(s, cls, ns);
+        transitions = this.transitions;
+        offsetToState = this.offsetToState;
       }
       s = ns;
       if (s == deadState) {
@@ -1496,22 +1593,18 @@ final class Dfa {
       int cls;
       if (pos > 0) {
         // Read the code point just before pos (scanning backward).
-        char ch = text.charAt(pos - 1);
-        if (ch < 128) {
-          // ASCII fast path.
-          cp = ch;
+        int singleUnitCodePoint = text.singleUnitCodePointBefore(pos);
+        if (singleUnitCodePoint >= 0) {
+          cp = singleUnitCodePoint;
           prevPos = pos - 1;
-          cls = asciiClassMap[ch];
-        } else if (Character.isLowSurrogate(ch)
-            && pos - 2 >= startLimit
-            && Character.isHighSurrogate(text.charAt(pos - 2))) {
-          // Surrogate pair: the low surrogate is at pos-1, high at pos-2.
-          cp = Character.toCodePoint(text.charAt(pos - 2), ch);
-          prevPos = pos - 2;
-          cls = classOf(cp);
+          cls =
+              singleUnitCodePoint < asciiClassMap.length
+                  ? asciiClassMap[singleUnitCodePoint]
+                  : classOf(singleUnitCodePoint);
         } else {
-          cp = ch;
-          prevPos = pos - 1;
+          long decoded = text.decodeBackward(pos);
+          cp = InputScanner.codePoint(decoded);
+          prevPos = InputScanner.position(decoded);
           cls = classOf(cp);
         }
       } else {
@@ -1524,7 +1617,7 @@ final class Dfa {
       // Bypass cache for position-dependent transitions (same invariant as doSearch).
       int effectivePrevPos = Math.max(prevPos, startLimit);
       State ns;
-      if (cp >= 0 && effectivePrevPos >= posDepThreshold) {
+      if (transitionDependsOnPosition(cp, effectivePrevPos, posDepThreshold)) {
         ns = computeNext(s, cp, text, effectivePrevPos);
         if (ns == null) {
           return null; // budget exceeded
@@ -1536,7 +1629,7 @@ final class Dfa {
           if (ns == null) {
             return null; // budget exceeded
           }
-          s.next[cls] = ns;
+          addTransition(s, cls, ns);
         }
       }
       s = ns;
@@ -1611,6 +1704,10 @@ final class Dfa {
    * states reached along the way.
    */
   ManyMatchResult doSearchMany(String text, boolean anchored) {
+    return doSearchMany(new StringInputScanner(text), anchored);
+  }
+
+  ManyMatchResult doSearchMany(InputScanner text, boolean anchored) {
     graphemeContext = GraphemeSupport.Context.create(text, hasGraphemeSemantics);
     int textLen = text.length();
     boolean needEndMatch = prog.anchorEnd();
@@ -1640,50 +1737,66 @@ final class Dfa {
     }
 
     if (s != deadState) {
+      int[] transitions = this.transitions;
+      State[] offsetToState = this.offsetToState;
+      int[] asciiClassMap = this.asciiClassMap;
       int pos = 0;
       // Fast path: scan forward through ASCII characters
+      int sId = s.id * numClasses;
       while (pos < textLen) {
         if (pos + 1 >= posDepThreshold) {
           break; // fall back to general loop for position-dependent context
         }
-        char ch = text.charAt(pos);
-        if (ch >= 128) {
+        int ch = text.asciiAt(pos);
+        if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
           break; // fall back
         }
         int cls = asciiClassMap[ch];
-        State ns = s.next[cls];
-        if (ns == null) {
+        int nsId = transitions[sId + cls];
+        if (nsId == 0) {
+          s = offsetToState[sId];
           int effectiveNextPos = pos + 1;
-          ns = computeNext(s, ch, text, effectiveNextPos);
+          State ns = computeNext(s, ch, text, effectiveNextPos);
           if (ns == null) {
             return null; // budget exceeded
           }
-          s.next[cls] = ns;
+          addTransition(s, cls, ns);
+          transitions = this.transitions;
+          offsetToState = this.offsetToState;
+          nsId = transitions[sId + cls];
         }
-        s = ns;
-        if (s == deadState) {
+        if (nsId == 0) { // deadState
           break;
         }
-        if (s.isMatch()) {
-          boolean useBefore =
-              (s.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
-          int endPos = useBefore ? pos : pos + 1;
+        int realNsId;
+        if (nsId < 0) {
+          realNsId = -nsId;
+          State ns = offsetToState[realNsId];
+          int flags = ns.flags;
+          int endPos =
+              ((flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE)
+                  ? pos
+                  : pos + 1;
           if (!needEndMatch
               || endPos == textLen
               || (trailingTermStart < textLen && endPos == trailingTermStart)) {
             // Collect match IDs from the state's instructions.
-            for (int id : collectMatchIds(s.insts)) {
+            for (int id : collectMatchIds(ns.insts)) {
               seen.set(id);
             }
-            if (s.wordBoundaryMatchIds != null) {
-              for (int id : s.wordBoundaryMatchIds) {
+            if (ns.wordBoundaryMatchIds != null) {
+              for (int id : ns.wordBoundaryMatchIds) {
                 seen.set(id);
               }
             }
           }
+        } else {
+          realNsId = nsId;
         }
+        sId = realNsId;
         pos++;
       }
+      s = offsetToState[sId];
 
       // General loop
       while (pos <= textLen) {
@@ -1691,20 +1804,18 @@ final class Dfa {
         int nextPos;
         int cls;
         if (pos < textLen) {
-          char ch = text.charAt(pos);
-          if (ch < 128) {
-            cp = ch;
+          int singleUnitCodePoint = text.singleUnitCodePointAt(pos);
+          if (singleUnitCodePoint >= 0) {
+            cp = singleUnitCodePoint;
             nextPos = pos + 1;
-            cls = asciiClassMap[ch];
-          } else if (Character.isHighSurrogate(ch)
-              && pos + 1 < textLen
-              && Character.isLowSurrogate(text.charAt(pos + 1))) {
-            cp = Character.toCodePoint(ch, text.charAt(pos + 1));
-            nextPos = pos + 2;
-            cls = classOf(cp);
+            cls =
+                singleUnitCodePoint < asciiClassMap.length
+                    ? asciiClassMap[singleUnitCodePoint]
+                    : classOf(singleUnitCodePoint);
           } else {
-            cp = ch;
-            nextPos = pos + 1;
+            long decoded = text.decodeForward(pos);
+            cp = InputScanner.codePoint(decoded);
+            nextPos = InputScanner.position(decoded);
             cls = classOf(cp);
           }
         } else {
@@ -1716,7 +1827,7 @@ final class Dfa {
         // Bypass cache for position-dependent transitions (same invariant as doSearch).
         int effectiveNextPos = Math.min(nextPos, textLen);
         State ns;
-        if (cp >= 0 && effectiveNextPos >= posDepThreshold) {
+        if (transitionDependsOnPosition(cp, effectiveNextPos, posDepThreshold)) {
           ns = computeNext(s, cp, text, effectiveNextPos);
           if (ns == null) {
             return null; // budget exceeded
@@ -1728,7 +1839,7 @@ final class Dfa {
             if (ns == null) {
               return null; // budget exceeded
             }
-            s.next[cls] = ns;
+            addTransition(s, cls, ns);
           }
         }
         s = ns;
@@ -1794,7 +1905,7 @@ final class Dfa {
     return firstMatch < firstActive;
   }
 
-  private boolean canStopAtFirstMatch(State s, String text, int pos, boolean needEndMatch) {
+  private boolean canStopAtFirstMatch(State s, InputScanner text, int pos, boolean needEndMatch) {
     if (!needEndMatch) {
       return s.isHighestPriorityMatch;
     }
@@ -1821,17 +1932,11 @@ final class Dfa {
     return false;
   }
 
-  private static int codePointAt(String text, int pos) {
+  private static int codePointAt(InputScanner text, int pos) {
     if (pos >= text.length()) {
       return -1;
     }
-    char ch = text.charAt(pos);
-    if (Character.isHighSurrogate(ch)
-        && pos + 1 < text.length()
-        && Character.isLowSurrogate(text.charAt(pos + 1))) {
-      return Character.toCodePoint(ch, text.charAt(pos + 1));
-    }
-    return ch;
+    return text.codePointAt(pos);
   }
 
   private static boolean isRequiredEndMatch(

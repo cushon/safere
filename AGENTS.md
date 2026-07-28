@@ -46,7 +46,7 @@ mvn -pl safere test -q
 mvn install -DskipTests -q
 
 # Run benchmarks (see Benchmarking section below)
-./run-java-benchmarks.sh '^org\.safere\.benchmark\.RegexBenchmark\.'
+./run-java-benchmarks.sh '^org\.safere\.benchmark\.CrossEngineBenchmark\.'
 ```
 
 ## Code Style
@@ -165,6 +165,10 @@ bug you find immediately**. Do not just report it and move on. The workflow is:
   exactly which verification has run and which verification has not run.
   Use `@DisabledForCrosscheck("reason")` on original SafeRE tests for cases
   that should be visible as disabled only in generated crosscheck coverage.
+- When creating PRs, use a normal descriptive title. Do not prefix titles with
+  `[codex]` unless explicitly requested.
+- Create ready-for-review PRs by default. Use draft PRs only when explicitly
+  requested or when the work is known to be incomplete.
 - **Update existing PRs — do not close and reopen.** Push commits (or
   force-push if rebasing) to the existing branch. Closing and reopening PRs
   loses review context and clutters the issue tracker.
@@ -294,38 +298,33 @@ Benchmark classes have no `@Fork`, `@Warmup`, or `@Measurement` annotations
 
 ```bash
 # BENCHMARKS.md updates and routine benchmark evidence
-./run-java-benchmarks.sh '^org\.safere\.benchmark\.RegexBenchmark\.'
+./run-java-benchmarks.sh '^org\.safere\.benchmark\.CrossEngineBenchmark\.'
 
 # Longer confirmation run for close, surprising, or important comparisons
-./run-java-benchmarks.sh --long '^org\.safere\.benchmark\.RegexBenchmark\.'
+./run-java-benchmarks.sh --long '^org\.safere\.benchmark\.CrossEngineBenchmark\.'
+
+# Separately licensed OpenJDK-derived suite (requires an external checkout)
+./run-openjdk-regex-benchmarks.sh
+
+# Full collection; includes the external OpenJDK-derived suite by default
+./collect-benchmark-results.sh
 ```
 
 Arguments after the mode flag are passed directly to JMH as benchmark regex
 filters.
 
-**Run benchmarks in batches, not all at once.** Run 2–3 benchmark classes
-per invocation and collect results incrementally:
+**Run benchmarks sequentially.** Use the declarative collection plan to select
+generic runners and trials:
 
 ```bash
-./run-java-benchmarks.sh \
-  '^org\.safere\.benchmark\.RegexBenchmark\.' \
-  '^org\.safere\.benchmark\.CompileBenchmark\.'
-./run-java-benchmarks.sh \
-  '^org\.safere\.benchmark\.SearchScalingBenchmark\.' \
-  '^org\.safere\.benchmark\.CaptureScalingBenchmark\.'
-./run-java-benchmarks.sh \
-  '^org\.safere\.benchmark\.HttpBenchmark\.' \
-  '^org\.safere\.benchmark\.ReplaceBenchmark\.' \
-  '^org\.safere\.benchmark\.FanoutBenchmark\.'
-./run-java-benchmarks.sh \
-  '^org\.safere\.benchmark\.PathologicalBenchmark\.' \
-  '^org\.safere\.benchmark\.PathologicalComparisonBenchmark\.'
+./run-java-benchmarks.sh --declared
+./run-java-benchmarks.sh --smoke --declared
 ```
 
 **Extract summary tables from JMH output** using grep:
 
 ```bash
-./run-java-benchmarks.sh '^org\.safere\.benchmark\.RegexBenchmark\.' 2>&1 \
+./run-java-benchmarks.sh '^org\.safere\.benchmark\.CrossEngineBenchmark\.' 2>&1 \
   | grep -E '^(Benchmark|[A-Z][a-zA-Z]+Benchmark\.)'
 ```
 
@@ -338,39 +337,52 @@ per invocation and collect results incrementally:
 - **Use `--long` for confirmation.** Long mode uses 2 forks, 3 warmup × 1s,
   and 5 measurement × 1s. Use it for close, surprising, or especially important
   comparisons where the extra runtime is justified.
-- **Pathological benchmarks always use `-f 0`.** The script handles this
-  automatically — PathologicalBenchmark and PathologicalComparisonBenchmark
-  run without forking because the JDK engine can hang on large inputs.
-- **Default benchmark collection is Java-only.** `./collect-benchmark-results.sh`
-  collects SafeRE, JDK, RE2/J, and RE2-FFM results by default. Use
-  `./collect-benchmark-results.sh --cross-language` only when broader C++ RE2
-  and Go `regexp` context is explicitly needed.
+- **Declared `noFork` workloads always use `-f 0`.** The generic collection
+  runner derives this setting from the measurement profile.
+- **Default benchmark collection includes both Java suites.**
+  `./collect-benchmark-results.sh` collects SafeRE, JDK, RE2/J, and RE2-FFM
+  results from SafeRE's suite, then SafeRE/JDK results from the external
+  OpenJDK-derived suite. Use `./collect-benchmark-results.sh --cross-language`
+  only when broader C++ RE2 and Go `regexp` context is explicitly needed.
+- **OpenJDK-derived benchmarks stay external.** Their GPL-2.0-only repository
+  must be checked out separately and must not be vendored or added to SafeRE's
+  Maven modules. The collection script runs them as a separate result set
+  against the current SafeRE snapshot. A request to run "our benchmarks" or the
+  "full benchmarks" includes this external suite unless the user explicitly
+  narrows the requested scope. Use it when broad matching, search, compilation,
+  or rejection changes could affect its workloads.
 - **NEVER run benchmarks in parallel.** All benchmark runs must run
   sequentially, one at a time. Parallel runs compete for CPU, cache, and memory
   bandwidth, producing inaccurate results.
 - **Do not commit optimizations that do not improve benchmark results.**
   Every optimization must be validated with before/after benchmarks.
-- **All harnesses share `benchmark-data.json`.** This ensures identical
-  patterns, inputs, and parameters across Java, C++, and Go. Edit the
-  JSON file to change workloads; never hardcode values in the harness.
+- **`benchmark-data.json` is the only checked-in workload source.** Benchmark
+  scripts materialize it into a resolved manifest and exact UTF-8 input files
+  before execution. Java, C++, Go, and other harnesses read only those
+  generated artifacts. Edit the JSON file to change workloads; never hardcode
+  values or generation logic in a harness.
 
 ### Summary Statistics
 
-When reporting benchmark results in BENCHMARKS.md, always compute and report
-**geometric mean of the speed ratios** (SafeRE time / competitor time) as the
-single summary statistic. Report three geomeans, against JDK, RE2/J, and
-RE2-FFM:
+The structure and workload groupings in `BENCHMARKS.md` must reflect the
+current benchmark suite and the questions the report is intended to answer.
+Do not preserve a fixed list of summary categories, benchmark methods, or
+competitors after the suite or reporting goals have changed.
 
-1. **Core workloads geomean** — includes: literalMatch, emailFind, findInText,
-   alternationFind, charClassMatch, captureGroups, pigLatinReplace, and
-   httpFull. These are focused microbenchmarks that isolate engine behavior.
-2. **Application workloads geomean** — includes the data-driven validation,
-   parsing, extraction, scanning, and redaction cases from
-   `ApplicationBenchmark`. This answers: "Is SafeRE competitive on ordinary
-   application regex use?"
-3. **Pathological/scaling geomean** — includes: pathological, searchHardFail,
-   and other benchmarks that demonstrate linear-time guarantees or scaling
-   behavior. This answers: "Does the linear-time guarantee matter?"
+When reporting an aggregate comparison:
+
+- Define its workload membership, parameter coverage, and weighting clearly.
+- Include the benchmark families that materially affect the report's
+  conclusions; do not silently omit important or inconvenient results.
+- Keep semantically different groups separate when combining them would hide
+  useful behavior. Label cross-runtime comparisons as context rather than
+  controlled same-runtime comparisons.
+- Compute the **geometric mean of speed ratios** rather than an arithmetic mean
+  of ratios. Use `SafeRE time / competitor time`, so values below 1.0 mean
+  SafeRE is faster.
+- Report the raw geomean and a readable interpretation such as "N× faster" or
+  "N× slower." Explain when a small number of extreme cases materially
+  influences the aggregate.
 
 **Why geometric mean:** It is the only mean consistent under inversion
 (geomean(A/B) = 1/geomean(B/A)), treats multiplicative improvements
@@ -378,9 +390,16 @@ symmetrically, and is the standard in systems benchmarking (SPEC, DaCapo,
 Renaissance). Do not use arithmetic mean of ratios — it is biased by outliers
 and inconsistent under inversion.
 
-**Ratio convention:** Express as `SafeRE / competitor` so values < 1.0 mean
-SafeRE is faster. For readability, also express as "SafeRE is N× faster" or
-"SafeRE is N× slower" alongside the raw geomean.
+`BENCHMARKS.md` must be self-contained for checked-in benchmark claims. Raw
+outputs may remain local, but do not make an ignored or machine-local artifact
+the only place where a reported result or supporting table can be inspected.
+
+When updating `BENCHMARKS.md`, update the external OpenJDK-derived benchmark
+section from the same collection. Keep its results and aggregates separate from
+SafeRE's native suite, and record the SafeRE commit, external benchmark
+repository commit, pinned OpenJDK source commit, SafeRE version, and JDK
+version. Do not leave the previous external results in place after publishing a
+new full collection.
 
 ### Writing About Benchmark Results
 

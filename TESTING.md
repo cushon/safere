@@ -183,30 +183,22 @@ mvn verify -pl safere-crosscheck -Pcrosscheck-public-api-tests
 mvn test -pl safere-fuzz
 ```
 
-## Unicode Compile Benchmarks
+## Compile and Cold-Start Benchmarks
 
-The Unicode table-generation work uses three benchmark shapes:
+Compile and cold-start workloads are selected from the declarative plan:
 
 ```bash
-# Warm repeated compile throughput.
-./run-java-benchmarks.sh '^org\.safere\.benchmark\.UnicodeCompileBenchmark\.'
+# Run every declared execution profile with the standard schedule.
+./run-java-benchmarks.sh --declared
 
-# Fresh-fork first compile. This preserves lazy Unicode table initialization
-# costs that ordinary JMH warmup would hide.
-./run-java-benchmarks.sh --first-compile '^org\.safere\.benchmark\.UnicodeFirstCompileBenchmark\.'
-
-# Plain JVM cold-start harness for short-lived CLI-style workloads.
-mvn install -DskipTests -q
-java -cp safere-benchmarks/target/benchmarks.jar \
-  org.safere.benchmark.UnicodeColdStartMain \
-  safere '\p{L}+' 0
+# Smoke one plan-selected trial per generic execution profile.
+./run-java-benchmarks.sh --smoke --declared
 ```
 
-Use `UnicodeCompileBenchmark` to check steady-state per-compile work after
-tables are already initialized. Use `UnicodeFirstCompileBenchmark` and
-`UnicodeColdStartMain` to measure the first-use cost seen by short-lived
-processes. Do not mix these results with publication-quality steady-state
-benchmark tables unless they are clearly labeled as cold-start measurements.
+`compileOnly` declarations measure steady-state per-compile work after
+initialization. `singleShotColdStart` declarations use a fresh fork and retain
+the first-use cost seen by short-lived processes. Do not combine those timing
+groups.
 
 Coverage reports are generated at
 `safere/target/site/jacoco/index.html`.  Note that JaCoCo is disabled
@@ -263,3 +255,26 @@ When a fuzzer finds a valid SafeRE/JDK divergence or crash, minimize the input
 and add a normal JUnit regression test before fixing the bug. See
 [safere-fuzz/README.md](../safere-fuzz/README.md) for target descriptions and
 workflow details.
+
+## Trino UTF-8 Validation
+
+The UTF-8 API is externally validated by the local Trino migration recorded in
+`design/TRINO_SAFERE_COMPATIBILITY.md`. At SafeRE revision
+`8e2394facf9c50ac3d51a15b6485b496cb591d2c`, install the artifact and run the
+selected Trino coverage at revision
+`4e070738fd759ef7cb909177bda24884b7d00dc1`:
+
+```bash
+mvn install -DskipTests -q
+
+cd ../trino
+./mvnw -pl core/trino-main \
+  -Dtest=TestSafeReRegexpFunctions,TestRe2jRegexpFunctions,TestFeaturesConfig,TestTypeCoercion,TestConnectorExpressionTranslator \
+  test -q
+```
+
+This covers Trino's complete SafeRE and retained RE2/J regex-function surfaces
+plus the adjacent configuration, coercion, and planner translation paths. A full
+`./mvnw -pl core/trino-main test -q` run was also attempted. It is not recorded
+as passing because Docker-dependent OAuth tests cannot start without Docker and
+an unrelated node-state poller remained alive after those failures.

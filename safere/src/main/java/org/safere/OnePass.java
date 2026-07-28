@@ -59,7 +59,7 @@ final class OnePass {
 
   private static final int EMPTY_BITS = 10;
   private static final int CAP_SHIFT = EMPTY_BITS;
-  private static final int INDEX_SHIFT = CAP_SHIFT + MAX_CAP_REGS;
+  private static final int INDEX_SHIFT = CAP_SHIFT + MAX_CAP_REGS + 1;
   private static final long EMPTY_MASK = (1L << EMPTY_BITS) - 1;
   private static final long CAP_REG_MASK = (1L << MAX_CAP_REGS) - 1;
   private static final long NO_ACTION = -1L;
@@ -69,12 +69,23 @@ final class OnePass {
    * {@code (action & CONDITION_MASK) == 0}, both the empty-flags check and the capture application
    * can be skipped entirely — a single branch instead of two.
    */
-  private static final long CONDITION_MASK = (1L << INDEX_SHIFT) - 1;
+  private static final long CONDITION_MASK = (1L << (CAP_SHIFT + MAX_CAP_REGS)) - 1;
+
+  private static final long MATCH_WINS_MASK = 1L << (CAP_SHIFT + MAX_CAP_REGS);
 
   private static long encodeAction(int nextState, int capMask, int emptyFlags) {
-    return ((long) nextState << INDEX_SHIFT)
-        | ((capMask & CAP_REG_MASK) << CAP_SHIFT)
-        | (emptyFlags & EMPTY_MASK);
+    return encodeAction(nextState, capMask, emptyFlags, false);
+  }
+
+  private static long encodeAction(int nextState, int capMask, int emptyFlags, boolean matchWins) {
+    long action =
+        ((long) nextState << INDEX_SHIFT)
+            | ((capMask & CAP_REG_MASK) << CAP_SHIFT)
+            | (emptyFlags & EMPTY_MASK);
+    if (matchWins) {
+      action |= MATCH_WINS_MASK;
+    }
+    return action;
   }
 
   // -------------------------------------------------------------------------
@@ -212,6 +223,12 @@ final class OnePass {
       // stack entries: [instId, capMask, emptyFlags]
       stack.push(new int[] {instId, 0, 0});
 
+      int[] nextStates = new int[numClasses];
+      Arrays.fill(nextStates, -1);
+      int[] capMasks = new int[numClasses];
+      int[] emptyFlagsList = new int[numClasses];
+      boolean matched = false;
+
       while (!stack.isEmpty()) {
         int[] entry = stack.pop();
         int id = entry[0];
@@ -274,13 +291,16 @@ final class OnePass {
                 worklist.add(ip.out);
               }
 
-              long action = encodeAction(nextState, capMask, emptyFlags);
-              long existing = tables.action(stateIndex, cls);
-              if (existing != NO_ACTION && existing != action) {
+              if (nextStates[cls] != -1
+                  && (nextStates[cls] != nextState
+                      || capMasks[cls] != capMask
+                      || emptyFlagsList[cls] != emptyFlags)) {
                 // Two different transitions for the same equivalence class -> not one-pass.
                 return null;
               }
-              tables.setAction(stateIndex, cls, action);
+              nextStates[cls] = nextState;
+              capMasks[cls] = capMask;
+              emptyFlagsList[cls] = emptyFlags;
             }
           }
           case CHAR_CLASS -> {
@@ -310,12 +330,15 @@ final class OnePass {
                   worklist.add(ip.out);
                 }
 
-                long action = encodeAction(nextState, capMask, emptyFlags);
-                long existing = tables.action(stateIndex, cls);
-                if (existing != NO_ACTION && existing != action) {
+                if (nextStates[cls] != -1
+                    && (nextStates[cls] != nextState
+                        || capMasks[cls] != capMask
+                        || emptyFlagsList[cls] != emptyFlags)) {
                   return null;
                 }
-                tables.setAction(stateIndex, cls, action);
+                nextStates[cls] = nextState;
+                capMasks[cls] = capMask;
+                emptyFlagsList[cls] = emptyFlags;
               }
             }
           }
@@ -327,8 +350,20 @@ final class OnePass {
               return null;
             }
             tables.setMatchAction(stateIndex, action);
+            matched = true;
           }
           default -> {}
+        }
+      }
+
+      for (int cls = 0; cls < numClasses; cls++) {
+        if (nextStates[cls] != -1) {
+          long action = encodeAction(nextStates[cls], capMasks[cls], emptyFlagsList[cls], matched);
+          long existing = tables.action(stateIndex, cls);
+          if (existing != NO_ACTION && existing != action) {
+            return null;
+          }
+          tables.setAction(stateIndex, cls, action);
         }
       }
     }
@@ -449,9 +484,6 @@ final class OnePass {
   // Search
   // -------------------------------------------------------------------------
 
-  @SuppressWarnings("ArrayRecordComponent")
-  record SearchResult(int[] groups) {}
-
   /**
    * Searches for a match in the given text starting at position 0. Convenience overload that
    * delegates to {@link #search(String, int, int, boolean, int)}.
@@ -461,38 +493,54 @@ final class OnePass {
    * @param nsubmatch number of submatch groups to track (including group 0)
    * @return submatch positions as {@code int[2*nsubmatch]}, or null if no match
    */
-  SearchResult search(String text, boolean endMatch, int nsubmatch) {
+  int[] search(String text, boolean endMatch, int nsubmatch) {
+    return search(new StringInputScanner(text), 0, text.length(), endMatch, nsubmatch);
+  }
+
+  int[] search(InputScanner text, boolean endMatch, int nsubmatch) {
     return search(text, 0, text.length(), endMatch, nsubmatch);
   }
 
-  /**
-   * Searches for an anchored match in the text starting from {@code startPos}, scanning up to
-   * {@code endPos}. This is equivalent to running OnePass on {@code text.substring(startPos,
-   * endPos)} but avoids the substring allocation. Positions in the returned array are relative to
-   * the original {@code text}.
-   *
-   * <p>Empty-width assertions ({@code \b}, {@code ^}, {@code $}) are evaluated against the full
-   * text, preserving correct boundary semantics even when searching a sub-range.
-   *
-   * @param text the full input text
-   * @param startPos position in {@code text} at which to anchor the match
-   * @param endPos upper scan bound (exclusive); the match cannot consume characters beyond this
-   * @param endMatch if true, the match must extend to exactly {@code endPos}
-   * @param nsubmatch number of submatch groups to track (including group 0)
-   * @return submatch positions relative to {@code text}, or null if no match
-   */
-  SearchResult search(String text, int startPos, int endPos, boolean endMatch, int nsubmatch) {
-    GraphemeSupport.Context graphemeContext =
-        GraphemeSupport.Context.create(text, hasGraphemeSemantics);
-    return search(text, startPos, endPos, endMatch, nsubmatch, graphemeContext);
+  int[] search(InputScanner text, boolean endMatch, int nsubmatch, int[] reuseGroups) {
+    return search(text, 0, text.length(), endMatch, nsubmatch, reuseGroups);
   }
 
-  private SearchResult search(
-      String text,
+  int[] search(String text, boolean endMatch, int nsubmatch, int[] reuseGroups) {
+    return search(new StringInputScanner(text), 0, text.length(), endMatch, nsubmatch, reuseGroups);
+  }
+
+  int[] search(String text, int startPos, int endPos, boolean endMatch, int nsubmatch) {
+    return search(new StringInputScanner(text), startPos, endPos, endMatch, nsubmatch);
+  }
+
+  int[] search(InputScanner text, int startPos, int endPos, boolean endMatch, int nsubmatch) {
+    return search(text, startPos, endPos, endMatch, nsubmatch, null);
+  }
+
+  int[] search(
+      String text, int startPos, int endPos, boolean endMatch, int nsubmatch, int[] reuseGroups) {
+    return search(new StringInputScanner(text), startPos, endPos, endMatch, nsubmatch, reuseGroups);
+  }
+
+  int[] search(
+      InputScanner text,
       int startPos,
       int endPos,
       boolean endMatch,
       int nsubmatch,
+      int[] reuseGroups) {
+    GraphemeSupport.Context graphemeContext =
+        GraphemeSupport.Context.create(text, hasGraphemeSemantics);
+    return search(text, startPos, endPos, endMatch, nsubmatch, reuseGroups, graphemeContext);
+  }
+
+  private int[] search(
+      InputScanner text,
+      int startPos,
+      int endPos,
+      boolean endMatch,
+      int nsubmatch,
+      int[] reuseGroups,
       GraphemeSupport.Context graphemeContext) {
     int ncap = 2 * Math.max(nsubmatch, 1);
     int[] cap = new int[ncap];
@@ -501,13 +549,15 @@ final class OnePass {
 
     int state = 0;
     boolean matched = false;
-    int[] bestCap = new int[ncap];
+    int[] bestCap = reuseGroups != null && reuseGroups.length >= ncap ? reuseGroups : new int[ncap];
 
     int nc = numClasses;
     long[] fa = flatActions;
     long[] ma = matchAction;
     int[] ascMap = asciiClassMap;
     long msb = matchStateBits;
+    String stringText =
+        text instanceof StringInputScanner stringScanner ? stringScanner.text() : null;
 
     int pos = startPos;
     // Main loop: process characters from startPos to endPos-1.  The match check at endPos is
@@ -515,7 +565,8 @@ final class OnePass {
     while (pos < endPos) {
       // Check match condition at current state BEFORE consuming next character.
       // The bitset test avoids the matchAction[] array load for non-match states.
-      if ((msb & (1L << state)) != 0) {
+      boolean shouldCopy = false;
+      if (!endMatch && !(anchorEnd && !dollarAnchorEnd) && (msb & (1L << state)) != 0) {
         long matchAct = ma[state];
         int reqEmpty = (int) (matchAct & EMPTY_MASK);
         if (reqEmpty == 0
@@ -530,32 +581,64 @@ final class OnePass {
             cap[1] = pos;
           }
           matched = true;
-          System.arraycopy(cap, 0, bestCap, 0, ncap);
+          shouldCopy = true;
         }
       }
 
       // Read next character — ASCII fast path avoids codePointAt/charCount overhead.
       int nextPos;
       int cls;
-      char ch = text.charAt(pos);
-      if (ch < 128) {
-        nextPos = pos + 1;
-        cls = ascMap[ch];
-      } else if (Character.isHighSurrogate(ch)
-          && pos + 1 < endPos
-          && Character.isLowSurrogate(text.charAt(pos + 1))) {
-        nextPos = pos + 2;
-        cls = classOf(Character.toCodePoint(ch, text.charAt(pos + 1)));
+      if (stringText != null) {
+        char ch = stringText.charAt(pos);
+        if (ch < 128) {
+          nextPos = pos + 1;
+          cls = ascMap[ch];
+        } else if (Character.isHighSurrogate(ch)
+            && pos + 1 < endPos
+            && Character.isLowSurrogate(stringText.charAt(pos + 1))) {
+          nextPos = pos + 2;
+          cls = classOf(Character.toCodePoint(ch, stringText.charAt(pos + 1)));
+        } else {
+          nextPos = pos + 1;
+          cls = classOf(ch);
+        }
       } else {
-        nextPos = pos + 1;
-        cls = classOf(ch);
+        int c = text.asciiAt(pos);
+        if (c >= 0) {
+          nextPos = pos + 1;
+          cls = ascMap[c];
+        } else {
+          long decoded = text.decodeForward(pos);
+          int cp = InputScanner.codePoint(decoded);
+          nextPos = InputScanner.position(decoded);
+          cls = classOf(cp);
+        }
       }
 
       // Equivalence classes and state indices are always valid for a well-formed OnePass
       // automaton, so no bounds check is needed on the flat actions array.
       long action = fa[state * nc + cls];
       if (action == NO_ACTION) {
+        if (shouldCopy) {
+          System.arraycopy(cap, 0, bestCap, 0, ncap);
+        }
         break;
+      }
+
+      if (shouldCopy) {
+        boolean skipCopy = false;
+        if ((action & MATCH_WINS_MASK) == 0) {
+          int nextState = (int) (action >>> INDEX_SHIFT);
+          if ((msb & (1L << nextState)) != 0) {
+            long nextMatchAct = ma[nextState];
+            if (nextMatchAct != NO_ACTION && (nextMatchAct & EMPTY_MASK) == 0) {
+              skipCopy = true;
+            }
+          }
+        }
+        if (!skipCopy) {
+          System.arraycopy(cap, 0, bestCap, 0, ncap);
+        }
       }
 
       // Combined condition check: bits below INDEX_SHIFT encode empty-width flags and capture
@@ -600,18 +683,18 @@ final class OnePass {
     }
 
     if (!matched) {
-      return new SearchResult(null);
+      return null;
     }
     if (endMatch && bestCap[1] != endPos) {
-      return new SearchResult(null);
+      return null;
     }
     if (anchorEnd && bestCap[1] != endPos) {
       // $ (dollarAnchorEnd) allows the match to end before a trailing line terminator.
       if (!dollarAnchorEnd || !Nfa.isAtTrailingLineTerminator(text, bestCap[1], unixLines)) {
-        return new SearchResult(null);
+        return null;
       }
     }
-    return new SearchResult(bestCap);
+    return bestCap;
   }
 
   /**
@@ -626,21 +709,22 @@ final class OnePass {
    * @return submatch positions relative to {@code text}, or null if no match
    */
   int[] searchUnanchored(String text, int startPos, int searchLimit, int nsubmatch) {
+    return searchUnanchored(new StringInputScanner(text), startPos, searchLimit, nsubmatch);
+  }
+
+  int[] searchUnanchored(InputScanner text, int startPos, int searchLimit, int nsubmatch) {
     int textLen = text.length();
     int limit = Math.min(searchLimit, textLen) + 1;
     GraphemeSupport.Context graphemeContext =
         GraphemeSupport.Context.create(text, hasGraphemeSemantics);
     for (int start = startPos; start < limit; start++) {
-      SearchResult result = search(text, start, textLen, false, nsubmatch, graphemeContext);
-      if (result.groups() != null) {
-        return result.groups();
+      int[] result = search(text, start, textLen, false, nsubmatch, null, graphemeContext);
+      if (result != null) {
+        return result;
       }
       // Advance to next code point boundary.
       if (start < textLen) {
-        int cp = text.codePointAt(start);
-        if (Character.charCount(cp) > 1) {
-          start++; // skip low surrogate; loop increment handles the rest
-        }
+        start = InputScanner.position(text.decodeForward(start)) - 1;
       }
     }
     return null;

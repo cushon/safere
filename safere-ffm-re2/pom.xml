@@ -8,7 +8,7 @@
   <parent>
     <groupId>org.safere</groupId>
     <artifactId>safere-parent</artifactId>
-    <version>0.9.0-SNAPSHOT</version>
+    <version>0.11.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>safere-ffm-re2</artifactId>
@@ -20,6 +20,15 @@
   <properties>
     <maven.deploy.skip>true</maven.deploy.skip>
   </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.13.2</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
 
   <build>
     <plugins>
@@ -131,6 +140,9 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.5.2</version>
+        <configuration>
+          <argLine>-Djava.library.path=${project.basedir}/build</argLine>
+        </configuration>
       </plugin>
     </plugins>
   </build>

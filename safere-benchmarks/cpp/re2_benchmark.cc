@@ -7,31 +7,164 @@
 //
 // Build:
 //   cd safere-benchmarks/cpp && mkdir -p build && cd build
-//   cmake .. && cmake --build . -j$(nproc)
+//   cmake .. && cmake --build . --parallel
 //
 // Run:
-//   ./build/re2_benchmark [--data path/to/benchmark-data.json] [filter...]
+//   ./build/re2_benchmark [--manifest path/to/manifest.json] [filter...]
 //
 // Each filter is a substring match against benchmark names. If no filters
 // are given, all benchmarks are run.
 
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <functional>
-#include <malloc.h>
 #include <memory>
-#include <random>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
+
+#ifdef SAFERE_HAVE_MALLINFO2
+#include <malloc.h>
+#endif
 
 #include <nlohmann/json.hpp>
 #include "re2/re2.h"
 
 using json = nlohmann::json;
+
+json benchmark_input_manifest;
+std::filesystem::path benchmark_input_directory;
+std::unordered_map<std::string, std::string> benchmark_pattern_profile;
+
+std::string sha256_hex(std::string_view input) {
+  static constexpr std::array<uint32_t, 64> kRoundConstants = {
+      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b,
+      0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01,
+      0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7,
+      0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+      0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152,
+      0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+      0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+      0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+      0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819,
+      0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08,
+      0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f,
+      0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+      0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+  std::array<uint32_t, 8> hash = {
+      0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+
+  std::vector<uint8_t> message(input.begin(), input.end());
+  uint64_t bit_length = static_cast<uint64_t>(message.size()) * 8;
+  message.push_back(0x80);
+  while (message.size() % 64 != 56) {
+    message.push_back(0);
+  }
+  for (int shift = 56; shift >= 0; shift -= 8) {
+    message.push_back(static_cast<uint8_t>(bit_length >> shift));
+  }
+
+  auto rotate_right = [](uint32_t value, int count) {
+    return (value >> count) | (value << (32 - count));
+  };
+  for (size_t offset = 0; offset < message.size(); offset += 64) {
+    std::array<uint32_t, 64> words{};
+    for (size_t index = 0; index < 16; index++) {
+      size_t word_offset = offset + index * 4;
+      words[index] =
+          (static_cast<uint32_t>(message[word_offset]) << 24) |
+          (static_cast<uint32_t>(message[word_offset + 1]) << 16) |
+          (static_cast<uint32_t>(message[word_offset + 2]) << 8) |
+          static_cast<uint32_t>(message[word_offset + 3]);
+    }
+    for (size_t index = 16; index < words.size(); index++) {
+      uint32_t s0 = rotate_right(words[index - 15], 7) ^
+                    rotate_right(words[index - 15], 18) ^
+                    (words[index - 15] >> 3);
+      uint32_t s1 = rotate_right(words[index - 2], 17) ^
+                    rotate_right(words[index - 2], 19) ^
+                    (words[index - 2] >> 10);
+      words[index] =
+          words[index - 16] + s0 + words[index - 7] + s1;
+    }
+
+    uint32_t a = hash[0];
+    uint32_t b = hash[1];
+    uint32_t c = hash[2];
+    uint32_t d = hash[3];
+    uint32_t e = hash[4];
+    uint32_t f = hash[5];
+    uint32_t g = hash[6];
+    uint32_t h = hash[7];
+    for (size_t index = 0; index < words.size(); index++) {
+      uint32_t sum1 = rotate_right(e, 6) ^ rotate_right(e, 11) ^
+                      rotate_right(e, 25);
+      uint32_t choose = (e & f) ^ (~e & g);
+      uint32_t temporary1 =
+          h + sum1 + choose + kRoundConstants[index] + words[index];
+      uint32_t sum0 = rotate_right(a, 2) ^ rotate_right(a, 13) ^
+                      rotate_right(a, 22);
+      uint32_t majority = (a & b) ^ (a & c) ^ (b & c);
+      uint32_t temporary2 = sum0 + majority;
+      h = g;
+      g = f;
+      f = e;
+      e = d + temporary1;
+      d = c;
+      c = b;
+      b = a;
+      a = temporary1 + temporary2;
+    }
+    hash[0] += a;
+    hash[1] += b;
+    hash[2] += c;
+    hash[3] += d;
+    hash[4] += e;
+    hash[5] += f;
+    hash[6] += g;
+    hash[7] += h;
+  }
+
+  std::string result;
+  result.reserve(64);
+  char word[9];
+  for (uint32_t value : hash) {
+    snprintf(word, sizeof(word), "%08x", value);
+    result.append(word);
+  }
+  return result;
+}
+
+bool run_sha256_self_test() {
+  struct TestCase {
+    std::string_view input;
+    std::string_view expected;
+  };
+  static constexpr std::array<TestCase, 3> kTestCases = {{
+      {"", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+      {"abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"},
+      {"The quick brown fox jumps over the lazy dog",
+       "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"},
+  }};
+  for (const TestCase& test_case : kTestCases) {
+    std::string actual = sha256_hex(test_case.input);
+    if (actual != test_case.expected) {
+      fprintf(stderr, "SHA-256 self-test failed: expected %s, found %s\n",
+              std::string(test_case.expected).c_str(), actual.c_str());
+      return false;
+    }
+  }
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -124,14 +257,77 @@ void do_not_optimize(const T& val) {
 // JSON loading
 // ---------------------------------------------------------------------------
 
-json load_benchmark_data(const std::string& path) {
-  std::ifstream ifs(path);
-  if (!ifs.is_open()) {
-    fprintf(stderr, "ERROR: cannot open benchmark data file: %s\n",
-            path.c_str());
+json load_benchmark_manifest(const std::string& manifest_path_string) {
+  std::filesystem::path manifest_path = manifest_path_string;
+  benchmark_input_directory = manifest_path.parent_path();
+  std::ifstream input(manifest_path);
+  if (!input.is_open()) {
+    fprintf(stderr, "ERROR: cannot open materialized benchmark manifest: %s\n",
+            manifest_path.string().c_str());
     exit(1);
   }
-  return json::parse(ifs);
+  json manifest = json::parse(input);
+  if (manifest.at("version").get<int>() != 1) {
+    fprintf(stderr, "ERROR: unsupported benchmark input manifest version\n");
+    exit(1);
+  }
+  benchmark_input_manifest = manifest.at("inputs");
+  json benchmark_data = manifest.at("benchmarkData");
+  if (benchmark_data.contains("patternProfiles")) {
+    const auto& profiles = benchmark_data.at("patternProfiles");
+    if (profiles.contains("re2")) {
+      for (const auto& entry : profiles.at("re2")) {
+        benchmark_pattern_profile.emplace(
+            entry.at("java").get<std::string>(),
+            entry.at("alternate").get<std::string>());
+      }
+    }
+  }
+  return benchmark_data;
+}
+
+std::string select_pattern(const std::string& java_pattern) {
+  auto alternate = benchmark_pattern_profile.find(java_pattern);
+  return alternate == benchmark_pattern_profile.end()
+             ? java_pattern
+             : alternate->second;
+}
+
+std::string load_benchmark_input(const std::string& key) {
+  auto entry = benchmark_input_manifest.find(key);
+  if (entry == benchmark_input_manifest.end()) {
+    fprintf(stderr, "ERROR: unknown materialized benchmark input: %s\n",
+            key.c_str());
+    exit(1);
+  }
+  std::filesystem::path path =
+      benchmark_input_directory / entry->at("file").get<std::string>();
+  std::ifstream input(path, std::ios::binary);
+  if (!input.is_open()) {
+    fprintf(stderr, "ERROR: cannot open materialized benchmark input: %s\n",
+            path.string().c_str());
+    exit(1);
+  }
+  std::string text((std::istreambuf_iterator<char>(input)),
+                   std::istreambuf_iterator<char>());
+  size_t expected_size = entry->at("utf8Bytes").get<size_t>();
+  if (text.size() != expected_size) {
+    fprintf(stderr,
+            "ERROR: materialized benchmark input has wrong size: %s "
+            "(expected %zu, found %zu)\n",
+            key.c_str(), expected_size, text.size());
+    exit(1);
+  }
+  std::string expected_sha256 = entry->at("sha256").get<std::string>();
+  std::string actual_sha256 = sha256_hex(text);
+  if (actual_sha256 != expected_sha256) {
+    fprintf(stderr,
+            "ERROR: materialized benchmark input has wrong SHA-256: %s "
+            "(expected %s, found %s)\n",
+            key.c_str(), expected_sha256.c_str(), actual_sha256.c_str());
+    exit(1);
+  }
+  return text;
 }
 
 // Convert Java-style replacement references ($N) to RE2 C++ style (\\N).
@@ -156,174 +352,6 @@ std::string convert_replacement(const std::string& repl) {
 }
 
 // ---------------------------------------------------------------------------
-// Text generators (parameterized from JSON)
-// ---------------------------------------------------------------------------
-
-std::string make_random_text(int size, const std::string& alphabet,
-                             unsigned seed) {
-  std::mt19937 rng(seed);
-  std::string text(size, ' ');
-  for (int i = 0; i < size; ++i) {
-    text[i] = alphabet[rng() % alphabet.size()];
-  }
-  return text;
-}
-
-std::string make_prose(int size, const std::string& unit) {
-  std::string text;
-  text.reserve(size + unit.size());
-  while (static_cast<int>(text.size()) < size) {
-    text += unit;
-  }
-  return text;
-}
-
-std::string repeat_to_size(const std::string& unit, int size) {
-  std::string text;
-  text.reserve(size + unit.size());
-  while (static_cast<int>(text.size()) < size) {
-    text += unit;
-  }
-  text.resize(size);
-  return text;
-}
-
-std::string surround_to_size(const std::string& prefix,
-                             const std::string& unit,
-                             const std::string& suffix,
-                             int size) {
-  int body_size = size - static_cast<int>(prefix.size() + suffix.size());
-  if (body_size < 0) body_size = 0;
-  return prefix + repeat_to_size(unit, body_size) + suffix;
-}
-
-std::string suffix_match_to_size(const std::string& prefix_unit,
-                                 const std::string& match,
-                                 int size) {
-  int prefix_size = size - static_cast<int>(match.size());
-  if (prefix_size < 0) prefix_size = 0;
-  return repeat_to_size(prefix_unit, prefix_size) + match;
-}
-
-std::string generated_real_world_input(const std::string& unit, int size,
-                                       const std::string& alphabet,
-                                       int seed) {
-  if (static_cast<int>(unit.size()) >= size) {
-    return unit.substr(0, size);
-  }
-  std::string text;
-  text.reserve(size + unit.size());
-  int delimiter_index = seed;
-  while (static_cast<int>(text.size()) < size) {
-    text += unit;
-    if (static_cast<int>(text.size()) < size) {
-      text += alphabet[delimiter_index % alphabet.size()];
-      ++delimiter_index;
-    }
-  }
-  text.resize(size);
-  return text;
-}
-
-std::string generated_sparse_real_world_input(const std::string& match_unit,
-                                              const std::string& non_match_unit,
-                                              int size, int seed,
-                                              int non_match_repeats,
-                                              const std::string& alphabet) {
-  std::string text;
-  text.reserve(size + match_unit.size() + non_match_unit.size());
-  int delimiter_index = seed;
-  while (static_cast<int>(text.size()) < size) {
-    for (int i = 0; i < non_match_repeats &&
-                    static_cast<int>(text.size()) < size; ++i) {
-      text += non_match_unit;
-      if (static_cast<int>(text.size()) < size) {
-        text += alphabet[delimiter_index % alphabet.size()];
-        ++delimiter_index;
-      }
-    }
-    if (static_cast<int>(text.size()) < size) {
-      text += " ";
-      text += match_unit;
-      text += " ";
-    }
-  }
-  text.resize(size);
-  return text;
-}
-std::string generate_surround_with_spaces_input(const std::string& body, int size) {
-  if (static_cast<int>(body.size()) >= size) {
-    return body.substr(0, size);
-  }
-  int total_padding = size - static_cast<int>(body.size());
-  int leading_padding = total_padding / 2;
-  int trailing_padding = total_padding - leading_padding;
-  return std::string(leading_padding, ' ') + body + std::string(trailing_padding, ' ');
-}
-
-std::string generate_real_world_input(const json& input_spec,
-                                      const std::string& match_unit,
-                                      const std::string& non_match_unit,
-                                      bool match, int size,
-                                      const std::string& alphabet, int seed) {
-  std::string unit = match ? match_unit : non_match_unit;
-  std::string kind = input_spec.value("kind", "repeat");
-  if (kind == "repeat") {
-    return generated_real_world_input(unit, size, alphabet, seed);
-  }
-  if (kind == "prefixedRepeat") {
-    std::string prefix = input_spec.at("prefix").get<std::string>();
-    if (static_cast<int>(prefix.size()) >= size) {
-      return prefix.substr(0, size);
-    }
-    int body_size = size - static_cast<int>(prefix.size());
-    return prefix + generated_real_world_input(unit, body_size, alphabet, seed);
-  }
-  if (kind == "sparseMatch") {
-    return generated_sparse_real_world_input(
-        match_unit, non_match_unit, size, seed,
-        input_spec.at("nonMatchRepeats").get<int>(),
-        input_spec.at("delimiterAlphabet").get<std::string>());
-  }
-  if (kind == "surroundWithSpaces") {
-    std::string body = input_spec.at("body").get<std::string>();
-    return generate_surround_with_spaces_input(body, size);
-  }
-  fprintf(stderr, "ERROR: invalid real-world input kind: %s\n", kind.c_str());
-  exit(1);
-}
-
-// Encode a Unicode code point as UTF-8 and append to the string.
-void append_utf8(std::string& s, int cp) {
-  if (cp < 0x80) {
-    s += static_cast<char>(cp);
-  } else if (cp < 0x800) {
-    s += static_cast<char>(0xC0 | (cp >> 6));
-    s += static_cast<char>(0x80 | (cp & 0x3F));
-  } else if (cp < 0x10000) {
-    s += static_cast<char>(0xE0 | (cp >> 12));
-    s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-    s += static_cast<char>(0x80 | (cp & 0x3F));
-  } else {
-    s += static_cast<char>(0xF0 | (cp >> 18));
-    s += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-    s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-    s += static_cast<char>(0x80 | (cp & 0x3F));
-  }
-}
-
-std::string make_unicode_text(int size, const std::vector<int>& codepoints,
-                              unsigned seed) {
-  std::mt19937 rng(seed);
-  std::string text;
-  while (static_cast<int>(text.size()) < size) {
-    int cp = codepoints[rng() % codepoints.size()];
-    append_utf8(text, cp);
-  }
-  return text;
-}
-
-// ---------------------------------------------------------------------------
 // Benchmark implementations
 // ---------------------------------------------------------------------------
 
@@ -331,12 +359,12 @@ void run_regex_benchmarks(const json& data,
                           const std::vector<std::string>& filters) {
   const auto& sec = data["regex"];
 
-  RE2 hello(sec["literalMatch"]["pattern"].get<std::string>());
-  RE2 alpha(sec["charClassMatch"]["pattern"].get<std::string>());
-  RE2 alt(sec["alternationFind"]["pattern"].get<std::string>());
-  RE2 date(sec["captureGroups"]["pattern"].get<std::string>());
-  RE2 find_ing(sec["findInText"]["pattern"].get<std::string>());
-  RE2 email(sec["emailFind"]["pattern"].get<std::string>());
+  RE2 hello(select_pattern(sec["literalMatch"]["pattern"].get<std::string>()));
+  RE2 alpha(select_pattern(sec["charClassMatch"]["pattern"].get<std::string>()));
+  RE2 alt(select_pattern(sec["alternationFind"]["pattern"].get<std::string>()));
+  RE2 date(select_pattern(sec["captureGroups"]["pattern"].get<std::string>()));
+  RE2 find_ing(select_pattern(sec["findInText"]["pattern"].get<std::string>()));
+  RE2 email(select_pattern(sec["emailFind"]["pattern"].get<std::string>()));
 
   std::string hello_text = sec["literalMatch"]["text"];
   std::string alpha_text = sec["charClassMatch"]["text"];
@@ -408,7 +436,7 @@ void run_application_benchmarks(const json& data,
     explicit AppCase(const json& item)
         : name(item.at("name").get<std::string>()),
           op(item.at("op").get<std::string>()),
-          pattern(item.at("pattern").get<std::string>()),
+          pattern(select_pattern(item.at("pattern").get<std::string>())),
           texts(item.contains("texts")
                     ? item.at("texts").get<std::vector<std::string>>()
                     : std::vector<std::string>()),
@@ -560,27 +588,17 @@ void run_real_world_regex_benchmarks(
     const json& data, const std::vector<std::string>& filters) {
   const auto& sec = data["realWorldRegex"];
   std::vector<int> sizes = sec["textSizes"].get<std::vector<int>>();
-  std::string alphabet = sec["safeDelimiterAlphabet"].get<std::string>();
-  int seed = sec["seed"].get<int>();
 
   struct RealWorldCase {
     std::string name;
     std::string op;
     std::string pattern;
-    std::string match;
-    std::string non_match;
-    json match_input;
-    json non_match_input;
     RE2 re;
 
     explicit RealWorldCase(const json& item)
         : name(item.at("name").get<std::string>()),
           op(item.at("op").get<std::string>()),
-          pattern(item.at("pattern").get<std::string>()),
-          match(item.at("match").get<std::string>()),
-          non_match(item.at("nonMatch").get<std::string>()),
-          match_input(item.value("matchInput", json::object())),
-          non_match_input(item.value("nonMatchInput", json::object())),
+          pattern(select_pattern(item.at("pattern").get<std::string>())),
           re(pattern) {}
   };
 
@@ -596,7 +614,7 @@ void run_real_world_regex_benchmarks(
               c.name.c_str());
       exit(1);
     }
-    if (c.op != "find" && c.op != "replaceAllEmpty" && c.op != "replaceAllGroup1" && c.op != "replaceAllLiteral") {
+    if (c.op != "find" && c.op != "matches" && c.op != "replaceAllEmpty" && c.op != "replaceAllGroup1" && c.op != "replaceAllLiteral") {
       fprintf(stderr, "ERROR: invalid real-world regex op: %s\n",
               c.op.c_str());
       exit(1);
@@ -606,11 +624,11 @@ void run_real_world_regex_benchmarks(
   for (const auto& case_ptr : cases) {
     const RealWorldCase& c = *case_ptr;
     for (bool match : {true, false}) {
-      const json& input_spec = match ? c.match_input : c.non_match_input;
       std::string match_label = match ? "match" : "noMatch";
       for (int size : sizes) {
-        std::string text = generate_real_world_input(
-            input_spec, c.match, c.non_match, match, size, alphabet, seed);
+        std::string text = load_benchmark_input(
+            "realWorldRegex." + c.name + "." + match_label + "." +
+            std::to_string(size));
         std::string name = "RealWorldRegexBenchmark.runBenchmark." + c.name +
                            "." + match_label + "." + std::to_string(size);
         if (!matches_filter(name, filters)) {
@@ -619,6 +637,10 @@ void run_real_world_regex_benchmarks(
         if (c.op == "find") {
           print_json(measure(name, [&]() {
             do_not_optimize(RE2::PartialMatch(text, c.re));
+          }));
+        } else if (c.op == "matches") {
+          print_json(measure(name, [&]() {
+            do_not_optimize(RE2::FullMatch(text, c.re));
           }));
         } else if (c.op == "replaceAllEmpty") {
           print_json(measure(name, [&]() {
@@ -648,10 +670,14 @@ void run_compile_benchmarks(const json& data,
                             const std::vector<std::string>& filters) {
   const auto& sec = data["compile"];
 
-  std::string simple = sec["simple"]["pattern"];
-  std::string medium = sec["medium"]["pattern"];
-  std::string complex_pat = sec["complex"]["pattern"];
-  std::string alternation = sec["alternation"]["pattern"];
+  std::string simple =
+      select_pattern(sec["simple"]["pattern"].get<std::string>());
+  std::string medium =
+      select_pattern(sec["medium"]["pattern"].get<std::string>());
+  std::string complex_pat =
+      select_pattern(sec["complex"]["pattern"].get<std::string>());
+  std::string alternation =
+      select_pattern(sec["alternation"]["pattern"].get<std::string>());
 
   auto run = [&](const std::string& name, const std::string& pattern) {
     if (matches_filter(name, filters)) {
@@ -672,20 +698,20 @@ void run_search_scaling_benchmarks(const json& data,
                                    const std::vector<std::string>& filters) {
   const auto& sec = data["searchScaling"];
   std::vector<int> sizes = sec["textSizes"].get<std::vector<int>>();
-  std::string match_suffix = sec["matchSuffix"];
-  std::string alphabet = sec["randomText"]["alphabet"];
-  unsigned seed = sec["randomText"]["seed"];
-  std::string prose_unit = sec["proseUnit"];
 
-  RE2 easy(sec["patterns"]["easy"].get<std::string>());
-  RE2 medium(sec["patterns"]["medium"].get<std::string>());
-  RE2 hard(sec["patterns"]["hard"].get<std::string>());
-  RE2 find_ing(sec["findIngPattern"].get<std::string>());
+  RE2 easy(select_pattern(sec["patterns"]["easy"].get<std::string>()));
+  RE2 medium(select_pattern(sec["patterns"]["medium"].get<std::string>()));
+  RE2 hard(select_pattern(sec["patterns"]["hard"].get<std::string>()));
+  RE2 find_ing(select_pattern(sec["findIngPattern"].get<std::string>()));
 
   for (int size : sizes) {
-    std::string random_text = make_random_text(size, alphabet, seed);
-    std::string text_with_match = random_text + match_suffix;
-    std::string prose = make_prose(size, prose_unit);
+    std::string size_string = std::to_string(size);
+    std::string random_text =
+        load_benchmark_input("searchScaling.random." + size_string);
+    std::string text_with_match =
+        load_benchmark_input("searchScaling.success." + size_string);
+    std::string prose =
+        load_benchmark_input("searchScaling.prose." + size_string);
 
     std::string suffix = "." + std::to_string(size);
 
@@ -723,10 +749,10 @@ void run_issue481_scaling_benchmarks(const json& data,
   const auto& sec = data["issue481Scaling"];
   std::vector<int> sizes = sec["textSizes"].get<std::vector<int>>();
 
-  RE2 split_w(sec["splitW"]["pattern"].get<std::string>());
-  RE2 block(sec["block"]["pattern"].get<std::string>());
-  RE2 tag(sec["tag"]["pattern"].get<std::string>());
-  RE2 scheme(sec["scheme"]["pattern"].get<std::string>());
+  RE2 split_w(select_pattern(sec["splitW"]["pattern"].get<std::string>()));
+  RE2 block(select_pattern(sec["block"]["pattern"].get<std::string>()));
+  RE2 tag(select_pattern(sec["tag"]["pattern"].get<std::string>()));
+  RE2 scheme(select_pattern(sec["scheme"]["pattern"].get<std::string>()));
 
   auto split_length_sum = [](const std::string& text, RE2& re) {
     int sum = 0;
@@ -775,31 +801,21 @@ void run_issue481_scaling_benchmarks(const json& data,
   };
 
   for (int size : sizes) {
+    std::string size_string = std::to_string(size);
     std::string split_text =
-        repeat_to_size(sec["splitW"]["unit"].get<std::string>(), size);
+        load_benchmark_input("issue481Scaling.splitW." + size_string);
     std::string block_text =
-        surround_to_size(sec["block"]["prefix"].get<std::string>(),
-                         sec["block"]["unit"].get<std::string>(),
-                         sec["block"]["suffix"].get<std::string>(), size);
+        load_benchmark_input("issue481Scaling.block." + size_string);
     std::string block_negative_text =
-        surround_to_size(sec["block"]["prefix"].get<std::string>(),
-                         sec["block"]["unit"].get<std::string>(),
-                         sec["block"]["negativeSuffix"].get<std::string>(),
-                         size);
+        load_benchmark_input("issue481Scaling.blockNegative." + size_string);
     std::string tag_text =
-        suffix_match_to_size(sec["tag"]["prefixUnit"].get<std::string>(),
-                             sec["tag"]["match"].get<std::string>(), size);
+        load_benchmark_input("issue481Scaling.tag." + size_string);
     std::string tag_negative_text =
-        suffix_match_to_size(sec["tag"]["prefixUnit"].get<std::string>(),
-                             sec["tag"]["negativeMatch"].get<std::string>(),
-                             size);
+        load_benchmark_input("issue481Scaling.tagNegative." + size_string);
     std::string scheme_text =
-        suffix_match_to_size(sec["scheme"]["prefixUnit"].get<std::string>(),
-                             sec["scheme"]["match"].get<std::string>(), size);
+        load_benchmark_input("issue481Scaling.scheme." + size_string);
     std::string scheme_negative_text =
-        suffix_match_to_size(sec["scheme"]["prefixUnit"].get<std::string>(),
-                             sec["scheme"]["negativeMatch"].get<std::string>(),
-                             size);
+        load_benchmark_input("issue481Scaling.schemeNegative." + size_string);
 
     std::string suffix = "." + std::to_string(size);
     auto run = [&](const std::string& name, const std::function<void()>& fn) {
@@ -837,10 +853,10 @@ void run_capture_scaling_benchmarks(const json& data,
                                     const std::vector<std::string>& filters) {
   const auto& sec = data["captureScaling"];
 
-  RE2 pat0(sec["capture0"]["pattern"].get<std::string>());
-  RE2 pat1(sec["capture1"]["pattern"].get<std::string>());
-  RE2 pat3(sec["capture3"]["pattern"].get<std::string>());
-  RE2 pat10(sec["capture10"]["pattern"].get<std::string>());
+  RE2 pat0(select_pattern(sec["capture0"]["pattern"].get<std::string>()));
+  RE2 pat1(select_pattern(sec["capture1"]["pattern"].get<std::string>()));
+  RE2 pat3(select_pattern(sec["capture3"]["pattern"].get<std::string>()));
+  RE2 pat10(select_pattern(sec["capture10"]["pattern"].get<std::string>()));
 
   std::string text0 = sec["capture0"]["text"];
   std::string text1 = sec["capture1"]["text"];
@@ -889,7 +905,7 @@ void run_http_benchmarks(const json& data,
                          const std::vector<std::string>& filters) {
   const auto& sec = data["http"];
 
-  RE2 http(sec["pattern"].get<std::string>());
+  RE2 http(select_pattern(sec["pattern"].get<std::string>()));
   std::string full = sec["fullRequest"];
   std::string small = sec["smallRequest"];
 
@@ -932,7 +948,7 @@ void run_replace_benchmarks(const json& data,
   for (auto& [key, val] : sec.items()) {
     cases.push_back({
         key,
-        val["pattern"].get<std::string>(),
+        select_pattern(val["pattern"].get<std::string>()),
         val["text"].get<std::string>(),
         convert_replacement(val["replacement"].get<std::string>()),
         val["op"].get<std::string>()
@@ -966,15 +982,16 @@ void run_pathological_benchmarks(const json& data,
       data["pathological"]["nValues"].get<std::vector<int>>();
 
   for (int n : ns) {
-    std::string regex;
-    for (int i = 0; i < n; ++i) regex += "a?";
-    for (int i = 0; i < n; ++i) regex += "a";
-    std::string text(n, 'a');
+    std::string n_string = std::to_string(n);
+    std::string regex =
+        load_benchmark_input("pathological.pattern." + n_string);
+    std::string text =
+        load_benchmark_input("pathological.text." + n_string);
 
     std::string name =
         "PathologicalBenchmark.pathological." + std::to_string(n);
     if (matches_filter(name, filters)) {
-      RE2 re(regex);
+      RE2 re(select_pattern(regex));
       print_json(measure(name, [&]() {
         do_not_optimize(RE2::FullMatch(text, re));
       }, 2, 2.0, 10, 2.0, "us/op", 1000.0));
@@ -987,21 +1004,15 @@ void run_fanout_benchmarks(const json& data,
   const auto& sec = data["fanout"];
   std::vector<int> sizes = sec["textSizes"].get<std::vector<int>>();
 
-  RE2 fanout(sec["unicodeFanout"]["pattern"].get<std::string>());
-  RE2 nested(sec["nestedQuantifier"]["pattern"].get<std::string>());
-
-  std::vector<int> codepoints =
-      sec["unicodeFanout"]["codePoints"].get<std::vector<int>>();
-  unsigned unicode_seed = sec["unicodeFanout"]["seed"];
-
-  std::string nested_alphabet = sec["nestedQuantifier"]["alphabet"];
-  unsigned nested_seed = sec["nestedQuantifier"]["seed"];
+  RE2 fanout(select_pattern(sec["unicodeFanout"]["pattern"].get<std::string>()));
+  RE2 nested(select_pattern(sec["nestedQuantifier"]["pattern"].get<std::string>()));
 
   for (int size : sizes) {
+    std::string size_string = std::to_string(size);
     std::string unicode_text =
-        make_unicode_text(size, codepoints, unicode_seed);
+        load_benchmark_input("fanout.unicode." + size_string);
     std::string ascii_text =
-        make_random_text(size, nested_alphabet, nested_seed);
+        load_benchmark_input("fanout.ascii." + size_string);
 
     std::string suffix = "." + std::to_string(size);
 
@@ -1025,9 +1036,9 @@ void run_fanout_benchmarks(const json& data,
 // Memory benchmarks
 // ---------------------------------------------------------------------------
 
-// Measure the heap allocation for compiling a single RE2 pattern, using
-// mallinfo2() heap delta.  Also reports RE2's ProgramSize() (number of
-// compiled bytecode instructions).
+// Measure the heap allocation for compiling a single RE2 pattern when
+// mallinfo2() is available. Also reports RE2's ProgramSize() (number of
+// compiled bytecode instructions) on every platform.
 void run_memory_benchmarks(const json& data,
                            const std::vector<std::string>& filters) {
   const auto& compile_sec = data["compile"];
@@ -1063,15 +1074,20 @@ void run_memory_benchmarks(const json& data,
 
   for (const auto& pi : patterns) {
     if (!matches_filter(pi.name, filters)) continue;
+    std::string pattern = select_pattern(pi.pattern);
 
+#ifdef SAFERE_HAVE_MALLINFO2
     // Measure heap delta around RE2 compilation using mallinfo2().
     struct mallinfo2 before = mallinfo2();
-    auto re = std::make_unique<RE2>(pi.pattern);
+#endif
+    auto re = std::make_unique<RE2>(pattern);
+#ifdef SAFERE_HAVE_MALLINFO2
     struct mallinfo2 after = mallinfo2();
 
     long heap_delta = static_cast<long>(after.uordblks) -
                       static_cast<long>(before.uordblks);
     print_memory_json(pi.name + ".heapBytes", heap_delta);
+#endif
 
     // Report RE2's program size (number of bytecode instructions).
     if (re->ok()) {
@@ -1088,19 +1104,23 @@ void run_memory_benchmarks(const json& data,
 // ---------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-  std::string data_path = "../../benchmark-data.json";
+  if (argc == 2 && std::string_view(argv[1]) == "--sha256-self-test") {
+    return run_sha256_self_test() ? 0 : 1;
+  }
+
+  std::string manifest_path = "../../target/benchmark-corpus/manifest.json";
   std::vector<std::string> filters;
 
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
-    if (arg == "--data" && i + 1 < argc) {
-      data_path = argv[++i];
+    if (arg == "--manifest" && i + 1 < argc) {
+      manifest_path = argv[++i];
     } else {
       filters.push_back(arg);
     }
   }
 
-  json data = load_benchmark_data(data_path);
+  json data = load_benchmark_manifest(manifest_path);
 
   run_regex_benchmarks(data, filters);
   run_application_benchmarks(data, filters);

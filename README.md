@@ -30,20 +30,20 @@ SafeRE is available on [Maven Central](https://central.sonatype.com/artifact/org
 <dependency>
   <groupId>org.safere</groupId>
   <artifactId>safere</artifactId>
-  <version>0.8.0</version>
+  <version>0.10.0</version>
 </dependency>
 ```
 
 **Gradle (Kotlin DSL):**
 
 ```kotlin
-implementation("org.safere:safere:0.8.0")
+implementation("org.safere:safere:0.10.0")
 ```
 
 **Gradle (Groovy DSL):**
 
 ```groovy
-implementation 'org.safere:safere:0.8.0'
+implementation 'org.safere:safere:0.10.0'
 ```
 
 ## Quick Start
@@ -66,6 +66,54 @@ if (m.find()) {
 
 SafeRE is a drop-in replacement for `java.util.regex.Pattern` and
 `java.util.regex.Matcher`. Just change your imports.
+
+## Diagnostics
+
+SafeRE can inspect a compiled pattern's static features and capabilities with
+`Pattern.analysis()`, and can report the strategies actually used by matching and replacement
+operations through a process-wide `SafeReMatchDiagnostics` listener.
+
+See [SafeRE Diagnostics](DIAGNOSTICS.md) for examples, event semantics, thread-safe aggregation,
+privacy guarantees, and performance guidance.
+
+## Direct UTF-8 Input
+
+Applications that already store text as UTF-8 can match it directly without
+first decoding the entire input to a `String`. This is primarily intended for
+JVM data systems, storage engines, network services, and parsing pipelines that
+process byte-oriented text in hot loops. It can avoid an input-sized UTF-8 to
+UTF-16 conversion, preserve zero-copy capture slicing, and write replacements
+back to byte-oriented output. If an application already owns a `String`, the
+regular `Pattern` and `Matcher` APIs remain the simpler choice.
+
+For example:
+
+```java
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+import org.safere.Pattern;
+import org.safere.Utf8Input;
+import org.safere.Utf8Matcher;
+
+byte[] bytes = "contact user@example.com for info".getBytes(UTF_8);
+Utf8Input input = Utf8Input.validated(bytes);
+Utf8Matcher matcher = Pattern.compile("(\\w+)@(\\w+\\.\\w+)").matcher(input);
+
+if (matcher.find()) {
+    // UTF-8 match coordinates are byte offsets relative to the input view.
+    int addressStart = matcher.start();
+    int addressEnd = matcher.end();
+}
+```
+
+`Utf8Input.validated` performs strict UTF-8 validation. Callers that already
+guarantee valid UTF-8 can use `Utf8Input.trusted` to avoid that validation pass.
+The input is a borrowed view: its covered bytes must not be mutated while a
+matcher is using them.
+
+The UTF-8 API also supports capture bounds and byte-native replacement through
+`Utf8Sink`. See [Direct UTF-8 Matching](UTF8.md) for the complete API,
+ownership, coordinate, malformed-input, and replacement contracts.
 
 ## Development
 
@@ -112,6 +160,8 @@ exponentially and hangs at n=25.
 - **Full Unicode** — Operates on Unicode code points, supports `\p{...}`
   properties, Unicode-aware case folding
 - **Named captures** — Java-compatible `(?<name>...)` syntax
+- **Direct UTF-8 input** — Matches borrowed UTF-8 byte-array views without
+  materializing an input-sized `String`
 - **Multi-pattern matching** — `PatternSet` matches multiple patterns
   simultaneously in a single pass
 - **Five execution engines** — OnePass, DFA, BitState, NFA, and reverse DFA,
@@ -379,9 +429,26 @@ SafeRE includes a [JMH](https://github.com/openjdk/jmh) benchmark suite in the
 [FFM API](https://openjdk.org/jeps/454)), C++ RE2, and Go `regexp`.
 The suite includes focused microbenchmarks, data-driven application workloads,
 scaling/pathological cases, replacement, memory, and `PatternSet` benchmarks.
-Application workloads live in `safere-benchmarks/benchmark-data.json`, where
-each case defines its operation semantics and expected result for the Java,
-C++, and Go harnesses.
+Benchmark recipes and configuration live in
+`safere-benchmarks/benchmark-data.json`. Before a benchmark starts, its runner
+materializes that file into a resolved manifest and exact UTF-8 inputs under
+`safere-benchmarks/target/benchmark-corpus`. Java, C++, and Go consume only
+those generated artifacts instead of independently interpreting input recipes.
+See
+[`safere-benchmarks/BENCHMARK_INPUTS.md`](safere-benchmarks/BENCHMARK_INPUTS.md)
+for details.
+
+Java workload additions are data-only: declarations select generic operations,
+engine capabilities, inputs, timing modes, and result consumption. See
+[`safere-benchmarks/DECLARATIVE_BENCHMARK_PLAN.md`](safere-benchmarks/DECLARATIVE_BENCHMARK_PLAN.md)
+and
+[`safere-benchmarks/DECLARATIVE_COLLECTION.md`](safere-benchmarks/DECLARATIVE_COLLECTION.md).
+
+SafeRE also maintains a separate
+[OpenJDK-derived regex benchmark suite](https://github.com/eaftan/safere-openjdk-regex-benchmarks).
+It compares SafeRE and `java.util.regex` on compatible workloads adapted from
+OpenJDK's regex microbenchmarks. That suite is GPL-2.0-only, so its source is
+not vendored here or included in the `safere-benchmarks` Maven module.
 
 ### Benchmark Collection
 
@@ -393,9 +460,19 @@ root:
 ./collect-benchmark-results.sh
 ```
 
-The default collection is Java-only: SafeRE, `java.util.regex`, RE2/J, and
-RE2-FFM. These are the normal engineering comparisons because they run in the
-same JVM environment.
+The default collection includes SafeRE's Java suite—SafeRE,
+`java.util.regex`, RE2/J, and RE2-FFM—and the external OpenJDK-derived
+SafeRE/JDK suite. Clone the external repository beside SafeRE before the first
+collection:
+
+```bash
+git clone https://github.com/eaftan/safere-openjdk-regex-benchmarks.git \
+  ../safere-openjdk-regex-benchmarks
+```
+
+These are the normal engineering comparisons because the engines run in the
+same JVM environment. Use `--openjdk-regex-repo PATH` when the external
+checkout is elsewhere.
 
 Use the longer Java mode when confirming close, surprising, or especially
 important comparisons:
@@ -420,9 +497,20 @@ To verify the collection pipeline without doing a full run:
 The script runs benchmark batches sequentially, captures raw output, and
 generates markdown tables.
 
+The collection script installs the SafeRE version from the current checkout,
+builds the external suite against that exact version, and runs both engines.
+Use `--skip-openjdk-regex` only for a deliberately incomplete local collection,
+such as when the separate checkout is unavailable. A comprehensive
+cross-runtime collection uses `--cross-language`; the OpenJDK-derived suite
+remains included by default.
+
+The OpenJDK-derived results remain a separate result set: they are not folded
+into `merged-tables.md` because the external workloads and their upstream JMH
+schedules differ from SafeRE's native suite.
+
 By default, results are written to a timestamped directory under
 `benchmark-results/`, and `benchmark-results/latest` is updated to point to
-the newest run. 
+the newest run.
 
 When the run finishes, hand off the result directory to the agent that will
 update `BENCHMARKS.md`:
@@ -435,6 +523,7 @@ The important files in that directory are:
 
 ```text
 jmh-output.txt
+declared-report-plan.json
 merged-tables.md
 java-memory.txt
 java-pattern-memory.txt
@@ -445,6 +534,14 @@ Cross-language runs also include:
 ```text
 cpp-results.jsonl
 go-results.jsonl
+cross-runtime-tables.md
+```
+
+Default runs also include:
+
+```text
+openjdk-regex-output.txt
+openjdk-regex-results.json
 ```
 
 ### Targeted Benchmark Runs
@@ -457,17 +554,31 @@ development iteration or focused investigation; use
 ```bash
 # Java benchmarks (throughput)
 ./run-java-benchmarks.sh                        # standard benchmarks
-./run-java-benchmarks.sh '^org\.safere\.benchmark\.RegexBenchmark\.'
-./run-java-benchmarks.sh '^org\.safere\.benchmark\.ApplicationBenchmark\.'
-./run-java-benchmarks.sh --long '^org\.safere\.benchmark\.RegexBenchmark\.'
+./run-java-benchmarks.sh --declared             # all declared execution profiles
+./run-java-benchmarks.sh --long --declared
 
 # Java memory profiling (allocation rates via JMH GC profiler)
-./run-java-memory-benchmarks.sh                 # all benchmarks
-./run-java-memory-benchmarks.sh '^org\.safere\.benchmark\.RegexBenchmark\.'
+./run-java-memory-benchmarks.sh --declared
 ```
 
-Arguments to the Java wrapper scripts are passed directly to JMH as benchmark
-regex filters.
+Use `BenchmarkCollectionPlan trials` to discover trial IDs by mode, timing
+unit, workload prefix, or execution variant. Benchmark regexes select generic
+JMH entry points, and arguments after `--` can select a specific trial or pass
+other JMH options. See
+[`safere-benchmarks/CROSS_ENGINE_EXECUTION.md`](safere-benchmarks/CROSS_ENGINE_EXECUTION.md)
+for workload IDs, execution variants, and timing boundaries.
+
+Run a targeted workload from the external OpenJDK-derived suite with:
+
+```bash
+./run-openjdk-regex-benchmarks.sh \
+  'org.safere.bench.openjdk.FindPatternComparison.*'
+```
+
+The wrapper defaults to a sibling `safere-openjdk-regex-benchmarks` checkout.
+Use `--repo PATH` or `SAFERE_OPENJDK_REGEX_BENCHMARKS_REPO` to select another
+location. Standard runs preserve the JMH schedules defined by the external
+suite; `--smoke` provides a short compile-and-execute check.
 
 `CrosscheckOverheadBenchmark` is excluded from the no-argument Java benchmark
 run. It measures overhead in the `safere-crosscheck` facade and should be run
@@ -480,8 +591,17 @@ explicitly only when optimizing crosscheck:
 ### C++ RE2 and Go Benchmarks
 
 The benchmark suite includes C++ RE2 and Go `regexp` harnesses for
-cross-language comparison. Prerequisites: CMake ≥ 3.14 + C++17 compiler
-(for C++), Go ≥ 1.21 (for Go). Dependencies are fetched automatically.
+cross-language comparison. Prerequisites are
+[CMake ≥ 3.14](https://cmake.org/download/) with a C++17 compiler,
+[Go ≥ 1.21](https://go.dev/doc/install). Dependencies are fetched
+automatically.
+
+Benchmark patterns are written in Java syntax. A pattern that needs different
+syntax in another regex dialect declares exact alternatives beside its
+Java-canonical definition in `safere-benchmarks/benchmark-data.json`; a missing
+alternate means that the Java pattern is used unchanged. See the
+[pattern-profile schema](safere-benchmarks/DECLARATIVE_BENCHMARK_PLAN.md#pattern-profiles)
+for profile mappings and validation rules.
 
 ```bash
 # C++ RE2 benchmarks
@@ -511,14 +631,12 @@ python3 safere-benchmarks/scripts/compare-benchmarks.py \
   --engines safere,jdk,re2j,re2_ffm,re2_cpp,go
 ```
 
-To verify that emitted application benchmark names match `benchmark-data.json`,
-add:
+To distinguish absent results from declared exclusions, include the report plan:
 
 ```bash
 python3 safere-benchmarks/scripts/compare-benchmarks.py \
   --jmh jmh-output.txt \
-  --benchmark-data safere-benchmarks/benchmark-data.json \
-  --check-application-names
+  --declared-plan declared-report-plan.json
 ```
 
 ### Latest Results
@@ -527,20 +645,22 @@ See [BENCHMARKS.md](BENCHMARKS.md) for full results. Highlights:
 
 | Benchmark | SafeRE | JDK | RE2/J | RE2-FFM | C++ RE2 | Go | vs JDK |
 |---|--:|--:|--:|--:|--:|--:|---|
-| Literal match | 9 ns | 13 ns | 126 ns | 55 ns | 40 ns | 78 ns | **1.4× faster** |
-| Capture groups (3) | 94 ns | 75 ns | 958 ns | 329 ns | 84 ns | 311 ns | 1.3× slower |
-| Capture groups (10) | 200 ns | 235 ns | 1,398 ns | 737 ns | 367 ns | 600 ns | **1.2× faster** |
-| Hard pattern (1 MB) | 0.019 µs | 43,773 µs | 37,857 µs | 152 µs | 0.048 µs | 25,445 µs | **2.3M× faster** |
-| Pathological (n=20) | 0.072 µs | 15,389 µs | 6.64 µs | 0.092 µs | 0.071 µs | 3.07 µs | **210,808× faster** |
-| Literal replaceFirst | 30 ns | 40 ns | 147 ns | 215 ns | 98 ns | 605 ns | **1.3× faster** |
+| Literal match | 14 ns | 13 ns | 127 ns | 59 ns | 40 ns | 76 ns | 1.1× slower |
+| Alternation find | 226 ns | 529 ns | 4,437 ns | 656 ns | 19 ns | 1,699 ns | **2.3× faster** |
+| Capture groups (10) | 214 ns | 247 ns | 1,485 ns | 765 ns | 356 ns | 578 ns | **1.2× faster** |
+| Hard pattern (1 MiB) | 0.04 µs | 44,845 µs | 38,996 µs | 350 µs | 0.04 µs | 25,453 µs | **1.1M× faster** |
+| Pathological (n=20) | 0.09 µs | 17,670 µs | 6.9 µs | 0.10 µs | 0.07 µs | 3.0 µs | **196,000× faster** |
+| Literal replaceFirst | 55 ns | 41 ns | 149 ns | 217 ns | 98 ns | 583 ns | 1.3× slower |
 
 **Summary (geometric mean of speed ratios):**
 
-| vs | Core workloads | Pathological/scaling |
-|---|---|---|
-| JDK | 1.1× slower | **13,500× faster** |
-| RE2/J | **11.5× faster** | **2,930× faster** |
-| RE2-FFM | **2.1× faster** | **17.3× faster** |
+| vs | Core | Application | Real-world matrix | Pathological/scaling |
+|---|---|---|---|---|
+| JDK | 1.09× slower | approximately even | **1.89× faster** | **13,500× faster** |
+| RE2/J | **11.7× faster** | **7.81× faster** | **10.6× faster** | **2,820× faster** |
+| RE2-FFM | **2.19× faster** | **1.66× faster** | **2.54× faster** | **23.2× faster** |
+| C++ RE2 | 2.32× slower | 1.32× slower | 1.44× slower | 1.11× slower |
+| Go `regexp` | **3.99× faster** | **2.01× faster** | **6.17× faster** | **1,520× faster** |
 
 ## License
 

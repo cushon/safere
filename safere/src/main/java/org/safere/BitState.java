@@ -160,6 +160,30 @@ final class BitState {
       boolean endMatch,
       int nsubmatch,
       int[] resultBuffer) {
+    return search(
+        cached,
+        prog,
+        new StringInputScanner(text),
+        startPos,
+        searchLimit,
+        anchored,
+        longest,
+        endMatch,
+        nsubmatch,
+        resultBuffer);
+  }
+
+  static int[] search(
+      BitState cached,
+      Prog prog,
+      InputScanner text,
+      int startPos,
+      int searchLimit,
+      boolean anchored,
+      boolean longest,
+      boolean endMatch,
+      int nsubmatch,
+      int[] resultBuffer) {
     int textLen = text.length();
     int maxLen = maxTextSize(prog);
     if (maxLen < 0 || textLen > maxLen) {
@@ -175,11 +199,11 @@ final class BitState {
 
     int ncap = 2 * Math.max(nsubmatch, 1);
     BitState bs;
-    if (cached != null && cached.canReuse(prog, text, ncap)) {
+    if (cached != null && cached.canReuse(prog, text, startPos, textLen, ncap)) {
       bs = cached;
-      bs.reset(text, textLen, ncap, longest, endMatch);
+      bs.reset(text, startPos, textLen, ncap, longest, endMatch);
     } else {
-      bs = new BitState(prog, text, ncap, longest, endMatch);
+      bs = new BitState(prog, text, startPos, textLen, ncap, longest, endMatch);
     }
 
     return bs.doSearch(startPos, searchLimit, anchored, resultBuffer);
@@ -193,17 +217,33 @@ final class BitState {
       BitState cached,
       Prog prog,
       String text,
+      int startPos,
       int endPos,
       int ncap,
       boolean longest,
       boolean endMatch) {
-    if (cached != null && cached.canReuse(prog, text, ncap)) {
-      cached.reset(text, endPos, ncap, longest, endMatch);
+    return getOrCreate(
+        cached, prog, new StringInputScanner(text), startPos, endPos, ncap, longest, endMatch);
+  }
+
+  /**
+   * Returns a BitState instance suitable for the given parameters, either by resetting {@code
+   * cached} (if compatible) or by creating a new one.
+   */
+  static BitState getOrCreate(
+      BitState cached,
+      Prog prog,
+      InputScanner text,
+      int startPos,
+      int endPos,
+      int ncap,
+      boolean longest,
+      boolean endMatch) {
+    if (cached != null && cached.canReuse(prog, text, startPos, endPos, ncap)) {
+      cached.reset(text, startPos, endPos, ncap, longest, endMatch);
       return cached;
     }
-    BitState bs = new BitState(prog, text, ncap, longest, endMatch);
-    bs.endPos = endPos;
-    return bs;
+    return new BitState(prog, text, startPos, endPos, ncap, longest, endMatch);
   }
 
   /**
@@ -225,7 +265,7 @@ final class BitState {
   int[] doSearch(int startPos, int searchLimit, boolean anchored, int[] resultBuffer) {
     budgetExceeded = false;
     stepCount = 0;
-    stepBudget = Math.max(4096L, (long) MAX_WORK_PER_SLOT * prog.size() * (endPos + 1));
+    stepBudget = Math.max(4096L, (long) MAX_WORK_PER_SLOT * prog.size() * textSlots);
     bestMatch = null;
     matchResult =
         resultBuffer != null && resultBuffer.length >= ncap ? resultBuffer : new int[ncap];
@@ -238,8 +278,7 @@ final class BitState {
         return null;
       }
       if (searchStart < textLen) {
-        int cp = text.codePointAt(searchStart);
-        searchStart += Character.charCount(cp) - 1;
+        searchStart = InputScanner.position(text.decodeForward(searchStart)) - 1;
       }
     }
     return null;
@@ -250,7 +289,7 @@ final class BitState {
   // -------------------------------------------------------------------------
 
   private final Prog prog;
-  private String text;
+  private InputScanner text;
   private int textLen;
   private int endPos;
   private boolean longest;
@@ -293,16 +332,25 @@ final class BitState {
 
   private int[] jobPos;
   private int jobCount;
+  private int basePos;
 
-  private BitState(Prog prog, String text, int ncap, boolean longest, boolean endMatch) {
+  private BitState(
+      Prog prog,
+      InputScanner text,
+      int startPos,
+      int endPos,
+      int ncap,
+      boolean longest,
+      boolean endMatch) {
     this.prog = prog;
     this.text = text;
     this.textLen = text.length();
-    this.endPos = textLen;
+    this.basePos = startPos;
+    this.endPos = endPos;
     this.longest = longest;
     this.endMatch = endMatch || prog.anchorEnd();
     this.ncap = ncap;
-    this.textSlots = textLen + 1;
+    this.textSlots = (endPos - basePos) + 2;
     this.cycleAlts = prog.epsilonCycleAlts();
     this.graphemeContext = GraphemeSupport.Context.create(text, prog.hasGraphemeSemantics());
 
@@ -322,7 +370,7 @@ final class BitState {
     this.jobInstId = new int[maxJobs];
     this.jobPos = new int[maxJobs];
     this.jobCount = 0;
-    this.stepBudget = Math.max(4096L, (long) MAX_WORK_PER_SLOT * prog.size() * (textLen + 1));
+    this.stepBudget = Math.max(4096L, (long) MAX_WORK_PER_SLOT * prog.size() * textSlots);
     this.stepCount = 0;
     this.budgetExceeded = false;
   }
@@ -354,7 +402,7 @@ final class BitState {
       return true; // non-cycle or non-ALT instruction: safe to revisit
     }
     // Cycle ALT: use visited bitmap to prevent infinite epsilon loops.
-    int bit = instId * textSlots + pos;
+    int bit = instId * textSlots + (pos - basePos);
     int word = bit / 64;
     long mask = 1L << (bit % 64);
     if ((visited[word] & mask) != 0) {
@@ -510,9 +558,14 @@ final class BitState {
 
         case InstOp.OP_CHAR_RANGE -> {
           if (pos < endPos) {
-            int cp = text.codePointAt(pos);
+            int cp = WorkCounterConfig.ENABLED ? -1 : text.asciiAt(pos);
+            int nextPos = pos + 1;
+            if (cp < 0) {
+              long decoded = text.decodeForward(pos);
+              cp = InputScanner.codePoint(decoded);
+              nextPos = InputScanner.position(decoded);
+            }
             if (ip.matchesChar(cp)) {
-              int nextPos = pos + Character.charCount(cp);
               if (shouldVisit(ip.out, nextPos)) {
                 push(ip.out, nextPos);
               }
@@ -522,9 +575,14 @@ final class BitState {
 
         case InstOp.OP_CHAR_CLASS -> {
           if (pos < endPos) {
-            int cp = text.codePointAt(pos);
+            int cp = WorkCounterConfig.ENABLED ? -1 : text.asciiAt(pos);
+            int nextPos = pos + 1;
+            if (cp < 0) {
+              long decoded = text.decodeForward(pos);
+              cp = InputScanner.codePoint(decoded);
+              nextPos = InputScanner.position(decoded);
+            }
             if (ip.matchesCharClass(cp)) {
-              int nextPos = pos + Character.charCount(cp);
               if (shouldVisit(ip.out, nextPos)) {
                 push(ip.out, nextPos);
               }
@@ -569,15 +627,20 @@ final class BitState {
     return budgetExceeded;
   }
 
+  /** Returns the current work budget. Package-private for testing. */
+  long stepBudgetForTesting() {
+    return stepBudget;
+  }
+
   /**
    * Returns whether this BitState can be reused for the given parameters. Reuse is possible when
    * the program is the same and the pre-allocated arrays are large enough for the full text.
    */
-  boolean canReuse(Prog prog, String text, int ncap) {
+  boolean canReuse(Prog prog, InputScanner text, int startPos, int endPos, int ncap) {
     if (this.prog != prog) {
       return false;
     }
-    int newTextSlots = text.length() + 1;
+    int newTextSlots = (endPos - startPos) + 2;
     int totalBits = prog.size() * newTextSlots;
     int requiredVisitedLen = (totalBits + 63) / 64;
     return visited.length >= requiredVisitedLen
@@ -585,18 +648,26 @@ final class BitState {
         && jobInstId.length >= Math.min(totalBits, 4096);
   }
 
+  /** Clears input-dependent references before this object enters the Pattern-level reuse cache. */
+  void releaseInput() {
+    text = null;
+    graphemeContext = null;
+  }
+
   /**
    * Resets this BitState for a new search, clearing the visited bitmap and capture arrays without
    * reallocating. The caller must verify {@link #canReuse} first.
    */
-  private void reset(String text, int endPos, int ncap, boolean longest, boolean endMatch) {
+  private void reset(
+      InputScanner text, int startPos, int endPos, int ncap, boolean longest, boolean endMatch) {
     this.text = text;
     this.textLen = text.length();
+    this.basePos = startPos;
     this.endPos = endPos;
     this.longest = longest;
     this.endMatch = endMatch || prog.anchorEnd();
     this.ncap = ncap;
-    this.textSlots = textLen + 1;
+    this.textSlots = (endPos - basePos) + 2;
     this.graphemeContext = GraphemeSupport.Context.create(text, prog.hasGraphemeSemantics());
     this.bestMatch = null;
     this.jobCount = 0;

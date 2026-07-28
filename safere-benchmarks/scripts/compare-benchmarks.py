@@ -21,19 +21,15 @@ Usage examples:
   python3 compare-benchmarks.py --jmh jmh.txt --json cpp.jsonl \
       --engines safere,jdk,re2j,re2_cpp
 
-  # Verify ApplicationBenchmark names match benchmark-data.json
-  python3 compare-benchmarks.py --jmh jmh.txt --json cpp.jsonl go.jsonl \
-      --benchmark-data benchmark-data.json --check-application-names
-
 JSON-lines format (one object per line):
-  {"engine":"re2_cpp","benchmark":"RegexBenchmark.literalMatch",
+  {"engine":"re2_cpp","benchmark":"ExampleSuite.literal",
    "score":40.674,"error":0.830,"unit":"ns/op"}
 
 JMH text format (whitespace-separated):
   Benchmark                          Mode  Cnt   Score   Error  Units
-  RegexBenchmark.literalMatch_jdk    avgt    5  23.456 ± 1.234  ns/op
+  ExampleSuite.literal_jdk           avgt    5  23.456 ± 1.234  ns/op
   Benchmark                          (engine)  (inputSize)  Mode  Cnt  Score  Error  Units
-  RealWorldRegexBenchmark.runBenchmark SafeRE  1000         avgt    5  23.456 ± 1.234 us/op
+  ExampleSuite.scaling              SafeRE  1000         avgt    5  23.456 ± 1.234 us/op
 """
 
 import argparse
@@ -66,6 +62,20 @@ _JMH_ENGINE_PARAMS = {
     "RE2J": "re2j",
     "RE2_FFM": "re2_ffm",
 }
+_CROSS_ENGINE_VARIANTS = {
+    "safere-string": "safere",
+    "safere-utf8": "safere_utf8",
+    "jdk-string": "jdk",
+    "re2j-string": "re2j",
+    "re2-ffm-string-conversion": "re2_ffm",
+}
+_DECLARED_TRIAL_PARAMS = (
+    "crossEngineTrial",
+    "crossEngineScalingTrial",
+    "crossEngineNoForkTrial",
+    "crossEngineColdStartTrial",
+    "specializedTrial",
+)
 _JMH_MODES = {"avgt", "thrpt", "sample", "ss", "all"}
 
 
@@ -162,6 +172,27 @@ def _parse_jmh_parameterized_line(line, param_names):
     class_name = full_name[: dot]
     method = full_name[dot + 1 :]
 
+    trial = next(
+        (params.get(name) for name in _DECLARED_TRIAL_PARAMS
+         if params.get(name) and params.get(name) != "N/A"),
+        None,
+    )
+    if trial and trial != "N/A":
+        try:
+            benchmark, variant = trial.rsplit("@", 1)
+        except ValueError:
+            return None
+        engine = _CROSS_ENGINE_VARIANTS.get(variant)
+        if engine is None:
+            return None
+        return Result(
+            engine=engine,
+            benchmark=benchmark,
+            score=score,
+            error=error,
+            unit=unit,
+        )
+
     engine, base_method = _engine_from_method(method)
     if "engine" in params and params["engine"] != "N/A":
         engine = _JMH_ENGINE_PARAMS.get(params["engine"], params["engine"].lower())
@@ -175,17 +206,6 @@ def _parameterized_benchmark_name(class_name, method, params, param_names):
         name: params[name] for name in param_names
         if name != "engine" and params.get(name) != "N/A"
     }
-    if (
-        class_name.endswith("RealWorldRegexBenchmark")
-        and method == "runBenchmark"
-        and active_params
-    ):
-        match_label = "match" if params.get("match") == "true" else "noMatch"
-        return (
-            f"{class_name}.{method}.{params['patternName']}."
-            f"{match_label}.{params['inputSize']}"
-        )
-
     suffixes = [active_params[name] for name in param_names if name in active_params]
     if suffixes:
         return f"{class_name}.{method}." + ".".join(suffixes)
@@ -310,7 +330,23 @@ def _rpad(text, width):
     return " " * max(0, width - len(text)) + text
 
 
-def generate_tables(results, engines):
+def load_declared_plan(path):
+    """Load declared trial and exclusion identities emitted by BenchmarkCollectionPlan."""
+    with open(path) as fh:
+        plan = json.load(fh)
+    statuses = collections.OrderedDict()
+    for trial in plan.get("trials", []):
+        engine = _CROSS_ENGINE_VARIANTS.get(trial["executionVariant"])
+        if engine:
+            statuses[(trial["workloadId"], engine)] = "declared"
+    for exclusion in plan.get("exclusions", []):
+        engine = _CROSS_ENGINE_VARIANTS.get(exclusion["executionVariant"])
+        if engine:
+            statuses.setdefault((exclusion["workloadId"], engine), "excluded")
+    return statuses
+
+
+def generate_tables(results, engines, declared_statuses=None):
     """Generate markdown tables from *results*, one per benchmark class.
 
     Args:
@@ -329,6 +365,10 @@ def generate_tables(results, engines):
         index[key] = r
         all_benchmarks[r.benchmark] = True
         seen_engines.add(r.engine)
+    if declared_statuses:
+        for benchmark, engine in declared_statuses:
+            all_benchmarks.setdefault(benchmark, True)
+            seen_engines.add(engine)
 
     # If no explicit engine list, discover from data (preserving order).
     if not engines:
@@ -380,6 +420,10 @@ def generate_tables(results, engines):
                 r = index.get((bench, eng))
                 if r:
                     cells.append(_fmt_cell(r.score, r.error))
+                elif declared_statuses and declared_statuses.get((bench, eng)) == "excluded":
+                    cells.append("excluded")
+                elif declared_statuses and declared_statuses.get((bench, eng)) == "declared":
+                    cells.append("missing")
                 else:
                     cells.append("—")
             rows.append((method, cells))
@@ -416,39 +460,6 @@ def generate_tables(results, engines):
     return "\n".join(lines)
 
 
-def _application_benchmarks_from_data(path):
-    with open(path) as fh:
-        data = json.load(fh)
-    return {
-        f"ApplicationBenchmark.{case['name']}"
-        for case in data.get("application", [])
-    }
-
-
-def verify_application_names(results, benchmark_data_path, engines):
-    """Verify every engine emitted the application case names from benchmark data."""
-    expected = _application_benchmarks_from_data(benchmark_data_path)
-    by_engine = collections.defaultdict(set)
-    seen_engines = collections.OrderedDict()
-    for result in results:
-        seen_engines[result.engine] = True
-        if result.benchmark.startswith("ApplicationBenchmark."):
-            by_engine[result.engine].add(result.benchmark)
-
-    expected_engines = engines or list(seen_engines)
-    errors = []
-    for engine in expected_engines:
-        names = by_engine[engine]
-        missing = sorted(expected - names)
-        extra = sorted(names - expected)
-        if missing:
-            errors.append(f"{engine}: missing {', '.join(missing)}")
-        if extra:
-            errors.append(f"{engine}: unexpected {', '.join(extra)}")
-    if errors:
-        raise SystemExit("Application benchmark name mismatch:\n" + "\n".join(errors))
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -457,6 +468,11 @@ def verify_application_names(results, benchmark_data_path, engines):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Merge benchmark results from multiple engines into markdown tables.",
+    )
+    parser.add_argument(
+        "--declared-plan",
+        metavar="FILE",
+        help="JSON report plan emitted by BenchmarkCollectionPlan.",
     )
     parser.add_argument(
         "--jmh",
@@ -475,17 +491,6 @@ def main(argv=None):
         help="Comma-separated engine names in desired column order "
              "(e.g. safere,jdk,re2j,re2_cpp).",
     )
-    parser.add_argument(
-        "--benchmark-data",
-        metavar="FILE",
-        default="benchmark-data.json",
-        help="Path to benchmark-data.json for application benchmark validation.",
-    )
-    parser.add_argument(
-        "--check-application-names",
-        action="store_true",
-        help="Verify emitted ApplicationBenchmark names match benchmark-data.json.",
-    )
     args = parser.parse_args(argv)
 
     if not args.jmh and not args.json:
@@ -503,10 +508,10 @@ def main(argv=None):
         sys.exit(1)
 
     engines = [e.strip() for e in args.engines.split(",")] if args.engines else []
-    if args.check_application_names:
-        verify_application_names(results, args.benchmark_data, engines)
-
-    print(generate_tables(results, engines))
+    declared_statuses = (
+        load_declared_plan(args.declared_plan) if args.declared_plan else None
+    )
+    print(generate_tables(results, engines, declared_statuses))
 
 
 if __name__ == "__main__":

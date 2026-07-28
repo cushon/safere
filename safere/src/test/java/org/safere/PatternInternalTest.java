@@ -12,10 +12,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** Tests for package-private {@link Pattern} metadata. */
 @DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
 class PatternInternalTest {
+
+  @Test
+  void testOnePassEligibility() {
+    Pattern p1 =
+        Pattern.compile(
+            "\\s*[\\[\\x{FF3B}]\\s*((?:[0-9]+\\.?){3,4}(?:\\s*[,\\x{3001}]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]\\x{FF3D}]");
+    assertThat(p1.onePass()).isNull();
+    assertThat(p1.canOnePassPrimary()).isFalse();
+
+    Pattern p2 = Pattern.compile("\\b[Ff]ormer [Cc][Ee][Oo] ([Aa]lice\\b|\\*\\*[Aa]lice\\*\\*)");
+    assertThat(p2.onePass()).isNotNull();
+    assertThat(p2.canOnePassPrimary()).isTrue();
+    assertThat(p2.canOnePassFind()).isFalse();
+    assertThat(p2.canOnePassSubmatch()).isTrue();
+  }
 
   @Test
   void numGroupsCounting() {
@@ -52,6 +68,23 @@ class PatternInternalTest {
     Pattern p = Pattern.compile("(?i)\\b(?:error|warning)\\b");
 
     assertThat(p.keywordAlternation()).isNotNull();
+  }
+
+  @Test
+  void greedyDotAllWrappersPreserveKeywordAlternationAccelerator() {
+    Pattern p = Pattern.compile("(?is).*\\b(you|your)\\b.*");
+
+    assertThat(p.keywordAlternation()).isNotNull();
+    assertThat(p.keywordAlternation().greedyWholeInput).isTrue();
+  }
+
+  @Test
+  void replacementGroupConsumptionRecordsCaptureDemand() {
+    Pattern pattern = Pattern.compile("(qu|[b-df-hj-np-tv-z]*)([a-z]+)");
+
+    pattern.matcher("the quick brown fox").replaceAll("$2$1ay");
+
+    assertThat(pattern.innerCapturesObserved()).isTrue();
   }
 
   @Test
@@ -134,6 +167,13 @@ class PatternInternalTest {
   }
 
   @Test
+  void deeplyNestedConcatPrefixExtractionIsStackSafe() {
+    Pattern p = Pattern.compile(nestedPrefixConcatPattern(1_000));
+
+    assertThat(p.prefix()).isEqualTo("foo");
+  }
+
+  @Test
   void caseInsensitiveAsciiLiteralUsesLiteralMatchMetadata() {
     Pattern p = Pattern.compile("(?i)i");
 
@@ -149,6 +189,58 @@ class PatternInternalTest {
     assertThat(p.requiredMatchClassRanges()).isNotNull();
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "'.*(x|y).*',             xy, az",
+    "'.*(?:m|n).*',           mn, xz",
+    "'.*([0-2]|[7-9]).*',     08, 56",
+    "'.*((?:α|β))+.*',        αβ, γδ",
+    "'.*(?:ab|cd).*',         ac, bd"
+  })
+  void mandatoryAlternativesRecordTheirRequiredCharacterUnion(
+      String regex, String members, String nonMembers) {
+    Pattern p = Pattern.compile(regex);
+
+    assertThat(p.requiredMatchClassRanges()).isNotNull();
+    members
+        .codePoints()
+        .forEach(codePoint -> assertThat(requiredClassContains(p, codePoint)).isTrue());
+    nonMembers
+        .codePoints()
+        .forEach(codePoint -> assertThat(requiredClassContains(p, codePoint)).isFalse());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {".*(x|).*", ".*(?:x|y)?.*", ".*(?:x|y){0,3}.*", ".*(?:x|y|.*).*"})
+  void nullableAlternativesDoNotRecordRequiredCharacterClasses(String regex) {
+    assertThat(Pattern.compile(regex).requiredMatchClassRanges()).isNull();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "'.*coolfunctionname.*',       coolfunctionname",
+    "'.*(needle).*',               needle",
+    "'(?:ab)+.*',                  ab",
+    "'.*short.*much-longer.*',     much-longer",
+    "'.*前置.*かなり長い必要語.*', かなり長い必要語"
+  })
+  void mandatoryCaseSensitiveLiteralsAreRecorded(String regex, String expected) {
+    assertThat(Pattern.compile(regex).requiredLiteral()).isEqualTo(expected);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        ".*(?:needle)?.*",
+        "(?i).*needle.*",
+        ".*(?:needle|thread).*",
+        ".*(?:needle){0,2}.*",
+        "needle.*"
+      })
+  void optionalCaseInsensitiveAndAlreadyPrefixedLiteralsAreNotRecorded(String regex) {
+    assertThat(Pattern.compile(regex).requiredLiteral()).isNull();
+  }
+
   @Test
   void boundaryPrefixedLiteralRecordsRequiredClass() {
     Pattern p = Pattern.compile("\\b{g}z");
@@ -161,6 +253,14 @@ class PatternInternalTest {
     Pattern p = Pattern.compile(".*");
 
     assertThat(p.requiredMatchClassRanges()).isNull();
+  }
+
+  private static boolean requiredClassContains(Pattern pattern, int codePoint) {
+    return InputScanner.classContains(
+        pattern.requiredMatchClassRanges(),
+        pattern.requiredMatchClassBitmap0(),
+        pattern.requiredMatchClassBitmap1(),
+        codePoint);
   }
 
   @ParameterizedTest(name = "compile(\"{0}\").numGroups() == {1}")
@@ -202,5 +302,30 @@ class PatternInternalTest {
       regex.append("|b)");
     }
     return regex.toString();
+  }
+
+  private static String nestedPrefixConcatPattern(int depth) {
+    StringBuilder regex = new StringBuilder(depth * 3 + 3);
+    for (int i = 0; i < depth; i++) {
+      regex.append('(');
+    }
+    regex.append("foo");
+    for (int i = 0; i < depth; i++) {
+      regex.append(")x");
+    }
+    return regex.toString();
+  }
+
+  @Test
+  void prefixExtractionFromNestedCaptureInConcat() {
+    Pattern p1 = Pattern.compile("(foo bar)baz");
+    assertThat(p1.prefix()).isEqualTo("foo bar");
+
+    Pattern p2 = Pattern.compile("(<template name>.*)");
+    assertThat(p2.prefix()).isEqualTo("<template name>");
+
+    // reproducing the actual templateTagMatch pattern structure
+    Pattern p3 = Pattern.compile("(<template name>.*)([^>])");
+    assertThat(p3.prefix()).isEqualTo("<template name>");
   }
 }
