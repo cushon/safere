@@ -343,7 +343,8 @@ generic runners and trials:
   `./collect-benchmark-results.sh` collects SafeRE, JDK, RE2/J, and RE2-FFM
   results from SafeRE's suite, then SafeRE/JDK results from the external
   OpenJDK-derived suite. Use `./collect-benchmark-results.sh --cross-language`
-  only when broader C++ RE2 and Go `regexp` context is explicitly needed.
+  only when broader C++ RE2, Go `regexp`, and Rust `regex` context is explicitly
+  needed.
 - **OpenJDK-derived benchmarks stay external.** Their GPL-2.0-only repository
   must be checked out separately and must not be vendored or added to SafeRE's
   Maven modules. The collection script runs them as a separate result set
@@ -358,9 +359,19 @@ generic runners and trials:
   Every optimization must be validated with before/after benchmarks.
 - **`benchmark-data.json` is the only checked-in workload source.** Benchmark
   scripts materialize it into a resolved manifest and exact UTF-8 input files
-  before execution. Java, C++, Go, and other harnesses read only those
+  before execution. Java, C++, Go, Rust, and other harnesses read only those
   generated artifacts. Edit the JSON file to change workloads; never hardcode
   values or generation logic in a harness.
+- **Zero implicit benchmark syntax conversion.** Regex patterns and
+  replacement templates remain Java-canonical workload data. When an engine
+  needs different syntax, declare the engine's exact alternate beside the
+  canonical value in `benchmark-data.json`, with a reason, and have the adapter
+  select that profile or use the canonical value unchanged. Runners and
+  adapters must not parse, rewrite, translate, escape, or otherwise infer
+  engine-specific pattern or replacement syntax, including numbered or named
+  group references and quoting rules. If the schema cannot yet express the
+  required alternate, extend and validate the schema first; do not add a
+  conversion helper in a harness.
 
 ### Summary Statistics
 
