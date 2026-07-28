@@ -1015,8 +1015,8 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns a cached reverse DFA from the pool or creates an unpooled instance if needed.
-   * Triggers lazy compilation of the reverse program on first access.
+   * Returns a cached reverse DFA from the pool or creates an unpooled instance if needed. Triggers
+   * lazy compilation of the reverse program on first access.
    */
   Dfa reverseDfa() {
     Dfa dfa = borrowReverseDfa();
