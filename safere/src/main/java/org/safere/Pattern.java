@@ -947,18 +947,22 @@ public final class Pattern implements Serializable {
     }
   }
 
+  /** Borrows a cached BitState from the pool, or creates one if empty. */
   BitState borrowBitState() {
     return cachedBitState.acquire();
   }
 
+  /** Returns a BitState instance to the pool for reuse. */
   void returnBitState(BitState bs) {
     cachedBitState.release(bs);
   }
 
+  /** Borrows a cached Nfa from the pool, or creates one if empty. */
   Nfa borrowNfa() {
     return cachedNfa.acquire();
   }
 
+  /** Returns an Nfa instance to the pool for reuse. */
   void returnNfa(Nfa nfa) {
     cachedNfa.release(nfa);
   }
@@ -966,11 +970,6 @@ public final class Pattern implements Serializable {
   /** Maximum number of DFA states before the DFA bails out. */
   static final int MAX_DFA_STATES = 10_000;
 
-  /**
-   * Returns the thread-local cached forward DFA, creating it on first access. The DFA state cache
-   * persists across Matcher instances, so repeated {@code pattern.matcher(t).find()} calls benefit
-   * from warm DFA transitions.
-   */
   Prog flatProg() {
     return flatProg;
   }
@@ -979,36 +978,46 @@ public final class Pattern implements Serializable {
     return flatDfaProg;
   }
 
+  /** Borrows a cached forward first-match DFA from the pool (or null if DFA engine disabled). */
   Dfa borrowForwardFirstMatchDfa() {
     return cachedForwardFirstMatchDfa != null ? cachedForwardFirstMatchDfa.acquire() : null;
   }
 
+  /** Returns a forward first-match DFA instance to the pool. */
   void returnForwardFirstMatchDfa(Dfa dfa) {
     if (cachedForwardFirstMatchDfa != null) {
       cachedForwardFirstMatchDfa.release(dfa);
     }
   }
 
+  /** Borrows a cached forward longest-match DFA from the pool (or null if DFA engine disabled). */
   Dfa borrowForwardLongestMatchDfa() {
     return cachedForwardLongestMatchDfa != null ? cachedForwardLongestMatchDfa.acquire() : null;
   }
 
+  /** Returns a forward longest-match DFA instance to the pool. */
   void returnForwardLongestMatchDfa(Dfa dfa) {
     if (cachedForwardLongestMatchDfa != null) {
       cachedForwardLongestMatchDfa.release(dfa);
     }
   }
 
+  /** Borrows a cached reverse DFA from the pool (or null if DFA engine disabled or anchored). */
   Dfa borrowReverseDfa() {
     return cachedReverseDfa != null ? cachedReverseDfa.acquire() : null;
   }
 
+  /** Returns a reverse DFA instance to the pool. */
   void returnReverseDfa(Dfa dfa) {
     if (cachedReverseDfa != null) {
       cachedReverseDfa.release(dfa);
     }
   }
 
+  /**
+   * Returns a cached reverse DFA from the pool or creates an unpooled instance if needed.
+   * Triggers lazy compilation of the reverse program on first access.
+   */
   Dfa reverseDfa() {
     Dfa dfa = borrowReverseDfa();
     if (dfa == null) {
