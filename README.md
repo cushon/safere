@@ -30,20 +30,20 @@ SafeRE is available on [Maven Central](https://central.sonatype.com/artifact/org
 <dependency>
   <groupId>org.safere</groupId>
   <artifactId>safere</artifactId>
-  <version>0.9.0</version>
+  <version>0.10.0</version>
 </dependency>
 ```
 
 **Gradle (Kotlin DSL):**
 
 ```kotlin
-implementation("org.safere:safere:0.9.0")
+implementation("org.safere:safere:0.10.0")
 ```
 
 **Gradle (Groovy DSL):**
 
 ```groovy
-implementation 'org.safere:safere:0.9.0'
+implementation 'org.safere:safere:0.10.0'
 ```
 
 ## Quick Start
@@ -429,9 +429,20 @@ SafeRE includes a [JMH](https://github.com/openjdk/jmh) benchmark suite in the
 [FFM API](https://openjdk.org/jeps/454)), C++ RE2, and Go `regexp`.
 The suite includes focused microbenchmarks, data-driven application workloads,
 scaling/pathological cases, replacement, memory, and `PatternSet` benchmarks.
-Application workloads live in `safere-benchmarks/benchmark-data.json`, where
-each case defines its operation semantics and expected result for the Java,
-C++, and Go harnesses.
+Benchmark recipes and configuration live in
+`safere-benchmarks/benchmark-data.json`. Before a benchmark starts, its runner
+materializes that file into a resolved manifest and exact UTF-8 inputs under
+`safere-benchmarks/target/benchmark-corpus`. Java, C++, and Go consume only
+those generated artifacts instead of independently interpreting input recipes.
+See
+[`safere-benchmarks/BENCHMARK_INPUTS.md`](safere-benchmarks/BENCHMARK_INPUTS.md)
+for details.
+
+Java workload additions are data-only: declarations select generic operations,
+engine capabilities, inputs, timing modes, and result consumption. See
+[`safere-benchmarks/DECLARATIVE_BENCHMARK_PLAN.md`](safere-benchmarks/DECLARATIVE_BENCHMARK_PLAN.md)
+and
+[`safere-benchmarks/DECLARATIVE_COLLECTION.md`](safere-benchmarks/DECLARATIVE_COLLECTION.md).
 
 SafeRE also maintains a separate
 [OpenJDK-derived regex benchmark suite](https://github.com/eaftan/safere-openjdk-regex-benchmarks).
@@ -512,6 +523,7 @@ The important files in that directory are:
 
 ```text
 jmh-output.txt
+declared-report-plan.json
 merged-tables.md
 java-memory.txt
 java-pattern-memory.txt
@@ -522,6 +534,7 @@ Cross-language runs also include:
 ```text
 cpp-results.jsonl
 go-results.jsonl
+cross-runtime-tables.md
 ```
 
 Default runs also include:
@@ -541,17 +554,19 @@ development iteration or focused investigation; use
 ```bash
 # Java benchmarks (throughput)
 ./run-java-benchmarks.sh                        # standard benchmarks
-./run-java-benchmarks.sh '^org\.safere\.benchmark\.RegexBenchmark\.'
-./run-java-benchmarks.sh '^org\.safere\.benchmark\.ApplicationBenchmark\.'
-./run-java-benchmarks.sh --long '^org\.safere\.benchmark\.RegexBenchmark\.'
+./run-java-benchmarks.sh --declared             # all declared execution profiles
+./run-java-benchmarks.sh --long --declared
 
 # Java memory profiling (allocation rates via JMH GC profiler)
-./run-java-memory-benchmarks.sh                 # all benchmarks
-./run-java-memory-benchmarks.sh '^org\.safere\.benchmark\.RegexBenchmark\.'
+./run-java-memory-benchmarks.sh --declared
 ```
 
-Arguments to the Java wrapper scripts are passed directly to JMH as benchmark
-regex filters.
+Use `BenchmarkCollectionPlan trials` to discover trial IDs by mode, timing
+unit, workload prefix, or execution variant. Benchmark regexes select generic
+JMH entry points, and arguments after `--` can select a specific trial or pass
+other JMH options. See
+[`safere-benchmarks/CROSS_ENGINE_EXECUTION.md`](safere-benchmarks/CROSS_ENGINE_EXECUTION.md)
+for workload IDs, execution variants, and timing boundaries.
 
 Run a targeted workload from the external OpenJDK-derived suite with:
 
@@ -576,8 +591,17 @@ explicitly only when optimizing crosscheck:
 ### C++ RE2 and Go Benchmarks
 
 The benchmark suite includes C++ RE2 and Go `regexp` harnesses for
-cross-language comparison. Prerequisites: CMake ≥ 3.14 + C++17 compiler
-(for C++), Go ≥ 1.21 (for Go). Dependencies are fetched automatically.
+cross-language comparison. Prerequisites are
+[CMake ≥ 3.14](https://cmake.org/download/) with a C++17 compiler,
+[Go ≥ 1.21](https://go.dev/doc/install). Dependencies are fetched
+automatically.
+
+Benchmark patterns are written in Java syntax. A pattern that needs different
+syntax in another regex dialect declares exact alternatives beside its
+Java-canonical definition in `safere-benchmarks/benchmark-data.json`; a missing
+alternate means that the Java pattern is used unchanged. See the
+[pattern-profile schema](safere-benchmarks/DECLARATIVE_BENCHMARK_PLAN.md#pattern-profiles)
+for profile mappings and validation rules.
 
 ```bash
 # C++ RE2 benchmarks
@@ -607,14 +631,12 @@ python3 safere-benchmarks/scripts/compare-benchmarks.py \
   --engines safere,jdk,re2j,re2_ffm,re2_cpp,go
 ```
 
-To verify that emitted application benchmark names match `benchmark-data.json`,
-add:
+To distinguish absent results from declared exclusions, include the report plan:
 
 ```bash
 python3 safere-benchmarks/scripts/compare-benchmarks.py \
   --jmh jmh-output.txt \
-  --benchmark-data safere-benchmarks/benchmark-data.json \
-  --check-application-names
+  --declared-plan declared-report-plan.json
 ```
 
 ### Latest Results

@@ -5,9 +5,10 @@
 # Run SafeRE JMH benchmarks with GC profiling to measure allocation rates.
 #
 # Usage:
-#   ./run-java-memory-benchmarks.sh '^org\.safere\.benchmark\.RegexBenchmark\.'
-#   ./run-java-memory-benchmarks.sh --quick '^org\.safere\.benchmark\.RegexBenchmark\.'
-#   ./run-java-memory-benchmarks.sh --smoke '^org\.safere\.benchmark\.RegexBenchmark\.'
+#   ./run-java-memory-benchmarks.sh '^org\.safere\.benchmark\.CrossEngineBenchmark\.'
+#   ./run-java-memory-benchmarks.sh --quick '^org\.safere\.benchmark\.CrossEngineBenchmark\.'
+#   ./run-java-memory-benchmarks.sh --smoke '^org\.safere\.benchmark\.CrossEngineBenchmark\.'
+#   ./run-java-memory-benchmarks.sh --declared
 #   ./run-java-memory-benchmarks.sh                         # run all benchmarks
 #
 # This runs the same benchmarks as run-java-benchmarks.sh but adds JMH's
@@ -24,6 +25,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BENCHMARK_JAR="$SCRIPT_DIR/safere-benchmarks/target/benchmarks.jar"
+BENCHMARK_CORPUS="$SCRIPT_DIR/safere-benchmarks/target/benchmark-corpus"
 RE2_SHIM_DIR="$SCRIPT_DIR/safere-ffm-re2/build"
 
 # Publication-quality settings: 3 forks × (3 warmup × 5s + 5 measurement × 5s).
@@ -34,6 +36,7 @@ SMOKE_OPTS="-f 0 -wi 1 -w 1 -i 1 -r 1"
 
 # Parse mode flag.
 MODE="publish"
+DECLARED=false
 if [ "${1:-}" = "--quick" ]; then
   MODE="quick"
   shift
@@ -41,6 +44,36 @@ elif [ "${1:-}" = "--smoke" ]; then
   MODE="smoke"
   shift
 fi
+
+BENCHMARKS=()
+JMH_EXTRA_ARGS=()
+CROSS_ENGINE_PREFIXES=()
+CROSS_ENGINE_SCALING_PREFIXES=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --declared)
+      DECLARED=true
+      shift
+      ;;
+    --cross-engine-prefix)
+      CROSS_ENGINE_PREFIXES+=("$2")
+      shift 2
+      ;;
+    --cross-engine-scaling-prefix)
+      CROSS_ENGINE_SCALING_PREFIXES+=("$2")
+      shift 2
+      ;;
+    --)
+      shift
+      JMH_EXTRA_ARGS=("$@")
+      break
+      ;;
+    *)
+      BENCHMARKS+=("$1")
+      shift
+      ;;
+  esac
+done
 
 if [ "$MODE" = "smoke" ]; then
   JMH_OPTS="$SMOKE_OPTS"
@@ -53,18 +86,125 @@ else
   echo "=== Publication mode (for BENCHMARKS.md) ==="
 fi
 
-# JVM args for FFM native access and native library path.
-JVM_ARGS="--enable-native-access=ALL-UNNAMED -Dre2shim.library.path=$RE2_SHIM_DIR"
-
 echo "=== Building safere + benchmark JAR ==="
+mvn -pl safere-benchmarks clean -q -f "$SCRIPT_DIR/pom.xml"
 mvn install -DskipTests -q -f "$SCRIPT_DIR/pom.xml"
 
-if [ $# -eq 0 ]; then
-  echo "=== Running all benchmarks with GC profiling ==="
-  java $JVM_ARGS -jar "$BENCHMARK_JAR" -jvmArgs "$JVM_ARGS" -prof gc $JMH_OPTS
+echo "=== Materializing shared benchmark inputs ==="
+"$SCRIPT_DIR/materialize-benchmark-inputs.sh" --no-build
+
+# JVM args for FFM native access, native library path, and the resolved corpus.
+JVM_ARGS="--enable-native-access=ALL-UNNAMED -Dre2shim.library.path=$RE2_SHIM_DIR -Dsafere.benchmark.corpus=$BENCHMARK_CORPUS"
+
+if [ "$DECLARED" = true ]; then
+  COLLECTION_QUERY=(allocation-runners)
+  if [ "$MODE" = "smoke" ]; then
+    COLLECTION_QUERY+=(--smoke)
+  fi
+  matched_runner=false
+  while IFS=$'\t' read -r profile benchmark parameter trial_ids; do
+    if [ ${#BENCHMARKS[@]} -gt 0 ]; then
+      matches_filter=false
+      for filter in "${BENCHMARKS[@]}"; do
+        if [[ "$benchmark" =~ $filter ]]; then
+          matches_filter=true
+          break
+        fi
+      done
+      if [ "$matches_filter" = false ]; then
+        continue
+      fi
+    fi
+    matched_runner=true
+    echo "=== Running declared allocation trials for $benchmark ==="
+    RUNNER_COMMAND=(java \
+      $JVM_ARGS \
+      -jar "$BENCHMARK_JAR" \
+      -jvmArgs "$JVM_ARGS" \
+      -prof gc \
+      $JMH_OPTS \
+      -p "$parameter=$trial_ids")
+    if [ ${#JMH_EXTRA_ARGS[@]} -gt 0 ]; then
+      RUNNER_COMMAND+=("${JMH_EXTRA_ARGS[@]}")
+    fi
+    RUNNER_COMMAND+=("^${benchmark//./\\.}$")
+    "${RUNNER_COMMAND[@]}"
+  done < <(
+    java $JVM_ARGS \
+      -cp "$BENCHMARK_JAR" \
+      org.safere.benchmark.BenchmarkCollectionPlan \
+      "${COLLECTION_QUERY[@]}"
+  )
+  if [ "$matched_runner" = false ]; then
+    echo "ERROR: no declared allocation runner matches the requested filters" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+if [ ${#CROSS_ENGINE_PREFIXES[@]} -gt 0 ]; then
+  CROSS_ENGINE_TRIALS="$(
+    java $JVM_ARGS \
+      -cp "$BENCHMARK_JAR" \
+      org.safere.benchmark.CrossEngineBenchmarkPlan \
+      nanoseconds \
+      "${CROSS_ENGINE_PREFIXES[@]}"
+  )"
 else
-  for bench in "$@"; do
+  CROSS_ENGINE_TRIALS="$(
+    java $JVM_ARGS \
+      -cp "$BENCHMARK_JAR" \
+      org.safere.benchmark.CrossEngineBenchmarkPlan \
+      nanoseconds
+  )"
+fi
+if [ ${#CROSS_ENGINE_SCALING_PREFIXES[@]} -gt 0 ]; then
+  CROSS_ENGINE_SCALING_TRIALS="$(
+    java $JVM_ARGS \
+      -cp "$BENCHMARK_JAR" \
+      org.safere.benchmark.CrossEngineBenchmarkPlan \
+      microseconds \
+      "${CROSS_ENGINE_SCALING_PREFIXES[@]}"
+  )"
+else
+  CROSS_ENGINE_SCALING_TRIALS="$(
+    java $JVM_ARGS \
+      -cp "$BENCHMARK_JAR" \
+      org.safere.benchmark.CrossEngineBenchmarkPlan \
+      microseconds
+  )"
+fi
+CROSS_ENGINE_PARAM_ARGS=()
+if [[ ! " ${JMH_EXTRA_ARGS[*]-} " =~ [[:space:]]crossEngineTrial= ]]; then
+  CROSS_ENGINE_PARAM_ARGS+=(-p "crossEngineTrial=$CROSS_ENGINE_TRIALS")
+fi
+if [[ ! " ${JMH_EXTRA_ARGS[*]-} " =~ [[:space:]]crossEngineScalingTrial= ]]; then
+  CROSS_ENGINE_PARAM_ARGS+=(-p "crossEngineScalingTrial=$CROSS_ENGINE_SCALING_TRIALS")
+fi
+RUN_ARGS=("${CROSS_ENGINE_PARAM_ARGS[@]}")
+if [ ${#JMH_EXTRA_ARGS[@]} -gt 0 ]; then
+  RUN_ARGS+=("${JMH_EXTRA_ARGS[@]}")
+fi
+
+if [ ${#BENCHMARKS[@]} -eq 0 ]; then
+  echo "=== Running all benchmarks with GC profiling ==="
+  java \
+    $JVM_ARGS \
+    -jar "$BENCHMARK_JAR" \
+    -jvmArgs "$JVM_ARGS" \
+    -prof gc \
+    $JMH_OPTS \
+    "${RUN_ARGS[@]}"
+else
+  for bench in "${BENCHMARKS[@]}"; do
     echo "=== Running $bench with GC profiling ==="
-    java $JVM_ARGS -jar "$BENCHMARK_JAR" -jvmArgs "$JVM_ARGS" -prof gc $JMH_OPTS "$bench"
+    java \
+      $JVM_ARGS \
+      -jar "$BENCHMARK_JAR" \
+      -jvmArgs "$JVM_ARGS" \
+      -prof gc \
+      $JMH_OPTS \
+      "${RUN_ARGS[@]}" \
+      "$bench"
   done
 fi
