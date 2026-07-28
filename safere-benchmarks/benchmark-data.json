@@ -8187,6 +8187,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "The Latin-1 prefix accelerator is specific to the Java String matcher path.",
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",

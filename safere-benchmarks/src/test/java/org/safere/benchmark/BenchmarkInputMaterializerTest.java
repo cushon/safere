@@ -30,7 +30,7 @@ class BenchmarkInputMaterializerTest {
     Map<String, byte[]> first = BenchmarkInputMaterializer.materialize(benchmarkData);
     Map<String, byte[]> second = BenchmarkInputMaterializer.materialize(benchmarkData);
 
-    assertThat(first).hasSize(304);
+    assertThat(first).hasSize(305);
     assertThat(second.keySet()).containsExactlyElementsOf(first.keySet());
     first.forEach((id, bytes) -> assertThat(second.get(id)).as(id).containsExactly(bytes));
     assertThat(text(first, "crossEngine.RegexBenchmark.literalMatch.input")).isEqualTo("hello");
@@ -157,7 +157,7 @@ class BenchmarkInputMaterializerTest {
     assertThat(resolvedData.getAsJsonObject("replacementProfiles").getAsJsonArray("rust-regex"))
         .hasSize(1);
     assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("dotnet")).hasSize(8);
-    assertThat(manifest.getAsJsonArray("resolvedWorkloads")).hasSize(485);
+    assertThat(manifest.getAsJsonArray("resolvedWorkloads")).hasSize(486);
     assertThat(
             resolvedData.getAsJsonArray("workloads").asList().stream()
                 .filter(
