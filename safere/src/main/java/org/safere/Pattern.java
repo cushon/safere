@@ -2819,13 +2819,12 @@ public final class Pattern implements Serializable {
 
   private static final int DEFAULT_DFA_POOL_SIZE =
       roundToPowerOfTwo(
-          Math.clamp(
-              Integer.getInteger(
-                  "safere.dfa_pool_size", Runtime.getRuntime().availableProcessors()),
+          Math.max(
               2,
-              256));
+              Integer.getInteger(
+                  "safere.dfa_pool_size", Runtime.getRuntime().availableProcessors())));
   private static final int DEFAULT_OTHER_POOL_SIZE =
-      roundToPowerOfTwo(Math.clamp(DEFAULT_DFA_POOL_SIZE / 2, 2, 128));
+      roundToPowerOfTwo(Math.max(2, DEFAULT_DFA_POOL_SIZE / 2));
 
   /** Deserialization: recompile the pattern from the stored string and flags. */
   private Object readResolve() {
