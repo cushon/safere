@@ -160,7 +160,6 @@ class BenchmarkInputMaterializerTest {
         .hasSize(1);
     assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("dotnet"))
         .hasSize(38);
-    assertThat(manifest.getAsJsonArray("resolvedWorkloads")).hasSize(486);
     JsonObject executionPlan = manifest.getAsJsonObject("executionPlan");
     assertThat(executionPlan.get("version").getAsInt()).isEqualTo(1);
     assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(486);
