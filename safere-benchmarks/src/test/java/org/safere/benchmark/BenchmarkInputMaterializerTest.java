@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -156,8 +158,59 @@ class BenchmarkInputMaterializerTest {
         .hasSize(6);
     assertThat(resolvedData.getAsJsonObject("replacementProfiles").getAsJsonArray("rust-regex"))
         .hasSize(1);
-    assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("dotnet")).hasSize(8);
+    assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("dotnet"))
+        .hasSize(38);
     assertThat(manifest.getAsJsonArray("resolvedWorkloads")).hasSize(486);
+    JsonObject executionPlan = manifest.getAsJsonObject("executionPlan");
+    assertThat(executionPlan.get("version").getAsInt()).isEqualTo(1);
+    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(486);
+    assertThat(executionPlan.get("engineCount").getAsInt()).isEqualTo(10);
+    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(4_860);
+    assertThat(
+            executionEntry(
+                    executionPlan, "UnicodeCompileBenchmark.compile.word.0@dotnet_nonbacktracking")
+                .getAsJsonArray("patterns")
+                .get(0)
+                .getAsString())
+        .isEqualTo("[A-Za-z0-9_]+");
+    assertThat(
+            executionEntry(
+                    executionPlan,
+                    "UnicodeCompileBenchmark.compile.word."
+                        + "CASE_INSENSITIVE_UNICODE_CHARACTER_CLASS@dotnet_nonbacktracking")
+                .getAsJsonArray("patterns")
+                .get(0)
+                .getAsString())
+        .isEqualTo("\\w+");
+    for (JsonElement engineElement : executionPlan.getAsJsonArray("engines")) {
+      String engineId = engineElement.getAsJsonObject().get("id").getAsString();
+      assertThat(
+              executionPlan.getAsJsonArray("entries").asList().stream()
+                  .map(JsonElement::getAsJsonObject)
+                  .filter(planEntry -> planEntry.get("engineId").getAsString().equals(engineId))
+                  .filter(
+                      planEntry ->
+                          Set.of("runnable", "excluded")
+                              .contains(planEntry.get("status").getAsString())))
+           .as(engineId)
+          .hasSize(486);
+    }
+    assertThat(
+            executionPlan.getAsJsonArray("entries").asList().stream()
+                .map(JsonElement::getAsJsonObject)
+                .filter(
+                    planEntry ->
+                        planEntry
+                            .get("workloadId")
+                            .getAsString()
+                            .equals("CompileBenchmark.compileSimple"))
+                .filter(
+                    planEntry ->
+                        Set.of("re2_cpp", "pcre2_jit", "go_regexp", "rust_regex")
+                            .contains(planEntry.get("engineId").getAsString())))
+        .hasSize(4)
+        .allSatisfy(
+            planEntry -> assertThat(planEntry.get("status").getAsString()).isEqualTo("runnable"));
     assertThat(
             resolvedData.getAsJsonArray("workloads").asList().stream()
                 .filter(
@@ -193,5 +246,13 @@ class BenchmarkInputMaterializerTest {
 
   private static String text(Map<String, byte[]> inputs, String id) {
     return new String(inputs.get(id), StandardCharsets.UTF_8);
+  }
+
+  private static JsonObject executionEntry(JsonObject plan, String id) {
+    return plan.getAsJsonArray("entries").asList().stream()
+        .map(JsonElement::getAsJsonObject)
+        .filter(entry -> entry.get("id").getAsString().equals(id))
+        .findFirst()
+        .orElseThrow();
   }
 }
