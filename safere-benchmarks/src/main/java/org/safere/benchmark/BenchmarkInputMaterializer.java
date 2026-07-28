@@ -42,6 +42,7 @@ public final class BenchmarkInputMaterializer {
   private final Map<String, byte[]> inputs = new LinkedHashMap<>();
 
   private BenchmarkInputMaterializer(JsonObject data, String benchmarkDataSha256) {
+    BenchmarkDataSchema.validate(data);
     this.data = PatternProfiles.normalizeInline(data);
     this.benchmarkDataSha256 = benchmarkDataSha256;
     if (!this.data.has("schemaVersion")
@@ -86,6 +87,7 @@ public final class BenchmarkInputMaterializer {
 
     BenchmarkInputMaterializer materializer =
         new BenchmarkInputMaterializer(data, sha256(benchmarkDataBytes));
+    BenchmarkDataSchema.requireWorkloads(data);
     materializer.generate();
     materializer.write(outputDirectory);
   }
@@ -438,7 +440,7 @@ public final class BenchmarkInputMaterializer {
         "description", "Resolved benchmark configuration and generated UTF-8 inputs.");
     manifest.addProperty("benchmarkDataSha256", benchmarkDataSha256);
     manifest.add("benchmarkData", data.deepCopy());
-    manifest.add("resolvedWorkloads", ResolvedBenchmarkPlan.create(data));
+    manifest.add("executionPlan", ResolvedBenchmarkPlan.create(data));
     JsonObject entries = new JsonObject();
     for (Map.Entry<String, byte[]> input : inputs.entrySet()) {
       byte[] bytes = input.getValue();

@@ -14,6 +14,7 @@ import com.google.gson.JsonParser;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class PatternProfilesTest {
@@ -185,6 +186,26 @@ class PatternProfilesTest {
   }
 
   @Test
+  void rejectsProfilesThatNoAuthoritativeWorkloadReferences() {
+    PatternProfiles profiles =
+        PatternProfiles.parse(
+            JsonParser.parseString(
+                """
+                {
+                  "re2": [{
+                    "java": "legacy-only",
+                    "alternate": "alternate",
+                    "reason": "Only a deleted legacy section used this value"
+                  }]
+                }
+                """));
+
+    assertThatThrownBy(() -> profiles.validateReferences(Set.of("used"), "pattern"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Unreferenced pattern profile value for re2: legacy-only");
+  }
+
+  @Test
   void checkedInProfilesContainReviewedDialectAlternates() throws Exception {
     Path benchmarkData =
         Files.exists(Path.of("benchmark-data.json"))
@@ -222,13 +243,17 @@ class PatternProfilesTest {
     assertThat(replacements.select("pcre2", "$1")).isEqualTo("$1");
     assertThat(replacements.select("rust-regex", "$2$1ay")).isEqualTo("${2}${1}ay");
     assertThat(patterns.select("dotnet", "^\\s*<(\\QApple\\E|\\QBanana\\E|\\QCherry\\E)>\\s*$"))
-        .isEqualTo("^\\s*<(Apple|Banana|Cherry)>\\s*$");
+        .isEqualTo("^[ \\t\\n\\x0B\\f\\r]*<(Apple|Banana|Cherry)>[ \\t\\n\\x0B\\f\\r]*$");
     assertThat(patterns.select("dotnet", "[😀-😇]")).isEqualTo("\\uD83D[\\uDE00-\\uDE07]");
     assertThat(patterns.select("dotnet", "\\p{javaLetter}")).isEqualTo("\\p{L}");
     assertThat(patterns.select("dotnet", "\\p{block=BasicLatin}+")).isEqualTo("[\\u0000-\\u007F]+");
     assertThat(patterns.select("dotnet", "\\p{block=CJK_Unified_Ideographs}+"))
         .isEqualTo("[\\u4E00-\\u9FFF]+");
     assertThat(patterns.select("dotnet", "[\\p{L}&&[^\\p{Lu}]]+")).isEqualTo("[\\p{L}-[\\p{Lu}]]+");
+    assertThat(patterns.select("dotnet", "\\w+", "0")).isEqualTo("[A-Za-z0-9_]+");
+    assertThat(patterns.select("dotnet", "\\w+", "UNICODE_CHARACTER_CLASS")).isEqualTo("\\w+");
+    assertThat(patterns.select("dotnet", "\\w+", "CASE_INSENSITIVE_UNICODE_CHARACTER_CLASS"))
+        .isEqualTo("\\w+");
     for (String profileType : List.of("patternProfiles", "replacementProfiles")) {
       for (JsonElement profile : normalized.getAsJsonObject(profileType).asMap().values()) {
         for (JsonElement entry : profile.getAsJsonArray()) {
