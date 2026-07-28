@@ -54,3 +54,32 @@ func TestCheckedInRE2PatternProfileCompiles(t *testing.T) {
 		t.Fatal("no inline re2 pattern alternates found")
 	}
 }
+
+func TestReplacementProfileSelectsExactAlternateWithJavaFallback(t *testing.T) {
+	data := map[string]any{
+		"replacementProfiles": map[string]any{
+			"go-regexp": []any{
+				map[string]any{
+					"java":      "$2$1ay",
+					"alternate": "${2}${1}ay",
+				},
+			},
+		},
+	}
+
+	benchmarkReplacementProfile = loadProfile(data, "replacementProfiles", "go-regexp")
+	t.Cleanup(func() {
+		benchmarkReplacementProfile = nil
+	})
+
+	if actual := selectedReplacement("$2$1ay"); actual != "${2}${1}ay" {
+		t.Fatalf("selected replacement %q, want %q", actual, "${2}${1}ay")
+	}
+	if actual := selectedReplacement("$1=REDACTED"); actual != "$1=REDACTED" {
+		t.Fatalf("fallback replacement %q, want unchanged Java value", actual)
+	}
+	re := regexp.MustCompile("(qu|[b-df-hj-np-tv-z]*)([a-z]+)")
+	if actual := re.ReplaceAllString("the", selectedReplacement("$2$1ay")); actual != "ethay" {
+		t.Fatalf("replacement result %q, want %q", actual, "ethay")
+	}
+}

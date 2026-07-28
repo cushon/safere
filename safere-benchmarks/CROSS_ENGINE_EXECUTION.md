@@ -6,7 +6,7 @@ in [DECLARATIVE_BENCHMARK_PLAN.md](DECLARATIVE_BENCHMARK_PLAN.md).
 Ordinary cross-engine regex measurements use a shared execution model. A
 workload declares its stable `id` in `benchmark-data.json`; Java class and
 method names are not used to infer workload identity. The same ID joins Java,
-C++, Go, generated reports, and historical results.
+C++, Go, Rust, .NET, generated reports, and historical results.
 
 A materially changed operation, input, result-consumption rule, or timing
 boundary requires a new workload ID. Display labels and the shared JMH entry
@@ -34,8 +34,9 @@ requirements and accepted representations. It emits a trial or a specific
 exclusion for every workload/variant pair, so an unsupported feature or
 representation is different from a missing adapter or operation
 implementation. In particular, SafeRE UTF-8 participates in direct `find` and
-repeated-`find` operations; it does not emulate String-only `matches`,
-group-text, replacement, or split APIs.
+repeated-`find`, whole-input `matches`, `lookingAt`, capture-participation, and
+matcher reset/region operations. Group-text, String replacement, and split
+workloads remain excluded rather than being emulated across representations.
 
 ## JMH trials and result names
 
