@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Objects;
 
 /** One regex workload executed consistently across multiple engines. */
+// groups is internal benchmark metadata; callers do not use record value semantics.
+@SuppressWarnings("ArrayRecordComponent")
 record CrossEngineWorkload(
     String id,
     BenchmarkOperation operation,
