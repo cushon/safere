@@ -23,7 +23,7 @@ final class BenchmarkDataSchema {
 
   static void validate(JsonObject source) {
     requireOnly(source, "benchmark-data.json", ROOT_FIELDS);
-    required(source, "schemaVersion").getAsInt();
+    var _ = required(source, "schemaVersion").getAsInt();
     requiredArray(source, "inputs");
     if (source.has("workloads")) {
       requiredArray(source, "workloads");
