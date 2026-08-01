@@ -5,7 +5,14 @@
 
 package org.safere;
 
+import java.util.Objects;
+import org.safere.vector.VectorScannerBridge;
+import org.safere.vector.VectorScannerLoader;
+
 final class StringInputScanner implements InputScanner {
+  private static final VectorScannerBridge VECTOR_SCANNER = VectorScannerLoader.getInstance();
+  private static final int VECTOR_THRESHOLD =
+      Objects.equals(System.getProperty("safere.vector.mode", "unsafe"), "copy") ? 512 : 32;
   private final String text;
 
   StringInputScanner(String text) {
@@ -49,6 +56,12 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
+    if (VECTOR_SCANNER != null && (text.length() - start) >= VECTOR_THRESHOLD) {
+      int idx = VECTOR_SCANNER.indexOfCodePointClass(text, ranges, bitmap0, bitmap1, start);
+      if (idx >= -1) {
+        return idx;
+      }
+    }
     int position = Math.max(0, start);
     while (position < text.length()) {
       if (WorkCounterConfig.ENABLED) {
@@ -134,5 +147,31 @@ final class StringInputScanner implements InputScanner {
       }
     }
     return threshold;
+  }
+
+  @Override
+  public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
+    if (VECTOR_SCANNER != null && (text.length() - start) >= VECTOR_THRESHOLD) {
+      int idx = VECTOR_SCANNER.indexOfCharClass(text, scanInfo, start);
+      if (idx >= -1) {
+        return idx;
+      }
+    }
+    // Fallback scalar implementation using classContains
+    int position = Math.max(0, start);
+    int[] ranges = scanInfo.ranges;
+    long b0 = scanInfo.bitmap0;
+    long b1 = scanInfo.bitmap1;
+    while (position < text.length()) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char ch = text.charAt(position);
+      if (ch < 128 && InputScanner.classContains(ranges, b0, b1, ch)) {
+        return position;
+      }
+      position++;
+    }
+    return -1;
   }
 }
