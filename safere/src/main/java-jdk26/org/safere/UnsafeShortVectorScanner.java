@@ -14,7 +14,7 @@ import jdk.incubator.vector.VectorSpecies;
  * Standard unsafe ShortVector scanning implementation. Always converts Latin-1 characters to shorts
  * in registers, making it simpler but slower than UnsafeByteVectorScanner for Latin-1.
  *
- * NOTE: This class is designed to remain completely agnostic of String internal layout details
+ * <p>NOTE: This class is designed to remain completely agnostic of String internal layout details
  * (such as the "coder" field of compact strings). It serves as a clean prototype for a future
  * upstream JDK API that might expose String vector loading without leaking internal JVM formats.
  */

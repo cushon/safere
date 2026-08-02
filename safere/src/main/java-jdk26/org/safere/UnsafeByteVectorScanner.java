@@ -69,7 +69,8 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
       }
     }
 
-    return UnsafeShortVectorScanner.indexOfCharClassShort(text, scanInfo.ranges, start, numRanges, false);
+    return UnsafeShortVectorScanner.indexOfCharClassShort(
+        text, scanInfo.ranges, start, numRanges, false);
   }
 
   private int indexOfCharClassByte(
@@ -186,7 +187,6 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
     return -1;
   }
 
-
   @Override
   public int indexOfCodePointClass(
       String text, int[] ranges, long bitmap0, long bitmap1, int start) {
@@ -231,7 +231,8 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
       return indexOfCharClassByte(text, activeRanges, start, numRanges, isAscii);
     }
 
-    return UnsafeShortVectorScanner.indexOfCharClassShort(text, activeRanges, start, numRanges, true);
+    return UnsafeShortVectorScanner.indexOfCharClassShort(
+        text, activeRanges, start, numRanges, true);
   }
 
   private static int[] clampRangesForLatin1(int[] ranges) {
