@@ -31,6 +31,7 @@ final class Utf8InputScanner implements InputScanner {
   private final byte[] bytes;
   private final int offset;
   private final int length;
+  private final VectorScanProvider scanProvider;
 
   Utf8InputScanner(byte[] bytes) {
     this(bytes, 0, bytes.length);
@@ -44,6 +45,7 @@ final class Utf8InputScanner implements InputScanner {
     }
     this.offset = offset;
     this.length = length;
+    this.scanProvider = VectorScanProviders.providerForLength(length);
   }
 
   static void validate(byte[] bytes, int offset, int length) {
@@ -126,6 +128,9 @@ final class Utf8InputScanner implements InputScanner {
    */
   private int indexOfAsciiRanges(int[] ranges, int start) {
     if (ranges.length == 2 && ranges[0] >= 0 && ranges[1] < 0x80) {
+      if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
+        return scanProvider.indexOfAsciiClass(bytes, offset, length, ranges, start);
+      }
       int low = ranges[0];
       int high = ranges[1];
       if (low == high) {
@@ -141,6 +146,9 @@ final class Utf8InputScanner implements InputScanner {
         && ranges[2] == ranges[3]
         && ranges[0] >= 0
         && ranges[3] < 0x80) {
+      if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
+        return scanProvider.indexOfAsciiClass(bytes, offset, length, ranges, start);
+      }
       return indexOfBytePair((byte) ranges[0], (byte) ranges[2], start);
     }
     return -2;
