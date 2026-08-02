@@ -24,12 +24,14 @@ public class StringVectorScanBenchmark {
   private String textWord;
   private String textAlpha;
   private String textNegated;
+  private String textPrefix;
 
   private Pattern patternSingle;
   private Pattern patternMulti;
   private Pattern patternWord;
   private Pattern patternAlpha;
   private Pattern patternNegated;
+  private Pattern patternPrefix;
 
   @Setup
   public void setup() {
@@ -65,11 +67,20 @@ public class StringVectorScanBenchmark {
     sb.append('-');
     textNegated = sb.toString();
 
+    // 5. For (?i)hello: fill with 'x', end with 'Hello'
+    sb = new StringBuilder();
+    for (int i = 0; i < length - 5; i++) {
+      sb.append('x');
+    }
+    sb.append("Hello");
+    textPrefix = sb.toString();
+
     patternSingle = Pattern.compile("[0-9]");
     patternMulti = Pattern.compile("[0-9a-c]");
     patternWord = Pattern.compile("\\w");
     patternAlpha = Pattern.compile("[A-Za-z]");
     patternNegated = Pattern.compile("[^A-Za-z0-9]");
+    patternPrefix = Pattern.compile("(?i)hello");
   }
 
   @Benchmark
@@ -95,5 +106,10 @@ public class StringVectorScanBenchmark {
   @Benchmark
   public boolean scanNegated() {
     return patternNegated.matcher(textNegated).find();
+  }
+
+  @Benchmark
+  public boolean scanPrefixIgnoreCase() {
+    return patternPrefix.matcher(textPrefix).find();
   }
 }

@@ -62,13 +62,14 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
         if (clampedRanges != null) {
           int clampedNumRanges = clampedRanges.length / 2;
           if (clampedNumRanges > 0 && clampedNumRanges <= 4) {
-            return indexOfCharClassByte(text, clampedRanges, start, clampedNumRanges, false /* isAscii */);
+            return indexOfCharClassByte(
+                text, clampedRanges, start, clampedNumRanges, false /* isAscii */);
           }
         }
       }
     }
 
-    return indexOfCharClassShort(text, scanInfo, start, numRanges);
+    return UnsafeShortVectorScanner.indexOfCharClassShort(text, scanInfo.ranges, start, numRanges, false);
   }
 
   private int indexOfCharClassByte(
@@ -100,10 +101,14 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
           ByteVector v2 = ByteVector.fromArray(BYTE_SPECIES, value, pos + 2 * vectorLen);
           ByteVector v3 = ByteVector.fromArray(BYTE_SPECIES, value, pos + 3 * vectorLen);
 
-          VectorMask<Byte> m0 = v0.compare(VectorOperators.GE, low).and(v0.compare(VectorOperators.LE, high));
-          VectorMask<Byte> m1 = v1.compare(VectorOperators.GE, low).and(v1.compare(VectorOperators.LE, high));
-          VectorMask<Byte> m2 = v2.compare(VectorOperators.GE, low).and(v2.compare(VectorOperators.LE, high));
-          VectorMask<Byte> m3 = v3.compare(VectorOperators.GE, low).and(v3.compare(VectorOperators.LE, high));
+          VectorMask<Byte> m0 =
+              v0.compare(VectorOperators.GE, low).and(v0.compare(VectorOperators.LE, high));
+          VectorMask<Byte> m1 =
+              v1.compare(VectorOperators.GE, low).and(v1.compare(VectorOperators.LE, high));
+          VectorMask<Byte> m2 =
+              v2.compare(VectorOperators.GE, low).and(v2.compare(VectorOperators.LE, high));
+          VectorMask<Byte> m3 =
+              v3.compare(VectorOperators.GE, low).and(v3.compare(VectorOperators.LE, high));
 
           VectorMask<Byte> merged = m0.or(m1).or(m2).or(m3);
           if (merged.anyTrue()) {
@@ -116,7 +121,9 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
         for (; pos <= limit; pos += vectorLen) {
           ByteVector inputVec = ByteVector.fromArray(BYTE_SPECIES, value, pos);
           VectorMask<Byte> matchMask =
-              inputVec.compare(VectorOperators.GE, low).and(inputVec.compare(VectorOperators.LE, high));
+              inputVec
+                  .compare(VectorOperators.GE, low)
+                  .and(inputVec.compare(VectorOperators.LE, high));
           if (matchMask.anyTrue()) {
             return pos + matchMask.firstTrue();
           }
@@ -145,8 +152,7 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
         }
         for (; pos <= limit; pos += vectorLen) {
           ByteVector inputVec = ByteVector.fromArray(BYTE_SPECIES, value, pos);
-          VectorMask<Byte> matchMask =
-              inputVec.sub(low).compare(VectorOperators.ULE, highMinusLow);
+          VectorMask<Byte> matchMask = inputVec.sub(low).compare(VectorOperators.ULE, highMinusLow);
           if (matchMask.anyTrue()) {
             return pos + matchMask.firstTrue();
           }
@@ -180,80 +186,6 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
     return -1;
   }
 
-  private int indexOfCharClassShort(
-      String text, Pattern.CharClassScanInfo scanInfo, int start, int numRanges) {
-    int textLen = text.length();
-    int pos = start;
-    int vectorLen = SHORT_SPECIES.length();
-    int limit = textLen - 2 * vectorLen;
-
-    ShortVector[] lowVecs = new ShortVector[numRanges];
-    ShortVector[] highMinusLowVecs = new ShortVector[numRanges];
-    for (int r = 0; r < numRanges; r++) {
-      short low = (short) scanInfo.ranges[r * 2];
-      short high = (short) scanInfo.ranges[r * 2 + 1];
-      lowVecs[r] = ShortVector.broadcast(SHORT_SPECIES, low);
-      highMinusLowVecs[r] = ShortVector.broadcast(SHORT_SPECIES, (short) (high - low));
-    }
-
-    if (numRanges == 1) {
-      ShortVector low = lowVecs[0];
-      ShortVector high = ShortVector.broadcast(SHORT_SPECIES, (short) scanInfo.ranges[1]);
-      int unrolledLimit = limit - 3 * vectorLen;
-      for (; pos <= unrolledLimit; pos += 4 * vectorLen) {
-        ShortVector v0 = StringUnsafeLoader.loadShortVector(SHORT_SPECIES, text, pos);
-        ShortVector v1 = StringUnsafeLoader.loadShortVector(SHORT_SPECIES, text, pos + vectorLen);
-        ShortVector v2 = StringUnsafeLoader.loadShortVector(SHORT_SPECIES, text, pos + 2 * vectorLen);
-        ShortVector v3 = StringUnsafeLoader.loadShortVector(SHORT_SPECIES, text, pos + 3 * vectorLen);
-
-        VectorMask<Short> m0 = v0.compare(VectorOperators.GE, low).and(v0.compare(VectorOperators.LE, high));
-        VectorMask<Short> m1 = v1.compare(VectorOperators.GE, low).and(v1.compare(VectorOperators.LE, high));
-        VectorMask<Short> m2 = v2.compare(VectorOperators.GE, low).and(v2.compare(VectorOperators.LE, high));
-        VectorMask<Short> m3 = v3.compare(VectorOperators.GE, low).and(v3.compare(VectorOperators.LE, high));
-
-        VectorMask<Short> merged = m0.or(m1).or(m2).or(m3);
-        if (merged.anyTrue()) {
-          if (m0.anyTrue()) return pos + m0.firstTrue();
-          if (m1.anyTrue()) return pos + vectorLen + m1.firstTrue();
-          if (m2.anyTrue()) return pos + 2 * vectorLen + m2.firstTrue();
-          return pos + 3 * vectorLen + m3.firstTrue();
-        }
-      }
-      for (; pos <= limit; pos += vectorLen) {
-        ShortVector inputVec = StringUnsafeLoader.loadShortVector(SHORT_SPECIES, text, pos);
-        VectorMask<Short> matchMask =
-            inputVec.compare(VectorOperators.GE, low).and(inputVec.compare(VectorOperators.LE, high));
-        if (matchMask.anyTrue()) {
-          return pos + matchMask.firstTrue();
-        }
-      }
-    } else {
-      for (; pos <= limit; pos += vectorLen) {
-        ShortVector inputVec = StringUnsafeLoader.loadShortVector(SHORT_SPECIES, text, pos);
-        VectorMask<Short> matchMask = SHORT_SPECIES.maskAll(false);
-        for (int r = 0; r < numRanges; r++) {
-          VectorMask<Short> rangeMask =
-              inputVec.sub(lowVecs[r]).compare(VectorOperators.ULE, highMinusLowVecs[r]);
-          matchMask = matchMask.or(rangeMask);
-        }
-
-        if (matchMask.anyTrue()) {
-          return pos + matchMask.firstTrue();
-        }
-      }
-    }
-
-    for (; pos < textLen; pos++) {
-      char ch = text.charAt(pos);
-      for (int r = 0; r < numRanges; r++) {
-        if (ch >= scanInfo.ranges[r * 2] && ch <= scanInfo.ranges[r * 2 + 1]) {
-          return pos;
-        }
-      }
-    }
-
-    return -1;
-  }
 
   @Override
   public int indexOfCodePointClass(
@@ -299,62 +231,7 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
       return indexOfCharClassByte(text, activeRanges, start, numRanges, isAscii);
     }
 
-    return indexOfCodePointClassShort(text, activeRanges, start, numRanges);
-  }
-  private int indexOfCodePointClassShort(String text, int[] ranges, int start, int numRanges) {
-    int textLen = text.length();
-    int pos = start;
-    int vectorLen = SHORT_SPECIES.length();
-    int limit = textLen - 2 * vectorLen;
-
-    ShortVector[] lowVecs = new ShortVector[numRanges];
-    ShortVector[] highVecs = new ShortVector[numRanges];
-    for (int r = 0; r < numRanges; r++) {
-      lowVecs[r] = ShortVector.broadcast(SHORT_SPECIES, (short) ranges[r * 2]);
-      highVecs[r] = ShortVector.broadcast(SHORT_SPECIES, (short) ranges[r * 2 + 1]);
-    }
-
-    ShortVector surrogateLow = ShortVector.broadcast(SHORT_SPECIES, (short) 0xD800);
-    ShortVector surrogateHigh = ShortVector.broadcast(SHORT_SPECIES, (short) 0xDFFF);
-
-    for (; pos <= limit; pos += vectorLen) {
-      ShortVector inputVec = StringUnsafeLoader.loadShortVector(SHORT_SPECIES, text, pos);
-
-      VectorMask<Short> surrogateMask =
-          inputVec
-              .compare(VectorOperators.GE, surrogateLow)
-              .and(inputVec.compare(VectorOperators.LE, surrogateHigh));
-      if (surrogateMask.anyTrue()) {
-        return -2;
-      }
-
-      VectorMask<Short> matchMask = SHORT_SPECIES.maskAll(false);
-      for (int r = 0; r < numRanges; r++) {
-        VectorMask<Short> rangeMask =
-            inputVec
-                .compare(VectorOperators.GE, lowVecs[r])
-                .and(inputVec.compare(VectorOperators.LE, highVecs[r]));
-        matchMask = matchMask.or(rangeMask);
-      }
-
-      if (matchMask.anyTrue()) {
-        return pos + matchMask.firstTrue();
-      }
-    }
-
-    for (; pos < textLen; pos++) {
-      char ch = text.charAt(pos);
-      if (Character.isSurrogate(ch)) {
-        return -2;
-      }
-      for (int r = 0; r < numRanges; r++) {
-        if (ch >= ranges[r * 2] && ch <= ranges[r * 2 + 1]) {
-          return pos;
-        }
-      }
-    }
-
-    return -1;
+    return UnsafeShortVectorScanner.indexOfCharClassShort(text, activeRanges, start, numRanges, true);
   }
 
   private static int[] clampRangesForLatin1(int[] ranges) {
@@ -381,5 +258,68 @@ final class UnsafeByteVectorScanner implements VectorScanProvider {
       return Arrays.copyOf(clamped, writeIdx);
     }
     return clamped;
+  }
+
+  @Override
+  public int indexOfIgnoreCase(String text, String prefix, int start) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return start;
+    }
+    byte coder = StringUnsafeLoader.getCoder(text);
+    if (coder != 0) {
+      return UnsafeShortVectorScanner.indexOfIgnoreCaseStatic(text, prefix, start);
+    }
+    // Check if the prefix has any non-ASCII characters. We only optimize ASCII prefixes.
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return -2;
+      }
+    }
+
+    int textLen = text.length();
+    int pos = start;
+    int vectorLen = BYTE_SPECIES.length();
+    int limit = textLen - vectorLen;
+
+    char first = prefix.charAt(0);
+    byte low = (byte) VectorScanProvider.asciiLower(first);
+    byte high = (byte) VectorScanProvider.asciiUpper(first);
+    ByteVector lowVec = ByteVector.broadcast(BYTE_SPECIES, low);
+    ByteVector highVec = ByteVector.broadcast(BYTE_SPECIES, high);
+
+    byte[] value = StringUnsafeLoader.getBackingArray(text);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = ByteVector.fromArray(BYTE_SPECIES, value, pos);
+      VectorMask<Byte> matchMask =
+          inputVec
+              .compare(VectorOperators.EQ, lowVec)
+              .or(inputVec.compare(VectorOperators.EQ, highVec));
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = pos + bit;
+          // Verify match (note: we check boundary limits)
+          if (candidatePos + prefixLen <= textLen
+              && Matcher.regionMatchesAsciiIgnoreCase(text, candidatePos, prefix, 0, prefixLen)) {
+            return candidatePos;
+          }
+          activeLanes &= activeLanes - 1; // Clear lowest set bit
+        }
+      }
+    }
+
+    // Scalar cleanup (not matching anymore vectors, check remaining characters)
+    int limitScalar = textLen - prefixLen;
+    for (; pos <= limitScalar; pos++) {
+      if (Matcher.regionMatchesAsciiIgnoreCase(text, pos, prefix, 0, prefixLen)) {
+        return pos;
+      }
+    }
+
+    return -1;
   }
 }

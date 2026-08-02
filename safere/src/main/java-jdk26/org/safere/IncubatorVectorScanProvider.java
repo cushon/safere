@@ -72,6 +72,11 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
     return stringDelegate.indexOfCodePointClass(text, ranges, bitmap0, bitmap1, start);
   }
 
+  @Override
+  public int indexOfIgnoreCase(String text, String prefix, int start) {
+    return stringDelegate.indexOfIgnoreCase(text, prefix, start);
+  }
+
   private static VectorMask<Byte> matches(ByteVector values, int[] ranges) {
     if (ranges.length == 4) {
       return values.eq((byte) ranges[0]).or(values.eq((byte) ranges[2]));
