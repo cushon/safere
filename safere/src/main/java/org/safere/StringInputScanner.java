@@ -5,14 +5,10 @@
 
 package org.safere;
 
-import java.util.Objects;
-import org.safere.vector.VectorScannerBridge;
-import org.safere.vector.VectorScannerLoader;
+
 
 final class StringInputScanner implements InputScanner {
-  private static final VectorScannerBridge VECTOR_SCANNER = VectorScannerLoader.getInstance();
-  private static final int VECTOR_THRESHOLD =
-      Objects.equals(System.getProperty("safere.vector.mode", "unsafe"), "copy") ? 512 : 32;
+  private static final VectorScanProvider VECTOR_SCANNER = VectorScanProviders.get();
   private final String text;
 
   StringInputScanner(String text) {
@@ -56,9 +52,9 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
-    if (VECTOR_SCANNER != null && (text.length() - start) >= VECTOR_THRESHOLD) {
+    if (VECTOR_SCANNER != null) {
       int idx = VECTOR_SCANNER.indexOfCodePointClass(text, ranges, bitmap0, bitmap1, start);
-      if (idx >= -1) {
+      if (idx != VectorScanProvider.UNSUPPORTED) {
         return idx;
       }
     }
@@ -151,9 +147,9 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
-    if (VECTOR_SCANNER != null && (text.length() - start) >= VECTOR_THRESHOLD) {
+    if (VECTOR_SCANNER != null) {
       int idx = VECTOR_SCANNER.indexOfCharClass(text, scanInfo, start);
-      if (idx >= -1) {
+      if (idx != VectorScanProvider.UNSUPPORTED) {
         return idx;
       }
     }

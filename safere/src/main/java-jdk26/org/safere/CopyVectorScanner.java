@@ -3,7 +3,7 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.vector;
+package org.safere;
 
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
@@ -11,27 +11,43 @@ import jdk.incubator.vector.ShortVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
-import org.safere.Pattern.CharClassScanInfo;
 
 /**
- * Safe, copy-based implementation of VectorScannerBridge. Copies string characters into a
- * thread-local chunk buffer to avoid unsafe reflection.
+ * Safe, copy-based implementation of VectorScanProvider for String operations. Copies string
+ * characters into a thread-local chunk buffer to avoid unsafe reflection.
  */
-public final class VectorScannerCopyImpl implements VectorScannerBridge {
+final class CopyVectorScanner implements VectorScanProvider {
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
   private static final int CHUNK_SIZE = 512;
+  private static final int MINIMUM_INPUT_LENGTH = 512;
 
   // Thread-local buffer to avoid heap allocation per scan
   private static final ThreadLocal<char[]> CHUNK_BUFFER =
       ThreadLocal.withInitial(() -> new char[CHUNK_SIZE]);
 
+  private final VectorScanProvider byteDelegate;
+
+  CopyVectorScanner(VectorScanProvider byteDelegate) {
+    this.byteDelegate = byteDelegate;
+  }
+
   @Override
-  public int indexOfCharClass(String text, CharClassScanInfo scanInfo, int start) {
+  public int minimumInputLength() {
+    return MINIMUM_INPUT_LENGTH;
+  }
+
+  @Override
+  public int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
+    // byte[] scans do not need copying
+    return byteDelegate.indexOfAsciiClass(bytes, offset, length, ranges, start);
+  }
+
+  @Override
+  public int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start) {
     int textLen = text.length();
     int remaining = textLen - start;
 
-    // Crossover gate
-    if (remaining < 32) {
+    if (remaining < SPECIES.length()) {
       return -2;
     }
 
@@ -79,8 +95,6 @@ public final class VectorScannerCopyImpl implements VectorScannerBridge {
         }
       }
 
-      // If we processed a full chunk, we advance by the vectorized amount.
-      // If it was the last partial chunk, we break and do scalar cleanup on the remainder.
       if (copyLen == CHUNK_SIZE) {
         pos += chunkPos;
       } else {
@@ -108,7 +122,7 @@ public final class VectorScannerCopyImpl implements VectorScannerBridge {
     int textLen = text.length();
     int remaining = textLen - start;
 
-    if (remaining < 32) {
+    if (remaining < SPECIES.length()) {
       return -2;
     }
 
@@ -158,7 +172,6 @@ public final class VectorScannerCopyImpl implements VectorScannerBridge {
                 .compare(VectorOperators.GE, surrogateLow)
                 .and(inputVec.compare(VectorOperators.LE, surrogateHigh));
         if (surrogateMask.anyTrue()) {
-          // If surrogates are found, we must abort vector scan and fallback to scalar
           return -2;
         }
 

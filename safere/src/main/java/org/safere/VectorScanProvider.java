@@ -7,7 +7,14 @@ package org.safere;
 
 /** Internal provider for experimental Vector API scan operations. */
 interface VectorScanProvider {
+  int UNSUPPORTED = -2;
+
   int minimumInputLength();
 
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
+
+  int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start);
+
+  int indexOfCodePointClass(String text, int[] ranges, long bitmap0, long bitmap1, int start);
 }
+

@@ -3,30 +3,46 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.vector;
+package org.safere;
 
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.ShortVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
-import org.safere.Pattern.CharClassScanInfo;
 
 /**
- * Advanced zero-copy implementation of VectorScannerBridge. Uses ByteVector direct scanning for
- * ASCII strings to maximize throughput, and falls back to ShortVector scanning for UTF-16 or
- * non-ASCII classes.
+ * Advanced zero-copy implementation of VectorScanProvider for String operations. Uses ByteVector
+ * direct scanning for ASCII strings to maximize throughput, and falls back to ShortVector scanning
+ * for UTF-16 or non-ASCII classes.
  */
-public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
+final class UnsafeByteVectorScanner implements VectorScanProvider {
   private static final VectorSpecies<Byte> BYTE_SPECIES = ByteVector.SPECIES_PREFERRED;
   private static final VectorSpecies<Short> SHORT_SPECIES = ShortVector.SPECIES_PREFERRED;
+  private static final int MINIMUM_INPUT_LENGTH = 32;
+
+  private final VectorScanProvider byteDelegate;
+
+  UnsafeByteVectorScanner(VectorScanProvider byteDelegate) {
+    this.byteDelegate = byteDelegate;
+  }
 
   @Override
-  public int indexOfCharClass(String text, CharClassScanInfo scanInfo, int start) {
+  public int minimumInputLength() {
+    return MINIMUM_INPUT_LENGTH;
+  }
+
+  @Override
+  public int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
+    return byteDelegate.indexOfAsciiClass(bytes, offset, length, ranges, start);
+  }
+
+  @Override
+  public int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start) {
     int textLen = text.length();
     int remaining = textLen - start;
 
-    if (remaining < 32) {
+    if (remaining < MINIMUM_INPUT_LENGTH) {
       return -2;
     }
 
@@ -38,22 +54,19 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
     byte coder = StringUnsafeLoader.getCoder(text);
 
     if (coder == 0 && scanInfo.isAscii) {
-      // Latin-1 + ASCII ranges -> Run high-performance ByteVector scan
       return indexOfCharClassByte(text, scanInfo, start, numRanges);
     } else {
-      // UTF-16 or non-ASCII ranges -> Run ShortVector scan
       return indexOfCharClassShort(text, scanInfo, start, numRanges);
     }
   }
 
   private int indexOfCharClassByte(
-      String text, CharClassScanInfo scanInfo, int start, int numRanges) {
+      String text, Pattern.CharClassScanInfo scanInfo, int start, int numRanges) {
     int textLen = text.length();
     int pos = start;
     int vectorLen = BYTE_SPECIES.length();
     int limit = textLen - vectorLen;
 
-    // Broadcast ranges as bytes (safe since bounds <= 127)
     ByteVector[] lowVecs = new ByteVector[numRanges];
     ByteVector[] highVecs = new ByteVector[numRanges];
     for (int r = 0; r < numRanges; r++) {
@@ -63,7 +76,6 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
 
     byte[] value = StringUnsafeLoader.getBackingArray(text);
 
-    // Vector scan loop (no overlapping reads, 32 lanes on AVX2)
     if (numRanges == 1) {
       ByteVector low = lowVecs[0];
       ByteVector high = highVecs[0];
@@ -95,7 +107,6 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
       }
     }
 
-    // Scalar cleanup
     for (; pos < textLen; pos++) {
       char ch = text.charAt(pos);
       for (int r = 0; r < numRanges; r++) {
@@ -109,13 +120,12 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
   }
 
   private int indexOfCharClassShort(
-      String text, CharClassScanInfo scanInfo, int start, int numRanges) {
+      String text, Pattern.CharClassScanInfo scanInfo, int start, int numRanges) {
     int textLen = text.length();
     int pos = start;
     int vectorLen = SHORT_SPECIES.length();
     int limit = textLen - 2 * vectorLen;
 
-    // Pre-broadcast ranges to ShortVector
     ShortVector[] lowVecs = new ShortVector[numRanges];
     ShortVector[] highVecs = new ShortVector[numRanges];
     for (int r = 0; r < numRanges; r++) {
@@ -123,7 +133,6 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
       highVecs[r] = ShortVector.broadcast(SHORT_SPECIES, (short) scanInfo.ranges[r * 2 + 1]);
     }
 
-    // Vector scan loop
     if (numRanges == 1) {
       ShortVector low = lowVecs[0];
       ShortVector high = highVecs[0];
@@ -155,7 +164,6 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
       }
     }
 
-    // Scalar cleanup
     for (; pos < textLen; pos++) {
       char ch = text.charAt(pos);
       for (int r = 0; r < numRanges; r++) {
@@ -174,7 +182,7 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
     int textLen = text.length();
     int remaining = textLen - start;
 
-    if (remaining < 32) {
+    if (remaining < MINIMUM_INPUT_LENGTH) {
       return -2;
     }
 
@@ -199,10 +207,8 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
     }
 
     if (coder == 0 && isAscii) {
-      // Latin-1 + ASCII ranges -> Run ByteVector scan (no surrogate checks needed)
       return indexOfCodePointClassByte(text, ranges, start, numRanges);
     } else {
-      // UTF-16 or non-ASCII -> Run ShortVector scan (with surrogate checks)
       return indexOfCodePointClassShort(text, ranges, start, numRanges);
     }
   }
@@ -238,7 +244,6 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
       }
     }
 
-    // Scalar cleanup
     for (; pos < textLen; pos++) {
       char ch = text.charAt(pos);
       for (int r = 0; r < numRanges; r++) {
@@ -270,7 +275,6 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
     for (; pos <= limit; pos += vectorLen) {
       ShortVector inputVec = StringUnsafeLoader.loadShortVector(SHORT_SPECIES, text, pos);
 
-      // Check for surrogates
       VectorMask<Short> surrogateMask =
           inputVec
               .compare(VectorOperators.GE, surrogateLow)
@@ -293,7 +297,6 @@ public final class VectorScannerUnsafeByteImpl implements VectorScannerBridge {
       }
     }
 
-    // Scalar cleanup
     for (; pos < textLen; pos++) {
       char ch = text.charAt(pos);
       if (Character.isSurrogate(ch)) {

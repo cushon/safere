@@ -35,11 +35,6 @@
     </dependency>
     <dependency>
       <groupId>org.safere</groupId>
-      <artifactId>safere-vector</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.safere</groupId>
       <artifactId>safere-crosscheck</artifactId>
       <version>${project.version}</version>
     </dependency>

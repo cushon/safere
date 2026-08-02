@@ -3,7 +3,7 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.vector;
+package org.safere;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandles;
@@ -20,7 +20,7 @@ import jdk.incubator.vector.VectorSpecies;
  * loader vectors without copying. Requires {@code --add-opens java.base/java.lang=ALL-UNNAMED} at
  * runtime.
  */
-public final class StringUnsafeLoader {
+final class StringUnsafeLoader {
   private static final VarHandle VALUE_HANDLE;
   private static final VarHandle CODER_HANDLE;
   private static final byte CODER_LATIN1 = 0;
