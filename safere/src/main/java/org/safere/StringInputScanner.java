@@ -5,8 +5,6 @@
 
 package org.safere;
 
-
-
 final class StringInputScanner implements InputScanner {
   private static final VectorScanProvider VECTOR_SCANNER = VectorScanProviders.get();
   private static final int SCALAR_PROLOGUE_LENGTH = 4;

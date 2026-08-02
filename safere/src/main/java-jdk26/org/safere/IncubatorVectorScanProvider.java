@@ -94,4 +94,3 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
     return value >= (byte) ranges[0] && value <= (byte) ranges[1];
   }
 }
-

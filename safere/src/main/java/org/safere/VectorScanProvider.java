@@ -17,4 +17,3 @@ interface VectorScanProvider {
 
   int indexOfCodePointClass(String text, int[] ranges, long bitmap0, long bitmap1, int start);
 }
-

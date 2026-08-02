@@ -23,7 +23,6 @@ final class VectorScanProviders {
     return SELECTED;
   }
 
-
   private static VectorScanProvider loadSelected() {
     String requested = System.getProperty(PROVIDER_PROPERTY, "").trim();
     if (requested.isEmpty() || requested.equals("swar")) {
