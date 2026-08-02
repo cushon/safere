@@ -47,7 +47,7 @@ final class CopyVectorScanner implements VectorScanProvider {
     int textLen = text.length();
     int remaining = textLen - start;
 
-    if (remaining < SPECIES.length()) {
+    if (remaining < MINIMUM_INPUT_LENGTH) {
       return -2;
     }
 
@@ -122,7 +122,7 @@ final class CopyVectorScanner implements VectorScanProvider {
     int textLen = text.length();
     int remaining = textLen - start;
 
-    if (remaining < SPECIES.length()) {
+    if (remaining < MINIMUM_INPUT_LENGTH) {
       return -2;
     }
 
