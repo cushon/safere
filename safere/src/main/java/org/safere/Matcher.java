@@ -2944,8 +2944,6 @@ public final class Matcher implements MatchResult {
         findNextDfaMatch(fwdDfa, isStartAnchored, prefix, foldCase, hasStartAcceleration, cursor);
 
     if (matchResult < 0) {
-      System.out.println(
-          "DEBUG: replaceDfaOptimized returned null because matchResult < 0 (" + matchResult + ")");
       return null;
     }
     if (matchResult == 0) {
