@@ -58,4 +58,18 @@ public final class RE2FfmTest {
     String[] parts = p.split(text);
     assertArrayEquals(new String[] {"hello ", " world"}, parts);
   }
+
+  @Test
+  public void testReplaceAll() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(\\w+)");
+    assertEquals("X X", p.matcher("hello world").replaceAll("X"));
+    assertEquals("[hello] [world]", p.matcher("hello world").replaceAll("[$1]"));
+  }
+
+  @Test
+  public void testReplaceFirst() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(\\w+)");
+    assertEquals("X world", p.matcher("hello world").replaceFirst("X"));
+    assertEquals("[hello] world", p.matcher("hello world").replaceFirst("[$1]"));
+  }
 }

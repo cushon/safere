@@ -133,6 +133,24 @@ int re2_find_all(const re2_pattern_t* p, const char* text, int text_len,
   return count;
 }
 
+int re2_replace_first(const re2_pattern_t* p,
+                      const char* text, int text_len,
+                      const char* rewrite, int rewrite_len,
+                      char* out_buf, int out_cap, int* out_len) {
+  if (!p || !p->re2->ok()) return -1;
+
+  std::string str(text, text_len);
+  bool replaced = RE2::Replace(&str, *p->re2,
+                               absl::string_view(rewrite, rewrite_len));
+
+  *out_len = static_cast<int>(str.size());
+  if (static_cast<int>(str.size()) > out_cap) {
+    return -1;  // buffer too small
+  }
+  std::memcpy(out_buf, str.data(), str.size());
+  return replaced ? 1 : 0;
+}
+
 int re2_replace_all(const re2_pattern_t* p,
                     const char* text, int text_len,
                     const char* rewrite, int rewrite_len,

@@ -56,6 +56,16 @@ bool re2_find(const re2_pattern_t* p, const char* text, int text_len,
 int re2_find_all(const re2_pattern_t* p, const char* text, int text_len,
                  int32_t* matches_out, int max_matches);
 
+// Replace the first occurrence of the pattern in text with rewrite.
+// Writes the result into out_buf (up to out_cap bytes) and sets *out_len
+// to the actual result length. Returns 1 if a replacement was made,
+// 0 if no match, or -1 if out_buf was too small (in which case *out_len
+// contains the required size).
+int re2_replace_first(const re2_pattern_t* p,
+                      const char* text, int text_len,
+                      const char* rewrite, int rewrite_len,
+                      char* out_buf, int out_cap, int* out_len);
+
 // Replace all occurrences of the pattern in text with rewrite.
 // Writes the result into out_buf (up to out_cap bytes) and sets *out_len
 // to the actual result length. Returns the number of replacements made,

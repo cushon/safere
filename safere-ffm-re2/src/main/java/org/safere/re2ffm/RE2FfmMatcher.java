@@ -211,40 +211,8 @@ public final class RE2FfmMatcher {
    * @return the result string
    */
   public String replaceAll(String replacement) {
-    // Convert Java-style $N backreferences to RE2-style \N.
     String re2Rewrite = convertReplacement(replacement);
-    byte[] rewriteUtf8 = re2Rewrite.getBytes(StandardCharsets.UTF_8);
-
-    // Start with a buffer 2x the input size.
-    int outCap = Math.max(inputUtf8.length * 2, 256);
-    while (true) {
-      try (Arena arena = Arena.ofConfined()) {
-        MemorySegment textSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, inputUtf8);
-        MemorySegment rewriteSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, rewriteUtf8);
-        MemorySegment outBuf = arena.allocate(outCap);
-        MemorySegment outLenSeg = arena.allocate(ValueLayout.JAVA_INT);
-
-        int result =
-            Re2Shim.replaceAll(
-                pattern.nativeHandle(),
-                textSeg,
-                inputUtf8.length,
-                rewriteSeg,
-                rewriteUtf8.length,
-                outBuf,
-                outCap,
-                outLenSeg);
-
-        if (result >= 0) {
-          int outLen = outLenSeg.get(ValueLayout.JAVA_INT, 0);
-          byte[] resultBytes = outBuf.asSlice(0, outLen).toArray(ValueLayout.JAVA_BYTE);
-          return new String(resultBytes, StandardCharsets.UTF_8);
-        }
-        // Buffer too small; grow and retry.
-        int needed = outLenSeg.get(ValueLayout.JAVA_INT, 0);
-        outCap = needed + needed / 2;
-      }
-    }
+    return Re2Shim.replaceAll(pattern.nativeHandle(), inputString, re2Rewrite).result();
   }
 
   /**
@@ -254,25 +222,8 @@ public final class RE2FfmMatcher {
    * @return the result string
    */
   public String replaceFirst(String replacement) {
-    reset();
-    if (!find()) {
-      return inputString;
-    }
     String re2Rewrite = convertReplacement(replacement);
-
-    StringBuilder sb = new StringBuilder();
-    // Append text before the match.
-    int matchStartChar = start();
-    sb.append(inputString, 0, matchStartChar);
-
-    // Build the replacement from the rewrite template.
-    appendRewrite(sb, re2Rewrite);
-
-    // Append text after the match.
-    int matchEndChar = end();
-    sb.append(inputString, matchEndChar, inputString.length());
-
-    return sb.toString();
+    return Re2Shim.replaceFirst(pattern.nativeHandle(), inputString, re2Rewrite).result();
   }
 
   // --- Private helpers ---
@@ -301,37 +252,6 @@ public final class RE2FfmMatcher {
       }
     }
     return sb.toString();
-  }
-
-  /** Expand RE2-style \N backreferences in the rewrite string against the current match. */
-  private void appendRewrite(StringBuilder sb, String rewrite) {
-    for (int i = 0; i < rewrite.length(); i++) {
-      char c = rewrite.charAt(i);
-      if (c == '\\' && i + 1 < rewrite.length()) {
-        char next = rewrite.charAt(i + 1);
-        if (Character.isDigit(next)) {
-          // Parse group number.
-          int groupNum = 0;
-          i++;
-          while (i < rewrite.length() && Character.isDigit(rewrite.charAt(i))) {
-            groupNum = groupNum * 10 + (rewrite.charAt(i) - '0');
-            i++;
-          }
-          i--; // Back up for the outer loop increment.
-          String g = group(groupNum);
-          if (g != null) {
-            sb.append(g);
-          }
-        } else if (next == '\\') {
-          sb.append('\\');
-          i++;
-        } else {
-          sb.append(c);
-        }
-      } else {
-        sb.append(c);
-      }
-    }
   }
 
   private void buildCharToByteMap(String s, byte[] bytes) {
