@@ -1234,7 +1234,6 @@ final class Dfa {
     State[] offsetToState = this.offsetToState;
     int[] asciiClassMap = this.asciiClassMap;
     int pos = startPos;
-
     // Fast path: loop through ASCII characters (characters < 128)
     while (pos < textLen) {
       int limit =
@@ -1312,7 +1311,6 @@ final class Dfa {
     }
 
     // General loop handles non-ASCII, position-dependent checks, and trailing end-of-text sentinel
-
     while (pos <= textLen) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
