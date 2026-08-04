@@ -31,6 +31,7 @@ final class Re2Shim {
   private static final MethodHandle FIND;
   private static final MethodHandle FIND_ALL;
   private static final MethodHandle REPLACE_ALL;
+  private static final MethodHandle REPLACE_LITERAL;
 
   static {
     // Load the native library from the build directory or system path.
@@ -136,6 +137,22 @@ final class Re2Shim {
                 ValueLayout.JAVA_INT,
                 ValueLayout.ADDRESS,
                 ValueLayout.JAVA_INT));
+
+    // void re2_replace_literal(const uint8_t* input, int input_len,
+    //                          const int* groups, int groups_count,
+    //                          const uint8_t* replacement, int replacement_len,
+    //                          uint8_t* output)
+    REPLACE_LITERAL =
+        linker.downcallHandle(
+            lookup.find("re2_replace_literal").orElseThrow(),
+            FunctionDescriptor.ofVoid(
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_INT,
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_INT,
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_INT,
+                ValueLayout.ADDRESS));
   }
 
   private Re2Shim() {}
@@ -237,6 +254,22 @@ final class Re2Shim {
       return (int)
           REPLACE_ALL.invokeExact(
               handle, text, textLen, rewrite, rewriteLen, outBuf, outCap, outLen);
+    } catch (Throwable t) {
+      throw new AssertionError("FFM call failed", t);
+    }
+  }
+
+  static void replaceLiteral(
+      MemorySegment input,
+      int inputLen,
+      MemorySegment groups,
+      int groupsCount,
+      MemorySegment replacement,
+      int replacementLen,
+      MemorySegment output) {
+    try {
+      REPLACE_LITERAL.invokeExact(
+          input, inputLen, groups, groupsCount, replacement, replacementLen, output);
     } catch (Throwable t) {
       throw new AssertionError("FFM call failed", t);
     }

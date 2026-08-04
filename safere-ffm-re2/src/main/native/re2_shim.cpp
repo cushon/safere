@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/container/fixed_array.h"
 #include "re2/re2.h"
 
 struct re2_pattern {
@@ -71,7 +72,7 @@ bool re2_find(const re2_pattern_t* p, const char* text, int text_len,
   if (!p || !p->re2->ok()) return false;
 
   int nsub = nmatches + 1;  // group 0 + nmatches capture groups
-  std::vector<absl::string_view> submatch(nsub);
+  absl::FixedArray<absl::string_view, 10> submatch(nsub);
 
   bool found = p->re2->Match(absl::string_view(text, text_len),
                               startpos, text_len, RE2::UNANCHORED,
@@ -149,5 +150,50 @@ int re2_replace_all(const re2_pattern_t* p,
   std::memcpy(out_buf, str.data(), str.size());
   return count;
 }
+
+void re2_replace_literal(const uint8_t* __restrict__ input, int input_len,
+                         const int* __restrict__ groups, int groups_count,
+                         const uint8_t* __restrict__ replacement, int replacement_len,
+                         uint8_t* __restrict__ output) {
+  int last_end = 0;
+  uint8_t* out_ptr = output;
+  for (int i = 0; i < groups_count; i++) {
+    int match_start = groups[2 * i];
+    int match_end = groups[2 * i + 1];
+    int slice_len = match_start - last_end;
+    if (slice_len > 0) {
+      std::memcpy(out_ptr, input + last_end, slice_len);
+      out_ptr += slice_len;
+    }
+    if (replacement_len > 0) {
+      std::memcpy(out_ptr, replacement, replacement_len);
+      out_ptr += replacement_len;
+    }
+    last_end = match_end;
+  }
+  int tail_len = input_len - last_end;
+  if (tail_len > 0) {
+    std::memcpy(out_ptr, input + last_end, tail_len);
+  }
+}
+
+#if defined(__linux__) && defined(__GLIBC__)
+__attribute__((weak)) unsigned long __isoc23_strtoul(const char* nptr,
+                                                     char** endptr, int base) {
+  return strtoul(nptr, endptr, base);
+}
+__attribute__((weak)) long __isoc23_strtol(const char* nptr, char** endptr,
+                                           int base) {
+  return strtol(nptr, endptr, base);
+}
+__attribute__((weak)) unsigned long long __isoc23_strtoull(
+    const char* nptr, char** endptr, int base) {
+  return strtoull(nptr, endptr, base);
+}
+__attribute__((weak)) long long __isoc23_strtoll(const char* nptr,
+                                                 char** endptr, int base) {
+  return strtoll(nptr, endptr, base);
+}
+#endif
 
 }  // extern "C"

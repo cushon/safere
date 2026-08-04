@@ -66,6 +66,12 @@ int re2_replace_all(const re2_pattern_t* p,
                     const char* rewrite, int rewrite_len,
                     char* out_buf, int out_cap, int* out_len);
 
+// Perform a literal replacement given match group byte pairs from re2_find_all.
+void re2_replace_literal(const uint8_t* __restrict__ input, int input_len,
+                         const int* __restrict__ groups, int groups_count,
+                         const uint8_t* __restrict__ replacement, int replacement_len,
+                         uint8_t* __restrict__ output);
+
 #ifdef __cplusplus
 }
 #endif
