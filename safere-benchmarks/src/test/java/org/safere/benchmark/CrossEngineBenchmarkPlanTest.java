@@ -48,7 +48,7 @@ class CrossEngineBenchmarkPlanTest {
             "HttpBenchmark.httpFull",
             "SearchScalingBenchmark.searchEasyFail.1024",
             "FanoutBenchmark.fanoutUnicode.1024");
-    assertThat(ids).hasSize(435);
+    assertThat(ids).hasSize(441);
   }
 
   @Test
@@ -77,9 +77,39 @@ class CrossEngineBenchmarkPlanTest {
                   .map(CrossEngineBenchmarkPlan.Trial::variant))
           .containsAnyOf(RegexEngineVariant.SAFERE_STRING, RegexEngineVariant.SAFERE_UTF8);
     }
-    assertThat(allTrials).hasSize(1518);
-    assertThat(plan.exclusions()).hasSize(657);
-    assertThat(accounted).hasSize(435 * RegexEngineVariant.values().length);
+    assertThat(allTrials).hasSize(1538);
+    assertThat(plan.exclusions()).hasSize(667);
+    assertThat(accounted).hasSize(441 * RegexEngineVariant.values().length);
+  }
+
+  @Test
+  void longRecitationListsExcludeOnlyJdkTrialsThatOverflowItsStack() {
+    List<MaterializedExecutionPlan.Entry> exclusions =
+        CrossEngineBenchmarkPlan.load().exclusions().stream()
+            .filter(
+                exclusion ->
+                    exclusion
+                        .workloadId()
+                        .startsWith("RealWorldRegexBenchmark.runBenchmark.recitation."))
+            .filter(exclusion -> exclusion.exclusion().kind().equals("explicitTrialExclusion"))
+            .toList();
+
+    assertThat(exclusions)
+        .extracting(MaterializedExecutionPlan.Entry::id)
+        .containsExactly(
+            "RealWorldRegexBenchmark.runBenchmark.recitation.match.10000@jdk-string",
+            "RealWorldRegexBenchmark.runBenchmark.recitation.match.100000@jdk-string",
+            "RealWorldRegexBenchmark.runBenchmark.recitation.noMatch.10000@jdk-string",
+            "RealWorldRegexBenchmark.runBenchmark.recitation.noMatch.100000@jdk-string");
+    assertThat(exclusions)
+        .allSatisfy(
+            exclusion -> {
+              assertThat(exclusion.exclusion().kind()).isEqualTo("explicitTrialExclusion");
+              assertThat(exclusion.exclusion().reason())
+                  .isEqualTo(
+                      "JDK's backtracking matcher throws StackOverflowError for the nested "
+                          + "quantified recitation pattern at these input sizes");
+            });
   }
 
   @Test
@@ -93,7 +123,7 @@ class CrossEngineBenchmarkPlanTest {
             second.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(888);
+        .hasSize(908);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
@@ -399,8 +429,8 @@ class CrossEngineBenchmarkPlanTest {
         .allMatch(runner -> !runner.trialIds().isEmpty())
         .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
         .doesNotHaveDuplicates()
-        .hasSize(1557);
-    assertThat(plan.reportPlan().trials()).hasSize(1557);
+        .hasSize(1577);
+    assertThat(plan.reportPlan().trials()).hasSize(1577);
     assertThat(plan.reportPlan().exclusions()).isNotEmpty().doesNotHaveDuplicates();
     assertThat(
             plan.reportPlan(true).trials().stream()

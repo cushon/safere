@@ -1236,7 +1236,8 @@ final class Dfa {
     int pos = startPos;
     // Fast path: loop through ASCII characters (characters < 128)
     while (pos < textLen) {
-      int limit = Math.min(textLen, posDepThreshold - 1);
+      int limit =
+          hasPositionDependentTransitions ? Math.min(textLen, posDepThreshold - 1) : textLen;
       int sId = s.id * numClasses;
       while (pos < limit) {
         int ch = text.asciiAt(pos);
@@ -1270,7 +1271,7 @@ final class Dfa {
       if (pos >= textLen) {
         break;
       }
-      if (pos + 1 >= posDepThreshold) {
+      if (hasPositionDependentTransitions && pos + 1 >= posDepThreshold) {
         break; // fall back to general loop for position-dependent flags
       }
 
@@ -1529,7 +1530,7 @@ final class Dfa {
       if (pos <= startLimit) {
         break;
       }
-      if (pos - 1 >= posDepThreshold) {
+      if (hasPositionDependentTransitions && pos - 1 >= posDepThreshold) {
         break; // fall back to general loop for position-dependent context
       }
 
@@ -1744,7 +1745,7 @@ final class Dfa {
       // Fast path: scan forward through ASCII characters
       int sId = s.id * numClasses;
       while (pos < textLen) {
-        if (pos + 1 >= posDepThreshold) {
+        if (hasPositionDependentTransitions && pos + 1 >= posDepThreshold) {
           break; // fall back to general loop for position-dependent context
         }
         int ch = text.asciiAt(pos);
