@@ -1683,10 +1683,9 @@
         ]
       },
       "recipe": {
-        "kind": "surroundToLength",
-        "prefix": "[",
-        "unit": "1.2.3,",
-        "suffix": "4.5.6]",
+        "kind": "suffixToLength",
+        "prefixUnit": "ordinary prose without a recitation ",
+        "suffix": "[1.2.3,4.5.6]",
         "length": "{size}"
       },
       "shared": true
@@ -1701,10 +1700,9 @@
         ]
       },
       "recipe": {
-        "kind": "surroundToLength",
-        "prefix": "[",
-        "unit": "1.2.3,",
-        "suffix": "4.5.6",
+        "kind": "suffixToLength",
+        "prefixUnit": "ordinary prose without a recitation ",
+        "suffix": "[1.2.3,4.5.6",
         "length": "{size}"
       },
       "shared": true
