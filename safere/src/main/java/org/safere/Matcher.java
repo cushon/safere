@@ -1576,14 +1576,15 @@ public final class Matcher implements MatchResult {
 
     Pattern.KeywordAlternation keywordAlternation = parentPattern.keywordAlternation();
     if (options.keywordAlternationFastPath()
-        && !regionActive
         && keywordAlternation != null
-        && text != null) {
+        && (!regionActive || text == null)) {
       diagnosticBoundary(MatchStrategy.KEYWORD);
       if (keywordAlternation.captureGroup > 0) {
         diagnosticCapture(MatchStrategy.KEYWORD);
       }
-      return findKeywordAlternation(keywordAlternation, searchFrom, prog.numCaptures());
+      return text != null
+          ? findKeywordAlternation(keywordAlternation, searchFrom, prog.numCaptures())
+          : findUtf8KeywordAlternation(keywordAlternation, searchFrom, prog.numCaptures());
     }
 
     // Anchored start: if the pattern requires a match at the beginning of the text (e.g., ^
@@ -2170,6 +2171,28 @@ public final class Matcher implements MatchResult {
       literalFrom = literalStart + 1;
     }
     return -1;
+  }
+
+  private boolean findUtf8KeywordAlternation(
+      Pattern.KeywordAlternation keywordAlternation, int startPos, int ncap) {
+    InputScanner scanner = activeScanner();
+    int matchStart = Math.max(0, startPos);
+    long match = keywordAlternation.find(scanner, matchStart);
+    if (match < 0) {
+      return applyFailedMatchResult();
+    }
+    int keywordStart = Pattern.KeywordAlternation.matchStart(match);
+    int keywordEnd = Pattern.KeywordAlternation.matchEnd(match);
+    int[] keywordGroups = new int[2 * ncap];
+    Arrays.fill(keywordGroups, -1);
+    keywordGroups[0] = keywordAlternation.greedyWholeInput ? matchStart : keywordStart;
+    keywordGroups[1] = keywordAlternation.greedyWholeInput ? scanner.length() : keywordEnd;
+    if (keywordAlternation.captureGroup > 0) {
+      int group = keywordAlternation.captureGroup;
+      keywordGroups[2 * group] = keywordStart;
+      keywordGroups[2 * group + 1] = keywordEnd;
+    }
+    return applyFullMatchResult(keywordGroups);
   }
 
   private boolean findKeywordAlternation(
