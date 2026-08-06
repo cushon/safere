@@ -313,18 +313,8 @@ final class Re2Shim {
 
   public record ReplaceResult(String result, int count) {}
 
-  public static ReplaceResult replaceFirst(MemorySegment re2Ptr, String text, String rewrite) {
-    return replaceImpl(re2Ptr, text, rewrite, false);
-  }
-
-  public static ReplaceResult replaceAll(MemorySegment re2Ptr, String text, String rewrite) {
-    return replaceImpl(re2Ptr, text, rewrite, true);
-  }
-
-  private static ReplaceResult replaceImpl(
-      MemorySegment re2Ptr, String text, String rewrite, boolean global) {
-    byte[] textBytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-    byte[] rewriteBytes = rewrite.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+  public static ReplaceResult replaceAll(
+      MemorySegment re2Ptr, byte[] textBytes, String textString, byte[] rewriteBytes) {
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment textSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, textBytes);
       MemorySegment rewriteSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, rewriteBytes);
@@ -332,48 +322,31 @@ final class Re2Shim {
       int cap = Math.max(textBytes.length * 2, 256);
       MemorySegment outBuf = arena.allocate(cap);
       int count =
-          global
-              ? replaceAll(
-                  re2Ptr,
-                  textSeg,
-                  textBytes.length,
-                  rewriteSeg,
-                  rewriteBytes.length,
-                  outBuf,
-                  cap,
-                  outLenSeg)
-              : replaceFirst(
-                  re2Ptr,
-                  textSeg,
-                  textBytes.length,
-                  rewriteSeg,
-                  rewriteBytes.length,
-                  outBuf,
-                  cap,
-                  outLenSeg);
+          replaceAll(
+              re2Ptr,
+              textSeg,
+              textBytes.length,
+              rewriteSeg,
+              rewriteBytes.length,
+              outBuf,
+              cap,
+              outLenSeg);
       if (count < 0) {
         int needed = outLenSeg.get(ValueLayout.JAVA_INT, 0);
         outBuf = arena.allocate(needed);
         count =
-            global
-                ? replaceAll(
-                    re2Ptr,
-                    textSeg,
-                    textBytes.length,
-                    rewriteSeg,
-                    rewriteBytes.length,
-                    outBuf,
-                    needed,
-                    outLenSeg)
-                : replaceFirst(
-                    re2Ptr,
-                    textSeg,
-                    textBytes.length,
-                    rewriteSeg,
-                    rewriteBytes.length,
-                    outBuf,
-                    needed,
-                    outLenSeg);
+            replaceAll(
+                re2Ptr,
+                textSeg,
+                textBytes.length,
+                rewriteSeg,
+                rewriteBytes.length,
+                outBuf,
+                needed,
+                outLenSeg);
+      }
+      if (count == 0) {
+        return new ReplaceResult(textString, 0);
       }
       int actualLen = outLenSeg.get(ValueLayout.JAVA_INT, 0);
       byte[] resBytes = new byte[actualLen];

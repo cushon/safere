@@ -40,6 +40,14 @@ public final class RE2FfmMatcher {
     reset(input);
   }
 
+  RE2FfmMatcher(RE2FfmPattern pattern, String input, byte[] inputUtf8) {
+    this.pattern = pattern;
+    this.inputString = input;
+    this.inputUtf8 = inputUtf8;
+    this.matchByteOffsets = new int[2 * (pattern.numGroups() + 1)];
+    buildCharToByteMap(inputString, inputUtf8);
+  }
+
   /**
    * Resets this matcher with a new input string.
    *
@@ -211,8 +219,13 @@ public final class RE2FfmMatcher {
    * @return the result string
    */
   public String replaceAll(String replacement) {
-    String re2Rewrite = convertReplacement(replacement);
-    return Re2Shim.replaceAll(pattern.nativeHandle(), inputString, re2Rewrite).result();
+    String rewrite = translateToRE2Rewrite(replacement);
+    if (rewrite != null) {
+      byte[] rewriteBytes = rewrite.getBytes(StandardCharsets.UTF_8);
+      return Re2Shim.replaceAll(pattern.nativeHandle(), inputUtf8, inputString, rewriteBytes)
+          .result();
+    }
+    return replaceAllJava(replacement);
   }
 
   /**
@@ -222,8 +235,25 @@ public final class RE2FfmMatcher {
    * @return the result string
    */
   public String replaceFirst(String replacement) {
+    reset();
+    if (!find()) {
+      return inputString;
+    }
     String re2Rewrite = convertReplacement(replacement);
-    return Re2Shim.replaceFirst(pattern.nativeHandle(), inputString, re2Rewrite).result();
+
+    StringBuilder sb = new StringBuilder();
+    // Append text before the match.
+    int matchStartChar = start();
+    sb.append(inputString, 0, matchStartChar);
+
+    // Build the replacement from the rewrite template.
+    appendRewrite(sb, re2Rewrite);
+
+    // Append text after the match.
+    int matchEndChar = end();
+    sb.append(inputString, matchEndChar, inputString.length());
+
+    return sb.toString();
   }
 
   // --- Private helpers ---
@@ -251,6 +281,96 @@ public final class RE2FfmMatcher {
         sb.append(c);
       }
     }
+    return sb.toString();
+  }
+
+  /** Expand RE2-style \N backreferences in the rewrite string against the current match. */
+  private void appendRewrite(StringBuilder sb, String rewrite) {
+    for (int i = 0; i < rewrite.length(); i++) {
+      char c = rewrite.charAt(i);
+      if (c == '\\' && i + 1 < rewrite.length()) {
+        char next = rewrite.charAt(i + 1);
+        if (Character.isDigit(next)) {
+          // Parse group number.
+          int groupNum = 0;
+          i++;
+          while (i < rewrite.length() && Character.isDigit(rewrite.charAt(i))) {
+            groupNum = groupNum * 10 + (rewrite.charAt(i) - '0');
+            i++;
+          }
+          i--; // Back up for the outer loop increment.
+          String g = group(groupNum);
+          if (g != null) {
+            sb.append(g);
+          }
+        } else if (next == '\\') {
+          sb.append('\\');
+          i++;
+        } else {
+          sb.append(c);
+        }
+      } else {
+        sb.append(c);
+      }
+    }
+  }
+
+  private String translateToRE2Rewrite(String replacement) {
+    int numGroups = pattern.numGroups();
+    if (numGroups > 9) {
+      return null;
+    }
+    if (replacement.indexOf('{') >= 0) {
+      return null;
+    }
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < replacement.length(); i++) {
+      char c = replacement.charAt(i);
+      if (c == '\\') {
+        if (++i >= replacement.length()) {
+          return null;
+        }
+        char next = replacement.charAt(i);
+        if (next == '$') {
+          sb.append('$');
+        } else if (next == '\\') {
+          sb.append("\\\\");
+        } else {
+          sb.append(next);
+        }
+      } else if (c == '$') {
+        if (++i >= replacement.length()) {
+          return null;
+        }
+        char next = replacement.charAt(i);
+        if (next >= '0' && next <= '9') {
+          int groupIndex = next - '0';
+          if (groupIndex > numGroups) {
+            return null;
+          }
+          sb.append('\\').append(next);
+        } else {
+          return null;
+        }
+      } else {
+        sb.append(c);
+      }
+    }
+    return sb.toString();
+  }
+
+  private String replaceAllJava(String replacement) {
+    reset();
+    String re2Rewrite = convertReplacement(replacement);
+    StringBuilder sb = new StringBuilder();
+    int lastAppend = 0;
+    while (find()) {
+      int matchStartChar = start();
+      sb.append(inputString, lastAppend, matchStartChar);
+      appendRewrite(sb, re2Rewrite);
+      lastAppend = end();
+    }
+    sb.append(inputString, lastAppend, inputString.length());
     return sb.toString();
   }
 

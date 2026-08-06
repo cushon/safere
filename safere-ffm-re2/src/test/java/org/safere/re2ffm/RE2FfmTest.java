@@ -72,4 +72,16 @@ public final class RE2FfmTest {
     assertEquals("X world", p.matcher("hello world").replaceFirst("X"));
     assertEquals("[hello] world", p.matcher("hello world").replaceFirst("[$1]"));
   }
+
+  @Test
+  public void testReplaceAllMultiDigitGroup() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)");
+    assertEquals("xjy", p.matcher("xabcdefghijy").replaceAll("$10"));
+  }
+
+  @Test
+  public void testReplaceFirstMultiDigitGroup() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)");
+    assertEquals("xjy", p.matcher("xabcdefghijy").replaceFirst("$10"));
+  }
 }
