@@ -10,6 +10,111 @@
     "crosscheckOverhead": {
       "pattern": "([a-z]+)(\\d+)",
       "replacement": "$2:$1"
+    },
+    "vectorScan": {
+      "smokeTrials": [
+        "singleton/first/absent/64/0",
+        "pair/first/late/64/7",
+        "range/all/dense/32768/0",
+        "alnum3/first/absent/32768/0",
+        "mixed4/all/sparse/32768/0"
+      ],
+      "standardTrials": [
+        "singleton/first/absent/15/0",
+        "singleton/first/absent/16/0",
+        "singleton/first/absent/17/0",
+        "singleton/first/absent/31/0",
+        "singleton/first/absent/32/0",
+        "singleton/first/absent/33/0",
+        "singleton/first/absent/63/0",
+        "singleton/first/absent/64/0",
+        "singleton/first/absent/65/0",
+        "singleton/first/absent/256/0",
+        "singleton/first/absent/1024/0",
+        "singleton/first/absent/32768/0",
+        "singleton/first/absent/1048576/0",
+        "pair/first/absent/15/0",
+        "pair/first/absent/16/0",
+        "pair/first/absent/17/0",
+        "pair/first/absent/31/0",
+        "pair/first/absent/32/0",
+        "pair/first/absent/33/0",
+        "pair/first/absent/63/0",
+        "pair/first/absent/64/0",
+        "pair/first/absent/65/0",
+        "pair/first/absent/256/0",
+        "pair/first/absent/1024/0",
+        "pair/first/absent/32768/0",
+        "pair/first/absent/1048576/0",
+        "range/first/absent/15/0",
+        "range/first/absent/16/0",
+        "range/first/absent/17/0",
+        "range/first/absent/31/0",
+        "range/first/absent/32/0",
+        "range/first/absent/33/0",
+        "range/first/absent/63/0",
+        "range/first/absent/64/0",
+        "range/first/absent/65/0",
+        "range/first/absent/256/0",
+        "range/first/absent/1024/0",
+        "range/first/absent/32768/0",
+        "range/first/absent/1048576/0",
+        "singleton/first/late/32768/0",
+        "singleton/first/sparse/32768/0",
+        "singleton/first/dense/32768/0",
+        "singleton/all/absent/32768/0",
+        "singleton/all/late/32768/0",
+        "singleton/all/sparse/32768/0",
+        "singleton/all/dense/32768/0",
+        "pair/first/late/32768/0",
+        "pair/first/sparse/32768/0",
+        "pair/first/dense/32768/0",
+        "pair/all/absent/32768/0",
+        "pair/all/late/32768/0",
+        "pair/all/sparse/32768/0",
+        "pair/all/dense/32768/0",
+        "range/first/late/32768/0",
+        "range/first/sparse/32768/0",
+        "range/first/dense/32768/0",
+        "range/all/absent/32768/0",
+        "range/all/late/32768/0",
+        "range/all/sparse/32768/0",
+        "range/all/dense/32768/0",
+        "singleton/first/absent/32768/7",
+        "singleton/first/late/32768/7",
+        "pair/first/absent/32768/7",
+        "pair/first/late/32768/7",
+        "range/first/absent/32768/7",
+        "range/first/late/32768/7",
+        "alnum3/first/absent/64/0",
+        "alnum3/first/absent/256/0",
+        "alnum3/first/absent/1024/0",
+        "alnum3/first/absent/32768/0",
+        "alnum3/first/absent/1048576/0",
+        "alnum3/first/late/32768/0",
+        "alnum3/first/sparse/32768/0",
+        "alnum3/first/dense/32768/0",
+        "alnum3/all/absent/32768/0",
+        "alnum3/all/late/32768/0",
+        "alnum3/all/sparse/32768/0",
+        "alnum3/all/dense/32768/0",
+        "alnum3/first/absent/32768/7",
+        "alnum3/first/late/32768/7",
+        "mixed4/first/absent/64/0",
+        "mixed4/first/absent/256/0",
+        "mixed4/first/absent/1024/0",
+        "mixed4/first/absent/32768/0",
+        "mixed4/first/absent/1048576/0",
+        "mixed4/first/late/32768/0",
+        "mixed4/first/sparse/32768/0",
+        "mixed4/first/dense/32768/0",
+        "mixed4/all/absent/32768/0",
+        "mixed4/all/late/32768/0",
+        "mixed4/all/sparse/32768/0",
+        "mixed4/all/dense/32768/0",
+        "mixed4/first/absent/32768/7",
+        "mixed4/first/late/32768/7"
+      ]
     }
   },
   "inputs": [
@@ -260,6 +365,121 @@
         "alphabet": "abcdefghijklmnopqrstuvwxyz",
         "length": 32768,
         "seed": 20260721
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.absent.{length}",
+      "axes": {
+        "length": [
+          15,
+          16,
+          17,
+          31,
+          32,
+          33,
+          63,
+          64,
+          65,
+          256,
+          1023,
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "b",
+        "length": "{length}"
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.late.{length}",
+      "axes": {
+        "length": [
+          64,
+          32768
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "b",
+        "suffix": "xy5",
+        "length": "{length}"
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.sparse.32768",
+      "recipe": {
+        "kind": "sparseMatchToLength",
+        "match": "xy5",
+        "nonMatch": "b",
+        "nonMatchRepeats": 127,
+        "delimiterAlphabet": "b",
+        "seed": 20260731,
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.dense.32768",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "bxy5",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.absent.{length}",
+      "axes": {
+        "length": [
+          64,
+          256,
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "~",
+        "length": "{length}"
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.late.32768",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "~",
+        "suffix": "!#5Aa",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.sparse.32768",
+      "recipe": {
+        "kind": "sparseMatchToLength",
+        "match": "!#5Aa",
+        "nonMatch": "~",
+        "nonMatchRepeats": 127,
+        "delimiterAlphabet": "~",
+        "seed": 20260801,
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.dense.32768",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "~!#5Aa",
+        "length": 32768
       },
       "shared": true
     },
@@ -1529,6 +1749,42 @@
         "value": "Today is a beautiful day with warm sunshine.",
         "delimiterAlphabet": " ",
         "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.recitation.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "[",
+        "unit": "1.2.3,",
+        "suffix": "4.5.6]",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.recitation.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "[",
+        "unit": "1.2.3,",
+        "suffix": "4.5.6",
         "length": "{size}"
       },
       "shared": true
@@ -3284,6 +3540,52 @@
         "constraints": [
           "prematerializedInput"
         ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.recitation.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\s*[\\[［]\\s*(?:(?:[0-9]+\\.?){3,4}(?:\\s*[,、]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]］]"
+      ],
+      "inputs": [
+        "realWorldRegex.recitation.{matchLabel}.{size}"
+      ],
+      "trialExclusions": [
+        {
+          "engineIds": [
+            "jdk-string"
+          ],
+          "when": {
+            "size": [
+              10000,
+              100000
+            ]
+          },
+          "reason": "JDK's backtracking matcher throws StackOverflowError for the nested quantified recitation pattern at these input sizes"
+        }
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
       },
       "axes": {
         "matchLabel": [

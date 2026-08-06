@@ -115,7 +115,34 @@ The UTF-8 API also supports capture bounds and byte-native replacement through
 `Utf8Sink`. See [Direct UTF-8 Matching](UTF8.md) for the complete API,
 ownership, coordinate, malformed-input, and replacement contracts.
 
+### Experimental Vector scanner
+
+SafeRE has an experimental Vector API provider for selected ASCII character-class scans
+over direct UTF-8 input. It currently accelerates the singleton, pair, and range scans used by
+UTF-8 prefix searching on sufficiently long inputs. It does not affect matching against
+`String`.
+
+The provider uses the incubating Vector API included with every JDK version supported by SafeRE.
+No additional dependency or class-path configuration is required.
+
+Enable the provider when starting the application on JDK 21 or later:
+
+```text
+--add-modules=jdk.incubator.vector
+-Dorg.safere.experimental.vectorScanProvider=vector
+```
+
+Both flags are required. Without the system property, SafeRE continues to use its built-in SWAR
+scanner. Without the incubator module flag, requesting the Vector scanner fails with a
+configuration error.
+
+The activation property, supported scans, implementation, and tuning thresholds are experimental
+and may change incompatibly or be removed in any SafeRE release.
+
 ## Development
+
+SafeRE's production artifacts are built with JDK 26 and `--release 21`. CI executes the
+same compiled artifacts on JDK 21 through 26 to verify runtime compatibility.
 
 SafeRE uses google-java-format through Spotless. To format Java sources, run:
 
@@ -527,6 +554,7 @@ The important files in that directory are:
 
 ```text
 jmh-output.txt
+normalized-results.jsonl
 declared-report-plan.json
 merged-tables.md
 java-memory.txt
@@ -542,6 +570,12 @@ rust-results.jsonl
 dotnet-results.jsonl
 cross-runtime-tables.md
 ```
+
+`normalized-results.jsonl` combines the parsed Java and selected native
+measurements into the common engine/benchmark/score/error/unit schema used by
+the comparison tooling. Reviewed result sets supporting published claims are
+retained under `benchmark-results/published/<full-SafeRE-commit>/`; other
+timestamped result directories remain local and ignored by Git.
 
 Default runs also include:
 
