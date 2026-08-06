@@ -2,7 +2,9 @@ package org.safere.re2ffm;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -83,5 +85,43 @@ public final class RE2FfmTest {
   public void testReplaceFirstMultiDigitGroup() {
     RE2FfmPattern p = RE2FfmPattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)");
     assertEquals("xjy", p.matcher("xabcdefghijy").replaceFirst("$10"));
+  }
+
+  @Test
+  public void testReplaceAllStateDiscrepancy() {
+    RE2FfmPattern p = RE2FfmPattern.compile("a");
+    RE2FfmMatcher m = p.matcher("aba");
+    assertTrue(m.find());
+    assertEquals("a", m.group());
+
+    assertEquals("xbx", m.replaceAll("x"));
+
+    try {
+      m.group();
+      fail("Expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      // Expected
+    }
+
+    assertFalse(m.find());
+  }
+
+  @Test
+  public void testReplaceAllStateDiscrepancyJavaFallback() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)");
+    RE2FfmMatcher m = p.matcher("xabcdefghijy");
+    assertTrue(m.find());
+    assertEquals("abcdefghij", m.group());
+
+    assertEquals("xxy", m.replaceAll("x"));
+
+    try {
+      m.group();
+      fail("Expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      // Expected
+    }
+
+    assertFalse(m.find());
   }
 }

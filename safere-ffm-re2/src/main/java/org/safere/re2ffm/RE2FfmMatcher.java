@@ -222,8 +222,11 @@ public final class RE2FfmMatcher {
     String rewrite = translateToRE2Rewrite(replacement);
     if (rewrite != null) {
       byte[] rewriteBytes = rewrite.getBytes(StandardCharsets.UTF_8);
-      return Re2Shim.replaceAll(pattern.nativeHandle(), inputUtf8, inputString, rewriteBytes)
-          .result();
+      String result =
+          Re2Shim.replaceAll(pattern.nativeHandle(), inputUtf8, inputString, rewriteBytes).result();
+      this.matched = false;
+      this.searchBytePos = inputUtf8.length;
+      return result;
     }
     return replaceAllJava(replacement);
   }
