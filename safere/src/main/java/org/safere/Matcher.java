@@ -4555,6 +4555,9 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean find(Matcher matcher, boolean regionActive) {
+      if (!matcher.parentPattern.canOnePassFind()) {
+        return matcher.doFindCore(regionActive);
+      }
       matcher.diagnosticBoundary(MatchStrategy.ONE_PASS);
       if (matcher.parentPattern.numGroups() > 0) {
         matcher.diagnosticCapture(MatchStrategy.ONE_PASS);
