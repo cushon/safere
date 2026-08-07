@@ -901,42 +901,9 @@ public final class Matcher implements MatchResult {
     }
   }
 
-  /** Core matches logic, operates on the (possibly substituted) {@code text} field. */
+  /** Core matches fallback logic, operates on the (possibly substituted) {@code text} field. */
   private boolean matchesCore() {
     capturesResolved = true;
-
-    // Literal fast path: for fully literal patterns with no user capture groups.
-    String literal = parentPattern.literalMatch();
-    if (enginePathOptions().literalFastPaths()
-        && literal != null
-        && parentPattern.numGroups() == 0
-        && text != null) {
-      DiagnosticOperation activeDiagnostics = diagnosticOperation;
-      if (activeDiagnostics != null) {
-        activeDiagnostics.accumulator().boundary(MatchStrategy.LITERAL);
-      }
-      boolean matched;
-      if (parentPattern.prefixFoldCase()) {
-        matched =
-            text.length() == literal.length() && literalRegionMatches(literal, 0, literal.length());
-      } else {
-        matched = text.equals(literal);
-      }
-      if (matched) {
-        applyFullMatchResult(new int[] {0, text.length()});
-      } else {
-        if (isPartialLiteralMatch(literal, 0)) {}
-        applyFailedMatchResult();
-      }
-      return hasMatch;
-    }
-
-    // Character-class fast path: for patterns like [a-zA-Z]+, \d+, \w*, etc.
-    int[] ccRanges = parentPattern.charClassMatchRanges();
-    if (enginePathOptions().charClassMatchFastPaths() && ccRanges != null && text != null) {
-      diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
-      return charClassMatchFastPath(ccRanges);
-    }
 
     int[] requiredRanges = parentPattern.requiredMatchClassRanges();
     if (enginePathOptions().charClassMatchFastPaths()
@@ -949,28 +916,6 @@ public final class Matcher implements MatchResult {
     }
 
     Prog prog = parentPattern.prog();
-
-    // Fast path: try one-pass engine (anchored, with captures, O(n) time).
-    EnginePathOptions options = enginePathOptions();
-    OnePass onePass = options.onePass() ? parentPattern.onePass() : null;
-    if (onePass != null
-        && !prog.hasGraphemeSemantics()
-        && !parentPattern.hasNullableAlternation()) {
-      DiagnosticOperation activeDiagnostics = diagnosticOperation;
-      if (activeDiagnostics != null) {
-        DiagnosticAccumulator accumulator = activeDiagnostics.accumulator();
-        accumulator.boundary(MatchStrategy.ONE_PASS);
-        if (parentPattern.numGroups() > 0) {
-          accumulator.capture(MatchStrategy.ONE_PASS);
-        }
-      }
-      int[] result =
-          text != null
-              ? onePass.search(text, true, prog.numCaptures(), this.groups)
-              : onePass.search(activeScanner(), true, prog.numCaptures(), this.groups);
-      return applyFullMatchResult(result);
-    }
-
     InputScanner scanner = activeScanner();
     boolean preferCaptureEngine = shouldPreferCaptureEngine(prog, scanner);
     // Medium path: use DFA to check if a full match exists.
@@ -1110,51 +1055,11 @@ public final class Matcher implements MatchResult {
     }
   }
 
-  /** Core lookingAt logic, operates on the (possibly substituted) {@code text} field. */
+  /** Core lookingAt fallback logic, operates on the (possibly substituted) {@code text} field. */
   private boolean lookingAtCore() {
     capturesResolved = true;
 
-    // Literal fast path: for fully literal patterns with no user capture groups.
-    String literal = parentPattern.literalMatch();
-    if (enginePathOptions().literalFastPaths()
-        && literal != null
-        && parentPattern.numGroups() == 0
-        && text != null) {
-      diagnosticBoundary(MatchStrategy.LITERAL);
-      boolean matched;
-      if (parentPattern.prefixFoldCase()) {
-        matched =
-            text.length() >= literal.length() && literalRegionMatches(literal, 0, literal.length());
-      } else {
-        matched = text.startsWith(literal);
-      }
-      if (matched) {
-        applyFullMatchResult(new int[] {0, literal.length()});
-      } else {
-        if (isPartialLiteralMatch(literal, 0)) {}
-        applyFailedMatchResult();
-      }
-      return hasMatch;
-    }
-
     Prog prog = parentPattern.prog();
-
-    // Fast path: try one-pass engine (anchored, with captures, O(n) time).
-    if (enginePathOptions().onePass()
-        && parentPattern.canOnePassPrimary()
-        && !prog.hasGraphemeSemantics()) {
-      diagnosticBoundary(MatchStrategy.ONE_PASS);
-      if (parentPattern.numGroups() > 0) {
-        diagnosticCapture(MatchStrategy.ONE_PASS);
-      }
-      OnePass onePass = parentPattern.onePass();
-      int[] result =
-          text != null
-              ? onePass.search(text, false, prog.numCaptures(), this.groups)
-              : onePass.search(activeScanner(), false, prog.numCaptures(), this.groups);
-      return applyFullMatchResult(result);
-    }
-
     InputScanner scanner = activeScanner();
     // Medium path: use DFA to check if an anchored match exists.
     if (enginePathOptions().dfa() && dfaSupportsProgram(parentPattern.flatDfaProg())) {
@@ -4473,10 +4378,13 @@ public final class Matcher implements MatchResult {
 
   private static final class SingleCharClassPreparedRunner implements PreparedMatchRunner {
     private final int[] singleCharClassRanges;
+    private final int[] charClassMatchRanges;
     private final boolean isStartAnchored;
 
-    SingleCharClassPreparedRunner(int[] ranges, boolean isStartAnchored) {
-      this.singleCharClassRanges = ranges;
+    SingleCharClassPreparedRunner(
+        int[] singleCharClassRanges, int[] charClassMatchRanges, boolean isStartAnchored) {
+      this.singleCharClassRanges = singleCharClassRanges;
+      this.charClassMatchRanges = charClassMatchRanges;
       this.isStartAnchored = isStartAnchored;
     }
 
@@ -4484,6 +4392,9 @@ public final class Matcher implements MatchResult {
     public boolean find(Matcher matcher, boolean regionActive) {
       if (isStartAnchored && matcher.searchFrom > 0) {
         return matcher.applyFailedMatchResult();
+      }
+      if (singleCharClassRanges == null) {
+        return matcher.doFindCore(regionActive);
       }
       matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
       return matcher.singleCharClassFindFastPath(singleCharClassRanges, matcher.searchFrom);
@@ -4495,10 +4406,9 @@ public final class Matcher implements MatchResult {
         return matcher.applyFailedMatchResult();
       }
       matcher.capturesResolved = true;
-      int[] ccRanges = matcher.parentPattern.charClassMatchRanges();
-      if (ccRanges != null && matcher.text != null) {
+      if (charClassMatchRanges != null && matcher.text != null) {
         matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
-        return matcher.charClassMatchFastPath(ccRanges);
+        return matcher.charClassMatchFastPath(charClassMatchRanges);
       }
       return matcher.matchesCore();
     }
@@ -4651,8 +4561,12 @@ public final class Matcher implements MatchResult {
 
     // 2. Single char class runner
     int[] singleCharClassRanges = parentPattern.singleCharClassRanges();
-    if (options.charClassMatchFastPaths() && singleCharClassRanges != null && text != null) {
-      return new SingleCharClassPreparedRunner(singleCharClassRanges, prog.anchorStart());
+    int[] charClassMatchRanges = parentPattern.charClassMatchRanges();
+    if (options.charClassMatchFastPaths()
+        && (singleCharClassRanges != null || charClassMatchRanges != null)
+        && text != null) {
+      return new SingleCharClassPreparedRunner(
+          singleCharClassRanges, charClassMatchRanges, prog.anchorStart());
     }
 
     if (regionActive) {
