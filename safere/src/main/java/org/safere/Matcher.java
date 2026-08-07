@@ -4550,7 +4550,7 @@ public final class Matcher implements MatchResult {
     EnginePathOptions options = enginePathOptions();
     Prog prog = parentPattern.prog();
 
-    // 1. Literal runner
+    // Literal runner
     String literal = parentPattern.literalMatch();
     if (options.literalFastPaths()
         && literal != null
@@ -4559,7 +4559,7 @@ public final class Matcher implements MatchResult {
       return new LiteralPreparedRunner(this);
     }
 
-    // 2. Single char class runner
+    // Single char class runner
     int[] singleCharClassRanges = parentPattern.singleCharClassRanges();
     int[] charClassMatchRanges = parentPattern.charClassMatchRanges();
     if (options.charClassMatchFastPaths()
@@ -4573,14 +4573,14 @@ public final class Matcher implements MatchResult {
       return FallbackPreparedRunner.INSTANCE;
     }
 
-    // 3. Keyword alternation runner
+    // Keyword alternation runner
     Pattern.KeywordAlternation keywordAlternation = parentPattern.keywordAlternation();
     if (options.keywordAlternationFastPath() && keywordAlternation != null) {
       return new KeywordAlternationPreparedRunner(
           keywordAlternation, prog.numCaptures(), prog.anchorStart());
     }
 
-    // 4. Anchored OnePass runner
+    // Anchored OnePass runner
     if (options.onePass()
         && (parentPattern.canOnePassFind() || parentPattern.canOnePassPrimary())
         && activeScanner().length() <= ONEPASS_ANCHORED_TEXT_LIMIT) {
