@@ -878,7 +878,12 @@ public final class Matcher implements MatchResult {
         }
         regionSubstituted = true;
       }
-      return matchesCore();
+      PreparedMatchRunner runner = preparedMatchRunner;
+      if (runner == null) {
+        runner = createPreparedRunner(regionActive);
+        preparedMatchRunner = runner;
+      }
+      return runner.matches(this);
     } finally {
       if (regionSubstituted) {
         resolveCapturesBeforeRestoringRegion();
@@ -1082,7 +1087,12 @@ public final class Matcher implements MatchResult {
         }
         regionSubstituted = true;
       }
-      return lookingAtCore();
+      PreparedMatchRunner runner = preparedMatchRunner;
+      if (runner == null) {
+        runner = createPreparedRunner(regionActive);
+        preparedMatchRunner = runner;
+      }
+      return runner.lookingAt(this);
     } finally {
       if (regionSubstituted) {
         resolveCapturesBeforeRestoringRegion();
@@ -4350,6 +4360,10 @@ public final class Matcher implements MatchResult {
           OnePassAnchoredPreparedRunner,
           FallbackPreparedRunner {
     boolean find(Matcher matcher, boolean regionActive);
+
+    boolean matches(Matcher matcher);
+
+    boolean lookingAt(Matcher matcher);
   }
 
   private static final class LiteralPreparedRunner implements PreparedMatchRunner {
@@ -4401,6 +4415,60 @@ public final class Matcher implements MatchResult {
       }
       return matcher.applyFullMatchResult(new int[] {idx, idx + matchLength});
     }
+
+    @Override
+    public boolean matches(Matcher matcher) {
+      if (isStartAnchored && matcher.searchFrom > 0) {
+        return matcher.applyFailedMatchResult();
+      }
+      matcher.capturesResolved = true;
+      if (matcher.text != null) {
+        matcher.diagnosticBoundary(MatchStrategy.LITERAL);
+        boolean matched;
+        if (foldCase) {
+          matched =
+              matcher.text.length() == literal.length()
+                  && matcher.literalRegionMatches(literal, 0, literal.length());
+        } else {
+          matched = matcher.text.equals(literal);
+        }
+        if (matched) {
+          matcher.applyFullMatchResult(new int[] {0, matcher.text.length()});
+        } else {
+          if (matcher.isPartialLiteralMatch(literal, 0)) {}
+          matcher.applyFailedMatchResult();
+        }
+        return matcher.hasMatch;
+      }
+      return matcher.matchesCore();
+    }
+
+    @Override
+    public boolean lookingAt(Matcher matcher) {
+      if (isStartAnchored && matcher.searchFrom > 0) {
+        return matcher.applyFailedMatchResult();
+      }
+      matcher.capturesResolved = true;
+      if (matcher.text != null) {
+        matcher.diagnosticBoundary(MatchStrategy.LITERAL);
+        boolean matched;
+        if (foldCase) {
+          matched =
+              matcher.text.length() >= literal.length()
+                  && matcher.literalRegionMatches(literal, 0, literal.length());
+        } else {
+          matched = matcher.text.startsWith(literal);
+        }
+        if (matched) {
+          matcher.applyFullMatchResult(new int[] {0, literal.length()});
+        } else {
+          if (matcher.isPartialLiteralMatch(literal, 0)) {}
+          matcher.applyFailedMatchResult();
+        }
+        return matcher.hasMatch;
+      }
+      return matcher.lookingAtCore();
+    }
   }
 
   private static final class SingleCharClassPreparedRunner implements PreparedMatchRunner {
@@ -4419,6 +4487,25 @@ public final class Matcher implements MatchResult {
       }
       matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
       return matcher.singleCharClassFindFastPath(singleCharClassRanges, matcher.searchFrom);
+    }
+
+    @Override
+    public boolean matches(Matcher matcher) {
+      if (isStartAnchored && matcher.searchFrom > 0) {
+        return matcher.applyFailedMatchResult();
+      }
+      matcher.capturesResolved = true;
+      int[] ccRanges = matcher.parentPattern.charClassMatchRanges();
+      if (ccRanges != null && matcher.text != null) {
+        matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
+        return matcher.charClassMatchFastPath(ccRanges);
+      }
+      return matcher.matchesCore();
+    }
+
+    @Override
+    public boolean lookingAt(Matcher matcher) {
+      return matcher.lookingAtCore();
     }
   }
 
@@ -4446,6 +4533,16 @@ public final class Matcher implements MatchResult {
       return matcher.text != null
           ? matcher.findKeywordAlternation(keywordAlternation, matcher.searchFrom, numCaptures)
           : matcher.findUtf8KeywordAlternation(keywordAlternation, matcher.searchFrom, numCaptures);
+    }
+
+    @Override
+    public boolean matches(Matcher matcher) {
+      return matcher.matchesCore();
+    }
+
+    @Override
+    public boolean lookingAt(Matcher matcher) {
+      return matcher.lookingAtCore();
     }
   }
 
@@ -4475,6 +4572,46 @@ public final class Matcher implements MatchResult {
                   matcher.groups);
       return matcher.applyFullMatchResult(result);
     }
+
+    @Override
+    public boolean matches(Matcher matcher) {
+      matcher.capturesResolved = true;
+      Pattern pattern = matcher.parentPattern;
+      Prog prog = pattern.prog();
+      OnePass onePass = pattern.onePass();
+      if (onePass != null && !prog.hasGraphemeSemantics() && !pattern.hasNullableAlternation()) {
+        matcher.diagnosticBoundary(MatchStrategy.ONE_PASS);
+        if (pattern.numGroups() > 0) {
+          matcher.diagnosticCapture(MatchStrategy.ONE_PASS);
+        }
+        int[] result =
+            matcher.text != null
+                ? onePass.search(matcher.text, true, numCaptures, matcher.groups)
+                : onePass.search(matcher.activeScanner(), true, numCaptures, matcher.groups);
+        return matcher.applyFullMatchResult(result);
+      }
+      return matcher.matchesCore();
+    }
+
+    @Override
+    public boolean lookingAt(Matcher matcher) {
+      matcher.capturesResolved = true;
+      Pattern pattern = matcher.parentPattern;
+      Prog prog = pattern.prog();
+      if (pattern.canOnePassPrimary() && !prog.hasGraphemeSemantics()) {
+        matcher.diagnosticBoundary(MatchStrategy.ONE_PASS);
+        if (pattern.numGroups() > 0) {
+          matcher.diagnosticCapture(MatchStrategy.ONE_PASS);
+        }
+        OnePass onePass = pattern.onePass();
+        int[] result =
+            matcher.text != null
+                ? onePass.search(matcher.text, false, numCaptures, matcher.groups)
+                : onePass.search(matcher.activeScanner(), false, numCaptures, matcher.groups);
+        return matcher.applyFullMatchResult(result);
+      }
+      return matcher.lookingAtCore();
+    }
   }
 
   private static final class FallbackPreparedRunner implements PreparedMatchRunner {
@@ -4483,6 +4620,16 @@ public final class Matcher implements MatchResult {
     @Override
     public boolean find(Matcher matcher, boolean regionActive) {
       return matcher.doFindCore(regionActive);
+    }
+
+    @Override
+    public boolean matches(Matcher matcher) {
+      return matcher.matchesCore();
+    }
+
+    @Override
+    public boolean lookingAt(Matcher matcher) {
+      return matcher.lookingAtCore();
     }
   }
 
@@ -4518,7 +4665,7 @@ public final class Matcher implements MatchResult {
 
     // 4. Anchored OnePass runner
     if (options.onePass()
-        && parentPattern.canOnePassFind()
+        && (parentPattern.canOnePassFind() || parentPattern.canOnePassPrimary())
         && activeScanner().length() <= ONEPASS_ANCHORED_TEXT_LIMIT) {
       return new OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
