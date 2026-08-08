@@ -1999,7 +1999,7 @@ public final class Matcher implements MatchResult {
       if (literalStart < 0) {
         return -1;
       }
-      if (discreteOffsets != null && firstAscii != null) {
+      if (discreteOffsets != null && discreteOffsets.length == 1 && firstAscii != null) {
         boolean matchFound = false;
         int earliestValid = -1;
         for (int offset : discreteOffsets) {
@@ -2020,7 +2020,8 @@ public final class Matcher implements MatchResult {
         literalFrom = literalStart + 1;
         continue;
       }
-      return Math.max(fromIndex, literalStart - fixedOffsetLiteral.maxOffset());
+      return Math.max(
+          fromIndex, scanner.retreatByCodePoints(literalStart, fixedOffsetLiteral.maxOffset()));
     }
     return -1;
   }

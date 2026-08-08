@@ -793,7 +793,8 @@ public final class Pattern implements Serializable {
   }
 
   private int nextFixedOffsetCandidate(Utf8InputScanner scanner, int searchFrom) {
-    int literalFrom = searchFrom + fixedOffsetLiteral.offset();
+    int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
+    int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
     while (literalFrom <= scanner.length()) {
       int literalStart =
           scanner.indexOf(
@@ -804,13 +805,28 @@ public final class Pattern implements Serializable {
       if (literalStart < 0) {
         return -1;
       }
-      int candidateStart = literalStart - fixedOffsetLiteral.offset();
-      int first = scanner.asciiAt(candidateStart);
-      if (charClassPrefixAscii == null
-          || (first >= 0 && first < charClassPrefixAscii.length && charClassPrefixAscii[first])) {
-        return candidateStart;
+      if (discreteOffsets != null && discreteOffsets.length == 1 && charClassPrefixAscii != null) {
+        int earliestValid = -1;
+        for (int offset : discreteOffsets) {
+          int candidateStart = literalStart - offset;
+          if (candidateStart >= searchFrom) {
+            int first = scanner.asciiAt(candidateStart);
+            if (first >= 0
+                && first < charClassPrefixAscii.length
+                && charClassPrefixAscii[first]
+                && (earliestValid < 0 || candidateStart < earliestValid)) {
+              earliestValid = candidateStart;
+            }
+          }
+        }
+        if (earliestValid >= 0) {
+          return earliestValid;
+        }
+        literalFrom = literalStart + 1;
+        continue;
       }
-      literalFrom = literalStart + 1;
+      return Math.max(
+          searchFrom, scanner.retreatByCodePoints(literalStart, fixedOffsetLiteral.maxOffset()));
     }
     return -1;
   }
@@ -2241,67 +2257,53 @@ public final class Pattern implements Serializable {
     }
   }
 
-  /**
-   * Finds the longest case-sensitive ASCII literal after a fixed-width ASCII match prefix.
-   *
-   * <p>This deliberately recognizes only the simple concatenation shape produced by simplification.
-   * Stopping at the first variable-width or non-ASCII atom keeps byte and UTF-16 offsets identical
-   * and makes every derived start position exact.
-   */
+  /** Finds the longest case-sensitive ASCII literal after a bounded-width match prefix. */
   private static FixedOffsetLiteral extractFixedOffsetLiteral(Regexp re) {
     Regexp node = unwrapFixedOffsetNode(re);
     if (node.op != RegexpOp.CONCAT || node.subs == null) {
       return null;
     }
     FixedOffsetLiteral best = null;
-    int minOffset = 0;
-    int maxOffset = 0;
-    int[] discreteOffsets = new int[] {0};
+    AsciiWidthRange prefixWidth = AsciiWidthRange.ZERO;
 
-    for (int i = 0; i < node.subs.size(); i++) {
-      StringBuilder litSb = new StringBuilder();
-      for (int j = i; j < node.subs.size(); j++) {
-        String lit = fixedOffsetAsciiLiteral(node.subs.get(j));
-        if (lit == null) {
-          break;
+    for (int index = 0; index < node.subs.size(); ) {
+      String literalPart = fixedOffsetAsciiLiteral(node.subs.get(index));
+      if (literalPart != null) {
+        StringBuilder literal = new StringBuilder(literalPart);
+        int next = index + 1;
+        while (next < node.subs.size()) {
+          String nextPart = fixedOffsetAsciiLiteral(node.subs.get(next));
+          if (nextPart == null) {
+            break;
+          }
+          literal.append(nextPart);
+          next++;
         }
-        litSb.append(lit);
-      }
-      String literal = litSb.length() > 0 ? litSb.toString() : null;
-      if (i > 0 && (minOffset > 0 || maxOffset > 0)) {
-        int minLitLen = (discreteOffsets != null) ? 1 : 2;
-        if (literal != null
-            && literal.length() >= minLitLen
-            && (best == null || literal.length() > best.literal().length())) {
-          best = new FixedOffsetLiteral(literal, minOffset, maxOffset, discreteOffsets);
-        }
-      }
-      Regexp sub = node.subs.get(i);
-      AsciiWidthRange width = computeAsciiWidthRange(sub);
-      if (!width.isValid()) {
-        break;
-      }
-      minOffset += width.minWidth;
-      if (maxOffset != Integer.MAX_VALUE) {
-        if (width.maxWidth == Integer.MAX_VALUE || maxOffset > Integer.MAX_VALUE - width.maxWidth) {
-          maxOffset = Integer.MAX_VALUE;
-        } else {
-          maxOffset += width.maxWidth;
-        }
-      }
-      if (discreteOffsets != null
-          && width.discreteWidths != null
-          && discreteOffsets.length * width.discreteWidths.length <= 16) {
-        java.util.TreeSet<Integer> newDiscrete = new java.util.TreeSet<>();
-        for (int d1 : discreteOffsets) {
-          for (int d2 : width.discreteWidths) {
-            newDiscrete.add(d1 + d2);
+        if (index > 0 && (prefixWidth.minWidth > 0 || prefixWidth.maxWidth > 0)) {
+          int minimumLiteralLength = prefixWidth.discreteWidths != null ? 1 : 2;
+          if (literal.length() >= minimumLiteralLength
+              && (best == null || literal.length() > best.literal().length())) {
+            best =
+                new FixedOffsetLiteral(
+                    literal.toString(),
+                    prefixWidth.minWidth,
+                    prefixWidth.maxWidth,
+                    prefixWidth.discreteWidths);
           }
         }
-        discreteOffsets = newDiscrete.stream().mapToInt(Integer::intValue).toArray();
-      } else {
-        discreteOffsets = null;
+        prefixWidth = concatenateWidths(prefixWidth, AsciiWidthRange.exact(literal.length()));
+        if (!prefixWidth.isValid()) {
+          break;
+        }
+        index = next;
+        continue;
       }
+
+      prefixWidth = concatenateWidths(prefixWidth, computeAsciiWidthRange(node.subs.get(index)));
+      if (!prefixWidth.isValid()) {
+        break;
+      }
+      index++;
     }
     return best;
   }
@@ -2315,191 +2317,229 @@ public final class Pattern implements Serializable {
   }
 
   private static String fixedOffsetAsciiLiteral(Regexp re) {
-    Regexp node = unwrapFixedOffsetNode(re);
-    if ((node.flags & ParseFlags.FOLD_CASE) != 0) {
+    StringBuilder literal = new StringBuilder();
+    Deque<Regexp> pending = new ArrayDeque<>();
+    pending.push(re);
+    while (!pending.isEmpty()) {
+      Regexp node = unwrapFixedOffsetNode(pending.pop());
+      if ((node.flags & ParseFlags.FOLD_CASE) != 0) {
+        return null;
+      }
+      if (node.op == RegexpOp.LITERAL && node.rune >= 0 && node.rune < 128) {
+        literal.append((char) node.rune);
+        continue;
+      }
+      if (node.op == RegexpOp.LITERAL_STRING && node.runes != null && node.runes.length > 0) {
+        for (int rune : node.runes) {
+          if (rune < 0 || rune >= 128) {
+            return null;
+          }
+          literal.append((char) rune);
+        }
+        continue;
+      }
+      if (node.op == RegexpOp.CONCAT && node.subs != null) {
+        for (int index = node.subs.size() - 1; index >= 0; index--) {
+          pending.push(node.subs.get(index));
+        }
+        continue;
+      }
       return null;
     }
-    if (node.op == RegexpOp.LITERAL && node.rune >= 0 && node.rune < 128) {
-      return Character.toString(node.rune);
-    }
-    if (node.op == RegexpOp.LITERAL_STRING && node.runes != null && node.runes.length > 0) {
-      for (int rune : node.runes) {
-        if (rune < 0 || rune >= 128) {
-          return null;
-        }
-      }
-      return new String(node.runes, 0, node.runes.length);
-    }
-    if (node.op == RegexpOp.CONCAT && node.subs != null) {
-      StringBuilder sb = new StringBuilder();
-      for (Regexp sub : node.subs) {
-        String s = fixedOffsetAsciiLiteral(sub);
-        if (s == null) {
-          return null;
-        }
-        sb.append(s);
-      }
-      return sb.isEmpty() ? null : sb.toString();
-    }
-    return null;
+    return literal.isEmpty() ? null : literal.toString();
   }
 
   private static AsciiWidthRange computeAsciiWidthRange(Regexp re) {
-    Regexp node = unwrapFixedOffsetNode(re);
-    if (node == null) {
+    return new AsciiWidthRangeWalker().walk(re, AsciiWidthRange.INVALID);
+  }
+
+  private static final class AsciiWidthRangeWalker extends Walker<AsciiWidthRange> {
+    @Override
+    protected AsciiWidthRange postVisit(
+        Regexp node,
+        AsciiWidthRange parentArg,
+        AsciiWidthRange preArg,
+        List<AsciiWidthRange> childArgs) {
+      return switch (node.op) {
+        case CAPTURE, NON_CAPTURE ->
+            childArgs.isEmpty() ? AsciiWidthRange.INVALID : childArgs.getFirst();
+        case EMPTY_MATCH,
+            BEGIN_LINE,
+            END_LINE,
+            BEGIN_TEXT,
+            END_TEXT,
+            WORD_BOUNDARY,
+            NO_WORD_BOUNDARY ->
+            AsciiWidthRange.ZERO;
+        case LITERAL ->
+            node.rune >= 0 && node.rune < 128 && (node.flags & ParseFlags.FOLD_CASE) == 0
+                ? AsciiWidthRange.ONE
+                : AsciiWidthRange.INVALID;
+        case LITERAL_STRING -> literalStringWidth(node);
+        case CHAR_CLASS -> characterClassWidth(node);
+        case REPEAT -> repeatWidth(node, childArgs);
+        case QUEST -> optionalWidth(childArgs);
+        case ALTERNATE -> alternateWidth(childArgs);
+        case CONCAT -> concatenateWidths(childArgs);
+        default -> AsciiWidthRange.INVALID;
+      };
+    }
+
+    @Override
+    protected AsciiWidthRange shortVisit(Regexp re, AsciiWidthRange parentArg) {
       return AsciiWidthRange.INVALID;
     }
-    return switch (node.op) {
-      case EMPTY_MATCH,
-          BEGIN_LINE,
-          END_LINE,
-          BEGIN_TEXT,
-          END_TEXT,
-          WORD_BOUNDARY,
-          NO_WORD_BOUNDARY ->
-          AsciiWidthRange.ZERO;
-      case LITERAL -> {
-        if (node.rune >= 0 && node.rune < 128 && (node.flags & ParseFlags.FOLD_CASE) == 0) {
-          yield AsciiWidthRange.ONE;
-        }
-        yield AsciiWidthRange.INVALID;
+
+    private static AsciiWidthRange literalStringWidth(Regexp node) {
+      if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.runes == null) {
+        return AsciiWidthRange.INVALID;
       }
-      case LITERAL_STRING -> {
-        if ((node.flags & ParseFlags.FOLD_CASE) == 0 && node.runes != null) {
-          for (int r : node.runes) {
-            if (r < 0 || r >= 128) {
-              yield AsciiWidthRange.INVALID;
-            }
-          }
-          yield AsciiWidthRange.exact(node.runes.length);
+      for (int rune : node.runes) {
+        if (rune < 0 || rune >= 128) {
+          return AsciiWidthRange.INVALID;
         }
-        yield AsciiWidthRange.INVALID;
       }
-      case CHAR_CLASS -> {
-        if (node.charClass != null
-            && !node.charClass.isEmpty()
-            && node.charClass.hi(node.charClass.numRanges() - 1) < 128) {
-          yield AsciiWidthRange.ONE;
-        }
-        yield AsciiWidthRange.INVALID;
+      return AsciiWidthRange.exact(node.runes.length);
+    }
+
+    private static AsciiWidthRange characterClassWidth(Regexp node) {
+      if (node.charClass == null || node.charClass.isEmpty()) {
+        return AsciiWidthRange.INVALID;
       }
-      case REPEAT -> {
-        if (node.max < 0) {
-          yield AsciiWidthRange.INVALID;
-        }
-        AsciiWidthRange sub = computeAsciiWidthRange(node.sub());
-        if (!sub.isValid() || node.min < 0) {
-          yield AsciiWidthRange.INVALID;
-        }
-        int minW = sub.minWidth * node.min;
-        int maxW = sub.maxWidth * node.max;
-        if (sub.isExact() && node.max - node.min <= 8) {
-          int[] discrete = new int[node.max - node.min + 1];
-          for (int i = 0; i < discrete.length; i++) {
-            discrete[i] = sub.minWidth * (node.min + i);
-          }
-          yield new AsciiWidthRange(minW, maxW, discrete);
-        }
-        yield new AsciiWidthRange(minW, maxW, null);
+      return node.charClass.hi(node.charClass.numRanges() - 1) < 128
+          ? AsciiWidthRange.ONE
+          : AsciiWidthRange.NON_DISCRETE_ONE;
+    }
+
+    private static AsciiWidthRange repeatWidth(Regexp node, List<AsciiWidthRange> childArgs) {
+      if (node.min < 0 || node.max < 0 || childArgs.isEmpty()) {
+        return AsciiWidthRange.INVALID;
       }
-      case QUEST -> {
-        AsciiWidthRange sub = computeAsciiWidthRange(node.sub());
-        if (!sub.isValid()) {
-          yield AsciiWidthRange.INVALID;
-        }
-        int minW = 0;
-        int maxW = sub.maxWidth;
-        if (sub.discreteWidths != null) {
-          java.util.TreeSet<Integer> discreteSet = new java.util.TreeSet<>();
-          discreteSet.add(0);
-          for (int d : sub.discreteWidths) {
-            discreteSet.add(d);
-          }
-          int[] discrete =
-              discreteSet.size() <= 16
-                  ? discreteSet.stream().mapToInt(Integer::intValue).toArray()
-                  : null;
-          yield new AsciiWidthRange(minW, maxW, discrete);
-        }
-        yield new AsciiWidthRange(minW, maxW, null);
+      AsciiWidthRange child = childArgs.getFirst();
+      if (!child.isValid()) {
+        return AsciiWidthRange.INVALID;
       }
-      case PLUS -> AsciiWidthRange.INVALID;
-      case ALTERNATE -> {
-        if (node.subs == null || node.subs.isEmpty()) {
-          yield AsciiWidthRange.INVALID;
-        }
-        int minW = Integer.MAX_VALUE;
-        int maxW = Integer.MIN_VALUE;
-        boolean allDiscrete = true;
-        java.util.TreeSet<Integer> discreteSet = new java.util.TreeSet<>();
-        for (Regexp sub : node.subs) {
-          AsciiWidthRange w = computeAsciiWidthRange(sub);
-          if (!w.isValid()) {
-            yield AsciiWidthRange.INVALID;
-          }
-          minW = Math.min(minW, w.minWidth);
-          maxW = Math.max(maxW, w.maxWidth);
-          if (w.discreteWidths != null && allDiscrete) {
-            for (int d : w.discreteWidths) {
-              discreteSet.add(d);
-            }
-          } else {
-            allDiscrete = false;
-          }
-        }
-        int[] discrete =
-            allDiscrete && discreteSet.size() <= 8
-                ? discreteSet.stream().mapToInt(Integer::intValue).toArray()
-                : null;
-        yield new AsciiWidthRange(minW, maxW, discrete);
+      int minWidth = multiplyWidth(child.minWidth, node.min);
+      int maxWidth = multiplyWidth(child.maxWidth, node.max);
+      if (minWidth < 0 || maxWidth < 0) {
+        return AsciiWidthRange.INVALID;
       }
-      case CONCAT -> {
-        if (node.subs == null || node.subs.isEmpty()) {
-          yield AsciiWidthRange.ZERO;
+      if (child.discreteWidths != null && child.isExact() && node.max - node.min <= 8) {
+        int[] discrete = new int[node.max - node.min + 1];
+        for (int index = 0; index < discrete.length; index++) {
+          int width = multiplyWidth(child.minWidth, node.min + index);
+          if (width < 0) {
+            return AsciiWidthRange.INVALID;
+          }
+          discrete[index] = width;
         }
-        int minW = 0;
-        int maxW = 0;
-        int[] discrete = new int[] {0};
-        for (Regexp sub : node.subs) {
-          AsciiWidthRange w = computeAsciiWidthRange(sub);
-          if (!w.isValid()) {
-            yield AsciiWidthRange.INVALID;
-          }
-          if (minW > Integer.MAX_VALUE - w.minWidth) {
-            yield AsciiWidthRange.INVALID;
-          }
-          minW += w.minWidth;
-          if (maxW != Integer.MAX_VALUE) {
-            if (w.maxWidth == Integer.MAX_VALUE || maxW > Integer.MAX_VALUE - w.maxWidth) {
-              maxW = Integer.MAX_VALUE;
-            } else {
-              maxW += w.maxWidth;
-            }
-          }
-          if (discrete != null
-              && w.discreteWidths != null
-              && discrete.length * w.discreteWidths.length <= 16) {
-            java.util.TreeSet<Integer> newDiscrete = new java.util.TreeSet<>();
-            for (int d1 : discrete) {
-              for (int d2 : w.discreteWidths) {
-                newDiscrete.add(d1 + d2);
-              }
-            }
-            discrete = newDiscrete.stream().mapToInt(Integer::intValue).toArray();
-          } else {
-            discrete = null;
-          }
-        }
-        yield new AsciiWidthRange(minW, maxW, discrete);
+        return new AsciiWidthRange(minWidth, maxWidth, discrete);
       }
-      default -> AsciiWidthRange.INVALID;
-    };
+      return new AsciiWidthRange(minWidth, maxWidth, null);
+    }
+
+    private static AsciiWidthRange optionalWidth(List<AsciiWidthRange> childArgs) {
+      if (childArgs.isEmpty() || !childArgs.getFirst().isValid()) {
+        return AsciiWidthRange.INVALID;
+      }
+      AsciiWidthRange child = childArgs.getFirst();
+      if (child.discreteWidths == null) {
+        return new AsciiWidthRange(0, child.maxWidth, null);
+      }
+      java.util.TreeSet<Integer> discrete = new java.util.TreeSet<>();
+      discrete.add(0);
+      for (int width : child.discreteWidths) {
+        discrete.add(width);
+      }
+      return new AsciiWidthRange(
+          0,
+          child.maxWidth,
+          discrete.size() <= 16 ? discrete.stream().mapToInt(Integer::intValue).toArray() : null);
+    }
+
+    private static AsciiWidthRange alternateWidth(List<AsciiWidthRange> childArgs) {
+      if (childArgs.isEmpty()) {
+        return AsciiWidthRange.INVALID;
+      }
+      int minWidth = Integer.MAX_VALUE;
+      int maxWidth = Integer.MIN_VALUE;
+      java.util.TreeSet<Integer> discrete = new java.util.TreeSet<>();
+      boolean allDiscrete = true;
+      for (AsciiWidthRange child : childArgs) {
+        if (!child.isValid()) {
+          return AsciiWidthRange.INVALID;
+        }
+        minWidth = Math.min(minWidth, child.minWidth);
+        maxWidth = Math.max(maxWidth, child.maxWidth);
+        if (allDiscrete && child.discreteWidths != null) {
+          for (int width : child.discreteWidths) {
+            discrete.add(width);
+          }
+        } else {
+          allDiscrete = false;
+        }
+      }
+      return new AsciiWidthRange(
+          minWidth,
+          maxWidth,
+          allDiscrete && discrete.size() <= 8
+              ? discrete.stream().mapToInt(Integer::intValue).toArray()
+              : null);
+    }
+  }
+
+  private static AsciiWidthRange concatenateWidths(List<AsciiWidthRange> widths) {
+    AsciiWidthRange result = AsciiWidthRange.ZERO;
+    for (AsciiWidthRange width : widths) {
+      result = concatenateWidths(result, width);
+      if (!result.isValid()) {
+        return result;
+      }
+    }
+    return result;
+  }
+
+  private static AsciiWidthRange concatenateWidths(AsciiWidthRange left, AsciiWidthRange right) {
+    if (!left.isValid() || !right.isValid()) {
+      return AsciiWidthRange.INVALID;
+    }
+    int minWidth = addWidth(left.minWidth, right.minWidth);
+    int maxWidth = addWidth(left.maxWidth, right.maxWidth);
+    if (minWidth < 0 || maxWidth < 0) {
+      return AsciiWidthRange.INVALID;
+    }
+    int[] discrete = null;
+    if (left.discreteWidths != null
+        && right.discreteWidths != null
+        && left.discreteWidths.length * right.discreteWidths.length <= 16) {
+      java.util.TreeSet<Integer> combined = new java.util.TreeSet<>();
+      for (int leftWidth : left.discreteWidths) {
+        for (int rightWidth : right.discreteWidths) {
+          int width = addWidth(leftWidth, rightWidth);
+          if (width < 0) {
+            return AsciiWidthRange.INVALID;
+          }
+          combined.add(width);
+        }
+      }
+      discrete = combined.stream().mapToInt(Integer::intValue).toArray();
+    }
+    return new AsciiWidthRange(minWidth, maxWidth, discrete);
+  }
+
+  private static int addWidth(int left, int right) {
+    return left > Integer.MAX_VALUE - right ? -1 : left + right;
+  }
+
+  private static int multiplyWidth(int width, int count) {
+    return width != 0 && count > Integer.MAX_VALUE / width ? -1 : width * count;
   }
 
   private static final class AsciiWidthRange {
     static final AsciiWidthRange INVALID = new AsciiWidthRange(-1, -1, null);
     static final AsciiWidthRange ZERO = new AsciiWidthRange(0, 0, new int[] {0});
     static final AsciiWidthRange ONE = new AsciiWidthRange(1, 1, new int[] {1});
+    static final AsciiWidthRange NON_DISCRETE_ONE = new AsciiWidthRange(1, 1, null);
 
     final int minWidth;
     final int maxWidth;

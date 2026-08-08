@@ -263,18 +263,19 @@ class PatternInternalTest {
   }
 
   @ParameterizedTest
-  @ValueSource(
-      strings = {
-        "\\d+/x",
-        "[αβ]/x",
-        "[ab](?i:x)",
-        "literal-prefix",
-        "(?:(?:a|.)a)",
-        ".\\d{3}foo",
-        "(^|[^#])(#!customTag)"
-      })
+  @ValueSource(strings = {"\\d+/x", "[ab](?i:x)", "literal-prefix"})
   void variableWidthUnicodeAndOrdinaryPrefixesDoNotRecordFixedOffsetLiterals(String regex) {
     assertThat(Pattern.compile(regex).fixedOffsetLiteral()).isNull();
+  }
+
+  @Test
+  void unicodeClassOffsetsAreRecordedAsNonDiscreteCodePointRanges() {
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile("[αβ]/x").fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.minOffset()).isEqualTo(1);
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).isNull();
   }
 
   @Test
@@ -283,6 +284,8 @@ class PatternInternalTest {
         Pattern.compile("(^|[a-z])(#!customTag)").fixedOffsetLiteral();
     assertThat(fixed).isNotNull();
     assertThat(fixed.literal()).isEqualTo("#!customTag");
+    assertThat(fixed.minOffset()).isZero();
+    assertThat(fixed.maxOffset()).isEqualTo(1);
     assertThat(fixed.discreteOffsets()).containsExactly(0, 1);
   }
 
