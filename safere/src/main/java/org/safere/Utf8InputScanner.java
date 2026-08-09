@@ -13,23 +13,12 @@ import java.lang.invoke.VarHandle;
 
 final class Utf8InputScanner implements InputScanner {
   private static final int REPLACEMENT_CHARACTER = 0xFFFD;
-  private static final long BYTE_ONES = 0x0101_0101_0101_0101L;
   private static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
-  private static final long BYTE_LOW_BITS = ~BYTE_HIGH_BITS;
   private static final int BOYER_MOORE_HORSPOOL_BATCH_SIZE = 2;
   private static final int MULTI_RANGE_SWAR_MINIMUM_LENGTH = 64;
   private static final int MULTI_RANGE_SWAR_SCALAR_PROLOGUE_LENGTH = Long.BYTES;
   private static final int VECTOR_SCALAR_PROLOGUE_LENGTH = Integer.BYTES;
 
-  /**
-   * Input sizes at which the SWAR candidate filter overtakes the skip loop. The filter always
-   * advances eight positions per step, while the skip loop can advance as far as the literal
-   * length, so the filter needs an input large enough to outweigh that per-step advantage. Both
-   * bounds were measured; see {@link #indexOfFiltered}.
-   */
-  private static final int MIN_FILTER_LENGTH = 64;
-
-  private static final int FILTER_LENGTH_FACTOR = 40;
   private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, nativeOrder());
 
   private final byte[] bytes;
@@ -169,128 +158,27 @@ final class Utf8InputScanner implements InputScanner {
       int low = ranges[0];
       int high = ranges[1];
       if (low == high) {
-        return indexOfByte((byte) low, start);
+        return ByteSwarScan.indexOfByte(bytes, offset, length, (byte) low, start);
       }
       if (high == low + 1) {
-        return indexOfBytePair((byte) low, (byte) high, start);
+        return ByteSwarScan.indexOfBytePair(bytes, offset, length, (byte) low, (byte) high, start);
       }
-      return indexOfByteRange(low, high, start);
+      return ByteSwarScan.indexOfByteRange(bytes, offset, length, low, high, start);
     }
     if (ranges.length == 4
         && ranges[0] == ranges[1]
         && ranges[2] == ranges[3]
         && ranges[0] >= 0
         && ranges[3] < 0x80) {
-      return indexOfBytePair((byte) ranges[0], (byte) ranges[2], start);
+      return ByteSwarScan.indexOfBytePair(
+          bytes, offset, length, (byte) ranges[0], (byte) ranges[2], start);
     }
     return -2;
   }
 
   private int indexOfMultipleByteRanges(int[] ranges, long bitmap0, long bitmap1, int start) {
-    return switch (ranges.length) {
-      case 4 -> indexOfTwoByteRanges(ranges, bitmap0, bitmap1, start);
-      case 6 -> indexOfThreeByteRanges(ranges, bitmap0, bitmap1, start);
-      case 8 -> indexOfFourByteRanges(ranges, bitmap0, bitmap1, start);
-      default -> throw new AssertionError("unexpected range count");
-    };
-  }
-
-  private int indexOfTwoByteRanges(int[] ranges, long bitmap0, long bitmap1, int start) {
-    long low0 = ranges[0] * BYTE_ONES;
-    long high0 = ranges[1] * BYTE_ONES;
-    long low1 = ranges[2] * BYTE_ONES;
-    long high1 = ranges[3] * BYTE_ONES;
-    int position = start;
-    int wordEnd = length - Long.BYTES;
-    while (position <= wordEnd) {
-      long word = (long) LONG_VIEW.get(bytes, offset + position);
-      long values = word & BYTE_LOW_BITS;
-      long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
-      if (matches != 0) {
-        return scalarRangeCheck(bitmap0, bitmap1, position, position + Long.BYTES);
-      }
-      position += Long.BYTES;
-    }
-    return scalarRangeCheck(bitmap0, bitmap1, position, length);
-  }
-
-  private int indexOfThreeByteRanges(int[] ranges, long bitmap0, long bitmap1, int start) {
-    long low0 = ranges[0] * BYTE_ONES;
-    long high0 = ranges[1] * BYTE_ONES;
-    long low1 = ranges[2] * BYTE_ONES;
-    long high1 = ranges[3] * BYTE_ONES;
-    long low2 = ranges[4] * BYTE_ONES;
-    long high2 = ranges[5] * BYTE_ONES;
-    int position = start;
-    int wordEnd = length - Long.BYTES;
-    while (position <= wordEnd) {
-      long word = (long) LONG_VIEW.get(bytes, offset + position);
-      long values = word & BYTE_LOW_BITS;
-      long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
-      matches |= exactAsciiRangeMask(values, ascii, low2, high2);
-      if (matches != 0) {
-        return scalarRangeCheck(bitmap0, bitmap1, position, position + Long.BYTES);
-      }
-      position += Long.BYTES;
-    }
-    return scalarRangeCheck(bitmap0, bitmap1, position, length);
-  }
-
-  private int indexOfFourByteRanges(int[] ranges, long bitmap0, long bitmap1, int start) {
-    long low0 = ranges[0] * BYTE_ONES;
-    long high0 = ranges[1] * BYTE_ONES;
-    long low1 = ranges[2] * BYTE_ONES;
-    long high1 = ranges[3] * BYTE_ONES;
-    long low2 = ranges[4] * BYTE_ONES;
-    long high2 = ranges[5] * BYTE_ONES;
-    long low3 = ranges[6] * BYTE_ONES;
-    long high3 = ranges[7] * BYTE_ONES;
-    int position = start;
-    int wordEnd = length - Long.BYTES;
-    while (position <= wordEnd) {
-      long word = (long) LONG_VIEW.get(bytes, offset + position);
-      long values = word & BYTE_LOW_BITS;
-      long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
-      matches |= exactAsciiRangeMask(values, ascii, low2, high2);
-      matches |= exactAsciiRangeMask(values, ascii, low3, high3);
-      if (matches != 0) {
-        return scalarRangeCheck(bitmap0, bitmap1, position, position + Long.BYTES);
-      }
-      position += Long.BYTES;
-    }
-    return scalarRangeCheck(bitmap0, bitmap1, position, length);
-  }
-
-  private int scalarRangeCheck(long bitmap0, long bitmap1, int position, int limit) {
-    for (; position < limit; position++) {
-      int value = unsignedByteAt(position);
-      if ((value < Long.SIZE && (bitmap0 & (1L << value)) != 0)
-          || (value >= Long.SIZE && value < 128 && (bitmap1 & (1L << (value - Long.SIZE))) != 0)) {
-        return position;
-      }
-    }
-    return -1;
-  }
-
-  static long exactAsciiRangeMask(long word, int low, int high) {
-    long values = word & BYTE_LOW_BITS;
-    long ascii = ~word & BYTE_HIGH_BITS;
-    return exactAsciiRangeMask(values, ascii, low * BYTE_ONES, high * BYTE_ONES);
-  }
-
-  private static long exactAsciiRangeMask(
-      long values, long ascii, long repeatedLow, long repeatedHigh) {
-    // Setting each minuend's high bit makes both subtractions independent in every byte lane:
-    // each lane subtracts at most 127 from at least 128, so no borrow can cross a lane boundary.
-    long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
-    long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
-    return ascii & atLeastLow & atMostHigh;
+    return ByteSwarScan.indexOfMultipleByteRanges(
+        bytes, offset, length, ranges, bitmap0, bitmap1, start);
   }
 
   private int indexOfNonAsciiCodePointClass(int[] ranges, int start) {
@@ -330,7 +218,7 @@ final class Utf8InputScanner implements InputScanner {
     }
     if (!WorkCounterConfig.ENABLED) {
       if (literal.length == 1) {
-        return indexOfByte(literal[0], start);
+        return ByteSwarScan.indexOfByte(bytes, offset, length, literal[0], start);
       }
       if (shifts != null) {
         // Both searches beat the linear scan, but they win over different ranges. The skip loop
@@ -340,8 +228,8 @@ final class Utf8InputScanner implements InputScanner {
         // wins by a growing margin. The crossover scales with the literal length, since a longer
         // literal lets the skip loop advance further per step.
         int result =
-            remaining(start) >= filterThreshold(literal.length)
-                ? indexOfFiltered(literal, failure, start)
+            remaining(start) >= ByteSwarScan.filterThreshold(literal.length)
+                ? ByteSwarScan.indexOfFiltered(bytes, offset, length, literal, failure, start)
                 : boundedBoyerMooreHorspool(literal, shifts, start);
         // A match index or a trusted -1; only the -2 "work budget exhausted" sentinel falls
         // through to the linear-time scan below.
@@ -357,10 +245,6 @@ final class Utf8InputScanner implements InputScanner {
     return length - start;
   }
 
-  static long filterThreshold(int literalLength) {
-    return Math.max(MIN_FILTER_LENGTH, (long) literalLength * FILTER_LENGTH_FACTOR);
-  }
-
   static long workLimit(int remaining) {
     return Math.max(1L, (long) remaining * 2);
   }
@@ -371,6 +255,11 @@ final class Utf8InputScanner implements InputScanner {
 
   /** Knuth-Morris-Pratt scan, linear in the input length regardless of the literal. */
   private int indexOfLinear(byte[] literal, int[] failure, int start) {
+    return indexOfLinear(bytes, offset, length, literal, failure, start);
+  }
+
+  static int indexOfLinear(
+      byte[] bytes, int offset, int length, byte[] literal, int[] failure, int start) {
     int matched = 0;
     for (int position = start; position < length; position++) {
       if (WorkCounterConfig.ENABLED) {
@@ -413,13 +302,14 @@ final class Utf8InputScanner implements InputScanner {
       return indexOfAsciiClassScalar(asciiClass, start);
     }
     if (second < 0) {
-      return indexOfByte((byte) first, start);
+      return ByteSwarScan.indexOfByte(bytes, offset, length, (byte) first, start);
     }
     if (last == second) {
-      return indexOfBytePair((byte) first, (byte) second, start);
+      return ByteSwarScan.indexOfBytePair(
+          bytes, offset, length, (byte) first, (byte) second, start);
     }
     return contiguous
-        ? indexOfByteRange(first, last, start)
+        ? ByteSwarScan.indexOfByteRange(bytes, offset, length, first, last, start)
         : indexOfAsciiClassScalar(asciiClass, start);
   }
 
@@ -459,176 +349,6 @@ final class Utf8InputScanner implements InputScanner {
         position += shifts[bytes[offset + position] & 0xFF];
         work++;
       }
-    }
-    return -1;
-  }
-
-  /**
-   * Searches for a multi-byte {@code literal} by locating candidate positions with a SWAR filter on
-   * the literal's first and last bytes, then verifying each candidate in full.
-   *
-   * <p>Two words are loaded per step, one aligned with the literal's first byte and one with its
-   * last byte. XOR-ing each against the corresponding broadcast byte turns matching positions into
-   * zero bytes, so the standard zero-byte test identifies positions where both the first and last
-   * byte agree. Requiring both bytes makes candidates far rarer than a single-byte filter would.
-   *
-   * <p>This examines eight positions per step with no data-dependent branching. A skip loop such as
-   * Boyer-Moore-Horspool can advance further per step, but each of its steps is a serialized load,
-   * table lookup, and add, which costs more than the wider branch-free step here.
-   *
-   * <p>The zero-byte test never misses a matching position, but it can flag a position that does
-   * not match, so every candidate is verified against the whole literal rather than trusting the
-   * filter for the first and last byte.
-   *
-   * <p>Verification is O(literal length) per candidate, so an adversarial input can drive this to
-   * O(input length * literal length). A work budget bounds that: on exhaustion this returns {@code
-   * -2} and the caller falls back to linear-time KMP.
-   *
-   * @return the index of the first match, {@code -1} if the literal is absent, or {@code -2} if the
-   *     work budget was exhausted before either could be established
-   */
-  private int indexOfFiltered(byte[] literal, int[] failure, int start) {
-    int last = literal.length - 1;
-    long repeatedFirst = (literal[0] & 0xFFL) * BYTE_ONES;
-    long repeatedLast = (literal[last] & 0xFFL) * BYTE_ONES;
-    int wordEnd = length - last - Long.BYTES;
-    long work = 0;
-    long workLimit = workLimit(remaining(start));
-    int position = start;
-    while (position <= wordEnd) {
-      long firstDifference = (long) LONG_VIEW.get(bytes, offset + position) ^ repeatedFirst;
-      long lastDifference = (long) LONG_VIEW.get(bytes, offset + position + last) ^ repeatedLast;
-      long candidates =
-          (firstDifference - BYTE_ONES)
-              & ~firstDifference
-              & (lastDifference - BYTE_ONES)
-              & ~lastDifference
-              & BYTE_HIGH_BITS;
-      if (candidates != 0) {
-        // Scanning the eight positions in address order keeps this independent of byte order and
-        // returns the leftmost match within the word.
-        int candidateCount = 0;
-        for (int index = 0; index < Long.BYTES; index++) {
-          int candidate = position + index;
-          if (bytes[offset + candidate] == literal[0]) {
-            if (matchesAt(literal, candidate)) {
-              return candidate;
-            }
-            candidateCount++;
-          }
-        }
-        work = addCandidateWork(work, candidateCount, literal.length);
-      }
-      position += Long.BYTES;
-      work++;
-      if (work >= workLimit) {
-        return -2;
-      }
-    }
-    // Fewer than literal.length + Long.BYTES positions remain. Finishing with the linear scan
-    // keeps the tail linear rather than comparing the whole literal at each remaining position.
-    return indexOfLinear(literal, failure, position);
-  }
-
-  private boolean matchesAt(byte[] literal, int position) {
-    for (int index = 0; index < literal.length; index++) {
-      if (bytes[offset + position + index] != literal[index]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private int indexOfByte(byte target, int start) {
-    int position = start;
-    int wordEnd = length - Long.BYTES;
-    long repeatedTarget = (target & 0xFFL) * BYTE_ONES;
-    while (position <= wordEnd) {
-      long difference = (long) LONG_VIEW.get(bytes, offset + position) ^ repeatedTarget;
-      if (((difference - BYTE_ONES) & ~difference & BYTE_HIGH_BITS) != 0) {
-        for (int index = 0; index < Long.BYTES; index++) {
-          if (bytes[offset + position + index] == target) {
-            return position + index;
-          }
-        }
-      }
-      position += Long.BYTES;
-    }
-    while (position < length) {
-      if (bytes[offset + position] == target) {
-        return position;
-      }
-      position++;
-    }
-    return -1;
-  }
-
-  private int indexOfBytePair(byte first, byte second, int start) {
-    int position = start;
-    int wordEnd = length - Long.BYTES;
-    long repeatedFirst = (first & 0xFFL) * BYTE_ONES;
-    long repeatedSecond = (second & 0xFFL) * BYTE_ONES;
-    while (position <= wordEnd) {
-      long word = (long) LONG_VIEW.get(bytes, offset + position);
-      long firstDifference = word ^ repeatedFirst;
-      long secondDifference = word ^ repeatedSecond;
-      if (((((firstDifference - BYTE_ONES) & ~firstDifference)
-                  | ((secondDifference - BYTE_ONES) & ~secondDifference))
-              & BYTE_HIGH_BITS)
-          != 0) {
-        for (int index = 0; index < Long.BYTES; index++) {
-          byte value = bytes[offset + position + index];
-          if (value == first || value == second) {
-            return position + index;
-          }
-        }
-      }
-      position += Long.BYTES;
-    }
-    while (position < length) {
-      byte value = bytes[offset + position];
-      if (value == first || value == second) {
-        return position;
-      }
-      position++;
-    }
-    return -1;
-  }
-
-  /**
-   * Searches for a byte in the inclusive ASCII range {@code [low, high]}.
-   *
-   * <p>The word filter compares the common binary prefix of the range endpoints across eight bytes
-   * at once. Every byte in the range has that prefix, so the filter cannot miss a match. It may
-   * admit bytes outside the range when the endpoints do not cover their entire binary-prefix
-   * bucket; the scalar candidate check provides the exact answer.
-   */
-  private int indexOfByteRange(int low, int high, int start) {
-    int differingBit = Integer.highestOneBit(low ^ high);
-    int commonMask = ~((differingBit << 1) - 1) & 0xFF;
-    long repeatedMask = (commonMask & 0xFFL) * BYTE_ONES;
-    long repeatedPrefix = (low & commonMask) * BYTE_ONES;
-    int position = start;
-    int wordEnd = length - Long.BYTES;
-    while (position <= wordEnd) {
-      long word = (long) LONG_VIEW.get(bytes, offset + position);
-      long difference = (word & repeatedMask) ^ repeatedPrefix;
-      if (((difference - BYTE_ONES) & ~difference & BYTE_HIGH_BITS) != 0) {
-        for (int index = 0; index < Long.BYTES; index++) {
-          int value = unsignedByteAt(position + index);
-          if (value >= low && value <= high) {
-            return position + index;
-          }
-        }
-      }
-      position += Long.BYTES;
-    }
-    while (position < length) {
-      int value = unsignedByteAt(position);
-      if (value >= low && value <= high) {
-        return position;
-      }
-      position++;
     }
     return -1;
   }
