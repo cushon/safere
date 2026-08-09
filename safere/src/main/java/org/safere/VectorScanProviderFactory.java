@@ -5,11 +5,23 @@
 
 package org.safere;
 
-/** Java 21 fallback replaced by the JDK 26 implementation in the multi-release JAR. */
+/** Constructs the optional incubator Vector API provider. */
 final class VectorScanProviderFactory {
+  private static final String VECTOR_MODULE_NAME = "jdk.incubator.vector";
+
   private VectorScanProviderFactory() {}
 
   static VectorScanProvider create() {
-    return null;
+    Module safeReModule = VectorScanProviderFactory.class.getModule();
+    if (safeReModule.isNamed()) {
+      Module vectorModule =
+          ModuleLayer.boot()
+              .findModule(VECTOR_MODULE_NAME)
+              .orElseThrow(
+                  () ->
+                      new IllegalStateException(VECTOR_MODULE_NAME + " is not in the boot layer"));
+      safeReModule.addReads(vectorModule);
+    }
+    return new IncubatorVectorScanProvider();
   }
 }

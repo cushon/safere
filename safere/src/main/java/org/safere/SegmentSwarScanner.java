@@ -27,7 +27,7 @@ final class SegmentSwarScanner {
     if (numRanges > 2) {
       return -2; // Route classes with >= 3 ranges to the O(1) 64-bit scalar bitmap table
     }
-    if (sac.charset() == StandardCharsets.ISO_8859_1) {
+    if (sac.charset().equals(StandardCharsets.ISO_8859_1)) {
       return indexOfLatin1(sac.segment(), text, ranges, start, numRanges);
     } else {
       return indexOfUtf16(sac.segment(), text, ranges, start, numRanges);
@@ -164,7 +164,7 @@ final class SegmentSwarScanner {
         return -2;
       }
     }
-    if (sac.charset() == StandardCharsets.ISO_8859_1) {
+    if (sac.charset().equals(StandardCharsets.ISO_8859_1)) {
       return indexOfIgnoreCaseLatin1(sac.segment(), text, prefix, start);
     } else {
       return indexOfIgnoreCaseUtf16(sac.segment(), text, prefix, start);

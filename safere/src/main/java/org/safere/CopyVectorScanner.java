@@ -83,7 +83,7 @@ final class CopyVectorScanner implements VectorScanProvider {
     return indexOfCharClassShort(text, ranges, start, numRanges, true);
   }
 
-  private int indexOfCharClassShort(
+  private static int indexOfCharClassShort(
       String text, int[] ranges, int start, int numRanges, boolean checkSurrogates) {
     int textLen = text.length();
 
@@ -108,12 +108,12 @@ final class CopyVectorScanner implements VectorScanProvider {
     }
 
     ShortVector[] lowVecs = new ShortVector[numRanges];
-    ShortVector[] highMinusLowVecs = new ShortVector[numRanges];
+    ShortVector[] highVecs = new ShortVector[numRanges];
     for (int r = 0; r < numRanges; r++) {
       short low = (short) ranges[r * 2];
       short high = (short) ranges[r * 2 + 1];
       lowVecs[r] = ShortVector.broadcast(SPECIES, low);
-      highMinusLowVecs[r] = ShortVector.broadcast(SPECIES, (short) (high - low));
+      highVecs[r] = ShortVector.broadcast(SPECIES, high);
     }
 
     ShortVector surrogateLow = ShortVector.broadcast(SPECIES, (short) 0xD800);
@@ -133,7 +133,7 @@ final class CopyVectorScanner implements VectorScanProvider {
 
       if (numRanges == 1) {
         ShortVector low = lowVecs[0];
-        ShortVector high = ShortVector.broadcast(SPECIES, (short) ranges[1]);
+        ShortVector high = highVecs[0];
         int unrolledLimit = chunkLimit - 3 * vectorLen;
         for (; chunkPos <= unrolledLimit; chunkPos += 4 * vectorLen) {
           ShortVector v0 =
@@ -222,7 +222,9 @@ final class CopyVectorScanner implements VectorScanProvider {
           VectorMask<Short> matchMask = SPECIES.maskAll(false);
           for (int r = 0; r < numRanges; r++) {
             VectorMask<Short> rangeMask =
-                inputVec.sub(lowVecs[r]).compare(VectorOperators.ULE, highMinusLowVecs[r]);
+                inputVec
+                    .compare(VectorOperators.GE, lowVecs[r])
+                    .and(inputVec.compare(VectorOperators.LE, highVecs[r]));
             matchMask = matchMask.or(rangeMask);
           }
 

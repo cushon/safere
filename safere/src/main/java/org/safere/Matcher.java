@@ -1562,14 +1562,15 @@ public final class Matcher implements MatchResult {
 
     Pattern.KeywordAlternation keywordAlternation = parentPattern.keywordAlternation();
     if (options.keywordAlternationFastPath()
-        && !regionActive
         && keywordAlternation != null
-        && text != null) {
+        && (!regionActive || text == null)) {
       diagnosticBoundary(MatchStrategy.KEYWORD);
       if (keywordAlternation.captureGroup > 0) {
         diagnosticCapture(MatchStrategy.KEYWORD);
       }
-      return findKeywordAlternation(keywordAlternation, searchFrom, prog.numCaptures());
+      return text != null
+          ? findKeywordAlternation(keywordAlternation, searchFrom, prog.numCaptures())
+          : findUtf8KeywordAlternation(keywordAlternation, searchFrom, prog.numCaptures());
     }
 
     // Anchored start: if the pattern requires a match at the beginning of the text (e.g., ^
@@ -2155,6 +2156,28 @@ public final class Matcher implements MatchResult {
       literalFrom = literalStart + 1;
     }
     return -1;
+  }
+
+  private boolean findUtf8KeywordAlternation(
+      Pattern.KeywordAlternation keywordAlternation, int startPos, int ncap) {
+    InputScanner scanner = activeScanner();
+    int matchStart = Math.max(0, startPos);
+    long match = keywordAlternation.find(scanner, matchStart);
+    if (match < 0) {
+      return applyFailedMatchResult();
+    }
+    int keywordStart = Pattern.KeywordAlternation.matchStart(match);
+    int keywordEnd = Pattern.KeywordAlternation.matchEnd(match);
+    int[] keywordGroups = new int[2 * ncap];
+    Arrays.fill(keywordGroups, -1);
+    keywordGroups[0] = keywordAlternation.greedyWholeInput ? matchStart : keywordStart;
+    keywordGroups[1] = keywordAlternation.greedyWholeInput ? scanner.length() : keywordEnd;
+    if (keywordAlternation.captureGroup > 0) {
+      int group = keywordAlternation.captureGroup;
+      keywordGroups[2 * group] = keywordStart;
+      keywordGroups[2 * group + 1] = keywordEnd;
+    }
+    return applyFullMatchResult(keywordGroups);
   }
 
   private boolean findKeywordAlternation(
@@ -2801,6 +2824,11 @@ public final class Matcher implements MatchResult {
     Objects.requireNonNull(replacement, "replacement");
     reset();
     LazyTemplate template = new LazyTemplate(replacement, groupCount());
+    String literalResult = literalReplaceFastPath(template, 1);
+    if (literalResult != null) {
+      return literalResult;
+    }
+
     String fastResult = charClassReplaceFastPath(template, 1);
     if (fastResult != null) {
       return fastResult;
@@ -2816,8 +2844,15 @@ public final class Matcher implements MatchResult {
       return result;
     }
 
+    if (template.needsCaptures()) {
+      eagerFallbackCaptures = true;
+    }
+
     if (!find()) {
       return text;
+    }
+    if (template.needsCaptures()) {
+      parentPattern.recordInnerCaptureAccess();
     }
     diagnosticIncrementMatchCount();
     StringBuilder sb = new StringBuilder(text.length());
@@ -2892,7 +2927,6 @@ public final class Matcher implements MatchResult {
         // dollarAnchorEnd is safe if start-anchored because we skip the reverse DFA scan.
         || (parentPattern.prog().dollarAnchorEnd() && !parentPattern.prog().anchorStart())
         || parentPattern.literalMatch() != null
-        || parentPattern.canMatchEmpty()
         || parentPattern.hasNullableAlternation()
         || regionActive) {
       return null;
@@ -3011,6 +3045,13 @@ public final class Matcher implements MatchResult {
 
       cursor.pos = matchEnd;
       matchesFound++;
+      if (matchStart == matchEnd) {
+        if (cursor.pos >= regionEnd) {
+          findExhaustedAfterTerminalEmptyMatch = true;
+          break;
+        }
+        cursor.pos++;
+      }
       if (matchesFound < limit) {
         matchResult =
             findNextDfaMatch(
@@ -3073,7 +3114,9 @@ public final class Matcher implements MatchResult {
 
       int earlyEnd = fwdResult.pos();
       if (earlyEnd <= pos) {
-        return -1;
+        matchOffsets[0] = pos;
+        matchOffsets[1] = pos;
+        return 1;
       }
 
       int matchStart;
@@ -3204,6 +3247,11 @@ public final class Matcher implements MatchResult {
   private String replaceAllImpl(String replacement) {
     reset();
     LazyTemplate template = new LazyTemplate(replacement, groupCount());
+    String literalResult = literalReplaceFastPath(template, Integer.MAX_VALUE);
+    if (literalResult != null) {
+      return literalResult;
+    }
+
     String fastResult = charClassReplaceFastPath(template, Integer.MAX_VALUE);
     if (fastResult != null) {
       return fastResult;
@@ -3219,8 +3267,15 @@ public final class Matcher implements MatchResult {
       return result;
     }
 
+    if (template.needsCaptures()) {
+      eagerFallbackCaptures = true;
+    }
+
     if (!find()) {
       return text;
+    }
+    if (template.needsCaptures()) {
+      parentPattern.recordInnerCaptureAccess();
     }
     diagnosticIncrementMatchCount();
     StringBuilder sb = new StringBuilder(text.length());
@@ -3281,6 +3336,100 @@ public final class Matcher implements MatchResult {
       appendReplacement(sb, replacement);
     } while (findAndRecordReplacementMatch());
     appendTail(sb);
+    return sb.toString();
+  }
+
+  private String literalReplaceFastPath(LazyTemplate template, int limit) {
+    if (!enginePathOptions().literalFastPaths()) {
+      return null;
+    }
+
+    String literal = parentPattern.literalMatch();
+    if (literal == null || literal.isEmpty() || text == null || parentPattern.prefixFoldCase()) {
+      return null;
+    }
+
+    String replacement = template.replacement;
+    boolean simpleReplacement = isSimpleReplacement(replacement);
+    if (!simpleReplacement && groupCount() > 0) {
+      return null; // Cannot handle complex replacements with captures yet
+    }
+
+    DiagnosticOperation activeDiagnostics = diagnosticOperation;
+    DiagnosticAccumulator accumulator =
+        activeDiagnostics == null ? null : activeDiagnostics.accumulator();
+    if (accumulator != null) {
+      accumulator.participate(MatchStrategy.LITERAL, StrategyRole.CANDIDATE_VERIFICATION);
+    }
+
+    StringBuilder sb = null;
+    int appendPosition = 0;
+    int searchFrom = 0;
+    int matchStart;
+    int matchesFound = 0;
+
+    int firstMatchStart = -1;
+    int firstMatchEnd = -1;
+
+    ReplacementSegment[] compiledTemplate = null;
+
+    while (matchesFound < limit && (matchStart = text.indexOf(literal, searchFrom)) != -1) {
+      if (sb == null) {
+        sb = new StringBuilder(text.length());
+      }
+      sb.append(text, appendPosition, matchStart);
+
+      if (matchesFound == 0) {
+        firstMatchStart = matchStart;
+        firstMatchEnd = matchStart + literal.length();
+        if (!simpleReplacement) {
+          applyFullMatchResult(new int[] {firstMatchStart, firstMatchEnd});
+          compiledTemplate = template.get();
+        }
+      }
+
+      if (simpleReplacement) {
+        sb.append(replacement);
+      } else {
+        groups[0] = matchStart;
+        groups[1] = matchStart + literal.length();
+        applyReplacementTemplate(sb, compiledTemplate);
+      }
+
+      appendPosition = matchStart + literal.length();
+      searchFrom = appendPosition;
+      matchesFound++;
+    }
+
+    if (sb == null) {
+      if (accumulator != null) {
+        accumulator.boundary(MatchStrategy.LITERAL);
+      }
+      applyFailedMatchResult();
+      return text;
+    }
+
+    this.appendPos = appendPosition;
+    sb.append(text, appendPosition, text.length());
+
+    if (limit == 1) {
+      if (groupCount() == 0) {
+        applyFullMatchResult(new int[] {firstMatchStart, firstMatchEnd});
+      } else {
+        applyDeferredMatchResult(
+            firstMatchStart, firstMatchEnd, parentPattern.prog().numCaptures(), true, false);
+        resolveCaptures();
+      }
+    } else {
+      this.searchFrom = regionEnd;
+      applyFailedMatchResult();
+    }
+
+    if (accumulator != null) {
+      accumulator.boundary(MatchStrategy.LITERAL);
+      accumulator.matchCount(matchesFound);
+    }
+
     return sb.toString();
   }
 

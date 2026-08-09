@@ -12,6 +12,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledForJreRange;
+import org.junit.jupiter.api.condition.JRE;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -78,6 +80,43 @@ class Utf8MatcherStateMachineTest {
 
     assertThat(matcher.find()).isFalse();
     assertThat(matcher.find()).isFalse();
+  }
+
+  @Test
+  void keywordAlternationMatchesJdkAcrossUtf8Boundaries() {
+    assertKeywordAlternationMatch(
+        "(?is).*\\b(you|your)\\b.*",
+        "préface You spoke first.\nThen your example ended with YOU!",
+        0);
+    assertKeywordAlternationMatch(
+        "(?is).*\\b(you|your)\\b.*",
+        "é ignore YOU, then keep your answer",
+        "é ignore YOU, ".length());
+    assertKeywordAlternationMatch("(?isU).*\\b(you|your)\\b.*", "éyoué -- your!", 0);
+    assertKeywordAlternationMatch("(?isU).*\\b(you|your)\\b.*", "éyoué -- βyourβ", 0);
+  }
+
+  @Test
+  void keywordAlternationPreservesIndependentUtf8BoundaryModes() {
+    assertKeywordAlternationMatch("(?-U)\\b(?i)(foo|bar)(?U)\\b", "éfoo! fooé bar!", 0);
+    assertKeywordAlternationMatch("(?U)\\b(?i)(foo|bar)(?-U)\\b", "éfoo! fooé bar!", 0);
+  }
+
+  @Test
+  void keywordAlternationFindsAlternativesAndRejectsAdjacentWordCharacters() {
+    String input = "préface error warning2 _timeout failed!";
+    Utf8Matcher matcher = matcher("(?i)\\b(error|warning|timeout|failed)\\b", input);
+
+    assertThat(matcher.find()).isTrue();
+    assertThat(utf8Slice(input, matcher.start(1), matcher.end(1))).isEqualTo("error");
+    assertThat(matcher.find()).isTrue();
+    assertThat(utf8Slice(input, matcher.start(1), matcher.end(1))).isEqualTo("failed");
+    assertThat(matcher.find()).isFalse();
+
+    Pattern absent = Pattern.compile("(?is).*\\b(you|your)\\b.*");
+    Utf8Input absentInput = Utf8Input.validated("é youth yours".getBytes(UTF_8));
+    assertThat(absent.matcher(absentInput).find()).isFalse();
+    assertThat(absent.find(absentInput)).isFalse();
   }
 
   @Test
@@ -328,42 +367,86 @@ class Utf8MatcherStateMachineTest {
 
   @Test
   void graphemePatternsWorkAcrossUtf8Scalars() {
-    for (String input : List.of("a\r\nb", "a\u0301b", "👩‍💻x", "🇺🇸x", "क्‍षx")) {
-      byte[] bytes = input.getBytes(UTF_8);
-      Utf8Matcher clusters = Pattern.compile("\\X").matcher(Utf8Input.validated(bytes));
-      List<List<Integer>> actualClusters = new ArrayList<>();
-      while (clusters.find()) {
-        actualClusters.add(List.of(clusters.start(), clusters.end()));
-      }
-
-      Matcher stringClusters = Pattern.compile("\\X").matcher(input);
-      List<List<Integer>> expectedClusters = new ArrayList<>();
-      while (stringClusters.find()) {
-        expectedClusters.add(
-            List.of(
-                utf8Offset(input, stringClusters.start()),
-                utf8Offset(input, stringClusters.end())));
-      }
-      assertThat(actualClusters).as("grapheme clusters for %s", input).isEqualTo(expectedClusters);
-
-      Utf8Matcher boundaries = Pattern.compile("\\b{g}").matcher(Utf8Input.validated(bytes));
-      List<Integer> actualBoundaries = new ArrayList<>();
-      while (boundaries.find()) {
-        actualBoundaries.add(boundaries.start());
-      }
-      Matcher stringBoundaries = Pattern.compile("\\b{g}").matcher(input);
-      List<Integer> expectedBoundaries = new ArrayList<>();
-      while (stringBoundaries.find()) {
-        expectedBoundaries.add(utf8Offset(input, stringBoundaries.start()));
-      }
-      assertThat(actualBoundaries)
-          .as("grapheme boundaries for %s", input)
-          .isEqualTo(expectedBoundaries);
+    for (String input : List.of("a\r\nb", "a\u0301b", "👩‍💻x", "🇺🇸x")) {
+      assertGraphemePatternsWorkAcrossUtf8Scalars(input);
     }
+  }
+
+  @Test
+  @DisabledForCrosscheck("SafeRE uses Unicode 17 grapheme rule GB9c while JDK 21 uses Unicode 15.0")
+  void indicConjunctGraphemePatternsWorkAcrossUtf8ScalarsOnEverySupportedJdk() {
+    assertGraphemePatternsWorkAcrossUtf8Scalars("क्‍षx");
+  }
+
+  @Test
+  @EnabledForJreRange(min = JRE.JAVA_22)
+  void indicConjunctGraphemePatternsMatchJdk22AndLaterAcrossUtf8Scalars() {
+    assertGraphemePatternsWorkAcrossUtf8Scalars("क्‍षx");
+  }
+
+  private static void assertGraphemePatternsWorkAcrossUtf8Scalars(String input) {
+    byte[] bytes = input.getBytes(UTF_8);
+    Utf8Matcher clusters = Pattern.compile("\\X").matcher(Utf8Input.validated(bytes));
+    List<List<Integer>> actualClusters = new ArrayList<>();
+    while (clusters.find()) {
+      actualClusters.add(List.of(clusters.start(), clusters.end()));
+    }
+
+    Matcher stringClusters = Pattern.compile("\\X").matcher(input);
+    List<List<Integer>> expectedClusters = new ArrayList<>();
+    while (stringClusters.find()) {
+      expectedClusters.add(
+          List.of(
+              utf8Offset(input, stringClusters.start()), utf8Offset(input, stringClusters.end())));
+    }
+    assertThat(actualClusters).as("grapheme clusters for %s", input).isEqualTo(expectedClusters);
+
+    Utf8Matcher boundaries = Pattern.compile("\\b{g}").matcher(Utf8Input.validated(bytes));
+    List<Integer> actualBoundaries = new ArrayList<>();
+    while (boundaries.find()) {
+      actualBoundaries.add(boundaries.start());
+    }
+    Matcher stringBoundaries = Pattern.compile("\\b{g}").matcher(input);
+    List<Integer> expectedBoundaries = new ArrayList<>();
+    while (stringBoundaries.find()) {
+      expectedBoundaries.add(utf8Offset(input, stringBoundaries.start()));
+    }
+    assertThat(actualBoundaries)
+        .as("grapheme boundaries for %s", input)
+        .isEqualTo(expectedBoundaries);
   }
 
   private static Utf8Matcher matcher(String pattern, String input) {
     return Pattern.compile(pattern).matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+  }
+
+  private static void assertKeywordAlternationMatch(String regex, String input, int regionStart) {
+    Pattern pattern = Pattern.compile(regex);
+    java.util.regex.Matcher jdkMatcher =
+        java.util.regex.Pattern.compile(regex).matcher(input).region(regionStart, input.length());
+    int byteRegionStart = utf8Offset(input, regionStart);
+    Utf8Input utf8Input = Utf8Input.validated(input.getBytes(UTF_8));
+    Utf8Matcher utf8Matcher =
+        pattern.matcher(utf8Input).region(byteRegionStart, utf8Input.length());
+
+    boolean jdkFound = jdkMatcher.find();
+    assertThat(pattern.find(utf8Input)).isEqualTo(jdkFound);
+    assertThat(utf8Matcher.find()).isEqualTo(jdkFound);
+    if (!jdkFound) {
+      return;
+    }
+    for (int group = 0; group <= jdkMatcher.groupCount(); group++) {
+      int expectedStart =
+          jdkMatcher.start(group) < 0 ? -1 : utf8Offset(input, jdkMatcher.start(group));
+      int expectedEnd = jdkMatcher.end(group) < 0 ? -1 : utf8Offset(input, jdkMatcher.end(group));
+      assertThat(utf8Matcher.start(group)).as("group %s start", group).isEqualTo(expectedStart);
+      assertThat(utf8Matcher.end(group)).as("group %s end", group).isEqualTo(expectedEnd);
+    }
+  }
+
+  private static String utf8Slice(String input, int start, int end) {
+    byte[] bytes = input.getBytes(UTF_8);
+    return new String(bytes, start, end - start, UTF_8);
   }
 
   private static List<List<Integer>> findTrace(Utf8Matcher matcher) {

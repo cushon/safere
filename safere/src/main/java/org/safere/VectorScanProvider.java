@@ -11,6 +11,7 @@ interface VectorScanProvider {
 
   int minimumInputLength();
 
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 
   int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start);
