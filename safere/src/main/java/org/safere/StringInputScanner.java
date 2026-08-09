@@ -7,6 +7,7 @@ package org.safere;
 
 final class StringInputScanner implements InputScanner {
   private static final VectorScanProvider VECTOR_SCANNER = VectorScanProviders.get();
+  private static final int MINIMUM_VECTOR_INPUT_LENGTH = 64;
   private static final int SCALAR_PROLOGUE_LENGTH = 4;
   private final String text;
 
@@ -52,8 +53,8 @@ final class StringInputScanner implements InputScanner {
   @Override
   public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
     int position = Math.max(0, start);
-    if (VECTOR_SCANNER != null) {
-      int scalarLimit = Math.min(text.length(), position + SCALAR_PROLOGUE_LENGTH);
+    if (VECTOR_SCANNER != null && text.length() - position >= MINIMUM_VECTOR_INPUT_LENGTH) {
+      int scalarLimit = position + SCALAR_PROLOGUE_LENGTH;
       while (position < scalarLimit) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
@@ -161,8 +162,8 @@ final class StringInputScanner implements InputScanner {
     int[] ranges = scanInfo.ranges;
     long b0 = scanInfo.bitmap0;
     long b1 = scanInfo.bitmap1;
-    if (VECTOR_SCANNER != null) {
-      int scalarLimit = Math.min(text.length(), position + SCALAR_PROLOGUE_LENGTH);
+    if (VECTOR_SCANNER != null && text.length() - position >= MINIMUM_VECTOR_INPUT_LENGTH) {
+      int scalarLimit = position + SCALAR_PROLOGUE_LENGTH;
       for (; position < scalarLimit; position++) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();

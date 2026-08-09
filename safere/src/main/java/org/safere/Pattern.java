@@ -180,8 +180,9 @@ public final class Pattern implements Serializable {
    * {@code \p{javaLetter}}. Non-null when {@code find()} can scan directly for one matching code
    * point and produce group 0 without invoking the engine cascade.
    */
-  private final transient int[] singleCharClassRanges;
+  private final transient CharClassScanInfo singleCharClassScanInfo;
 
+  private final transient int[] singleCharClassRanges;
   private final transient long singleCharClassBitmap0;
   private final transient long singleCharClassBitmap1;
 
@@ -301,9 +302,7 @@ public final class Pattern implements Serializable {
       long charClassMatchBitmap0,
       long charClassMatchBitmap1,
       boolean charClassMatchAllowEmpty,
-      int[] singleCharClassRanges,
-      long singleCharClassBitmap0,
-      long singleCharClassBitmap1,
+      CharClassScanInfo singleCharClass,
       int[] requiredMatchClassRanges,
       long requiredMatchClassBitmap0,
       long requiredMatchClassBitmap1,
@@ -367,9 +366,10 @@ public final class Pattern implements Serializable {
     this.charClassMatchBitmap0 = charClassMatchBitmap0;
     this.charClassMatchBitmap1 = charClassMatchBitmap1;
     this.charClassMatchAllowEmpty = charClassMatchAllowEmpty;
-    this.singleCharClassRanges = singleCharClassRanges;
-    this.singleCharClassBitmap0 = singleCharClassBitmap0;
-    this.singleCharClassBitmap1 = singleCharClassBitmap1;
+    this.singleCharClassScanInfo = singleCharClass;
+    this.singleCharClassRanges = singleCharClass != null ? singleCharClass.ranges : null;
+    this.singleCharClassBitmap0 = singleCharClass != null ? singleCharClass.bitmap0 : 0;
+    this.singleCharClassBitmap1 = singleCharClass != null ? singleCharClass.bitmap1 : 0;
     this.requiredMatchClassRanges = requiredMatchClassRanges;
     this.requiredMatchClassBitmap0 = requiredMatchClassBitmap0;
     this.requiredMatchClassBitmap1 = requiredMatchClassBitmap1;
@@ -530,9 +530,7 @@ public final class Pattern implements Serializable {
         ccMatch != null ? ccMatch.bitmap0 : 0,
         ccMatch != null ? ccMatch.bitmap1 : 0,
         ccMatch != null && ccMatch.allowEmpty,
-        singleCharClass != null ? singleCharClass.ranges : null,
-        singleCharClass != null ? singleCharClass.bitmap0 : 0,
-        singleCharClass != null ? singleCharClass.bitmap1 : 0,
+        singleCharClass,
         requiredMatchClass != null ? requiredMatchClass.ranges : null,
         requiredMatchClass != null ? requiredMatchClass.bitmap0 : 0,
         requiredMatchClass != null ? requiredMatchClass.bitmap1 : 0,
@@ -1319,6 +1317,13 @@ public final class Pattern implements Serializable {
    */
   boolean charClassMatchAllowEmpty() {
     return charClassMatchAllowEmpty;
+  }
+
+  /**
+   * Returns precomputed scan info when the pattern is exactly one character class, or {@code null}.
+   */
+  CharClassScanInfo singleCharClassScanInfo() {
+    return singleCharClassScanInfo;
   }
 
   /**

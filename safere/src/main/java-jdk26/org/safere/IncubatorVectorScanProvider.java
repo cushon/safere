@@ -16,18 +16,17 @@ import jdk.incubator.vector.VectorSpecies;
 final class IncubatorVectorScanProvider implements VectorScanProvider {
   private static final int MINIMUM_INPUT_LENGTH = 1024;
   private static final int SCALAR_PROLOGUE_LENGTH = Integer.BYTES;
-  private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
   private final VectorScanProvider stringDelegate;
 
   public IncubatorVectorScanProvider() {
-    String mode = System.getProperty("safere.vector.mode", "unsafe-byte");
+    String mode = System.getProperty("safere.vector.mode", "segment");
     if ("copy".equals(mode)) {
       this.stringDelegate = new CopyVectorScanner(this);
-    } else if ("unsafe".equals(mode)) {
-      this.stringDelegate = new UnsafeShortVectorScanner(this);
+    } else if ("swar".equals(mode)) {
+      this.stringDelegate = new SwarVectorScanner(this);
     } else {
-      this.stringDelegate = new UnsafeByteVectorScanner(this);
+      this.stringDelegate = new SegmentVectorScanner(this);
     }
   }
 
@@ -38,27 +37,7 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
 
   @Override
   public int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
-    int position = Math.max(0, start);
-    int scalarLimit = Math.min(length, position + SCALAR_PROLOGUE_LENGTH);
-    for (; position < scalarLimit; position++) {
-      if (matches(bytes[offset + position], ranges)) {
-        return position;
-      }
-    }
-    int limit = position + SPECIES.loopBound(length - position);
-    for (; position < limit; position += SPECIES.length()) {
-      ByteVector values = ByteVector.fromArray(SPECIES, bytes, offset + position);
-      VectorMask<Byte> matches = matches(values, ranges);
-      if (matches.anyTrue()) {
-        return position + matches.firstTrue();
-      }
-    }
-    for (; position < length; position++) {
-      if (matches(bytes[offset + position], ranges)) {
-        return position;
-      }
-    }
-    return -1;
+    return Utf8.indexOfAsciiClass(bytes, offset, length, ranges, start);
   }
 
   @Override
@@ -77,25 +56,56 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
     return stringDelegate.indexOfIgnoreCase(text, prefix, start);
   }
 
-  private static VectorMask<Byte> matches(ByteVector values, int[] ranges) {
-    if (ranges.length == 4) {
-      return values.eq((byte) ranges[0]).or(values.eq((byte) ranges[2]));
-    }
-    byte low = (byte) ranges[0];
-    byte high = (byte) ranges[1];
-    if (low == high) {
-      return values.eq(low);
-    }
-    if (high == low + 1) {
-      return values.eq(low).or(values.eq(high));
-    }
-    return values.compare(GE, low).and(values.compare(LE, high));
-  }
+  /** Lazy holder for UTF-8 byte array SIMD operations and vector species. */
+  private static final class Utf8 {
+    private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
-  private static boolean matches(byte value, int[] ranges) {
-    if (ranges.length == 4) {
-      return value == (byte) ranges[0] || value == (byte) ranges[2];
+    static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
+      int position = Math.max(0, start);
+      int scalarLimit = Math.min(length, position + SCALAR_PROLOGUE_LENGTH);
+      for (; position < scalarLimit; position++) {
+        if (matches(bytes[offset + position], ranges)) {
+          return position;
+        }
+      }
+      int limit = position + SPECIES.loopBound(length - position);
+      for (; position < limit; position += SPECIES.length()) {
+        ByteVector values = ByteVector.fromArray(SPECIES, bytes, offset + position);
+        VectorMask<Byte> matches = matches(values, ranges);
+        if (matches.anyTrue()) {
+          return position + matches.firstTrue();
+        }
+      }
+      for (; position < length; position++) {
+        if (matches(bytes[offset + position], ranges)) {
+          return position;
+        }
+      }
+      return -1;
     }
-    return value >= (byte) ranges[0] && value <= (byte) ranges[1];
+
+    private static VectorMask<Byte> matches(ByteVector values, int[] ranges) {
+      if (ranges.length == 4) {
+        return values.eq((byte) ranges[0]).or(values.eq((byte) ranges[2]));
+      }
+      byte low = (byte) ranges[0];
+      byte high = (byte) ranges[1];
+      if (low == high) {
+        return values.eq(low);
+      }
+      if (high == low + 1) {
+        return values.eq(low).or(values.eq(high));
+      }
+      return values.compare(GE, low).and(values.compare(LE, high));
+    }
+
+    private static boolean matches(byte value, int[] ranges) {
+      if (ranges.length == 4) {
+        return value == (byte) ranges[0] || value == (byte) ranges[2];
+      }
+      return value >= (byte) ranges[0] && value <= (byte) ranges[1];
+    }
+
+    private Utf8() {}
   }
 }

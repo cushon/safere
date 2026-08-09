@@ -566,6 +566,14 @@ public final class Matcher implements MatchResult {
    * directly and returns the first matching code point as group 0.
    */
   private boolean singleCharClassFindFastPath(int[] ranges, int fromIndex) {
+    Pattern.CharClassScanInfo scanInfo = parentPattern.singleCharClassScanInfo();
+    if (scanInfo != null && scanInfo.isAscii && text != null) {
+      int idx = activeScanner().indexOfCharClass(scanInfo, fromIndex);
+      if (idx >= 0) {
+        return applyFullMatchResult(new int[] {idx, idx + 1});
+      }
+      return applyFailedMatchResult();
+    }
     long b0 = parentPattern.singleCharClassBitmap0();
     long b1 = parentPattern.singleCharClassBitmap1();
     int idx = activeScanner().indexOfCodePointClass(ranges, b0, b1, fromIndex);
@@ -2235,11 +2243,13 @@ public final class Matcher implements MatchResult {
     return ('A' <= ch && ch <= 'Z') ? ch + ('a' - 'A') : ch;
   }
 
+  private static final VectorScanProvider VECTOR_SCANNER = VectorScanProviders.get();
+  private static final int MINIMUM_VECTOR_INPUT_LENGTH = 64;
+
   /** ASCII case-insensitive indexOf for Java's default CASE_INSENSITIVE semantics. */
   private static int indexOfIgnoreCase(String text, String prefix, int fromIndex) {
-    VectorScanProvider scanner = VectorScanProviders.providerForLength(text.length());
-    if (scanner != null) {
-      int idx = scanner.indexOfIgnoreCase(text, prefix, fromIndex);
+    if (VECTOR_SCANNER != null && text.length() - fromIndex >= MINIMUM_VECTOR_INPUT_LENGTH) {
+      int idx = VECTOR_SCANNER.indexOfIgnoreCase(text, prefix, fromIndex);
       if (idx != VectorScanProvider.UNSUPPORTED) {
         return idx;
       }
