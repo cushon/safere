@@ -20,19 +20,40 @@ import java.lang.invoke.VarHandle;
 final class StringSegmentSupport {
   private static final VarHandle VALUE_HANDLE;
   private static final VarHandle CODER_HANDLE;
+  private static final boolean AVAILABLE;
 
   static {
+    VarHandle valueHandle = null;
+    VarHandle coderHandle = null;
+    boolean available = false;
     try {
-      MethodHandles.Lookup lookup =
-          MethodHandles.privateLookupIn(String.class, MethodHandles.lookup());
-      VALUE_HANDLE = lookup.findVarHandle(String.class, "value", byte[].class);
-      CODER_HANDLE = lookup.findVarHandle(String.class, "coder", byte.class);
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to access String internals via reflection", e);
+      Module baseModule = String.class.getModule();
+      Module ourModule = StringSegmentSupport.class.getModule();
+      if (baseModule.isOpen("java.lang", ourModule)) {
+        MethodHandles.Lookup lookup =
+            MethodHandles.privateLookupIn(String.class, MethodHandles.lookup());
+        valueHandle = lookup.findVarHandle(String.class, "value", byte[].class);
+        coderHandle = lookup.findVarHandle(String.class, "coder", byte.class);
+        available = true;
+      }
+    } catch (Exception ignored) {
+      // Ignored: java.base is not open or reflection failed
     }
+    VALUE_HANDLE = valueHandle;
+    CODER_HANDLE = coderHandle;
+    AVAILABLE = available;
+  }
+
+  public static boolean isAvailable() {
+    return AVAILABLE;
   }
 
   public static SegmentAndCharset stringAsSegment(String str) {
+    if (!AVAILABLE) {
+      throw new UnsupportedOperationException(
+          "String internal access not available; open java.base/java.lang to "
+              + StringSegmentSupport.class.getModule().getName());
+    }
     byte[] value = (byte[]) VALUE_HANDLE.get(str);
     byte coder = (byte) CODER_HANDLE.get(str);
     return new SegmentAndCharset(value, coder);

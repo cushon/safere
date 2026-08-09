@@ -20,13 +20,17 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   private final VectorScanProvider stringDelegate;
 
   public IncubatorVectorScanProvider() {
-    String mode = System.getProperty("safere.vector.mode", "segment");
+    String mode = System.getProperty("safere.vector.mode", "auto");
     if (mode.equals("copy")) {
       this.stringDelegate = new CopyVectorScanner(this);
     } else if (mode.equals("swar")) {
       this.stringDelegate = new SwarVectorScanner(this);
-    } else {
+    } else if (mode.equals("segment")) {
       this.stringDelegate = new SegmentVectorScanner(this);
+    } else if (StringSegmentSupport.isAvailable()) {
+      this.stringDelegate = new SegmentVectorScanner(this);
+    } else {
+      this.stringDelegate = new CopyVectorScanner(this);
     }
   }
 
