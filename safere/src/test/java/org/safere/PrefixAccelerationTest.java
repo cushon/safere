@@ -74,7 +74,7 @@ class PrefixAccelerationTest {
   @Test
   void testCharClassPrefixFind() {
     Pattern p = Pattern.compile("[0-9][a-z]+");
-    String text = "x".repeat(1500) + "7abc" + "y".repeat(100);
+    String text = "x".repeat(1500) + "7abc" + "1".repeat(100);
     Matcher m = p.matcher(text);
     assertThat(m.find()).isTrue();
     assertThat(m.start()).isEqualTo(1500);
@@ -83,5 +83,6 @@ class PrefixAccelerationTest {
     Utf8Matcher mUtf8 = p.matcher(Utf8Input.trusted(text.getBytes(StandardCharsets.UTF_8)));
     assertThat(mUtf8.find()).isTrue();
     assertThat(mUtf8.start()).isEqualTo(1500);
+    assertThat(mUtf8.end()).isEqualTo(1504);
   }
 }
