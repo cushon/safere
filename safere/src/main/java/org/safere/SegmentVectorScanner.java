@@ -65,14 +65,15 @@ final class SegmentVectorScanner implements VectorScanProvider {
 
     if (sac.isLatin1()) {
       if (scanInfo.isAscii) {
-        return Latin1.indexOfCharClass(sac.value(), text, scanInfo.ranges, scalarLimit, numRanges);
+        return ByteVectorScan.indexOfAsciiClass(
+            sac.value(), 0, textLen, scanInfo.ranges, scalarLimit);
       } else {
         int[] clampedRanges = clampRangesForLatin1(scanInfo.ranges);
         if (clampedRanges != null) {
           int clampedNumRanges = clampedRanges.length / 2;
           if (clampedNumRanges > 0 && clampedNumRanges <= 4) {
-            return Latin1.indexOfCharClass(
-                sac.value(), text, clampedRanges, scalarLimit, clampedNumRanges);
+            return ByteVectorScan.indexOfAsciiClass(
+                sac.value(), 0, textLen, clampedRanges, scalarLimit);
           }
         }
       }
@@ -126,7 +127,7 @@ final class SegmentVectorScanner implements VectorScanProvider {
     }
 
     if (sac.isLatin1()) {
-      return Latin1.indexOfCharClass(sac.value(), text, activeRanges, scalarLimit, numRanges);
+      return ByteVectorScan.indexOfAsciiClass(sac.value(), 0, textLen, activeRanges, scalarLimit);
     }
 
     return Utf16.indexOfCharClass(sac.value(), text, activeRanges, scalarLimit, numRanges, true);
@@ -168,125 +169,7 @@ final class SegmentVectorScanner implements VectorScanProvider {
     if (!sac.isLatin1()) {
       return Utf16.indexOfIgnoreCase(sac.value(), text, prefix, start);
     }
-    return Latin1.indexOfIgnoreCase(sac.value(), text, prefix, start);
-  }
-
-  /** Nested Latin-1 SIMD routines using ByteVector. */
-  static final class Latin1 {
-    private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
-
-    static int indexOfCharClass(byte[] value, String text, int[] ranges, int start, int numRanges) {
-      int textLen = text.length();
-      int pos = start;
-      int vectorLen = SPECIES.length();
-      int limit = textLen - vectorLen;
-
-      ByteVector[] lowVecs = new ByteVector[numRanges];
-      ByteVector[] highVecs = new ByteVector[numRanges];
-      for (int r = 0; r < numRanges; r++) {
-        byte low = (byte) ranges[r * 2];
-        byte high = (byte) ranges[r * 2 + 1];
-        lowVecs[r] = ByteVector.broadcast(SPECIES, low);
-        highVecs[r] = ByteVector.broadcast(SPECIES, high);
-      }
-
-      if (numRanges == 1) {
-        ByteVector low = lowVecs[0];
-        ByteVector high = highVecs[0];
-        for (; pos <= limit; pos += vectorLen) {
-          ByteVector inputVec = ByteVector.fromArray(SPECIES, value, pos);
-          VectorMask<Byte> matchMask =
-              inputVec
-                  .compare(VectorOperators.GE, low)
-                  .and(inputVec.compare(VectorOperators.LE, high));
-          if (matchMask.anyTrue()) {
-            return pos + matchMask.firstTrue();
-          }
-        }
-      } else {
-        for (; pos <= limit; pos += vectorLen) {
-          ByteVector inputVec = ByteVector.fromArray(SPECIES, value, pos);
-          VectorMask<Byte> matchMask = SPECIES.maskAll(false);
-          for (int r = 0; r < numRanges; r++) {
-            VectorMask<Byte> rangeMask =
-                inputVec
-                    .compare(VectorOperators.GE, lowVecs[r])
-                    .and(inputVec.compare(VectorOperators.LE, highVecs[r]));
-            matchMask = matchMask.or(rangeMask);
-          }
-
-          if (matchMask.anyTrue()) {
-            return pos + matchMask.firstTrue();
-          }
-        }
-      }
-
-      for (; pos < textLen; pos++) {
-        char ch = text.charAt(pos);
-        for (int r = 0; r < numRanges; r++) {
-          if (ch >= ranges[r * 2] && ch <= ranges[r * 2 + 1]) {
-            return pos;
-          }
-        }
-      }
-
-      return -1;
-    }
-
-    static int indexOfIgnoreCase(byte[] value, String text, String prefix, int start) {
-      int prefixLen = prefix.length();
-      // Check if the prefix has any non-ASCII characters. We only optimize ASCII prefixes.
-      for (int i = 0; i < prefixLen; i++) {
-        if (prefix.charAt(i) > 127) {
-          return -2;
-        }
-      }
-
-      int textLen = text.length();
-      int pos = start;
-      int vectorLen = SPECIES.length();
-      int limit = textLen - vectorLen;
-
-      char first = prefix.charAt(0);
-      byte low = (byte) VectorScanProvider.asciiLower(first);
-      byte high = (byte) VectorScanProvider.asciiUpper(first);
-      ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
-      ByteVector highVec = ByteVector.broadcast(SPECIES, high);
-
-      for (; pos <= limit; pos += vectorLen) {
-        ByteVector inputVec = ByteVector.fromArray(SPECIES, value, pos);
-        VectorMask<Byte> matchMask =
-            inputVec
-                .compare(VectorOperators.EQ, lowVec)
-                .or(inputVec.compare(VectorOperators.EQ, highVec));
-
-        if (matchMask.anyTrue()) {
-          long activeLanes = matchMask.toLong();
-          while (activeLanes != 0) {
-            int bit = Long.numberOfTrailingZeros(activeLanes);
-            int candidatePos = pos + bit;
-            // Verify match (note: we check boundary limits)
-            if (candidatePos + prefixLen <= textLen
-                && Matcher.regionMatchesAsciiIgnoreCase(text, candidatePos, prefix, 0, prefixLen)) {
-              return candidatePos;
-            }
-            activeLanes &= activeLanes - 1; // Clear lowest set bit
-          }
-        }
-      }
-
-      // Scalar cleanup
-      int limitScalar = textLen - prefixLen;
-      for (; pos <= limitScalar; pos++) {
-        if (Matcher.regionMatchesAsciiIgnoreCase(text, pos, prefix, 0, prefixLen)) {
-          return pos;
-        }
-      }
-
-      return -1;
-    }
-
-    private Latin1() {}
+    return ByteVectorScan.indexOfIgnoreCase(sac.value(), 0, text.length(), prefix, start);
   }
 
   /**

@@ -10,6 +10,7 @@ import static jdk.incubator.vector.VectorOperators.LE;
 
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
+import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
 
 /**
@@ -73,6 +74,70 @@ final class ByteVectorScan {
       }
     }
     return false;
+  }
+
+  public static int indexOfIgnoreCase(
+      byte[] bytes, int offset, int length, String prefix, int start) {
+    int prefixLen = prefix.length();
+    // Check if the prefix has any non-ASCII characters. We only optimize ASCII prefixes.
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    char first = prefix.charAt(0);
+    byte low = (byte) VectorScanProvider.asciiLower(first);
+    byte high = (byte) VectorScanProvider.asciiUpper(first);
+    ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
+    ByteVector highVec = ByteVector.broadcast(SPECIES, high);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
+      VectorMask<Byte> matchMask =
+          inputVec
+              .compare(VectorOperators.EQ, lowVec)
+              .or(inputVec.compare(VectorOperators.EQ, highVec));
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = pos + bit;
+          if (candidatePos + prefixLen <= length
+              && regionMatchesAsciiIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
+            return candidatePos;
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int limitScalar = length - prefixLen;
+    for (; pos <= limitScalar; pos++) {
+      if (regionMatchesAsciiIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+        return pos;
+      }
+    }
+
+    return -1;
+  }
+
+  private static boolean regionMatchesAsciiIgnoreCase(
+      byte[] bytes, int offset, String prefix, int prefixLen) {
+    for (int i = 0; i < prefixLen; i++) {
+      int b = bytes[offset + i] & 0xFF;
+      int p = prefix.charAt(i);
+      if (b != p
+          && VectorScanProvider.asciiLower((char) b) != VectorScanProvider.asciiLower((char) p)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private ByteVectorScan() {}

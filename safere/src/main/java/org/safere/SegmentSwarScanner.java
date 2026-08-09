@@ -15,10 +15,6 @@ import java.nio.ByteOrder;
  * or disabled.
  */
 final class SegmentSwarScanner {
-  private static final long BYTE_LOW_BITS = 0x7F7F_7F7F_7F7F_7F7FL;
-  private static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
-  private static final long BYTE_ONES = 0x0101_0101_0101_0101L;
-
   private static final long SHORT_HIGH_BITS = 0x8000_8000_8000_8000L;
   private static final long SHORT_ONES = 0x0001_0001_0001_0001L;
 
@@ -43,18 +39,18 @@ final class SegmentSwarScanner {
     int pos = start;
     int wordEnd = length - Long.BYTES;
 
-    long low0 = ranges[0] * BYTE_ONES;
-    long high0 = ranges[1] * BYTE_ONES;
-    long low1 = numRanges > 1 ? ranges[2] * BYTE_ONES : 0;
-    long high1 = numRanges > 1 ? ranges[3] * BYTE_ONES : 0;
+    long low0 = ranges[0] * ByteSwarScan.BYTE_ONES;
+    long high0 = ranges[1] * ByteSwarScan.BYTE_ONES;
+    long low1 = numRanges > 1 ? ranges[2] * ByteSwarScan.BYTE_ONES : 0;
+    long high1 = numRanges > 1 ? ranges[3] * ByteSwarScan.BYTE_ONES : 0;
 
     if (numRanges == 1) {
       while (pos <= wordEnd) {
         long word = (long) LONG_VIEW.get(value, pos);
-        long values = word & BYTE_LOW_BITS;
-        long ascii = ~word & BYTE_HIGH_BITS;
+        long values = word & ~ByteSwarScan.BYTE_HIGH_BITS;
+        long ascii = ~word & ByteSwarScan.BYTE_HIGH_BITS;
 
-        long matches = exactAsciiRangeMask(values, ascii, low0, high0);
+        long matches = ByteSwarScan.exactAsciiRangeMask(values, ascii, low0, high0);
         if (matches != 0) {
           int wordLimit = pos + Long.BYTES;
           for (int i = pos; i < wordLimit; i++) {
@@ -69,12 +65,12 @@ final class SegmentSwarScanner {
     } else {
       while (pos <= wordEnd) {
         long word = (long) LONG_VIEW.get(value, pos);
-        long values = word & BYTE_LOW_BITS;
-        long ascii = ~word & BYTE_HIGH_BITS;
+        long values = word & ~ByteSwarScan.BYTE_HIGH_BITS;
+        long ascii = ~word & ByteSwarScan.BYTE_HIGH_BITS;
 
         long matches =
-            exactAsciiRangeMask(values, ascii, low0, high0)
-                | exactAsciiRangeMask(values, ascii, low1, high1);
+            ByteSwarScan.exactAsciiRangeMask(values, ascii, low0, high0)
+                | ByteSwarScan.exactAsciiRangeMask(values, ascii, low1, high1);
 
         if (matches != 0) {
           int wordLimit = pos + Long.BYTES;
@@ -183,16 +179,17 @@ final class SegmentSwarScanner {
     char first = prefix.charAt(0);
     byte low = (byte) VectorScanProvider.asciiLower(first);
     byte high = (byte) VectorScanProvider.asciiUpper(first);
-    long repeatedLow = (low & 0xFFL) * BYTE_ONES;
-    long repeatedHigh = (high & 0xFFL) * BYTE_ONES;
+    long repeatedLow = (low & 0xFFL) * ByteSwarScan.BYTE_ONES;
+    long repeatedHigh = (high & 0xFFL) * ByteSwarScan.BYTE_ONES;
 
     while (pos <= wordEnd) {
       long word = (long) LONG_VIEW.get(value, pos);
       long diffLow = word ^ repeatedLow;
       long diffHigh = word ^ repeatedHigh;
       long matches =
-          (((diffLow - BYTE_ONES) & ~diffLow) | ((diffHigh - BYTE_ONES) & ~diffHigh))
-              & BYTE_HIGH_BITS;
+          (((diffLow - ByteSwarScan.BYTE_ONES) & ~diffLow)
+                  | ((diffHigh - ByteSwarScan.BYTE_ONES) & ~diffHigh))
+              & ByteSwarScan.BYTE_HIGH_BITS;
 
       if (matches != 0) {
         int wordLimit = pos + Long.BYTES;
@@ -254,13 +251,6 @@ final class SegmentSwarScanner {
       }
     }
     return -1;
-  }
-
-  private static long exactAsciiRangeMask(
-      long values, long ascii, long repeatedLow, long repeatedHigh) {
-    long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
-    long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
-    return ascii & atLeastLow & atMostHigh;
   }
 
   private static long exactShortRangeMask(long values, long repeatedLow, long repeatedHigh) {
