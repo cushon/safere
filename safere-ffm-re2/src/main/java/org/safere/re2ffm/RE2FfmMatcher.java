@@ -314,7 +314,7 @@ public final class RE2FfmMatcher {
           int groupNum = 0;
           i++;
           while (i < rewrite.length() && Character.isDigit(rewrite.charAt(i))) {
-            groupNum = groupNum * 10 + rewrite.charAt(i) - '0';
+            groupNum = groupNum * 10 + (rewrite.charAt(i) - '0');
             i++;
           }
           i--; // Back up for the outer loop increment.
@@ -361,8 +361,10 @@ public final class RE2FfmMatcher {
         if (charI < charToByteMap.length) {
           charToByteMap[charI++] = byteI;
         }
-        if (len == 4 && charI < charToByteMap.length) {
-          charToByteMap[charI++] = byteI + 2;
+        if (len == 4) {
+          if (charI < charToByteMap.length) {
+            charToByteMap[charI++] = byteI + 2;
+          }
         }
       }
       byteI += len;

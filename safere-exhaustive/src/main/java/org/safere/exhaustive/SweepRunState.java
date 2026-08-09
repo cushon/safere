@@ -89,7 +89,7 @@ final class SweepRunState implements AutoCloseable {
   private static String formatDuration(long nanos) {
     long totalSeconds = TimeUnit.NANOSECONDS.toSeconds(nanos);
     long hours = totalSeconds / 3_600;
-    long minutes = totalSeconds % 3_600 / 60;
+    long minutes = (totalSeconds % 3_600) / 60;
     long seconds = totalSeconds % 60;
     if (hours > 0) {
       return String.format(Locale.ROOT, "%dh%02dm%02ds", hours, minutes, seconds);

@@ -128,7 +128,6 @@ public final class MemoryBenchmark {
    * Measures the DFA cache growth for a single compiled SafeRE pattern by measuring heap before and
    * after running the pattern against text. Uses multiple trials and returns the median.
    */
-  @SuppressWarnings("PMD.EmptyControlStatement")
   private static long measureDfaCacheGrowth(String pattern, String text) throws Exception {
     long[] results = new long[TRIALS];
 

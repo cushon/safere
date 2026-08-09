@@ -1170,7 +1170,8 @@ final class DeclarativeBenchmarkPlan {
     public RecipeValue substitute(
         Map<String, ParameterValue> parameters, String inputId, String argumentName) {
       return new RecipeString(
-          substituteValue(value, parameters, inputId + " recipe " + argumentName));
+          DeclarativeBenchmarkPlan.substituteValue(
+              value, parameters, inputId + " recipe " + argumentName));
     }
   }
 
@@ -1204,7 +1205,10 @@ final class DeclarativeBenchmarkPlan {
         Map<String, ParameterValue> parameters, String inputId, String argumentName) {
       return new RecipeStringList(
           values.stream()
-              .map(value -> substituteValue(value, parameters, inputId + " recipe " + argumentName))
+              .map(
+                  value ->
+                      DeclarativeBenchmarkPlan.substituteValue(
+                          value, parameters, inputId + " recipe " + argumentName))
               .toList());
     }
   }

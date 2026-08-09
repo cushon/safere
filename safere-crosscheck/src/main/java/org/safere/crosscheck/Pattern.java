@@ -282,7 +282,7 @@ public final class Pattern implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private Object readResolve() throws ObjectStreamException {
-      return compile(regex, flags);
+      return Pattern.compile(regex, flags);
     }
   }
 }

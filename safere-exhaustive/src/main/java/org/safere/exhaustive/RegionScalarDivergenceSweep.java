@@ -138,11 +138,11 @@ public final class RegionScalarDivergenceSweep {
     options.printStartup("region-scalar");
 
     if (options.replayFile() != null) {
-      runReplay(options);
+      RegionScalarDivergenceSweep.runReplay(options);
       return;
     }
 
-    SweepRunState state = runSweep(options);
+    SweepRunState state = RegionScalarDivergenceSweep.runSweep(options);
     System.out.println("checked=" + state.checked.sum());
     System.out.println("generated=" + state.generated);
     System.out.println("totalCases=" + totalCases());

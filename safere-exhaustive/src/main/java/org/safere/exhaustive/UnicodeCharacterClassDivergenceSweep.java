@@ -156,7 +156,7 @@ public final class UnicodeCharacterClassDivergenceSweep {
     if (ordinal < Character.MIN_SURROGATE) {
       return ordinal;
     }
-    return ordinal + Character.MAX_SURROGATE - Character.MIN_SURROGATE + 1;
+    return ordinal + (Character.MAX_SURROGATE - Character.MIN_SURROGATE + 1);
   }
 
   private static void evaluateCase(
