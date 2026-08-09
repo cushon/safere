@@ -35,7 +35,7 @@ final class StringSegmentSupport {
           MethodHandles.publicLookup()
               .findVirtual(
                   String.class, "asSegment", MethodType.methodType(SegmentAndCharset.class));
-    } catch (NoSuchMethodException | IllegalAccessException e) {
+    } catch (NoSuchMethodException | IllegalAccessException ignored) {
       // Upstream API not yet present; use fallback
     }
     AS_SEGMENT_HANDLE = handle;
@@ -60,7 +60,7 @@ final class StringSegmentSupport {
     if (AS_SEGMENT_HANDLE != null) {
       try {
         return (SegmentAndCharset) AS_SEGMENT_HANDLE.invokeExact(str);
-      } catch (Throwable t) {
+      } catch (Throwable ignored) {
         // Fall back to reflection
       }
     }

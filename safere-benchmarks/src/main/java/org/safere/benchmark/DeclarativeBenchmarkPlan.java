@@ -1170,8 +1170,7 @@ final class DeclarativeBenchmarkPlan {
     public RecipeValue substitute(
         Map<String, ParameterValue> parameters, String inputId, String argumentName) {
       return new RecipeString(
-          DeclarativeBenchmarkPlan.substituteValue(
-              value, parameters, inputId + " recipe " + argumentName));
+          substituteValue(value, parameters, inputId + " recipe " + argumentName));
     }
   }
 
@@ -1196,7 +1195,7 @@ final class DeclarativeBenchmarkPlan {
     @Override
     public Set<String> placeholders() {
       Set<String> result = new LinkedHashSet<>();
-      values.forEach(value -> result.addAll(DeclarativeBenchmarkPlan.placeholders(value)));
+      values.forEach(value -> result.addAll(placeholders(value)));
       return result;
     }
 
@@ -1205,10 +1204,7 @@ final class DeclarativeBenchmarkPlan {
         Map<String, ParameterValue> parameters, String inputId, String argumentName) {
       return new RecipeStringList(
           values.stream()
-              .map(
-                  value ->
-                      DeclarativeBenchmarkPlan.substituteValue(
-                          value, parameters, inputId + " recipe " + argumentName))
+              .map(value -> substituteValue(value, parameters, inputId + " recipe " + argumentName))
               .toList());
     }
   }

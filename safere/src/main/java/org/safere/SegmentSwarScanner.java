@@ -40,10 +40,10 @@ final class SegmentSwarScanner {
     int pos = start;
     int wordEnd = length - Long.BYTES;
 
-    long low0 = (long) ranges[0] * BYTE_ONES;
-    long high0 = (long) ranges[1] * BYTE_ONES;
-    long low1 = numRanges > 1 ? (long) ranges[2] * BYTE_ONES : 0;
-    long high1 = numRanges > 1 ? (long) ranges[3] * BYTE_ONES : 0;
+    long low0 = ranges[0] * BYTE_ONES;
+    long high0 = ranges[1] * BYTE_ONES;
+    long low1 = numRanges > 1 ? ranges[2] * BYTE_ONES : 0;
+    long high1 = numRanges > 1 ? ranges[3] * BYTE_ONES : 0;
 
     if (numRanges == 1) {
       while (pos <= wordEnd) {
@@ -103,10 +103,10 @@ final class SegmentSwarScanner {
     int pos = start;
     int wordEnd = length - 4; // 4 shorts = 8 bytes
 
-    long low0 = (long) ranges[0] * SHORT_ONES;
-    long high0 = (long) ranges[1] * SHORT_ONES;
-    long low1 = numRanges > 1 ? (long) ranges[2] * SHORT_ONES : 0;
-    long high1 = numRanges > 1 ? (long) ranges[3] * SHORT_ONES : 0;
+    long low0 = ranges[0] * SHORT_ONES;
+    long high0 = ranges[1] * SHORT_ONES;
+    long low1 = numRanges > 1 ? ranges[2] * SHORT_ONES : 0;
+    long high1 = numRanges > 1 ? ranges[3] * SHORT_ONES : 0;
 
     if (numRanges == 1) {
       while (pos <= wordEnd) {

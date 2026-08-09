@@ -81,7 +81,7 @@ final class SweepWorkers {
     if (remainder == 0) {
       return rangeStartInclusive;
     }
-    return rangeStartInclusive + (progressInterval - remainder);
+    return rangeStartInclusive + progressInterval - remainder;
   }
 
   static long progressProbeInterval(long progressInterval, int threads) {
@@ -178,6 +178,7 @@ final class SweepWorkers {
     }
   }
 
+  @SuppressWarnings("PMD.EmptyControlStatement")
   private static void putQueuedLine(
       BlockingQueue<QueuedLine> queue, QueuedLine queuedLine, AtomicReference<Throwable> failure) {
     try {
