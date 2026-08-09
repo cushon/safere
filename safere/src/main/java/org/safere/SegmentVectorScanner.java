@@ -5,9 +5,6 @@
 
 package org.safere;
 
-import java.lang.foreign.MemorySegment;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.ShortVector;
@@ -66,23 +63,23 @@ final class SegmentVectorScanner implements VectorScanProvider {
 
     SegmentAndCharset sac = StringSegmentSupport.stringAsSegment(text);
 
-    if (sac.charset().equals(StandardCharsets.ISO_8859_1)) {
+    if (sac.isLatin1()) {
       if (scanInfo.isAscii) {
-        return Latin1.indexOfCharClass(
-            sac.segment(), text, scanInfo.ranges, scalarLimit, numRanges);
+        return Latin1.indexOfCharClass(sac.value(), text, scanInfo.ranges, scalarLimit, numRanges);
       } else {
         int[] clampedRanges = clampRangesForLatin1(scanInfo.ranges);
         if (clampedRanges != null) {
           int clampedNumRanges = clampedRanges.length / 2;
           if (clampedNumRanges > 0 && clampedNumRanges <= 4) {
             return Latin1.indexOfCharClass(
-                sac.segment(), text, clampedRanges, scalarLimit, clampedNumRanges);
+                sac.value(), text, clampedRanges, scalarLimit, clampedNumRanges);
           }
         }
       }
     }
 
-    return Utf16.indexOfCharClass(sac, text, scanInfo.ranges, scalarLimit, numRanges, false);
+    return Utf16.indexOfCharClass(
+        sac.value(), text, scanInfo.ranges, scalarLimit, numRanges, false);
   }
 
   @Override
@@ -99,7 +96,7 @@ final class SegmentVectorScanner implements VectorScanProvider {
     int[] activeRanges = ranges;
     int numRanges;
 
-    if (sac.charset().equals(StandardCharsets.ISO_8859_1)) {
+    if (sac.isLatin1()) {
       activeRanges = clampRangesForLatin1(ranges);
       if (activeRanges == null) {
         return -1; // No ranges can match in Latin-1
@@ -128,11 +125,11 @@ final class SegmentVectorScanner implements VectorScanProvider {
       }
     }
 
-    if (sac.charset().equals(StandardCharsets.ISO_8859_1)) {
-      return Latin1.indexOfCharClass(sac.segment(), text, activeRanges, scalarLimit, numRanges);
+    if (sac.isLatin1()) {
+      return Latin1.indexOfCharClass(sac.value(), text, activeRanges, scalarLimit, numRanges);
     }
 
-    return Utf16.indexOfCharClass(sac, text, activeRanges, scalarLimit, numRanges, true);
+    return Utf16.indexOfCharClass(sac.value(), text, activeRanges, scalarLimit, numRanges, true);
   }
 
   private static int[] clampRangesForLatin1(int[] ranges) {
@@ -168,18 +165,17 @@ final class SegmentVectorScanner implements VectorScanProvider {
       return start;
     }
     SegmentAndCharset sac = StringSegmentSupport.stringAsSegment(text);
-    if (!sac.charset().equals(StandardCharsets.ISO_8859_1)) {
-      return Utf16.indexOfIgnoreCase(sac, text, prefix, start);
+    if (!sac.isLatin1()) {
+      return Utf16.indexOfIgnoreCase(sac.value(), text, prefix, start);
     }
-    return Latin1.indexOfIgnoreCase(sac, text, prefix, start);
+    return Latin1.indexOfIgnoreCase(sac.value(), text, prefix, start);
   }
 
   /** Nested Latin-1 SIMD routines using ByteVector. */
   static final class Latin1 {
     private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
-    static int indexOfCharClass(
-        MemorySegment segment, String text, int[] ranges, int start, int numRanges) {
+    static int indexOfCharClass(byte[] value, String text, int[] ranges, int start, int numRanges) {
       int textLen = text.length();
       int pos = start;
       int vectorLen = SPECIES.length();
@@ -198,8 +194,7 @@ final class SegmentVectorScanner implements VectorScanProvider {
         ByteVector low = lowVecs[0];
         ByteVector high = highVecs[0];
         for (; pos <= limit; pos += vectorLen) {
-          ByteVector inputVec =
-              ByteVector.fromMemorySegment(SPECIES, segment, (long) pos, ByteOrder.nativeOrder());
+          ByteVector inputVec = ByteVector.fromArray(SPECIES, value, pos);
           VectorMask<Byte> matchMask =
               inputVec
                   .compare(VectorOperators.GE, low)
@@ -210,8 +205,7 @@ final class SegmentVectorScanner implements VectorScanProvider {
         }
       } else {
         for (; pos <= limit; pos += vectorLen) {
-          ByteVector inputVec =
-              ByteVector.fromMemorySegment(SPECIES, segment, (long) pos, ByteOrder.nativeOrder());
+          ByteVector inputVec = ByteVector.fromArray(SPECIES, value, pos);
           VectorMask<Byte> matchMask = SPECIES.maskAll(false);
           for (int r = 0; r < numRanges; r++) {
             VectorMask<Byte> rangeMask =
@@ -239,7 +233,7 @@ final class SegmentVectorScanner implements VectorScanProvider {
       return -1;
     }
 
-    static int indexOfIgnoreCase(SegmentAndCharset sac, String text, String prefix, int start) {
+    static int indexOfIgnoreCase(byte[] value, String text, String prefix, int start) {
       int prefixLen = prefix.length();
       // Check if the prefix has any non-ASCII characters. We only optimize ASCII prefixes.
       for (int i = 0; i < prefixLen; i++) {
@@ -259,11 +253,8 @@ final class SegmentVectorScanner implements VectorScanProvider {
       ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
       ByteVector highVec = ByteVector.broadcast(SPECIES, high);
 
-      MemorySegment segment = sac.segment();
-
       for (; pos <= limit; pos += vectorLen) {
-        ByteVector inputVec =
-            ByteVector.fromMemorySegment(SPECIES, segment, (long) pos, ByteOrder.nativeOrder());
+        ByteVector inputVec = ByteVector.fromArray(SPECIES, value, pos);
         VectorMask<Byte> matchMask =
             inputVec
                 .compare(VectorOperators.EQ, lowVec)
@@ -304,9 +295,10 @@ final class SegmentVectorScanner implements VectorScanProvider {
    */
   static final class Utf16 {
     private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
+    private static final VectorSpecies<Byte> BYTE_SPECIES = SPECIES.withLanes(byte.class);
 
     static int indexOfCharClass(
-        SegmentAndCharset sac,
+        byte[] value,
         String text,
         int[] ranges,
         int start,
@@ -344,15 +336,13 @@ final class SegmentVectorScanner implements VectorScanProvider {
 
       ShortVector surrogateLow = ShortVector.broadcast(SPECIES, (short) 0xD800);
       ShortVector surrogateHigh = ShortVector.broadcast(SPECIES, (short) 0xDFFF);
-      MemorySegment segment = sac.segment();
 
       if (numRanges == 1) {
         ShortVector low = lowVecs[0];
         ShortVector high = highVecs[0];
         for (; pos <= limit; pos += vectorLen) {
           ShortVector inputVec =
-              ShortVector.fromMemorySegment(
-                  SPECIES, segment, (long) pos << 1, ByteOrder.nativeOrder());
+              ByteVector.fromArray(BYTE_SPECIES, value, pos << 1).reinterpretAsShorts();
           if (activeSurrogateCheck) {
             VectorMask<Short> surrogateMask =
                 inputVec
@@ -373,8 +363,7 @@ final class SegmentVectorScanner implements VectorScanProvider {
       } else {
         for (; pos <= limit; pos += vectorLen) {
           ShortVector inputVec =
-              ShortVector.fromMemorySegment(
-                  SPECIES, segment, (long) pos << 1, ByteOrder.nativeOrder());
+              ByteVector.fromArray(BYTE_SPECIES, value, pos << 1).reinterpretAsShorts();
           if (activeSurrogateCheck) {
             VectorMask<Short> surrogateMask =
                 inputVec
@@ -414,7 +403,7 @@ final class SegmentVectorScanner implements VectorScanProvider {
       return -1;
     }
 
-    static int indexOfIgnoreCase(SegmentAndCharset sac, String text, String prefix, int start) {
+    static int indexOfIgnoreCase(byte[] value, String text, String prefix, int start) {
       int prefixLen = prefix.length();
       for (int i = 0; i < prefixLen; i++) {
         if (prefix.charAt(i) > 127) {
@@ -432,12 +421,10 @@ final class SegmentVectorScanner implements VectorScanProvider {
       short high = (short) VectorScanProvider.asciiUpper(first);
       ShortVector lowVec = ShortVector.broadcast(SPECIES, low);
       ShortVector highVec = ShortVector.broadcast(SPECIES, high);
-      MemorySegment segment = sac.segment();
 
       for (; pos <= limit; pos += vectorLen) {
         ShortVector inputVec =
-            ShortVector.fromMemorySegment(
-                SPECIES, segment, (long) pos << 1, ByteOrder.nativeOrder());
+            ByteVector.fromArray(BYTE_SPECIES, value, pos << 1).reinterpretAsShorts();
         VectorMask<Short> matchMask =
             inputVec
                 .compare(VectorOperators.EQ, lowVec)

@@ -5,8 +5,6 @@
 
 package org.safere;
 
-import java.lang.foreign.MemorySegment;
-import java.nio.ByteOrder;
 import jdk.incubator.vector.ShortVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
@@ -87,10 +85,6 @@ final class CopyVectorScanner implements VectorScanProvider {
       String text, int[] ranges, int start, int numRanges, boolean checkSurrogates) {
     int textLen = text.length();
 
-    // Coder-agnostic surrogate check avoidance:
-    // If the ranges we match do not overlap with the UTF-16 surrogate range [0xD800, 0xDFFF],
-    // then no surrogate code unit can ever match our pattern anyway. We can safely skip the
-    // expensive surrogate check in the vector loop.
     boolean activeSurrogateCheck = checkSurrogates;
     if (activeSurrogateCheck) {
       boolean overlaps = false;
@@ -126,7 +120,6 @@ final class CopyVectorScanner implements VectorScanProvider {
     while (pos < textLen) {
       int copyLen = Math.min(textLen - pos, CHUNK_SIZE);
       text.getChars(pos, pos + copyLen, buf, 0);
-      MemorySegment segment = MemorySegment.ofArray(buf);
 
       int chunkPos = 0;
       int chunkLimit = copyLen - vectorLen;
@@ -136,18 +129,10 @@ final class CopyVectorScanner implements VectorScanProvider {
         ShortVector high = highVecs[0];
         int unrolledLimit = chunkLimit - 3 * vectorLen;
         for (; chunkPos <= unrolledLimit; chunkPos += 4 * vectorLen) {
-          ShortVector v0 =
-              ShortVector.fromMemorySegment(
-                  SPECIES, segment, (long) chunkPos * 2, ByteOrder.nativeOrder());
-          ShortVector v1 =
-              ShortVector.fromMemorySegment(
-                  SPECIES, segment, (long) (chunkPos + vectorLen) * 2, ByteOrder.nativeOrder());
-          ShortVector v2 =
-              ShortVector.fromMemorySegment(
-                  SPECIES, segment, (long) (chunkPos + 2 * vectorLen) * 2, ByteOrder.nativeOrder());
-          ShortVector v3 =
-              ShortVector.fromMemorySegment(
-                  SPECIES, segment, (long) (chunkPos + 3 * vectorLen) * 2, ByteOrder.nativeOrder());
+          ShortVector v0 = ShortVector.fromCharArray(SPECIES, buf, chunkPos);
+          ShortVector v1 = ShortVector.fromCharArray(SPECIES, buf, chunkPos + vectorLen);
+          ShortVector v2 = ShortVector.fromCharArray(SPECIES, buf, chunkPos + 2 * vectorLen);
+          ShortVector v3 = ShortVector.fromCharArray(SPECIES, buf, chunkPos + 3 * vectorLen);
 
           if (activeSurrogateCheck) {
             VectorMask<Short> s0 =
@@ -185,9 +170,7 @@ final class CopyVectorScanner implements VectorScanProvider {
           }
         }
         for (; chunkPos <= chunkLimit; chunkPos += vectorLen) {
-          ShortVector inputVec =
-              ShortVector.fromMemorySegment(
-                  SPECIES, segment, (long) chunkPos * 2, ByteOrder.nativeOrder());
+          ShortVector inputVec = ShortVector.fromCharArray(SPECIES, buf, chunkPos);
           if (activeSurrogateCheck) {
             VectorMask<Short> surrogateMask =
                 inputVec
@@ -207,9 +190,7 @@ final class CopyVectorScanner implements VectorScanProvider {
         }
       } else {
         for (; chunkPos <= chunkLimit; chunkPos += vectorLen) {
-          ShortVector inputVec =
-              ShortVector.fromMemorySegment(
-                  SPECIES, segment, (long) chunkPos * 2, ByteOrder.nativeOrder());
+          ShortVector inputVec = ShortVector.fromCharArray(SPECIES, buf, chunkPos);
           if (activeSurrogateCheck) {
             VectorMask<Short> surrogateMask =
                 inputVec
@@ -286,15 +267,12 @@ final class CopyVectorScanner implements VectorScanProvider {
     while (pos < textLen) {
       int copyLen = Math.min(textLen - pos, CHUNK_SIZE);
       text.getChars(pos, pos + copyLen, buf, 0);
-      MemorySegment segment = MemorySegment.ofArray(buf);
 
       int chunkPos = 0;
       int chunkLimit = copyLen - vectorLen;
 
       for (; chunkPos <= chunkLimit; chunkPos += vectorLen) {
-        ShortVector inputVec =
-            ShortVector.fromMemorySegment(
-                SPECIES, segment, (long) chunkPos * 2, ByteOrder.nativeOrder());
+        ShortVector inputVec = ShortVector.fromCharArray(SPECIES, buf, chunkPos);
         VectorMask<Short> matchMask =
             inputVec
                 .compare(VectorOperators.EQ, lowVec)

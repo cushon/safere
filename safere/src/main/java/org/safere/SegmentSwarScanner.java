@@ -5,14 +5,14 @@
 
 package org.safere;
 
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
-import java.nio.charset.StandardCharsets;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
+import java.nio.ByteOrder;
 
 /**
- * 64-bit SWAR (SIMD Within A Register) scanner for MemorySegment views of Strings. Provides
- * broadword scanning (8 chars/step for Latin-1, 4 chars/step for UTF-16) when the Vector API is
- * unavailable or disabled.
+ * 64-bit SWAR (SIMD Within A Register) scanner for String backing byte arrays. Provides broadword
+ * scanning (8 chars/step for Latin-1, 4 chars/step for UTF-16) when the Vector API is unavailable
+ * or disabled.
  */
 final class SegmentSwarScanner {
   private static final long BYTE_LOW_BITS = 0x7F7F_7F7F_7F7F_7F7FL;
@@ -22,20 +22,23 @@ final class SegmentSwarScanner {
   private static final long SHORT_HIGH_BITS = 0x8000_8000_8000_8000L;
   private static final long SHORT_ONES = 0x0001_0001_0001_0001L;
 
+  private static final VarHandle LONG_VIEW =
+      MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.nativeOrder());
+
   static int indexOfCharClass(
       SegmentAndCharset sac, String text, int[] ranges, int start, int numRanges) {
     if (numRanges > 2) {
       return -2; // Route classes with >= 3 ranges to the O(1) 64-bit scalar bitmap table
     }
-    if (sac.charset().equals(StandardCharsets.ISO_8859_1)) {
-      return indexOfLatin1(sac.segment(), text, ranges, start, numRanges);
+    if (sac.isLatin1()) {
+      return indexOfLatin1(sac.value(), text, ranges, start, numRanges);
     } else {
-      return indexOfUtf16(sac.segment(), text, ranges, start, numRanges);
+      return indexOfUtf16(sac.value(), text, ranges, start, numRanges);
     }
   }
 
   private static int indexOfLatin1(
-      MemorySegment segment, String text, int[] ranges, int start, int numRanges) {
+      byte[] value, String text, int[] ranges, int start, int numRanges) {
     int length = text.length();
     int pos = start;
     int wordEnd = length - Long.BYTES;
@@ -47,7 +50,7 @@ final class SegmentSwarScanner {
 
     if (numRanges == 1) {
       while (pos <= wordEnd) {
-        long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, (long) pos);
+        long word = (long) LONG_VIEW.get(value, pos);
         long values = word & BYTE_LOW_BITS;
         long ascii = ~word & BYTE_HIGH_BITS;
 
@@ -65,7 +68,7 @@ final class SegmentSwarScanner {
       }
     } else {
       while (pos <= wordEnd) {
-        long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, (long) pos);
+        long word = (long) LONG_VIEW.get(value, pos);
         long values = word & BYTE_LOW_BITS;
         long ascii = ~word & BYTE_HIGH_BITS;
 
@@ -98,7 +101,7 @@ final class SegmentSwarScanner {
   }
 
   private static int indexOfUtf16(
-      MemorySegment segment, String text, int[] ranges, int start, int numRanges) {
+      byte[] value, String text, int[] ranges, int start, int numRanges) {
     int length = text.length();
     int pos = start;
     int wordEnd = length - 4; // 4 shorts = 8 bytes
@@ -110,7 +113,7 @@ final class SegmentSwarScanner {
 
     if (numRanges == 1) {
       while (pos <= wordEnd) {
-        long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, (long) pos << 1);
+        long word = (long) LONG_VIEW.get(value, pos << 1);
         long matches = exactShortRangeMask(word, low0, high0);
 
         if (matches != 0) {
@@ -126,7 +129,7 @@ final class SegmentSwarScanner {
       }
     } else {
       while (pos <= wordEnd) {
-        long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, (long) pos << 1);
+        long word = (long) LONG_VIEW.get(value, pos << 1);
         long matches =
             exactShortRangeMask(word, low0, high0) | exactShortRangeMask(word, low1, high1);
 
@@ -164,15 +167,14 @@ final class SegmentSwarScanner {
         return -2;
       }
     }
-    if (sac.charset().equals(StandardCharsets.ISO_8859_1)) {
-      return indexOfIgnoreCaseLatin1(sac.segment(), text, prefix, start);
+    if (sac.isLatin1()) {
+      return indexOfIgnoreCaseLatin1(sac.value(), text, prefix, start);
     } else {
-      return indexOfIgnoreCaseUtf16(sac.segment(), text, prefix, start);
+      return indexOfIgnoreCaseUtf16(sac.value(), text, prefix, start);
     }
   }
 
-  private static int indexOfIgnoreCaseLatin1(
-      MemorySegment segment, String text, String prefix, int start) {
+  private static int indexOfIgnoreCaseLatin1(byte[] value, String text, String prefix, int start) {
     int textLen = text.length();
     int prefixLen = prefix.length();
     int pos = start;
@@ -185,7 +187,7 @@ final class SegmentSwarScanner {
     long repeatedHigh = (high & 0xFFL) * BYTE_ONES;
 
     while (pos <= wordEnd) {
-      long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, (long) pos);
+      long word = (long) LONG_VIEW.get(value, pos);
       long diffLow = word ^ repeatedLow;
       long diffHigh = word ^ repeatedHigh;
       long matches =
@@ -213,8 +215,7 @@ final class SegmentSwarScanner {
     return -1;
   }
 
-  private static int indexOfIgnoreCaseUtf16(
-      MemorySegment segment, String text, String prefix, int start) {
+  private static int indexOfIgnoreCaseUtf16(byte[] value, String text, String prefix, int start) {
     int textLen = text.length();
     int prefixLen = prefix.length();
     int pos = start;
@@ -227,7 +228,7 @@ final class SegmentSwarScanner {
     long repeatedHigh = (high & 0xFFFFL) * SHORT_ONES;
 
     while (pos <= wordEnd) {
-      long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, (long) pos << 1);
+      long word = (long) LONG_VIEW.get(value, pos << 1);
       long diffLow = word ^ repeatedLow;
       long diffHigh = word ^ repeatedHigh;
       long matches =

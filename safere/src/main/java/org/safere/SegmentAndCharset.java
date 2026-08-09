@@ -5,11 +5,25 @@
 
 package org.safere;
 
-import java.lang.foreign.MemorySegment;
-import java.nio.charset.Charset;
+/** Encapsulates access to a String's backing byte array and its coder byte (Latin-1 vs UTF-16). */
+final class SegmentAndCharset {
+  private final byte[] value;
+  private final byte coder;
 
-/**
- * Encapsulates a MemorySegment view of a String's backing storage and its Charset. Mirrors the
- * proposed upstream JDK String#asSegment API.
- */
-public record SegmentAndCharset(MemorySegment segment, Charset charset) {}
+  SegmentAndCharset(byte[] value, byte coder) {
+    this.value = value;
+    this.coder = coder;
+  }
+
+  byte[] value() {
+    return value;
+  }
+
+  byte coder() {
+    return coder;
+  }
+
+  boolean isLatin1() {
+    return coder == 0;
+  }
+}
