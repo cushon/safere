@@ -1195,7 +1195,7 @@ final class DeclarativeBenchmarkPlan {
     @Override
     public Set<String> placeholders() {
       Set<String> result = new LinkedHashSet<>();
-      values.forEach(value -> result.addAll(placeholders(value)));
+      values.forEach(value -> result.addAll(DeclarativeBenchmarkPlan.placeholders(value)));
       return result;
     }
 
