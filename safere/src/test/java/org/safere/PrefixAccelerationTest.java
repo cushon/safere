@@ -66,7 +66,7 @@ class PrefixAccelerationTest {
     assertThat(m.end()).isEqualTo(2010);
 
     // UTF-8 input scanner test
-    Matcher mUtf8 = p.matcher(Utf8Input.trusted(text.getBytes(StandardCharsets.UTF_8)));
+    Utf8Matcher mUtf8 = p.matcher(Utf8Input.trusted(text.getBytes(StandardCharsets.UTF_8)));
     assertThat(mUtf8.find()).isTrue();
     assertThat(mUtf8.start()).isEqualTo(2000);
   }
@@ -80,7 +80,7 @@ class PrefixAccelerationTest {
     assertThat(m.start()).isEqualTo(1500);
     assertThat(m.end()).isEqualTo(1504);
 
-    Matcher mUtf8 = p.matcher(Utf8Input.trusted(text.getBytes(StandardCharsets.UTF_8)));
+    Utf8Matcher mUtf8 = p.matcher(Utf8Input.trusted(text.getBytes(StandardCharsets.UTF_8)));
     assertThat(mUtf8.find()).isTrue();
     assertThat(mUtf8.start()).isEqualTo(1500);
   }
