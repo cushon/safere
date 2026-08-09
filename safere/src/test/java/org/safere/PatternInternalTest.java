@@ -243,7 +243,15 @@ class PatternInternalTest {
 
   @ParameterizedTest
   @ValueSource(
-      strings = {"\\d+/x", "[αβ]/x", "[ab](?i:x)", "literal-prefix", "(?:(?:a|.)a)", ".\\d{3}foo"})
+      strings = {
+        "\\d+/x",
+        "[αβ]/x",
+        "[ab](?i:x)",
+        "literal-prefix",
+        "(?:(?:a|.)a)",
+        ".\\d{3}foo",
+        "(^|[^#])(#!customTag)"
+      })
   void variableWidthUnicodeAndOrdinaryPrefixesDoNotRecordFixedOffsetLiterals(String regex) {
     assertThat(Pattern.compile(regex).fixedOffsetLiteral()).isNull();
   }
@@ -251,7 +259,7 @@ class PatternInternalTest {
   @Test
   void discreteMultiOffsetLiteralsAreRecorded() {
     Pattern.FixedOffsetLiteral fixed =
-        Pattern.compile("(^|[^#])(#!customTag)").fixedOffsetLiteral();
+        Pattern.compile("(^|[a-z])(#!customTag)").fixedOffsetLiteral();
     assertThat(fixed).isNotNull();
     assertThat(fixed.literal()).isEqualTo("#!customTag");
     assertThat(fixed.discreteOffsets()).containsExactly(0, 1);
