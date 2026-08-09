@@ -657,6 +657,22 @@
       "shared": true
     },
     {
+      "id": "charClassSearch.singleCharAbsent.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "The quick brown fox jumps over the lazy dog without any numbers. ",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "utf8Matching.requiredClassNonmatch.text",
       "recipe": {
         "kind": "repeatToLength",
@@ -9085,6 +9101,36 @@
         "constraints": [
           "prematerializedInput",
           "allocationProfile"
+        ]
+      }
+    },
+    {
+      "id": "SingleCharClassBenchmark.findDigitAbsent.{size}",
+      "operation": "find",
+      "patterns": [
+        "[0-9]"
+      ],
+      "inputs": [
+        "charClassSearch.singleCharAbsent.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString"
+      ],
+      "inputRepresentationReason": "Measures single character class find fast-path throughput over non-matching input strings.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
         ]
       }
     }
