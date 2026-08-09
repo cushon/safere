@@ -242,7 +242,8 @@ class PatternInternalTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"\\d+/x", "[αβ]/x", "[ab](?i:x)", "literal-prefix"})
+  @ValueSource(
+      strings = {"\\d+/x", "[αβ]/x", "[ab](?i:x)", "literal-prefix", "(?:(?:a|.)a)", ".\\d{3}foo"})
   void variableWidthUnicodeAndOrdinaryPrefixesDoNotRecordFixedOffsetLiterals(String regex) {
     assertThat(Pattern.compile(regex).fixedOffsetLiteral()).isNull();
   }

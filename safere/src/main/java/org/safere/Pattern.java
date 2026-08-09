@@ -2395,7 +2395,9 @@ public final class Pattern implements Serializable {
         yield AsciiWidthRange.INVALID;
       }
       case CHAR_CLASS -> {
-        if (node.charClass != null && !node.charClass.isEmpty() && node.charClass.lo(0) < 128) {
+        if (node.charClass != null
+            && !node.charClass.isEmpty()
+            && node.charClass.hi(node.charClass.numRanges() - 1) < 128) {
           yield AsciiWidthRange.ONE;
         }
         yield AsciiWidthRange.INVALID;
