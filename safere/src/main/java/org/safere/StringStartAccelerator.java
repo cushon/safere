@@ -165,9 +165,25 @@ sealed interface StringStartAccelerator {
           literalFrom = literalStart + 1;
           continue;
         }
-        return Math.max(fromIndex, literalStart - fixedOffsetLiteral.maxOffset());
+        return Math.max(
+            fromIndex,
+            retreatByCodePoints(text, literalStart, fixedOffsetLiteral.maxOffset(), fromIndex));
       }
       return -1;
+    }
+
+    private static int retreatByCodePoints(String text, int index, int count, int minIndex) {
+      int pos = index;
+      while (count > 0 && pos > minIndex) {
+        pos--;
+        if (pos > minIndex
+            && Character.isLowSurrogate(text.charAt(pos))
+            && Character.isHighSurrogate(text.charAt(pos - 1))) {
+          pos--;
+        }
+        count--;
+      }
+      return Math.max(minIndex, pos);
     }
   }
 
