@@ -3,10 +3,15 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere;
+package org.safere.foreign;
+
+import static org.safere.internal.Ascii.toLowerCase;
+import static org.safere.internal.Ascii.toUpperCase;
+import static org.safere.internal.Swar.UNSUPPORTED;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.nio.ByteOrder;
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
@@ -15,8 +20,8 @@ import jdk.incubator.vector.VectorSpecies;
 /** Stateless 1-byte SIMD scanning kernels over {@link MemorySegment}. */
 public final class SegmentByteVectorScan {
 
-  public static final int UNSUPPORTED = -2;
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
+  private static final ByteOrder NATIVE_ORDER = ByteOrder.nativeOrder();
 
   private SegmentByteVectorScan() {}
 
@@ -45,9 +50,7 @@ public final class SegmentByteVectorScan {
     long loopBound = length - vectorLen;
 
     while (pos <= loopBound) {
-      ByteVector v =
-          ByteVector.fromMemorySegment(
-              SPECIES, segment, offset + pos, java.nio.ByteOrder.nativeOrder());
+      ByteVector v = ByteVector.fromMemorySegment(SPECIES, segment, offset + pos, NATIVE_ORDER);
       VectorMask<Byte> mask =
           v.compare(VectorOperators.GE, vLow1).and(v.compare(VectorOperators.LE, vHigh1));
 
@@ -89,8 +92,8 @@ public final class SegmentByteVectorScan {
     int vectorLen = SPECIES.length();
 
     char first = prefix.charAt(0);
-    byte low = (byte) asciiLower(first);
-    byte high = (byte) asciiUpper(first);
+    byte low = (byte) toLowerCase(first);
+    byte high = (byte) toUpperCase(first);
 
     ByteVector vLow = ByteVector.broadcast(SPECIES, low);
     ByteVector vHigh = ByteVector.broadcast(SPECIES, high);
@@ -99,9 +102,7 @@ public final class SegmentByteVectorScan {
     long loopBound = length - vectorLen;
 
     while (pos <= loopBound) {
-      ByteVector v =
-          ByteVector.fromMemorySegment(
-              SPECIES, segment, offset + pos, java.nio.ByteOrder.nativeOrder());
+      ByteVector v = ByteVector.fromMemorySegment(SPECIES, segment, offset + pos, NATIVE_ORDER);
       VectorMask<Byte> mask =
           v.compare(VectorOperators.EQ, vLow).or(v.compare(VectorOperators.EQ, vHigh));
 
@@ -133,18 +134,10 @@ public final class SegmentByteVectorScan {
     for (int i = 0; i < len; i++) {
       char c1 = (char) (segment.get(ValueLayout.JAVA_BYTE, offset + i) & 0xFF);
       char c2 = prefix.charAt(i);
-      if (c1 != c2 && asciiLower(c1) != asciiLower(c2)) {
+      if (c1 != c2 && toLowerCase(c1) != toLowerCase(c2)) {
         return false;
       }
     }
     return true;
-  }
-
-  private static char asciiLower(char ch) {
-    return ch >= 'A' && ch <= 'Z' ? (char) (ch + 32) : ch;
-  }
-
-  private static char asciiUpper(char ch) {
-    return ch >= 'a' && ch <= 'z' ? (char) (ch - 32) : ch;
   }
 }

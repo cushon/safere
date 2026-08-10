@@ -5,6 +5,8 @@
 
 package org.safere;
 
+import org.safere.internal.Ascii;
+
 /** Internal provider for experimental Vector API scan operations. */
 interface VectorScanProvider {
   int UNSUPPORTED = -2;
@@ -15,10 +17,10 @@ interface VectorScanProvider {
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 
   static char asciiLower(char ch) {
-    return ch >= 'A' && ch <= 'Z' ? (char) (ch + 32) : ch;
+    return Ascii.toLowerCase(ch);
   }
 
   static char asciiUpper(char ch) {
-    return ch >= 'a' && ch <= 'z' ? (char) (ch - 32) : ch;
+    return Ascii.toUpperCase(ch);
   }
 }

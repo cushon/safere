@@ -7,6 +7,8 @@ package org.safere;
 
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
+import static org.safere.internal.Ascii.toLowerCase;
+import static org.safere.internal.Ascii.toUpperCase;
 
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.ShortVector;
@@ -108,8 +110,8 @@ public final class ShortVectorScan {
     int limit = length - vectorLen;
 
     char first = prefix.charAt(0);
-    short low = (short) VectorScanProvider.asciiLower(first);
-    short high = (short) VectorScanProvider.asciiUpper(first);
+    short low = (short) toLowerCase(first);
+    short high = (short) toUpperCase(first);
     ShortVector lowVec = ShortVector.broadcast(SPECIES, low);
     ShortVector highVec = ShortVector.broadcast(SPECIES, high);
 
@@ -157,8 +159,8 @@ public final class ShortVectorScan {
     int limit = length - vectorLen;
 
     char first = prefix.charAt(0);
-    short low = (short) VectorScanProvider.asciiLower(first);
-    short high = (short) VectorScanProvider.asciiUpper(first);
+    short low = (short) toLowerCase(first);
+    short high = (short) toUpperCase(first);
     ShortVector lowVec = ShortVector.broadcast(SPECIES, low);
     ShortVector highVec = ShortVector.broadcast(SPECIES, high);
 
@@ -249,7 +251,7 @@ public final class ShortVectorScan {
     for (int i = 0; i < prefixLen; i++) {
       char c = chars[offset + i];
       char p = prefix.charAt(i);
-      if (c != p && VectorScanProvider.asciiLower(c) != VectorScanProvider.asciiLower(p)) {
+      if (c != p && toLowerCase(c) != toLowerCase(p)) {
         return false;
       }
     }
@@ -264,7 +266,7 @@ public final class ShortVectorScan {
               ((bytes[byteOffset + (i << 1)] & 0xFF)
                   | ((bytes[byteOffset + (i << 1) + 1] & 0xFF) << 8));
       char p = prefix.charAt(i);
-      if (c != p && VectorScanProvider.asciiLower(c) != VectorScanProvider.asciiLower(p)) {
+      if (c != p && toLowerCase(c) != toLowerCase(p)) {
         return false;
       }
     }

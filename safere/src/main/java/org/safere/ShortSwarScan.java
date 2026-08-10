@@ -7,13 +7,16 @@ package org.safere;
 
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
+import static org.safere.internal.Ascii.toLowerCase;
+import static org.safere.internal.Ascii.toUpperCase;
+import static org.safere.internal.Swar.SHORT_HIGH_BITS;
+import static org.safere.internal.Swar.SHORT_ONES;
 
 import java.lang.invoke.VarHandle;
+import org.safere.internal.Swar;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 2-byte sequences (UTF-16 and char[]). */
 public final class ShortSwarScan {
-  static final long SHORT_ONES = 0x0001_0001_0001_0001L;
-  static final long SHORT_HIGH_BITS = 0x8000_8000_8000_8000L;
 
   private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, nativeOrder());
 
@@ -157,8 +160,8 @@ public final class ShortSwarScan {
     int wordEnd = length - 4;
 
     char first = prefix.charAt(0);
-    short low = (short) VectorScanProvider.asciiLower(first);
-    short high = (short) VectorScanProvider.asciiUpper(first);
+    short low = (short) toLowerCase(first);
+    short high = (short) toUpperCase(first);
     long repeatedLow = (low & 0xFFFFL) * SHORT_ONES;
     long repeatedHigh = (high & 0xFFFFL) * SHORT_ONES;
 
@@ -204,8 +207,8 @@ public final class ShortSwarScan {
     int wordEnd = length - 4;
 
     char first = prefix.charAt(0);
-    short low = (short) VectorScanProvider.asciiLower(first);
-    short high = (short) VectorScanProvider.asciiUpper(first);
+    short low = (short) toLowerCase(first);
+    short high = (short) toUpperCase(first);
     long repeatedLow = (low & 0xFFFFL) * SHORT_ONES;
     long repeatedHigh = (high & 0xFFFFL) * SHORT_ONES;
 
@@ -239,9 +242,7 @@ public final class ShortSwarScan {
   }
 
   static long exactShortRangeMask(long word, long repeatedLow, long repeatedHigh) {
-    long atLeastLow = ((word | SHORT_HIGH_BITS) - repeatedLow) & SHORT_HIGH_BITS;
-    long atMostHigh = ((repeatedHigh | SHORT_HIGH_BITS) - word) & SHORT_HIGH_BITS;
-    return atLeastLow & atMostHigh;
+    return Swar.exactShortRangeMask(word, repeatedLow, repeatedHigh);
   }
 
   private static long loadLongFromChars(char[] chars, int offset) {
@@ -256,7 +257,7 @@ public final class ShortSwarScan {
     for (int i = 0; i < prefixLen; i++) {
       char c = chars[offset + i];
       char p = prefix.charAt(i);
-      if (c != p && VectorScanProvider.asciiLower(c) != VectorScanProvider.asciiLower(p)) {
+      if (c != p && toLowerCase(c) != toLowerCase(p)) {
         return false;
       }
     }
@@ -271,7 +272,7 @@ public final class ShortSwarScan {
               ((bytes[byteOffset + (i << 1)] & 0xFF)
                   | ((bytes[byteOffset + (i << 1) + 1] & 0xFF) << 8));
       char p = prefix.charAt(i);
-      if (c != p && VectorScanProvider.asciiLower(c) != VectorScanProvider.asciiLower(p)) {
+      if (c != p && toLowerCase(c) != toLowerCase(p)) {
         return false;
       }
     }

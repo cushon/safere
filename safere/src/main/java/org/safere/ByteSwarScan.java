@@ -8,13 +8,14 @@ package org.safere;
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
 import static java.util.Objects.requireNonNull;
+import static org.safere.internal.Swar.BYTE_HIGH_BITS;
+import static org.safere.internal.Swar.BYTE_ONES;
 
 import java.lang.invoke.VarHandle;
+import org.safere.internal.Swar;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 1-byte sequences. */
 public abstract class ByteSwarScan {
-  static final long BYTE_ONES = 0x0101_0101_0101_0101L;
-  static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
   /**
    * Input sizes at which the SWAR candidate filter overtakes the skip loop. The filter always
@@ -223,11 +224,7 @@ public abstract class ByteSwarScan {
   }
 
   static long exactAsciiRangeMask(long values, long ascii, long repeatedLow, long repeatedHigh) {
-    // Setting each minuend's high bit makes both subtractions independent in every byte lane:
-    // each lane subtracts at most 127 from at least 128, so no borrow can cross a lane boundary.
-    long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
-    long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
-    return ascii & atLeastLow & atMostHigh;
+    return Swar.exactAsciiRangeMask(values, ascii, repeatedLow, repeatedHigh);
   }
 
   static int indexOfMultipleByteRanges(

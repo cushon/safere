@@ -3,7 +3,11 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere;
+package org.safere.foreign;
+
+import static org.safere.internal.Ascii.toLowerCase;
+import static org.safere.internal.Ascii.toUpperCase;
+import static org.safere.internal.Swar.UNSUPPORTED;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -16,7 +20,6 @@ import jdk.incubator.vector.VectorSpecies;
 /** Stateless 2-byte UTF-16 SIMD scanning kernels over {@link MemorySegment}. */
 public final class SegmentShortVectorScan {
 
-  public static final int UNSUPPORTED = -2;
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
   private static final ByteOrder NATIVE_ORDER = ByteOrder.nativeOrder();
 
@@ -117,8 +120,8 @@ public final class SegmentShortVectorScan {
     int vectorLen = SPECIES.length();
 
     char first = prefix.charAt(0);
-    short low = (short) asciiLower(first);
-    short high = (short) asciiUpper(first);
+    short low = (short) toLowerCase(first);
+    short high = (short) toUpperCase(first);
 
     ShortVector vLow = ShortVector.broadcast(SPECIES, low);
     ShortVector vHigh = ShortVector.broadcast(SPECIES, high);
@@ -164,18 +167,10 @@ public final class SegmentShortVectorScan {
                       ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (charIndex + i) << 1))
                   & 0xFFFF);
       char c2 = prefix.charAt(i);
-      if (c1 != c2 && asciiLower(c1) != asciiLower(c2)) {
+      if (c1 != c2 && toLowerCase(c1) != toLowerCase(c2)) {
         return false;
       }
     }
     return true;
-  }
-
-  private static char asciiLower(char ch) {
-    return ch >= 'A' && ch <= 'Z' ? (char) (ch + 32) : ch;
-  }
-
-  private static char asciiUpper(char ch) {
-    return ch >= 'a' && ch <= 'z' ? (char) (ch - 32) : ch;
   }
 }

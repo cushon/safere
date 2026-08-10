@@ -3,68 +3,75 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere;
+package org.safere.foreign;
 
+import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_16LE;
-import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
-import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.safere.ByteSwarScan;
+import org.safere.ByteVectorScan;
+import org.safere.ShortSwarScan;
+import org.safere.ShortVectorScan;
 
 /**
- * Comprehensive differential equivalence tests comparing {@link MemorySegment} SIMD/SWAR kernels
- * against array kernels and scalar reference models across on-heap and off-heap memory.
+ * Differential equivalence test comparing {@link MemorySegment} vector and SWAR scan kernels in
+ * {@code safere-foreign} against standard array kernels and scalar reference implementations.
  */
 class MemorySegmentScanEquivalenceTest {
 
-  private static final List<int[]> ASCII_CHAR_CLASS_RANGES =
-      List.of(
-          new int[] {'0', '9'},
-          new int[] {'a', 'z'},
-          new int[] {'a', 'z', 'A', 'Z'},
-          new int[] {'0', '9', 'a', 'z', 'A', 'Z'},
-          new int[] {'0', '9', 'a', 'z', 'A', 'Z', '_', '_'});
+  private static final int[][] BYTE_RANGES_CASES = {
+    {'a', 'z'},
+    {'0', '9'},
+    {'A', 'Z', 'a', 'z'},
+    {'a', 'z', '0', '9'},
+  };
 
-  private static final List<int[]> UTF16_CHAR_CLASS_RANGES =
-      List.of(
-          new int[] {'0', '9'},
-          new int[] {'a', 'z', 'A', 'Z'},
-          new int[] {0x0400, 0x04FF}, // Cyrillic
-          new int[] {0x3040, 0x309F}, // Hiragana
-          new int[] {'0', '9', 0x0400, 0x04FF});
+  private static final int[][] UTF16_RANGES_CASES = {
+    {'a', 'z'},
+    {'0', '9'},
+    {'A', 'Z', 'a', 'z'},
+    {'\u0400', '\u04FF'}, // Cyrillic
+    {'a', 'z', '\u0400', '\u04FF'},
+  };
+
+  private static final String[] TEST_PREFIXES = {
+    "a", "abc", "HTTP", "Content-Type", "xyz", "hello-world"
+  };
 
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");
       return true;
-    } catch (Throwable t) {
+    } catch (ClassNotFoundException | LinkageError e) {
       return false;
     }
   }
 
   @ParameterizedTest
-  @ValueSource(ints = {0, 1, 3, 7, 15, 16, 31, 32, 63, 64, 127, 128, 512, 1024, 2048})
+  @ValueSource(ints = {0, 1, 3, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 512, 1024, 2048})
   @DisplayName("1-byte Latin-1 char class scan equivalence across Array, Heap-Segment, Off-Heap")
   void testLatin1CharClassEquivalence(int length) {
     Random random = new Random(42 + length);
     byte[] input = new byte[length];
+    random.nextBytes(input);
+
     for (int i = 0; i < length; i++) {
-      input[i] = (byte) (random.nextInt(26) + 'a'); // random lowercase
+      input[i] = (byte) (input[i] & 0x7F);
     }
 
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment heapSegment = MemorySegment.ofArray(input);
       MemorySegment offHeapSegment = arena.allocateFrom(ValueLayout.JAVA_BYTE, input);
 
-      for (int[] ranges : ASCII_CHAR_CLASS_RANGES) {
+      for (int[] ranges : BYTE_RANGES_CASES) {
         for (int start : new int[] {0, 1, 7, 15, 31, Math.max(0, length - 5)}) {
           if (start > length) continue;
 
@@ -126,7 +133,6 @@ class MemorySegmentScanEquivalenceTest {
     for (int i = 0; i < charLength; i++) {
       chars[i] = (char) (random.nextInt(26) + 'a');
     }
-    // Inject some Cyrillic chars
     if (charLength > 10) {
       chars[charLength / 2] = '\u0416';
     }
@@ -138,56 +144,54 @@ class MemorySegmentScanEquivalenceTest {
       MemorySegment heapSegment = MemorySegment.ofArray(utf16Bytes);
       MemorySegment offHeapSegment = arena.allocateFrom(ValueLayout.JAVA_BYTE, utf16Bytes);
 
-      for (int[] ranges : UTF16_CHAR_CLASS_RANGES) {
+      for (int[] ranges : UTF16_RANGES_CASES) {
         for (int start : new int[] {0, 1, 7, 15, 31, Math.max(0, charLength - 5)}) {
           if (start > charLength) continue;
 
-          int expected = scalarIndexOfCharClass(chars, ranges, start);
+          int expected = scalarIndexOfCharClassUtf16(chars, ranges, start);
 
-          // SWAR Kernels (Always available)
-          int shortSwar =
-              (ranges.length <= 4)
-                  ? ShortSwarScan.indexOfCharClassUtf16(utf16Bytes, 0, charLength, ranges, start)
-                  : expected;
-          int segShortSwar =
-              (ranges.length <= 4)
-                  ? SegmentShortSwarScan.indexOfCharClassUtf16(
-                      heapSegment, 0, charLength, ranges, start)
-                  : expected;
-          int offHeapShortSwar =
-              (ranges.length <= 4)
-                  ? SegmentShortSwarScan.indexOfCharClassUtf16(
-                      offHeapSegment, 0, charLength, ranges, start)
-                  : expected;
+          // Array Kernels
+          int charSwar = ShortSwarScan.indexOfCharClass(chars, 0, charLength, ranges, start);
+          int utf16ByteSwar =
+              ShortSwarScan.indexOfCharClassUtf16(utf16Bytes, 0, charLength, ranges, start);
 
-          assertThat(shortSwar)
-              .as("ShortSwarScan at start=%d, len=%d", start, charLength)
-              .isEqualTo(expected);
-          assertThat(segShortSwar)
+          assertThat(charSwar).as("char[] SWAR at start=%d", start).isEqualTo(expected);
+          assertThat(utf16ByteSwar).as("byte[] UTF-16 SWAR at start=%d", start).isEqualTo(expected);
+
+          // MemorySegment SWAR Kernels
+          int segSwarHeap =
+              SegmentShortSwarScan.indexOfCharClassUtf16(heapSegment, 0, charLength, ranges, start);
+          int segSwarOffHeap =
+              SegmentShortSwarScan.indexOfCharClassUtf16(
+                  offHeapSegment, 0, charLength, ranges, start);
+
+          assertThat(segSwarHeap)
               .as("SegmentShortSwar (heap) at start=%d", start)
               .isEqualTo(expected);
-          assertThat(offHeapShortSwar)
+          assertThat(segSwarOffHeap)
               .as("SegmentShortSwar (off-heap) at start=%d", start)
               .isEqualTo(expected);
 
-          // Vector API Kernels (When enabled on runtime)
+          // Vector API Kernels
           if (isVectorApiAvailable()) {
-            int shortVector =
+            int charVector = ShortVectorScan.indexOfCharClass(chars, 0, charLength, ranges, start);
+            int utf16ByteVector =
                 ShortVectorScan.indexOfCharClassUtf16(utf16Bytes, 0, charLength, ranges, start);
-            int segShortVector =
+            int segVecHeap =
                 SegmentShortVectorScan.indexOfCharClassUtf16(
                     heapSegment, 0, charLength, ranges, start);
-            int offHeapShortVector =
+            int segVecOffHeap =
                 SegmentShortVectorScan.indexOfCharClassUtf16(
                     offHeapSegment, 0, charLength, ranges, start);
 
-            assertThat(shortVector)
-                .as("ShortVectorScan at start=%d, len=%d", start, charLength)
+            assertThat(charVector).as("char[] Vector at start=%d", start).isEqualTo(expected);
+            assertThat(utf16ByteVector)
+                .as("byte[] UTF-16 Vector at start=%d", start)
                 .isEqualTo(expected);
-            assertThat(segShortVector)
+            assertThat(segVecHeap)
                 .as("SegmentShortVector (heap) at start=%d", start)
                 .isEqualTo(expected);
-            assertThat(offHeapShortVector)
+            assertThat(segVecOffHeap)
                 .as("SegmentShortVector (off-heap) at start=%d", start)
                 .isEqualTo(expected);
           }
@@ -196,54 +200,47 @@ class MemorySegmentScanEquivalenceTest {
     }
   }
 
-  @Test
-  @DisplayName("Case-insensitive prefix scan equivalence for 1-byte and 2-byte MemorySegment")
-  void testIgnoreCaseEquivalence() {
-    String prefix = "hElLo";
-    String haystackLatin1 = "x".repeat(500) + "hello world" + "x".repeat(500);
-    String haystackUtf16 =
-        "x".repeat(500)
-            + "\u0416\u0435\u043B\u043B\u043E"
-            + "x".repeat(200)
-            + "HELLO"
-            + "x".repeat(300);
-
-    byte[] latin1Bytes = haystackLatin1.getBytes(ISO_8859_1);
-    byte[] utf16Bytes = haystackUtf16.getBytes(UTF_16LE);
+  @ParameterizedTest
+  @ValueSource(strings = {"hello world", "HTTP/1.1 200 OK", "quick brown fox jumps", "FoObAr12345"})
+  @DisplayName("IgnoreCase Prefix scan equivalence across Array and MemorySegment")
+  void testIgnoreCaseEquivalence(String sample) {
+    byte[] latin1 = sample.getBytes(ISO_8859_1);
+    char[] chars = sample.toCharArray();
+    byte[] utf16 = sample.getBytes(UTF_16LE);
 
     try (Arena arena = Arena.ofConfined()) {
-      MemorySegment latin1Segment = arena.allocateFrom(ValueLayout.JAVA_BYTE, latin1Bytes);
-      MemorySegment utf16Segment = arena.allocateFrom(ValueLayout.JAVA_BYTE, utf16Bytes);
+      MemorySegment latin1Seg = arena.allocateFrom(ValueLayout.JAVA_BYTE, latin1);
+      MemorySegment utf16Seg = arena.allocateFrom(ValueLayout.JAVA_BYTE, utf16);
 
-      // SWAR
-      int latin1Swar =
-          SegmentByteSwarScan.indexOfIgnoreCase(
-              latin1Segment, 0, haystackLatin1.length(), prefix, 0);
-      assertThat(latin1Swar).isEqualTo(500);
+      for (String prefix : TEST_PREFIXES) {
+        int expectedLatin1 = scalarIndexOfIgnoreCase(latin1, prefix, 0);
+        int segByteSwar =
+            SegmentByteSwarScan.indexOfIgnoreCase(latin1Seg, 0, latin1.length, prefix, 0);
+        assertThat(segByteSwar).isEqualTo(expectedLatin1);
 
-      int utf16Swar =
-          SegmentShortSwarScan.indexOfIgnoreCaseUtf16(
-              utf16Segment, 0, haystackUtf16.length(), prefix, 0);
-      assertThat(utf16Swar).isEqualTo(705);
+        if (isVectorApiAvailable()) {
+          int segByteVec =
+              SegmentByteVectorScan.indexOfIgnoreCase(latin1Seg, 0, latin1.length, prefix, 0);
+          assertThat(segByteVec).isEqualTo(expectedLatin1);
+        }
 
-      // Vector
-      if (isVectorApiAvailable()) {
-        int latin1Vec =
-            SegmentByteVectorScan.indexOfIgnoreCase(
-                latin1Segment, 0, haystackLatin1.length(), prefix, 0);
-        assertThat(latin1Vec).isEqualTo(500);
+        int expectedUtf16 = scalarIndexOfIgnoreCaseUtf16(chars, prefix, 0);
+        int segShortSwar =
+            SegmentShortSwarScan.indexOfIgnoreCaseUtf16(utf16Seg, 0, chars.length, prefix, 0);
+        assertThat(segShortSwar).isEqualTo(expectedUtf16);
 
-        int utf16Vec =
-            SegmentShortVectorScan.indexOfIgnoreCaseUtf16(
-                utf16Segment, 0, haystackUtf16.length(), prefix, 0);
-        assertThat(utf16Vec).isEqualTo(705);
+        if (isVectorApiAvailable()) {
+          int segShortVec =
+              SegmentShortVectorScan.indexOfIgnoreCaseUtf16(utf16Seg, 0, chars.length, prefix, 0);
+          assertThat(segShortVec).isEqualTo(expectedUtf16);
+        }
       }
     }
   }
 
-  private static int scalarIndexOfAsciiClass(byte[] input, int[] ranges, int start) {
-    for (int i = start; i < input.length; i++) {
-      int b = input[i] & 0xFF;
+  private static int scalarIndexOfAsciiClass(byte[] bytes, int[] ranges, int start) {
+    for (int i = start; i < bytes.length; i++) {
+      int b = bytes[i] & 0xFF;
       for (int r = 0; r < ranges.length; r += 2) {
         if (b >= ranges[r] && b <= ranges[r + 1]) {
           return i;
@@ -253,14 +250,51 @@ class MemorySegmentScanEquivalenceTest {
     return -1;
   }
 
-  private static int scalarIndexOfCharClass(char[] input, int[] ranges, int start) {
-    for (int i = start; i < input.length; i++) {
-      char c = input[i];
+  private static int scalarIndexOfCharClassUtf16(char[] chars, int[] ranges, int start) {
+    for (int i = start; i < chars.length; i++) {
+      char c = chars[i];
       for (int r = 0; r < ranges.length; r += 2) {
         if (c >= ranges[r] && c <= ranges[r + 1]) {
+          if (Character.isLowSurrogate(c) && i > 0 && Character.isHighSurrogate(chars[i - 1])) {
+            continue;
+          }
           return i;
         }
       }
+    }
+    return -1;
+  }
+
+  private static int scalarIndexOfIgnoreCase(byte[] bytes, String prefix, int start) {
+    int len = prefix.length();
+    for (int i = start; i <= bytes.length - len; i++) {
+      boolean match = true;
+      for (int j = 0; j < len; j++) {
+        char c1 = (char) (bytes[i + j] & 0xFF);
+        char c2 = prefix.charAt(j);
+        if (Character.toLowerCase(c1) != Character.toLowerCase(c2)) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return i;
+    }
+    return -1;
+  }
+
+  private static int scalarIndexOfIgnoreCaseUtf16(char[] chars, String prefix, int start) {
+    int len = prefix.length();
+    for (int i = start; i <= chars.length - len; i++) {
+      boolean match = true;
+      for (int j = 0; j < len; j++) {
+        char c1 = chars[i + j];
+        char c2 = prefix.charAt(j);
+        if (Character.toLowerCase(c1) != Character.toLowerCase(c2)) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return i;
     }
     return -1;
   }

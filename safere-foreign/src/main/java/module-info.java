@@ -3,8 +3,10 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-/** SafeRE: a linear-time regular expression matching library for Java. */
-module org.safere {
-  exports org.safere;
-  exports org.safere.internal;
+/** SafeRE Foreign Memory: MemorySegment scanning kernels for SafeRE. */
+module org.safere.foreign {
+  requires org.safere;
+  requires static jdk.incubator.vector;
+
+  exports org.safere.foreign;
 }

@@ -3,17 +3,15 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere;
+package org.safere.foreign;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import org.safere.internal.Ascii;
+import org.safere.internal.Swar;
 
 /** Stateless 1-byte 64-bit SWAR scanning kernels over {@link MemorySegment}. */
 public final class SegmentByteSwarScan {
-
-  public static final int UNSUPPORTED = -2;
-  private static final long BYTE_ONES = 0x0101_0101_0101_0101L;
-  private static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
   private SegmentByteSwarScan() {}
 
@@ -21,23 +19,23 @@ public final class SegmentByteSwarScan {
       MemorySegment segment, long offset, long length, int[] ranges, int start) {
     int numRanges = ranges.length / 2;
     if (numRanges < 1 || numRanges > 2 || (ranges.length & 1) != 0) {
-      return UNSUPPORTED;
+      return Swar.UNSUPPORTED;
     }
 
     long pos = Math.max(0, start);
     long wordEnd = length - Long.BYTES;
 
-    long low0 = (ranges[0] & 0xFFL) * BYTE_ONES;
-    long high0 = (ranges[1] & 0xFFL) * BYTE_ONES;
-    long low1 = numRanges > 1 ? (ranges[2] & 0xFFL) * BYTE_ONES : 0;
-    long high1 = numRanges > 1 ? (ranges[3] & 0xFFL) * BYTE_ONES : 0;
+    long low0 = (ranges[0] & 0xFFL) * Swar.BYTE_ONES;
+    long high0 = (ranges[1] & 0xFFL) * Swar.BYTE_ONES;
+    long low1 = numRanges > 1 ? (ranges[2] & 0xFFL) * Swar.BYTE_ONES : 0;
+    long high1 = numRanges > 1 ? (ranges[3] & 0xFFL) * Swar.BYTE_ONES : 0;
 
     if (numRanges == 1) {
       while (pos <= wordEnd) {
         long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, offset + pos);
-        long values = word & ~BYTE_HIGH_BITS;
-        long ascii = ~word & BYTE_HIGH_BITS;
-        long matches = exactAsciiRangeMask(values, ascii, low0, high0);
+        long values = word & ~Swar.BYTE_HIGH_BITS;
+        long ascii = ~word & Swar.BYTE_HIGH_BITS;
+        long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
 
         if (matches != 0) {
           long limit = pos + Long.BYTES;
@@ -53,11 +51,11 @@ public final class SegmentByteSwarScan {
     } else {
       while (pos <= wordEnd) {
         long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, offset + pos);
-        long values = word & ~BYTE_HIGH_BITS;
-        long ascii = ~word & BYTE_HIGH_BITS;
+        long values = word & ~Swar.BYTE_HIGH_BITS;
+        long ascii = ~word & Swar.BYTE_HIGH_BITS;
         long matches =
-            exactAsciiRangeMask(values, ascii, low0, high0)
-                | exactAsciiRangeMask(values, ascii, low1, high1);
+            Swar.exactAsciiRangeMask(values, ascii, low0, high0)
+                | Swar.exactAsciiRangeMask(values, ascii, low1, high1);
 
         if (matches != 0) {
           long limit = pos + Long.BYTES;
@@ -89,7 +87,7 @@ public final class SegmentByteSwarScan {
     int prefixLen = prefix.length();
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
-        return UNSUPPORTED;
+        return Swar.UNSUPPORTED;
       }
     }
 
@@ -97,18 +95,18 @@ public final class SegmentByteSwarScan {
     long wordEnd = length - Long.BYTES;
 
     char first = prefix.charAt(0);
-    byte low = (byte) asciiLower(first);
-    byte high = (byte) asciiUpper(first);
-    long repeatedLow = (low & 0xFFL) * BYTE_ONES;
-    long repeatedHigh = (high & 0xFFL) * BYTE_ONES;
+    byte low = (byte) Ascii.toLowerCase(first);
+    byte high = (byte) Ascii.toUpperCase(first);
+    long repeatedLow = (low & 0xFFL) * Swar.BYTE_ONES;
+    long repeatedHigh = (high & 0xFFL) * Swar.BYTE_ONES;
 
     while (pos <= wordEnd) {
       long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, offset + pos);
       long diffLow = word ^ repeatedLow;
       long diffHigh = word ^ repeatedHigh;
       long matches =
-          (((diffLow - BYTE_ONES) & ~diffLow) | ((diffHigh - BYTE_ONES) & ~diffHigh))
-              & BYTE_HIGH_BITS;
+          (((diffLow - Swar.BYTE_ONES) & ~diffLow) | ((diffHigh - Swar.BYTE_ONES) & ~diffHigh))
+              & Swar.BYTE_HIGH_BITS;
 
       if (matches != 0) {
         long limit = pos + Long.BYTES;
@@ -130,30 +128,15 @@ public final class SegmentByteSwarScan {
     return -1;
   }
 
-  private static long exactAsciiRangeMask(
-      long values, long ascii, long repeatedLow, long repeatedHigh) {
-    long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
-    long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
-    return ascii & atLeastLow & atMostHigh;
-  }
-
   private static boolean regionMatchesAsciiIgnoreCase(
       MemorySegment segment, long offset, String prefix, int len) {
     for (int i = 0; i < len; i++) {
       char c1 = (char) (segment.get(ValueLayout.JAVA_BYTE, offset + i) & 0xFF);
       char c2 = prefix.charAt(i);
-      if (c1 != c2 && asciiLower(c1) != asciiLower(c2)) {
+      if (c1 != c2 && Ascii.toLowerCase(c1) != Ascii.toLowerCase(c2)) {
         return false;
       }
     }
     return true;
-  }
-
-  private static char asciiLower(char ch) {
-    return ch >= 'A' && ch <= 'Z' ? (char) (ch + 32) : ch;
-  }
-
-  private static char asciiUpper(char ch) {
-    return ch >= 'a' && ch <= 'z' ? (char) (ch - 32) : ch;
   }
 }
