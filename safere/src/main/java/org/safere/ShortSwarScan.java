@@ -245,10 +245,10 @@ public final class ShortSwarScan {
   }
 
   private static long loadLongFromChars(char[] chars, int offset) {
-    return ((long) chars[offset] & 0xFFFFL)
-        | (((long) chars[offset + 1] & 0xFFFFL) << 16)
-        | (((long) chars[offset + 2] & 0xFFFFL) << 32)
-        | (((long) chars[offset + 3] & 0xFFFFL) << 48);
+    return (chars[offset] & 0xFFFFL)
+        | ((chars[offset + 1] & 0xFFFFL) << 16)
+        | ((chars[offset + 2] & 0xFFFFL) << 32)
+        | ((chars[offset + 3] & 0xFFFFL) << 48);
   }
 
   private static boolean regionMatchesAsciiIgnoreCase(
