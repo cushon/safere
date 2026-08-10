@@ -7,11 +7,12 @@ package org.safere;
 
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
+import static java.util.Objects.requireNonNull;
 
 import java.lang.invoke.VarHandle;
 
-/** Stateless 64-bit SWAR kernels for scanning 1-byte sequences (UTF-8 and Latin-1 Strings). */
-final class ByteSwarScan {
+/** Shared 64-bit SWAR kernels for scanning bounded 1-byte sequences. */
+abstract class ByteSwarScan {
   static final long BYTE_ONES = 0x0101_0101_0101_0101L;
   static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
@@ -27,11 +28,25 @@ final class ByteSwarScan {
 
   private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, nativeOrder());
 
+  final byte[] bytes;
+  final int offset;
+  final int length;
+
+  ByteSwarScan(byte[] bytes, int offset, int length) {
+    this.bytes = requireNonNull(bytes, "bytes");
+    if (offset < 0 || length < 0 || offset > bytes.length - length) {
+      throw new IndexOutOfBoundsException(
+          "offset=" + offset + ", length=" + length + ", arrayLength=" + bytes.length);
+    }
+    this.offset = offset;
+    this.length = length;
+  }
+
   static long filterThreshold(int literalLength) {
     return Math.max(MIN_FILTER_LENGTH, (long) literalLength * FILTER_LENGTH_FACTOR);
   }
 
-  static int indexOfByte(byte[] bytes, int offset, int length, byte target, int start) {
+  final int indexOfByte(byte target, int start) {
     int position = start;
     int wordEnd = length - Long.BYTES;
     long repeatedTarget = (target & 0xFFL) * BYTE_ONES;
@@ -311,6 +326,4 @@ final class ByteSwarScan {
     }
     return -1;
   }
-
-  private ByteSwarScan() {}
 }
