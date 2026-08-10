@@ -38,6 +38,15 @@ interface InputScanner {
   /** Returns whether {@code pos} is a code-point boundary in this representation. */
   boolean isCodePointBoundary(int pos);
 
+  /** Moves backward by at most {@code count} Unicode code points from {@code pos}. */
+  default int retreatByCodePoints(int pos, int count) {
+    int result = pos;
+    for (int remaining = count; remaining > 0 && result > 0; remaining--) {
+      result = position(decodeBackward(result));
+    }
+    return result;
+  }
+
   /** Returns the code point starting at the given index. */
   default int codePointAt(int pos) {
     return codePoint(decodeForward(pos));

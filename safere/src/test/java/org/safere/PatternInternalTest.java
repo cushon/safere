@@ -198,6 +198,27 @@ class PatternInternalTest {
   }
 
   @Test
+  void deeplyNestedFixedOffsetWidthExtractionIsStackSafe() {
+    Pattern p = Pattern.compile(nestedFixedOffsetPattern(2_000));
+
+    assertThat(p.fixedOffsetLiteral()).isNotNull();
+  }
+
+  @Test
+  void largeCapturedLiteralConcatenationRecordsMaximalSuffix() {
+    StringBuilder regex = new StringBuilder("[ab]");
+    for (int i = 0; i < 2_000; i++) {
+      regex.append("(x)");
+    }
+
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile(regex.toString()).fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).hasSize(2_000);
+    assertThat(fixed.minOffset()).isEqualTo(1);
+  }
+
+  @Test
   void caseInsensitiveAsciiLiteralUsesLiteralMatchMetadata() {
     Pattern p = Pattern.compile("(?i)i");
 
@@ -242,9 +263,40 @@ class PatternInternalTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"\\d+/x", "[αβ]/x", "[ab](?i:x)", "literal-prefix"})
+  @ValueSource(strings = {"\\d+/x", "[ab](?i:x)", "literal-prefix"})
   void variableWidthUnicodeAndOrdinaryPrefixesDoNotRecordFixedOffsetLiterals(String regex) {
     assertThat(Pattern.compile(regex).fixedOffsetLiteral()).isNull();
+  }
+
+  @Test
+  void unicodeClassOffsetsAreRecordedAsNonDiscreteCodePointRanges() {
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile("[αβ]/x").fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.minOffset()).isEqualTo(1);
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).isNull();
+  }
+
+  @Test
+  void discreteMultiOffsetLiteralsAreRecorded() {
+    Pattern.FixedOffsetLiteral fixed =
+        Pattern.compile("(^|[a-z])(#!customTag)").fixedOffsetLiteral();
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).isEqualTo("#!customTag");
+    assertThat(fixed.minOffset()).isZero();
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).containsExactly(0, 1);
+  }
+
+  @Test
+  void boundedRangeOffsetLiteralsAreRecorded() {
+    Pattern.FixedOffsetLiteral fixed =
+        Pattern.compile("\\s{0,8}renderElement\\(").fixedOffsetLiteral();
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).isEqualTo("renderElement(");
+    assertThat(fixed.minOffset()).isEqualTo(0);
+    assertThat(fixed.maxOffset()).isEqualTo(8);
   }
 
   @ParameterizedTest
@@ -398,6 +450,19 @@ class PatternInternalTest {
     for (int i = 0; i < depth; i++) {
       regex.append(")x");
     }
+    return regex.toString();
+  }
+
+  private static String nestedFixedOffsetPattern(int depth) {
+    StringBuilder regex = new StringBuilder(depth * 3 + 6);
+    for (int i = 0; i < depth; i++) {
+      regex.append('(');
+    }
+    regex.append("[ab]");
+    for (int i = 0; i < depth; i++) {
+      regex.append(")x");
+    }
+    regex.append("ZZ");
     return regex.toString();
   }
 
