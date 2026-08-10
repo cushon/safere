@@ -13,15 +13,18 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.MutableCallSite;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
@@ -205,6 +208,13 @@ public final class Pattern implements Serializable {
   private final transient int[] requiredLiteralShifts;
 
   /**
+   * A small disjoint set of case-sensitive literal substrings for alternation patterns where every
+   * branch requires at least one literal substring. If none of these literals are present in the
+   * input, the search is rejected immediately.
+   */
+  private final transient DisjointRequiredLiterals disjointRequiredLiterals;
+
+  /**
    * Lazily computed OnePass analysis results. Holds the OnePass automaton (if eligible) and derived
    * flags ({@code canOnePassFind}, {@code canOnePassSubmatch}). Computed on first access to avoid
    * paying the OnePass BFS cost at compile time.
@@ -275,6 +285,40 @@ public final class Pattern implements Serializable {
   private record OnePassAnalysis(
       OnePass onePass, boolean canPrimary, boolean canFind, boolean canSubmatch) {}
 
+  /** Precomputed metadata for a small disjoint set of required literal substrings. */
+  @SuppressWarnings("ArrayRecordComponent")
+  record DisjointRequiredLiterals(
+      String[] literals,
+      byte[][] utf8,
+      int[][] failure,
+      int[][] shifts) {
+
+    static DisjointRequiredLiterals create(String[] literals) {
+      if (literals == null || literals.length == 0) {
+        return null;
+      }
+      byte[][] utf8 = new byte[literals.length][];
+      int[][] failure = new int[literals.length][];
+      int[][] shifts = new int[literals.length][];
+      for (int i = 0; i < literals.length; i++) {
+        byte[] bytes = literals[i].getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        utf8[i] = bytes;
+        failure[i] = literalFailure(bytes);
+        shifts[i] = literalShifts(bytes);
+      }
+      return new DisjointRequiredLiterals(literals, utf8, failure, shifts);
+    }
+
+    boolean matchesAny(Utf8InputScanner scanner, int searchFrom) {
+      for (int i = 0; i < utf8.length; i++) {
+        if (scanner.indexOf(utf8[i], failure[i], shifts[i], searchFrom) >= 0) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+
   private Pattern(
       String pattern,
       int flags,
@@ -303,6 +347,7 @@ public final class Pattern implements Serializable {
       long requiredMatchClassBitmap0,
       long requiredMatchClassBitmap1,
       String requiredLiteral,
+      DisjointRequiredLiterals disjointRequiredLiterals,
       EnginePathOptions enginePathOptions) {
     this.patternId = nextPatternId();
     this.pattern = pattern;
@@ -375,6 +420,7 @@ public final class Pattern implements Serializable {
         requiredLiteralUtf8 == null ? null : literalFailure(requiredLiteralUtf8);
     this.requiredLiteralShifts =
         requiredLiteralUtf8 == null ? null : literalShifts(requiredLiteralUtf8);
+    this.disjointRequiredLiterals = disjointRequiredLiterals;
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
     onePassAnalysis();
@@ -499,6 +545,10 @@ public final class Pattern implements Serializable {
     CharClassScanInfo requiredMatchClass =
         extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
     String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
+    DisjointRequiredLiterals disjointRequiredLiterals =
+        (prefix == null && requiredLiteral == null)
+            ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
+            : null;
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,
@@ -528,6 +578,7 @@ public final class Pattern implements Serializable {
         requiredMatchClass != null ? requiredMatchClass.bitmap0 : 0,
         requiredMatchClass != null ? requiredMatchClass.bitmap1 : 0,
         requiredLiteral,
+        disjointRequiredLiterals,
         enginePathOptions);
   }
 
@@ -652,6 +703,12 @@ public final class Pattern implements Serializable {
             < 0) {
       return false;
     }
+    if (enginePathOptions.literalFastPaths()
+        && disjointRequiredLiterals != null
+        && prefixUtf8 == null
+        && !disjointRequiredLiterals.matchesAny(scanner, 0)) {
+      return false;
+    }
     if (enginePathOptions.charClassMatchFastPaths()
         && requiredMatchClassRanges != null
         && prefixUtf8 == null
@@ -721,6 +778,14 @@ public final class Pattern implements Serializable {
         && prefixUtf8 == null
         && scanner.indexOf(requiredLiteralUtf8, requiredLiteralFailure, requiredLiteralShifts, 0)
             < 0) {
+      diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
+      diagnostics.boundary(MatchStrategy.LITERAL);
+      return false;
+    }
+    if (enginePathOptions.literalFastPaths()
+        && disjointRequiredLiterals != null
+        && prefixUtf8 == null
+        && !disjointRequiredLiterals.matchesAny(scanner, 0)) {
       diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
       diagnostics.boundary(MatchStrategy.LITERAL);
       return false;
@@ -1372,6 +1437,14 @@ public final class Pattern implements Serializable {
 
   int[] requiredLiteralShifts() {
     return requiredLiteralShifts;
+  }
+
+  DisjointRequiredLiterals disjointRequiredLiterals() {
+    return disjointRequiredLiterals;
+  }
+
+  String[] requiredDisjointLiterals() {
+    return disjointRequiredLiterals != null ? disjointRequiredLiterals.literals() : null;
   }
 
   /**
@@ -3303,6 +3376,83 @@ public final class Pattern implements Serializable {
       }
     }
     return longest;
+  }
+
+  /**
+   * Finds a small set of disjoint required literal substrings for alternation patterns where every
+   * branch requires at least one literal substring (e.g., {@code (apple.*|banana.*|orange.*)}).
+   *
+   * <p>Returns {@code null} if any branch has no required literal, or if the number of distinct
+   * literals is outside [2, 16].
+   */
+  private static String[] extractDisjointRequiredLiterals(Regexp re) {
+    Regexp node = re;
+    while (node != null
+        && (node.op == RegexpOp.CAPTURE
+            || node.op == RegexpOp.NON_CAPTURE
+            || node.op == RegexpOp.PLUS)) {
+      node = node.sub();
+    }
+    if (node == null) {
+      return null;
+    }
+    if (node.op == RegexpOp.CONCAT && node.subs != null) {
+      for (Regexp sub : node.subs) {
+        String[] disjoint = extractDisjointRequiredLiteralsFromAlternate(sub);
+        if (disjoint != null) {
+          return disjoint;
+        }
+      }
+      return null;
+    }
+    return extractDisjointRequiredLiteralsFromAlternate(node);
+  }
+
+  private static String[] extractDisjointRequiredLiteralsFromAlternate(Regexp re) {
+    Regexp node = re;
+    while (node != null
+        && (node.op == RegexpOp.CAPTURE
+            || node.op == RegexpOp.NON_CAPTURE
+            || node.op == RegexpOp.PLUS)) {
+      node = node.sub();
+    }
+    if (node == null || node.op != RegexpOp.ALTERNATE || node.subs == null || node.subs.size() < 2) {
+      return null;
+    }
+    Set<String> literalSet = new LinkedHashSet<>();
+    for (Regexp branch : node.subs) {
+      String req = extractRequiredLiteral(branch);
+      if (req == null || req.length() < 2) {
+        return null;
+      }
+      literalSet.add(req);
+    }
+    // Substring subsumption / set minimization:
+    // If literal A is a substring of literal B, any text containing B already contains A.
+    // Therefore, searching for A is sufficient to cover branch B, and the longer literal B can
+    // be pruned from the required search set.
+    List<String> rawList = new ArrayList<>(literalSet);
+    Set<String> pruned = new LinkedHashSet<>();
+    for (int i = 0; i < rawList.size(); i++) {
+      String s1 = rawList.get(i);
+      boolean subsumed = false;
+      for (int j = 0; j < rawList.size(); j++) {
+        if (i != j) {
+          String s2 = rawList.get(j);
+          if (s1.contains(s2) && (s1.length() > s2.length() || (s1.length() == s2.length() && j < i))) {
+            subsumed = true;
+            break;
+          }
+        }
+      }
+      if (!subsumed) {
+        pruned.add(s1);
+      }
+    }
+    if (pruned.isEmpty() || pruned.size() > 16) {
+      return null;
+    }
+    return pruned.toArray(new String[0]);
   }
 
   private static CharClass literalCharClass(int cp, int flags) {

@@ -352,6 +352,49 @@ class PatternInternalTest {
   }
 
   @Test
+  void disjointRequiredLiteralsAreRecordedForAlternations() {
+    Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");
+    assertThat(p.requiredDisjointLiterals()).containsExactly("apple", "banana", "cherry");
+    assertThat(p.requiredLiteral()).isNull();
+
+    Pattern p2 = Pattern.compile("(foo.*|bar.*|baz.*)");
+    assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "bar", "baz");
+
+    Pattern p3 = Pattern.compile("(?:\\bfirstToken\\b|\\bsecondToken\\b)");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("firstToken", "secondToken");
+  }
+
+  @Test
+  void disjointRequiredLiteralsSubsumptionMinimization() {
+    // pineapple contains apple, so pineapple is pruned and only apple is required.
+    Pattern p1 = Pattern.compile(".*(?:apple|pineapple).*");
+    assertThat(p1.requiredDisjointLiterals()).containsExactly("apple");
+
+    // prefix_foo contains foo, bar_baz contains baz
+    Pattern p2 = Pattern.compile(".*(?:prefix_foo|foo|bar_baz|baz).*");
+    assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "baz");
+
+    // https contains http
+    Pattern p3 = Pattern.compile(".*(?:http|https).*");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("http");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        ".*(?:apple|banana)?.*",
+        ".*(?:apple|.*).*",
+        ".*(?:apple|a).*",
+        "(?i).*(?:apple|banana).*"
+      })
+  void invalidOrNullableAlternationsDoNotRecordDisjointLiterals(String regex) {
+    Pattern p = Pattern.compile(regex);
+    if (p.prefix() == null && p.requiredLiteral() == null) {
+      assertThat(p.requiredDisjointLiterals()).isNull();
+    }
+  }
+
+  @Test
   void boundaryPrefixedLiteralRecordsRequiredClass() {
     Pattern p = Pattern.compile("\\b{g}z");
 

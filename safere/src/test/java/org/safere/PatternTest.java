@@ -1062,4 +1062,62 @@ class PatternTest {
       assertThatCode(() -> Pattern.compile(regex)).doesNotThrowAnyException();
     }
   }
+
+  @Nested
+  @DisplayName("disjoint reject prefilter")
+  class DisjointRejectPrefilterTests {
+
+    @Test
+    @DisplayName("rejects search when none of the disjoint required literals are present")
+    void rejectsWhenNoDisjointLiteralsPresent() {
+      Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");
+      Matcher m = p.matcher("grapefruit orange peach plum lemon");
+      assertThat(m.find()).isFalse();
+
+      Utf8Input input =
+          Utf8Input.trusted(
+              "grapefruit orange peach plum lemon"
+                  .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      assertThat(p.find(input)).isFalse();
+    }
+
+    @Test
+    @DisplayName("matches when at least one disjoint required literal is present")
+    void matchesWhenOneDisjointLiteralIsPresent() {
+      Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");
+      Matcher m = p.matcher("grapefruit banana peach pineapple lemon");
+      assertThat(m.find()).isTrue();
+      assertThat(m.group()).isEqualTo("grapefruit banana peach pineapple lemon");
+
+      Utf8Input input =
+          Utf8Input.trusted(
+              "grapefruit banana peach pineapple lemon"
+                  .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      assertThat(p.find(input)).isTrue();
+    }
+
+    @Test
+    @DisplayName("correctly handles word boundaries and alternations")
+    void wordBoundaryDisjointAlternation() {
+      Pattern p = Pattern.compile("(?:\\bapple\\b|\\bbanana\\b)");
+      Matcher m = p.matcher("there is an apple here");
+      assertThat(m.find()).isTrue();
+      assertThat(m.group()).isEqualTo("apple");
+
+      Matcher m2 = p.matcher("there is a pineapple here");
+      assertThat(m2.find()).isFalse();
+    }
+
+    @Test
+    @DisplayName("subsumed alternations correctly reject when shortest required literal is missing")
+    void subsumedAlternationRejectionAndMatching() {
+      Pattern p = Pattern.compile(".*(?:apple|pineapple).*");
+      Matcher m = p.matcher("grapefruit orange peach plum lemon");
+      assertThat(m.find()).isFalse();
+
+      Matcher m2 = p.matcher("there is a pineapple here");
+      assertThat(m2.find()).isTrue();
+      assertThat(m2.group()).isEqualTo("there is a pineapple here");
+    }
+  }
 }
