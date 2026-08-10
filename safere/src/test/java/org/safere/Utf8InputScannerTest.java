@@ -186,7 +186,7 @@ class Utf8InputScannerTest {
         for (int value = 0; value < 256; value++) {
           long word = value * byteOnes;
           long expected = value >= low && value <= high ? byteHighBits : 0;
-          long actual = Utf8InputScanner.exactAsciiRangeMask(word, low, high);
+          long actual = ByteSwarScan.exactAsciiRangeMask(word, low, high);
           if (actual != expected) {
             fail(
                 "Incorrect range mask for [%s, %s] and byte %s: expected %s, actual %s",
@@ -213,7 +213,7 @@ class Utf8InputScannerTest {
         }
       }
 
-      assertThat(Utf8InputScanner.exactAsciiRangeMask(word, low, high))
+      assertThat(ByteSwarScan.exactAsciiRangeMask(word, low, high))
           .as("range [%s, %s], word %s", low, high, Long.toHexString(word))
           .isEqualTo(expected);
     }
@@ -316,7 +316,7 @@ class Utf8InputScannerTest {
 
   @Test
   void literalSearchSizeArithmeticDoesNotOverflowForLargeArrays() {
-    assertThat(Utf8InputScanner.filterThreshold(Integer.MAX_VALUE)).isEqualTo(85_899_345_880L);
+    assertThat(ByteSwarScan.filterThreshold(Integer.MAX_VALUE)).isEqualTo(85_899_345_880L);
     assertThat(Utf8InputScanner.workLimit(Integer.MAX_VALUE)).isEqualTo(4_294_967_294L);
   }
 
