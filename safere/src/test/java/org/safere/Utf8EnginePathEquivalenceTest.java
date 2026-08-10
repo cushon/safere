@@ -107,6 +107,23 @@ class Utf8EnginePathEquivalenceTest {
   }
 
   @Test
+  @DisplayName("UTF-8 convenience find supports generalized fixed offsets")
+  void utf8ConvenienceFindSupportsGeneralizedFixedOffsets() {
+    for (String regex : List.of("(^|a)bc", "(aq|b[a-z]{9})z")) {
+      String input =
+          switch (regex) {
+            case "(^|a)bc" -> "abc";
+            case "(aq|b[a-z]{9})z" -> "bxxaxzxxxxz";
+            default -> throw new AssertionError(regex);
+          };
+      Pattern pattern = Pattern.compile(regex);
+      Utf8Input utf8Input = Utf8Input.validated(input.getBytes(UTF_8));
+
+      assertThat(pattern.find(utf8Input)).as("/%s/ on %s", regex, input).isTrue();
+    }
+  }
+
+  @Test
   @DisplayName("malformed trusted input is equivalent across UTF-8 fallback engines")
   void malformedTrustedInputIsEquivalentAcrossFallbackEngines() {
     byte[] bytes = {'a', (byte) 0x80, (byte) 0xc2, 'b', (byte) 0xf0, (byte) 0x9f, 'c'};

@@ -117,6 +117,17 @@ class MatcherTest {
     }
 
     @Test
+    @DisplayName("multi-offset acceleration preserves starts belonging to later literals")
+    void multiOffsetAccelerationPreservesEarlierStartFromLaterLiteral() {
+      Matcher matcher = Pattern.compile("(aq|b[a-z]{9})z").matcher("bxxaxzxxxxz");
+
+      assertThat(matcher.find()).isTrue();
+      assertThat(matcher.group()).isEqualTo("bxxaxzxxxxz");
+      assertThat(matcher.start()).isZero();
+      assertThat(matcher.end()).isEqualTo(11);
+    }
+
+    @Test
     @DisplayName("lookingAt() respects lazy quantifier priority")
     void lookingAtRespectsLazyQuantifierPriority() {
       Matcher m = Pattern.compile("(a+?)").matcher("aaa");

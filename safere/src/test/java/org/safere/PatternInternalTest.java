@@ -198,6 +198,27 @@ class PatternInternalTest {
   }
 
   @Test
+  void deeplyNestedFixedOffsetWidthExtractionIsStackSafe() {
+    Pattern p = Pattern.compile(nestedFixedOffsetPattern(2_000));
+
+    assertThat(p.fixedOffsetLiteral()).isNotNull();
+  }
+
+  @Test
+  void largeCapturedLiteralConcatenationRecordsMaximalSuffix() {
+    StringBuilder regex = new StringBuilder("[ab]");
+    for (int i = 0; i < 2_000; i++) {
+      regex.append("(x)");
+    }
+
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile(regex.toString()).fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).hasSize(2_000);
+    assertThat(fixed.minOffset()).isEqualTo(1);
+  }
+
+  @Test
   void caseInsensitiveAsciiLiteralUsesLiteralMatchMetadata() {
     Pattern p = Pattern.compile("(?i)i");
 
@@ -426,6 +447,19 @@ class PatternInternalTest {
     for (int i = 0; i < depth; i++) {
       regex.append(")x");
     }
+    return regex.toString();
+  }
+
+  private static String nestedFixedOffsetPattern(int depth) {
+    StringBuilder regex = new StringBuilder(depth * 3 + 6);
+    for (int i = 0; i < depth; i++) {
+      regex.append('(');
+    }
+    regex.append("[ab]");
+    for (int i = 0; i < depth; i++) {
+      regex.append(")x");
+    }
+    regex.append("ZZ");
     return regex.toString();
   }
 
