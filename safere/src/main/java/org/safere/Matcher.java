@@ -1482,8 +1482,7 @@ public final class Matcher implements MatchResult {
         return applyFailedMatchResult();
       }
     }
-    DisjointRequiredLiterals disjointRequiredLiterals =
-        parentPattern.disjointRequiredLiterals();
+    DisjointRequiredLiterals disjointRequiredLiterals = parentPattern.disjointRequiredLiterals();
     if (options.literalFastPaths()
         && disjointRequiredLiterals != null
         && !hasAcceleratedSearchPath

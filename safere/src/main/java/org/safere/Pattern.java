@@ -288,10 +288,7 @@ public final class Pattern implements Serializable {
   /** Precomputed metadata for a small disjoint set of required literal substrings. */
   @SuppressWarnings("ArrayRecordComponent")
   record DisjointRequiredLiterals(
-      String[] literals,
-      byte[][] utf8,
-      int[][] failure,
-      int[][] shifts) {
+      String[] literals, byte[][] utf8, int[][] failure, int[][] shifts) {
 
     static DisjointRequiredLiterals create(String[] literals) {
       if (literals == null || literals.length == 0) {
@@ -3416,7 +3413,10 @@ public final class Pattern implements Serializable {
             || node.op == RegexpOp.PLUS)) {
       node = node.sub();
     }
-    if (node == null || node.op != RegexpOp.ALTERNATE || node.subs == null || node.subs.size() < 2) {
+    if (node == null
+        || node.op != RegexpOp.ALTERNATE
+        || node.subs == null
+        || node.subs.size() < 2) {
       return null;
     }
     Set<String> literalSet = new LinkedHashSet<>();
@@ -3439,7 +3439,8 @@ public final class Pattern implements Serializable {
       for (int j = 0; j < rawList.size(); j++) {
         if (i != j) {
           String s2 = rawList.get(j);
-          if (s1.contains(s2) && (s1.length() > s2.length() || (s1.length() == s2.length() && j < i))) {
+          if (s1.contains(s2)
+              && (s1.length() > s2.length() || (s1.length() == s2.length() && j < i))) {
             subsumed = true;
             break;
           }
