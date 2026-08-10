@@ -64,6 +64,10 @@ interface InputScanner {
     return (int) (decoded >> 32);
   }
 
+  default int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
+    return -1;
+  }
+
   static int position(long decoded) {
     return (int) decoded;
   }
