@@ -180,10 +180,7 @@ public final class Pattern implements Serializable {
    * {@code \p{javaLetter}}. Non-null when {@code find()} can scan directly for one matching code
    * point and produce group 0 without invoking the engine cascade.
    */
-  private final transient int[] singleCharClassRanges;
-
-  private final transient long singleCharClassBitmap0;
-  private final transient long singleCharClassBitmap1;
+  private final transient CharClassScanInfo singleCharClassScanInfo;
 
   /**
    * Precomputed character class data for a mandatory character class. Non-null when matching can
@@ -301,9 +298,7 @@ public final class Pattern implements Serializable {
       long charClassMatchBitmap0,
       long charClassMatchBitmap1,
       boolean charClassMatchAllowEmpty,
-      int[] singleCharClassRanges,
-      long singleCharClassBitmap0,
-      long singleCharClassBitmap1,
+      CharClassScanInfo singleCharClass,
       int[] requiredMatchClassRanges,
       long requiredMatchClassBitmap0,
       long requiredMatchClassBitmap1,
@@ -367,9 +362,7 @@ public final class Pattern implements Serializable {
     this.charClassMatchBitmap0 = charClassMatchBitmap0;
     this.charClassMatchBitmap1 = charClassMatchBitmap1;
     this.charClassMatchAllowEmpty = charClassMatchAllowEmpty;
-    this.singleCharClassRanges = singleCharClassRanges;
-    this.singleCharClassBitmap0 = singleCharClassBitmap0;
-    this.singleCharClassBitmap1 = singleCharClassBitmap1;
+    this.singleCharClassScanInfo = singleCharClass;
     this.requiredMatchClassRanges = requiredMatchClassRanges;
     this.requiredMatchClassBitmap0 = requiredMatchClassBitmap0;
     this.requiredMatchClassBitmap1 = requiredMatchClassBitmap1;
@@ -530,9 +523,7 @@ public final class Pattern implements Serializable {
         ccMatch != null ? ccMatch.bitmap0 : 0,
         ccMatch != null ? ccMatch.bitmap1 : 0,
         ccMatch != null && ccMatch.allowEmpty,
-        singleCharClass != null ? singleCharClass.ranges : null,
-        singleCharClass != null ? singleCharClass.bitmap0 : 0,
-        singleCharClass != null ? singleCharClass.bitmap1 : 0,
+        singleCharClass,
         requiredMatchClass != null ? requiredMatchClass.ranges : null,
         requiredMatchClass != null ? requiredMatchClass.bitmap0 : 0,
         requiredMatchClass != null ? requiredMatchClass.bitmap1 : 0,
@@ -1330,20 +1321,10 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns precomputed ranges when the pattern is exactly one character class, or {@code null}.
+   * Returns precomputed scan info when the pattern is exactly one character class, or {@code null}.
    */
-  int[] singleCharClassRanges() {
-    return singleCharClassRanges;
-  }
-
-  /** ASCII bitmap (code points 0–63) for the single-character-class fast path. */
-  long singleCharClassBitmap0() {
-    return singleCharClassBitmap0;
-  }
-
-  /** ASCII bitmap (code points 64–127) for the single-character-class fast path. */
-  long singleCharClassBitmap1() {
-    return singleCharClassBitmap1;
+  CharClassScanInfo singleCharClassScanInfo() {
+    return singleCharClassScanInfo;
   }
 
   /** Returns precomputed ranges for a required character class, or {@code null}. */
@@ -1594,7 +1575,7 @@ public final class Pattern implements Serializable {
     }
     addAstAnalysisFeatures(features);
 
-    if (charClassMatchRanges != null || singleCharClassRanges != null) {
+    if (charClassMatchRanges != null || singleCharClassScanInfo != null) {
       capabilities.add(PatternCapability.CHARACTER_CLASS_MATCH);
     }
     if (keywordAlternation != null) {
@@ -2997,11 +2978,13 @@ public final class Pattern implements Serializable {
     final int[] ranges;
     final long bitmap0;
     final long bitmap1;
+    final boolean isAscii;
 
-    CharClassScanInfo(int[] ranges, long bitmap0, long bitmap1) {
+    CharClassScanInfo(int[] ranges, long bitmap0, long bitmap1, boolean isAscii) {
       this.ranges = ranges;
       this.bitmap0 = bitmap0;
       this.bitmap1 = bitmap1;
+      this.isAscii = isAscii;
     }
   }
 
@@ -3039,7 +3022,7 @@ public final class Pattern implements Serializable {
     if (rangeCount == 0) {
       return null;
     }
-    return new CharClassScanInfo(Arrays.copyOf(ranges, rangeCount * 2), bitmap0, bitmap1);
+    return new CharClassScanInfo(Arrays.copyOf(ranges, rangeCount * 2), bitmap0, bitmap1, true);
   }
 
   /**
@@ -3314,7 +3297,8 @@ public final class Pattern implements Serializable {
         }
       }
     }
-    return new CharClassScanInfo(ranges, b0, b1);
+    boolean isAscii = numRanges > 0 && cc.hi(numRanges - 1) <= 127;
+    return new CharClassScanInfo(ranges, b0, b1, isAscii);
   }
 
   /**
