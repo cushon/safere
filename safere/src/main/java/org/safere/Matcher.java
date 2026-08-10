@@ -570,21 +570,20 @@ public final class Matcher implements MatchResult {
    * Fast path for {@code find()} when the pattern is exactly one character class. Scans code points
    * directly and returns the first matching code point as group 0.
    */
-  private boolean singleCharClassFindFastPath(int[] ranges, int fromIndex) {
-    long b0 = parentPattern.singleCharClassBitmap0();
-    long b1 = parentPattern.singleCharClassBitmap1();
-
-    int i = fromIndex;
-    int len = text.length();
-    while (i < len) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
+  private boolean singleCharClassFindFastPath(Pattern.CharClassScanInfo scanInfo, int fromIndex) {
+    if (scanInfo.isAscii && text != null) {
+      int idx = activeScanner().indexOfCharClass(scanInfo, fromIndex);
+      if (idx >= 0) {
+        return applyFullMatchResult(new int[] {idx, idx + 1});
       }
-      int cp = text.codePointAt(i);
-      if (charClassContains(ranges, b0, b1, cp)) {
-        return applyFullMatchResult(new int[] {i, i + Character.charCount(cp)});
-      }
-      i += Character.charCount(cp);
+      return applyFailedMatchResult();
+    }
+    int idx =
+        activeScanner()
+            .indexOfCodePointClass(scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex);
+    if (idx >= 0) {
+      int cp = text.codePointAt(idx);
+      return applyFullMatchResult(new int[] {idx, idx + Character.charCount(cp)});
     }
     return applyFailedMatchResult();
   }
@@ -596,20 +595,6 @@ public final class Matcher implements MatchResult {
   private boolean containsRequiredMatchClass(int[] ranges, int fromIndex) {
     long b0 = parentPattern.requiredMatchClassBitmap0();
     long b1 = parentPattern.requiredMatchClassBitmap1();
-    if (text != null) {
-      int position = Math.max(0, fromIndex);
-      while (position < text.length()) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record();
-        }
-        int codePoint = text.codePointAt(position);
-        if (charClassContains(ranges, b0, b1, codePoint)) {
-          return true;
-        }
-        position += Character.charCount(codePoint);
-      }
-      return false;
-    }
     return activeScanner().indexOfCodePointClass(ranges, b0, b1, fromIndex) >= 0;
   }
 
@@ -1465,7 +1450,6 @@ public final class Matcher implements MatchResult {
 
     Prog prog = parentPattern.prog();
     EnginePathOptions options = enginePathOptions();
-
     // Anchored start: if the pattern requires a match at the beginning of the text (e.g., ^
     // without MULTILINE, or \A), there can be no match starting after position 0 (or regionStart
     // when a region is active). Return false immediately to avoid the DFA matching at every
@@ -4139,23 +4123,23 @@ public final class Matcher implements MatchResult {
     }
 
     // Char class fast path
-    int[] singleCharClassRanges = parentPattern.singleCharClassRanges();
-    if (options.charClassMatchFastPaths() && singleCharClassRanges != null) {
-      long b0 = parentPattern.singleCharClassBitmap0();
-      long b1 = parentPattern.singleCharClassBitmap1();
-      int i = fromIndex;
-      int len = text.length();
-      while (i < len) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record();
+    Pattern.CharClassScanInfo singleCharClass = parentPattern.singleCharClassScanInfo();
+    if (options.charClassMatchFastPaths() && singleCharClass != null) {
+      if (singleCharClass.isAscii) {
+        int idx = scanner.indexOfCharClass(singleCharClass, fromIndex);
+        if (idx < 0) {
+          return -1L;
         }
-        int cp = text.codePointAt(i);
-        if (charClassContains(singleCharClassRanges, b0, b1, cp)) {
-          return packPositions(i, i + Character.charCount(cp));
-        }
-        i += Character.charCount(cp);
+        return packPositions(idx, idx + 1);
       }
-      return -1L;
+      int idx =
+          scanner.indexOfCodePointClass(
+              singleCharClass.ranges, singleCharClass.bitmap0, singleCharClass.bitmap1, fromIndex);
+      if (idx < 0) {
+        return -1L;
+      }
+      int cp = text.codePointAt(idx);
+      return packPositions(idx, idx + Character.charCount(cp));
     }
 
     int effectiveStart = fromIndex;
@@ -4377,13 +4361,15 @@ public final class Matcher implements MatchResult {
   }
 
   private static final class SingleCharClassPreparedRunner implements PreparedMatchRunner {
-    private final int[] singleCharClassRanges;
+    private final Pattern.CharClassScanInfo singleCharClass;
     private final int[] charClassMatchRanges;
     private final boolean isStartAnchored;
 
     SingleCharClassPreparedRunner(
-        int[] singleCharClassRanges, int[] charClassMatchRanges, boolean isStartAnchored) {
-      this.singleCharClassRanges = singleCharClassRanges;
+        Pattern.CharClassScanInfo singleCharClass,
+        int[] charClassMatchRanges,
+        boolean isStartAnchored) {
+      this.singleCharClass = singleCharClass;
       this.charClassMatchRanges = charClassMatchRanges;
       this.isStartAnchored = isStartAnchored;
     }
@@ -4393,11 +4379,11 @@ public final class Matcher implements MatchResult {
       if (isStartAnchored && matcher.searchFrom > 0) {
         return matcher.applyFailedMatchResult();
       }
-      if (singleCharClassRanges == null) {
+      if (singleCharClass == null) {
         return matcher.doFindCore(regionActive);
       }
       matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
-      return matcher.singleCharClassFindFastPath(singleCharClassRanges, matcher.searchFrom);
+      return matcher.singleCharClassFindFastPath(singleCharClass, matcher.searchFrom);
     }
 
     @Override
@@ -4560,13 +4546,13 @@ public final class Matcher implements MatchResult {
     }
 
     // Single char class runner
-    int[] singleCharClassRanges = parentPattern.singleCharClassRanges();
+    Pattern.CharClassScanInfo singleCharClass = parentPattern.singleCharClassScanInfo();
     int[] charClassMatchRanges = parentPattern.charClassMatchRanges();
     if (options.charClassMatchFastPaths()
-        && (singleCharClassRanges != null || charClassMatchRanges != null)
+        && (singleCharClass != null || charClassMatchRanges != null)
         && text != null) {
       return new SingleCharClassPreparedRunner(
-          singleCharClassRanges, charClassMatchRanges, prog.anchorStart());
+          singleCharClass, charClassMatchRanges, prog.anchorStart());
     }
 
     if (regionActive) {
