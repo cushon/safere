@@ -157,6 +157,8 @@ public final class Pattern implements Serializable {
   private final transient CharClassScanInfo charClassPrefixScanInfo;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
   private final transient StartAcceleration startAcceleration;
+  private final transient Utf8StartAccelerator utf8StartAccelerator;
+  private final transient StringStartAccelerator stringStartAccelerator;
   private final transient KeywordAlternation keywordAlternation;
   private final transient EnginePathOptions enginePathOptions;
   private final long patternId;
@@ -381,6 +383,23 @@ public final class Pattern implements Serializable {
     this.charClassPrefixScanInfo = buildAsciiClassScanInfo(charClassPrefixAscii);
     this.fixedOffsetLiteral = fixedOffsetLiteral;
     this.startAcceleration = startAcceleration;
+    this.utf8StartAccelerator =
+        Utf8StartAccelerator.create(
+            prefixUtf8,
+            prefixFoldCase,
+            prefixUtf8Failure,
+            prefixUtf8Shifts,
+            fixedOffsetLiteral,
+            this.charClassPrefixScanInfo,
+            prog.hasWordBoundary());
+    this.stringStartAccelerator =
+        StringStartAccelerator.create(
+            prefix,
+            prefixFoldCase,
+            fixedOffsetLiteral,
+            charClassPrefixAscii,
+            startAcceleration,
+            prog.hasWordBoundary());
     this.keywordAlternation = keywordAlternation;
     this.enginePathOptions = enginePathOptions;
     this.charClassMatchRanges = charClassMatchRanges;
@@ -693,23 +712,8 @@ public final class Pattern implements Serializable {
       return false;
     }
     int searchStart = 0;
-    if (prefixUtf8 != null && !prefixFoldCase) {
-      searchStart = scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts);
-      if (searchStart < 0) {
-        return false;
-      }
-    } else if (enginePathOptions.startAcceleration() && fixedOffsetLiteral != null) {
-      searchStart = nextFixedOffsetCandidate(scanner, 0);
-      if (searchStart < 0) {
-        return false;
-      }
-    } else if (!prog.hasWordBoundary() && charClassPrefixScanInfo != null) {
-      searchStart =
-          scanner.indexOfCodePointClass(
-              charClassPrefixScanInfo.ranges,
-              charClassPrefixScanInfo.bitmap0,
-              charClassPrefixScanInfo.bitmap1,
-              0);
+    if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
+      searchStart = utf8StartAccelerator.findCandidate(this, scanner, 0);
       if (searchStart < 0) {
         return false;
       }
@@ -768,30 +772,16 @@ public final class Pattern implements Serializable {
       return false;
     }
     int searchStart = 0;
-    if (prefixUtf8 != null && !prefixFoldCase) {
-      diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.START_ACCELERATION);
-      searchStart = scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts);
-      if (searchStart < 0) {
-        diagnostics.boundary(MatchStrategy.LITERAL);
-        return false;
+    if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
+      MatchStrategy strategy = utf8StartAccelerator.diagnosticStrategy();
+      if (strategy != null) {
+        diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
-    } else if (enginePathOptions.startAcceleration() && fixedOffsetLiteral != null) {
-      diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.START_ACCELERATION);
-      searchStart = nextFixedOffsetCandidate(scanner, 0);
+      searchStart = utf8StartAccelerator.findCandidate(this, scanner, 0);
       if (searchStart < 0) {
-        diagnostics.boundary(MatchStrategy.LITERAL);
-        return false;
-      }
-    } else if (!prog.hasWordBoundary() && charClassPrefixScanInfo != null) {
-      diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.START_ACCELERATION);
-      searchStart =
-          scanner.indexOfCodePointClass(
-              charClassPrefixScanInfo.ranges,
-              charClassPrefixScanInfo.bitmap0,
-              charClassPrefixScanInfo.bitmap1,
-              0);
-      if (searchStart < 0) {
-        diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
+        if (strategy != null) {
+          diagnostics.boundary(strategy);
+        }
         return false;
       }
     }
@@ -823,7 +813,7 @@ public final class Pattern implements Serializable {
     return matched;
   }
 
-  private int nextFixedOffsetCandidate(Utf8InputScanner scanner, int searchFrom) {
+  int nextFixedOffsetCandidate(Utf8InputScanner scanner, int searchFrom) {
     int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
     int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
     while (literalFrom <= scanner.length()) {
@@ -1334,6 +1324,16 @@ public final class Pattern implements Serializable {
   /** Returns conservative start-position acceleration data, or {@code null} if unavailable. */
   StartAcceleration startAcceleration() {
     return startAcceleration;
+  }
+
+  /** Returns the compiled UTF-8 start-position accelerator strategy, or {@code null}. */
+  Utf8StartAccelerator utf8StartAccelerator() {
+    return utf8StartAccelerator;
+  }
+
+  /** Returns the compiled String start-position accelerator strategy, or {@code null}. */
+  StringStartAccelerator stringStartAccelerator() {
+    return stringStartAccelerator;
   }
 
   /** Returns case-insensitive keyword-alternation fast-path data, or {@code null}. */
