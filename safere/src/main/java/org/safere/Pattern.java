@@ -2409,7 +2409,7 @@ public final class Pattern implements Serializable {
       }
       return node.charClass.hi(node.charClass.numRanges() - 1) < 128
           ? AsciiWidthRange.ONE
-          : AsciiWidthRange.INVALID;
+          : AsciiWidthRange.NON_DISCRETE_ONE;
     }
 
     private static AsciiWidthRange repeatWidth(Regexp node, List<AsciiWidthRange> childArgs) {
@@ -2540,6 +2540,7 @@ public final class Pattern implements Serializable {
     static final AsciiWidthRange INVALID = new AsciiWidthRange(-1, -1, null);
     static final AsciiWidthRange ZERO = new AsciiWidthRange(0, 0, new int[] {0});
     static final AsciiWidthRange ONE = new AsciiWidthRange(1, 1, new int[] {1});
+    static final AsciiWidthRange NON_DISCRETE_ONE = new AsciiWidthRange(1, 1, null);
 
     final int minWidth;
     final int maxWidth;
