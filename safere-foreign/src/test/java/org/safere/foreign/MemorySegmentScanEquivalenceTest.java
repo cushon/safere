@@ -5,9 +5,9 @@
 
 package org.safere.foreign;
 
-import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_16LE;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
