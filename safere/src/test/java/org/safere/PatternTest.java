@@ -1111,7 +1111,7 @@ class PatternTest {
     @Test
     @DisplayName("subsumed alternations correctly reject when shortest required literal is missing")
     void subsumedAlternationRejectionAndMatching() {
-      Pattern p = Pattern.compile(".*(?:apple|pineapple).*");
+      Pattern p = Pattern.compile(".*(?:apple|pineapple|banana).*");
       Matcher m = p.matcher("grapefruit orange peach plum lemon");
       assertThat(m.find()).isFalse();
 

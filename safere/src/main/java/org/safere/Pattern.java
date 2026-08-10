@@ -3450,7 +3450,7 @@ public final class Pattern implements Serializable {
         pruned.add(s1);
       }
     }
-    if (pruned.isEmpty() || pruned.size() > 16) {
+    if (pruned.size() < 2 || pruned.size() > 16) {
       return null;
     }
     return pruned.toArray(new String[0]);

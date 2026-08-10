@@ -366,17 +366,17 @@ class PatternInternalTest {
 
   @Test
   void disjointRequiredLiteralsSubsumptionMinimization() {
-    // pineapple contains apple, so pineapple is pruned and only apple is required.
-    Pattern p1 = Pattern.compile(".*(?:apple|pineapple).*");
-    assertThat(p1.requiredDisjointLiterals()).containsExactly("apple");
+    // pineapple contains apple, so pineapple is pruned and apple + banana are required.
+    Pattern p1 = Pattern.compile(".*(?:apple|pineapple|banana).*");
+    assertThat(p1.requiredDisjointLiterals()).containsExactly("apple", "banana");
 
     // prefix_foo contains foo, bar_baz contains baz
     Pattern p2 = Pattern.compile(".*(?:prefix_foo|foo|bar_baz|baz).*");
     assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "baz");
 
-    // https contains http
-    Pattern p3 = Pattern.compile(".*(?:http|https).*");
-    assertThat(p3.requiredDisjointLiterals()).containsExactly("http");
+    // https contains http, ftp is distinct
+    Pattern p3 = Pattern.compile(".*(?:http|https|ftp).*");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("http", "ftp");
   }
 
   @ParameterizedTest
