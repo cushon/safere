@@ -29,9 +29,6 @@ interface InputScanner {
   /** Returns the first position at or after {@code start} in the supplied code-point class. */
   int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start);
 
-  /** Returns the first position at or after {@code start} in the supplied ASCII class scan info. */
-  int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start);
-
   /** Decodes the scalar at {@code pos} and packs it with the following logical position. */
   long decodeForward(int pos);
 
@@ -65,6 +62,10 @@ interface InputScanner {
 
   static int codePoint(long decoded) {
     return (int) (decoded >> 32);
+  }
+
+  default int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
+    return -1;
   }
 
   static int position(long decoded) {

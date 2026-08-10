@@ -7,11 +7,10 @@ package org.safere;
 
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
-import static java.util.Objects.requireNonNull;
 
 import java.lang.invoke.VarHandle;
 
-final class Utf8InputScanner implements InputScanner {
+final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   private static final int REPLACEMENT_CHARACTER = 0xFFFD;
   private static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
   private static final int BOYER_MOORE_HORSPOOL_BATCH_SIZE = 2;
@@ -21,9 +20,6 @@ final class Utf8InputScanner implements InputScanner {
 
   private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, nativeOrder());
 
-  private final byte[] bytes;
-  private final int offset;
-  private final int length;
   private final VectorScanProvider scanProvider;
 
   Utf8InputScanner(byte[] bytes) {
@@ -31,13 +27,7 @@ final class Utf8InputScanner implements InputScanner {
   }
 
   Utf8InputScanner(byte[] bytes, int offset, int length) {
-    this.bytes = requireNonNull(bytes, "bytes");
-    if (offset < 0 || length < 0 || offset > bytes.length - length) {
-      throw new IndexOutOfBoundsException(
-          "offset=" + offset + ", length=" + length + ", arrayLength=" + bytes.length);
-    }
-    this.offset = offset;
-    this.length = length;
+    super(bytes, offset, length);
     this.scanProvider = VectorScanProviders.providerForLength(length);
   }
 
@@ -158,7 +148,7 @@ final class Utf8InputScanner implements InputScanner {
       int low = ranges[0];
       int high = ranges[1];
       if (low == high) {
-        return ByteSwarScan.indexOfByte(bytes, offset, length, (byte) low, start);
+        return indexOfByte((byte) low, start);
       }
       if (high == low + 1) {
         return ByteSwarScan.indexOfBytePair(bytes, offset, length, (byte) low, (byte) high, start);
@@ -218,7 +208,7 @@ final class Utf8InputScanner implements InputScanner {
     }
     if (!WorkCounterConfig.ENABLED) {
       if (literal.length == 1) {
-        return ByteSwarScan.indexOfByte(bytes, offset, length, literal[0], start);
+        return indexOfByte(literal[0], start);
       }
       if (shifts != null) {
         // Both searches beat the linear scan, but they win over different ranges. The skip loop
@@ -302,7 +292,7 @@ final class Utf8InputScanner implements InputScanner {
       return indexOfAsciiClassScalar(asciiClass, start);
     }
     if (second < 0) {
-      return ByteSwarScan.indexOfByte(bytes, offset, length, (byte) first, start);
+      return indexOfByte((byte) first, start);
     }
     if (last == second) {
       return ByteSwarScan.indexOfBytePair(

@@ -182,10 +182,6 @@ public final class Pattern implements Serializable {
    */
   private final transient CharClassScanInfo singleCharClassScanInfo;
 
-  private final transient int[] singleCharClassRanges;
-  private final transient long singleCharClassBitmap0;
-  private final transient long singleCharClassBitmap1;
-
   /**
    * Precomputed character class data for a mandatory character class. Non-null when matching can
    * reject by scanning for an absent required code point before invoking the full engine cascade.
@@ -367,9 +363,6 @@ public final class Pattern implements Serializable {
     this.charClassMatchBitmap1 = charClassMatchBitmap1;
     this.charClassMatchAllowEmpty = charClassMatchAllowEmpty;
     this.singleCharClassScanInfo = singleCharClass;
-    this.singleCharClassRanges = singleCharClass != null ? singleCharClass.ranges : null;
-    this.singleCharClassBitmap0 = singleCharClass != null ? singleCharClass.bitmap0 : 0;
-    this.singleCharClassBitmap1 = singleCharClass != null ? singleCharClass.bitmap1 : 0;
     this.requiredMatchClassRanges = requiredMatchClassRanges;
     this.requiredMatchClassBitmap0 = requiredMatchClassBitmap0;
     this.requiredMatchClassBitmap1 = requiredMatchClassBitmap1;
@@ -1334,23 +1327,6 @@ public final class Pattern implements Serializable {
     return singleCharClassScanInfo;
   }
 
-  /**
-   * Returns precomputed ranges when the pattern is exactly one character class, or {@code null}.
-   */
-  int[] singleCharClassRanges() {
-    return singleCharClassRanges;
-  }
-
-  /** ASCII bitmap (code points 0–63) for the single-character-class fast path. */
-  long singleCharClassBitmap0() {
-    return singleCharClassBitmap0;
-  }
-
-  /** ASCII bitmap (code points 64–127) for the single-character-class fast path. */
-  long singleCharClassBitmap1() {
-    return singleCharClassBitmap1;
-  }
-
   /** Returns precomputed ranges for a required character class, or {@code null}. */
   int[] requiredMatchClassRanges() {
     return requiredMatchClassRanges;
@@ -1599,7 +1575,7 @@ public final class Pattern implements Serializable {
     }
     addAstAnalysisFeatures(features);
 
-    if (charClassMatchRanges != null || singleCharClassRanges != null) {
+    if (charClassMatchRanges != null || singleCharClassScanInfo != null) {
       capabilities.add(PatternCapability.CHARACTER_CLASS_MATCH);
     }
     if (keywordAlternation != null) {
@@ -2803,24 +2779,18 @@ public final class Pattern implements Serializable {
   @SuppressWarnings("ArrayRecordComponent")
   private record CharClassMatchInfo(int[] ranges, long bitmap0, long bitmap1, boolean allowEmpty) {}
 
-  public static final class CharClassScanInfo {
-    public final int[] ranges;
-    public final long bitmap0;
-    public final long bitmap1;
-    public final boolean isAscii;
+  /** Holds precomputed data for scanning one character class. */
+  static final class CharClassScanInfo {
+    final int[] ranges;
+    final long bitmap0;
+    final long bitmap1;
+    final boolean isAscii;
 
-    public CharClassScanInfo(int[] ranges, long bitmap0, long bitmap1) {
+    CharClassScanInfo(int[] ranges, long bitmap0, long bitmap1, boolean isAscii) {
       this.ranges = ranges;
       this.bitmap0 = bitmap0;
       this.bitmap1 = bitmap1;
-      boolean ascii = true;
-      for (int bound : ranges) {
-        if (bound > 127) {
-          ascii = false;
-          break;
-        }
-      }
-      this.isAscii = ascii;
+      this.isAscii = isAscii;
     }
   }
 
@@ -2858,7 +2828,7 @@ public final class Pattern implements Serializable {
     if (rangeCount == 0) {
       return null;
     }
-    return new CharClassScanInfo(Arrays.copyOf(ranges, rangeCount * 2), bitmap0, bitmap1);
+    return new CharClassScanInfo(Arrays.copyOf(ranges, rangeCount * 2), bitmap0, bitmap1, true);
   }
 
   /**
@@ -3133,7 +3103,8 @@ public final class Pattern implements Serializable {
         }
       }
     }
-    return new CharClassScanInfo(ranges, b0, b1);
+    boolean isAscii = numRanges > 0 && cc.hi(numRanges - 1) <= 127;
+    return new CharClassScanInfo(ranges, b0, b1, isAscii);
   }
 
   /**

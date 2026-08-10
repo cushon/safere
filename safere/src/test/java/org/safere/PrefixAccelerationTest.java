@@ -7,23 +7,24 @@ package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
-/** Correctness tests for vectorized case-insensitive prefix scanning. */
+/** Correctness tests for prefix and character-class start acceleration scanning. */
 class PrefixAccelerationTest {
 
   @Test
-  public void testCaseInsensitivePrefixFind() {
-    Pattern p = Pattern.compile("(?i)hello");
+  void testCaseInsensitivePrefixFind() {
+    Pattern p = Pattern.compile("(?i)hello[0-9]");
 
-    // 1. Match at the end, triggering vector loop
-    String text = "x".repeat(1100) + "Hello, world!";
+    // 1. Match at the end
+    String text = "x".repeat(1100) + "Hello7, world!";
     Matcher m = p.matcher(text);
     assertThat(m.find()).isTrue();
     assertThat(m.start()).isEqualTo(1100);
 
     // 2. Mixed case match
-    String text2 = "x".repeat(1050) + "hElLo";
+    String text2 = "x".repeat(1050) + "hElLo7";
     Matcher m2 = p.matcher(text2);
     assertThat(m2.find()).isTrue();
     assertThat(m2.start()).isEqualTo(1050);
@@ -33,25 +34,55 @@ class PrefixAccelerationTest {
     Matcher m3 = p.matcher(text3);
     assertThat(m3.find()).isFalse();
 
-    // 4. Exact vector boundary matching
-    String text4 = "x".repeat(1024) + "hello";
+    // 4. Exact 1024 boundary matching
+    String text4 = "x".repeat(1024) + "hello7";
     Matcher m4 = p.matcher(text4);
     assertThat(m4.find()).isTrue();
     assertThat(m4.start()).isEqualTo(1024);
 
-    // 5. Match within vector body
-    String text5 = "x".repeat(1015) + "hello" + "x".repeat(100);
+    // 5. Match within body
+    String text5 = "x".repeat(1015) + "hello7" + "x".repeat(100);
     Matcher m5 = p.matcher(text5);
     assertThat(m5.find()).isTrue();
     assertThat(m5.start()).isEqualTo(1015);
   }
 
   @Test
-  public void testNonAlphabeticFirstChar() {
-    Pattern p = Pattern.compile("(?i)-hello");
-    String text = "x".repeat(1100) + "-Hello";
+  void testNonAlphabeticFirstChar() {
+    Pattern p = Pattern.compile("(?i)-hello[0-9]");
+    String text = "x".repeat(1100) + "-Hello7";
     Matcher m = p.matcher(text);
     assertThat(m.find()).isTrue();
     assertThat(m.start()).isEqualTo(1100);
+  }
+
+  @Test
+  void testCaseSensitivePrefixFind() {
+    Pattern p = Pattern.compile("foobar_xyz[0-9]");
+    String text = "a".repeat(2000) + "foobar_xyz7" + "b".repeat(500);
+    Matcher m = p.matcher(text);
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(2000);
+    assertThat(m.end()).isEqualTo(2011);
+
+    // UTF-8 input scanner test
+    Utf8Matcher mUtf8 = p.matcher(Utf8Input.trusted(text.getBytes(StandardCharsets.UTF_8)));
+    assertThat(mUtf8.find()).isTrue();
+    assertThat(mUtf8.start()).isEqualTo(2000);
+  }
+
+  @Test
+  void testCharClassPrefixFind() {
+    Pattern p = Pattern.compile("[0-9][a-z]+");
+    String text = "x".repeat(1500) + "7abc" + "1".repeat(100);
+    Matcher m = p.matcher(text);
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(1500);
+    assertThat(m.end()).isEqualTo(1504);
+
+    Utf8Matcher mUtf8 = p.matcher(Utf8Input.trusted(text.getBytes(StandardCharsets.UTF_8)));
+    assertThat(mUtf8.find()).isTrue();
+    assertThat(mUtf8.start()).isEqualTo(1500);
+    assertThat(mUtf8.end()).isEqualTo(1504);
   }
 }
