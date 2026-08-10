@@ -19,6 +19,7 @@ import org.junit.jupiter.params.provider.ValueSource;
  * Comprehensive differential equivalence tests comparing 16-bit {@link ShortVectorScan} and {@link
  * ShortSwarScan} kernels against 8-bit kernels and scalar reference models.
  */
+@DisabledForCrosscheck("Internal SIMD/SWAR kernel test, not part of public regex API")
 class ShortScanEquivalenceTest {
 
   private static final List<int[]> ASCII_CHAR_CLASS_RANGES =
