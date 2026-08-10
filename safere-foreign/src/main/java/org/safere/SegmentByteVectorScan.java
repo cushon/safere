@@ -26,13 +26,11 @@ public final class SegmentByteVectorScan {
 
   public static int indexOfAsciiClass(
       MemorySegment segment, long offset, long length, int[] ranges, int start) {
-    if (ranges.length == 0 || ranges.length > 4) {
+    int numRanges = ranges.length / 2;
+    if (numRanges < 1 || numRanges > 4 || (ranges.length & 1) != 0) {
       return UNSUPPORTED;
     }
     int vectorLen = SPECIES.length();
-    if (length < vectorLen) {
-      return UNSUPPORTED;
-    }
 
     byte low1 = (byte) ranges[0];
     byte high1 = (byte) ranges[1];
@@ -69,11 +67,10 @@ public final class SegmentByteVectorScan {
     // Scalar tail
     for (long i = pos; i < length; i++) {
       int b = segment.get(ValueLayout.JAVA_BYTE, offset + i) & 0xFF;
-      if (b >= (ranges[0] & 0xFF) && b <= (ranges[1] & 0xFF)) {
-        return (int) i;
-      }
-      if (hasSecondRange && b >= (ranges[2] & 0xFF) && b <= (ranges[3] & 0xFF)) {
-        return (int) i;
+      for (int r = 0; r < numRanges; r++) {
+        if (b >= ranges[r * 2] && b <= ranges[r * 2 + 1]) {
+          return (int) i;
+        }
       }
     }
 
@@ -90,9 +87,6 @@ public final class SegmentByteVectorScan {
     }
 
     int vectorLen = SPECIES.length();
-    if (length < vectorLen) {
-      return UNSUPPORTED;
-    }
 
     char first = prefix.charAt(0);
     byte low = (byte) asciiLower(first);

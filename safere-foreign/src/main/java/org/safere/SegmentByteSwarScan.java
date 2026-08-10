@@ -19,62 +19,66 @@ public final class SegmentByteSwarScan {
 
   public static int indexOfAsciiClass(
       MemorySegment segment, long offset, long length, int[] ranges, int start) {
-    if (ranges.length == 0 || ranges.length > 4) {
-      return UNSUPPORTED;
-    }
-    if (length < Long.BYTES) {
+    int numRanges = ranges.length / 2;
+    if (numRanges < 1 || numRanges > 2 || (ranges.length & 1) != 0) {
       return UNSUPPORTED;
     }
 
     long pos = Math.max(0, start);
     long wordEnd = length - Long.BYTES;
 
-    int r0 = ranges[0];
-    int r1 = ranges[1];
-    boolean hasSecondRange = ranges.length >= 4;
-    int r2 = hasSecondRange ? ranges[2] : 0;
-    int r3 = hasSecondRange ? ranges[3] : 0;
+    long low0 = (ranges[0] & 0xFFL) * BYTE_ONES;
+    long high0 = (ranges[1] & 0xFFL) * BYTE_ONES;
+    long low1 = numRanges > 1 ? (ranges[2] & 0xFFL) * BYTE_ONES : 0;
+    long high1 = numRanges > 1 ? (ranges[3] & 0xFFL) * BYTE_ONES : 0;
 
-    long low1 = (r0 & 0xFFL) * BYTE_ONES;
-    long high1 = (r1 & 0xFFL) * BYTE_ONES;
-    long low2 = hasSecondRange ? (r2 & 0xFFL) * BYTE_ONES : 0;
-    long high2 = hasSecondRange ? (r3 & 0xFFL) * BYTE_ONES : 0;
+    if (numRanges == 1) {
+      while (pos <= wordEnd) {
+        long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, offset + pos);
+        long values = word & ~BYTE_HIGH_BITS;
+        long ascii = ~word & BYTE_HIGH_BITS;
+        long matches = exactAsciiRangeMask(values, ascii, low0, high0);
 
-    while (pos <= wordEnd) {
-      long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, offset + pos);
-
-      // SWAR range check: (word >= low) & (word <= high)
-      long ge1 = (((word | BYTE_HIGH_BITS) - low1) ^ (~word & BYTE_HIGH_BITS)) & BYTE_HIGH_BITS;
-      long le1 = (((high1 | BYTE_HIGH_BITS) - word) ^ (word & BYTE_HIGH_BITS)) & BYTE_HIGH_BITS;
-      long inRange1 = ge1 & le1;
-
-      long inRange;
-      if (hasSecondRange) {
-        long ge2 = (((word | BYTE_HIGH_BITS) - low2) ^ (~word & BYTE_HIGH_BITS)) & BYTE_HIGH_BITS;
-        long le2 = (((high2 | BYTE_HIGH_BITS) - word) ^ (word & BYTE_HIGH_BITS)) & BYTE_HIGH_BITS;
-        long inRange2 = ge2 & le2;
-        inRange = inRange1 | inRange2;
-      } else {
-        inRange = inRange1;
-      }
-
-      if (inRange != 0) {
-        long limit = pos + Long.BYTES;
-        for (long i = pos; i < limit; i++) {
-          int b = segment.get(ValueLayout.JAVA_BYTE, offset + i) & 0xFF;
-          if ((b >= r0 && b <= r1) || (hasSecondRange && b >= r2 && b <= r3)) {
-            return (int) i;
+        if (matches != 0) {
+          long limit = pos + Long.BYTES;
+          for (long i = pos; i < limit; i++) {
+            int b = segment.get(ValueLayout.JAVA_BYTE, offset + i) & 0xFF;
+            if (b >= ranges[0] && b <= ranges[1]) {
+              return (int) i;
+            }
           }
         }
+        pos += Long.BYTES;
       }
-      pos += Long.BYTES;
+    } else {
+      while (pos <= wordEnd) {
+        long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, offset + pos);
+        long values = word & ~BYTE_HIGH_BITS;
+        long ascii = ~word & BYTE_HIGH_BITS;
+        long matches =
+            exactAsciiRangeMask(values, ascii, low0, high0)
+                | exactAsciiRangeMask(values, ascii, low1, high1);
+
+        if (matches != 0) {
+          long limit = pos + Long.BYTES;
+          for (long i = pos; i < limit; i++) {
+            int b = segment.get(ValueLayout.JAVA_BYTE, offset + i) & 0xFF;
+            if ((b >= ranges[0] && b <= ranges[1]) || (b >= ranges[2] && b <= ranges[3])) {
+              return (int) i;
+            }
+          }
+        }
+        pos += Long.BYTES;
+      }
     }
 
     // Scalar tail
     for (long i = pos; i < length; i++) {
       int b = segment.get(ValueLayout.JAVA_BYTE, offset + i) & 0xFF;
-      if ((b >= r0 && b <= r1) || (hasSecondRange && b >= r2 && b <= r3)) {
-        return (int) i;
+      for (int r = 0; r < numRanges; r++) {
+        if (b >= ranges[r * 2] && b <= ranges[r * 2 + 1]) {
+          return (int) i;
+        }
       }
     }
     return -1;
@@ -124,6 +128,13 @@ public final class SegmentByteSwarScan {
       }
     }
     return -1;
+  }
+
+  private static long exactAsciiRangeMask(
+      long values, long ascii, long repeatedLow, long repeatedHigh) {
+    long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
+    long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
+    return ascii & atLeastLow & atMostHigh;
   }
 
   private static boolean regionMatchesAsciiIgnoreCase(

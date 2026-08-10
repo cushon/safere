@@ -28,13 +28,11 @@ public final class SegmentShortVectorScan {
 
   public static int indexOfCharClassUtf16(
       MemorySegment segment, long byteOffset, int charLength, int[] ranges, int start) {
-    if (ranges.length == 0 || ranges.length > 4) {
+    int numRanges = ranges.length / 2;
+    if (numRanges < 1 || numRanges > 4 || (ranges.length & 1) != 0) {
       return UNSUPPORTED;
     }
     int vectorLen = SPECIES.length();
-    if (charLength < vectorLen) {
-      return UNSUPPORTED;
-    }
 
     short low1 = (short) ranges[0];
     short high1 = (short) ranges[1];
@@ -87,29 +85,20 @@ public final class SegmentShortVectorScan {
     // Scalar tail
     for (int i = pos; i < charLength; i++) {
       int c = segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) i << 1)) & 0xFFFF;
-      if (c >= (ranges[0] & 0xFFFF) && c <= (ranges[1] & 0xFFFF)) {
-        if (Character.isLowSurrogate((char) c) && i > 0) {
-          char prev =
-              (char)
-                  (segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (i - 1) << 1))
-                      & 0xFFFF);
-          if (Character.isHighSurrogate(prev)) {
-            continue;
+      for (int r = 0; r < numRanges; r++) {
+        if (c >= (ranges[r * 2] & 0xFFFF) && c <= (ranges[r * 2 + 1] & 0xFFFF)) {
+          if (Character.isLowSurrogate((char) c) && i > 0) {
+            char prev =
+                (char)
+                    (segment.get(
+                            ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (i - 1) << 1))
+                        & 0xFFFF);
+            if (Character.isHighSurrogate(prev)) {
+              continue;
+            }
           }
+          return i;
         }
-        return i;
-      }
-      if (hasSecondRange && c >= (ranges[2] & 0xFFFF) && c <= (ranges[3] & 0xFFFF)) {
-        if (Character.isLowSurrogate((char) c) && i > 0) {
-          char prev =
-              (char)
-                  (segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (i - 1) << 1))
-                      & 0xFFFF);
-          if (Character.isHighSurrogate(prev)) {
-            continue;
-          }
-        }
-        return i;
       }
     }
 
@@ -126,9 +115,6 @@ public final class SegmentShortVectorScan {
     }
 
     int vectorLen = SPECIES.length();
-    if (charLength < vectorLen) {
-      return UNSUPPORTED;
-    }
 
     char first = prefix.charAt(0);
     short low = (short) asciiLower(first);

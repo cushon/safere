@@ -19,82 +19,100 @@ public final class SegmentShortSwarScan {
 
   public static int indexOfCharClassUtf16(
       MemorySegment segment, long byteOffset, int charLength, int[] ranges, int start) {
-    if (ranges.length == 0 || ranges.length > 4) {
-      return UNSUPPORTED;
-    }
-    if (charLength < 4) {
+    int numRanges = ranges.length / 2;
+    if (numRanges < 1 || numRanges > 2 || (ranges.length & 1) != 0) {
       return UNSUPPORTED;
     }
 
     int pos = Math.max(0, start);
     int wordEnd = charLength - 4;
 
-    int r0 = ranges[0];
-    int r1 = ranges[1];
-    boolean hasSecondRange = ranges.length >= 4;
-    int r2 = hasSecondRange ? ranges[2] : 0;
-    int r3 = hasSecondRange ? ranges[3] : 0;
+    long low0 = (ranges[0] & 0xFFFFL) * SHORT_ONES;
+    long high0 = (ranges[1] & 0xFFFFL) * SHORT_ONES;
+    long low1 = numRanges > 1 ? (ranges[2] & 0xFFFFL) * SHORT_ONES : 0;
+    long high1 = numRanges > 1 ? (ranges[3] & 0xFFFFL) * SHORT_ONES : 0;
 
-    long low1 = (r0 & 0xFFFFL) * SHORT_ONES;
-    long high1 = (r1 & 0xFFFFL) * SHORT_ONES;
-    long low2 = hasSecondRange ? (r2 & 0xFFFFL) * SHORT_ONES : 0;
-    long high2 = hasSecondRange ? (r3 & 0xFFFFL) * SHORT_ONES : 0;
-
-    while (pos <= wordEnd) {
-      long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, byteOffset + ((long) pos << 1));
-
-      long ge1 = (((word | SHORT_HIGH_BITS) - low1) ^ (~word & SHORT_HIGH_BITS)) & SHORT_HIGH_BITS;
-      long le1 = (((high1 | SHORT_HIGH_BITS) - word) ^ (word & SHORT_HIGH_BITS)) & SHORT_HIGH_BITS;
-      long inRange1 = ge1 & le1;
-
-      long inRange;
-      if (hasSecondRange) {
-        long ge2 =
-            (((word | SHORT_HIGH_BITS) - low2) ^ (~word & SHORT_HIGH_BITS)) & SHORT_HIGH_BITS;
-        long le2 =
-            (((high2 | SHORT_HIGH_BITS) - word) ^ (word & SHORT_HIGH_BITS)) & SHORT_HIGH_BITS;
-        long inRange2 = ge2 & le2;
-        inRange = inRange1 | inRange2;
-      } else {
-        inRange = inRange1;
-      }
-
-      if (inRange != 0) {
-        for (int i = pos; i < pos + 4; i++) {
-          int c =
-              segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) i << 1)) & 0xFFFF;
-          if ((c >= r0 && c <= r1) || (hasSecondRange && c >= r2 && c <= r3)) {
-            if (Character.isLowSurrogate((char) c) && i > 0) {
-              char prev =
-                  (char)
-                      (segment.get(
-                              ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (i - 1) << 1))
-                          & 0xFFFF);
-              if (Character.isHighSurrogate(prev)) {
-                continue;
+    if (numRanges == 1) {
+      while (pos <= wordEnd) {
+        long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, byteOffset + ((long) pos << 1));
+        long matches = exactShortRangeMask(word, low0, high0);
+        if (matches != 0) {
+          int limit = pos + 4;
+          for (int i = pos; i < limit; i++) {
+            char ch =
+                (char)
+                    (segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) i << 1))
+                        & 0xFFFF);
+            if (ch >= ranges[0] && ch <= ranges[1]) {
+              if (Character.isLowSurrogate(ch) && i > 0) {
+                char prev =
+                    (char)
+                        (segment.get(
+                                ValueLayout.JAVA_SHORT_UNALIGNED,
+                                byteOffset + ((long) (i - 1) << 1))
+                            & 0xFFFF);
+                if (Character.isHighSurrogate(prev)) {
+                  continue;
+                }
               }
+              return i;
             }
-            return i;
           }
         }
+        pos += 4;
       }
-      pos += 4;
+    } else {
+      while (pos <= wordEnd) {
+        long word = segment.get(ValueLayout.JAVA_LONG_UNALIGNED, byteOffset + ((long) pos << 1));
+        long matches =
+            exactShortRangeMask(word, low0, high0) | exactShortRangeMask(word, low1, high1);
+        if (matches != 0) {
+          int limit = pos + 4;
+          for (int i = pos; i < limit; i++) {
+            char ch =
+                (char)
+                    (segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) i << 1))
+                        & 0xFFFF);
+            if ((ch >= ranges[0] && ch <= ranges[1]) || (ch >= ranges[2] && ch <= ranges[3])) {
+              if (Character.isLowSurrogate(ch) && i > 0) {
+                char prev =
+                    (char)
+                        (segment.get(
+                                ValueLayout.JAVA_SHORT_UNALIGNED,
+                                byteOffset + ((long) (i - 1) << 1))
+                            & 0xFFFF);
+                if (Character.isHighSurrogate(prev)) {
+                  continue;
+                }
+              }
+              return i;
+            }
+          }
+        }
+        pos += 4;
+      }
     }
 
     // Scalar tail
     for (int i = pos; i < charLength; i++) {
-      int c = segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) i << 1)) & 0xFFFF;
-      if ((c >= r0 && c <= r1) || (hasSecondRange && c >= r2 && c <= r3)) {
-        if (Character.isLowSurrogate((char) c) && i > 0) {
-          char prev =
-              (char)
-                  (segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (i - 1) << 1))
-                      & 0xFFFF);
-          if (Character.isHighSurrogate(prev)) {
-            continue;
+      char ch =
+          (char)
+              (segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) i << 1))
+                  & 0xFFFF);
+      for (int r = 0; r < numRanges; r++) {
+        if (ch >= ranges[r * 2] && ch <= ranges[r * 2 + 1]) {
+          if (Character.isLowSurrogate(ch) && i > 0) {
+            char prev =
+                (char)
+                    (segment.get(
+                            ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (i - 1) << 1))
+                        & 0xFFFF);
+            if (Character.isHighSurrogate(prev)) {
+              continue;
+            }
           }
+          return i;
         }
-        return i;
       }
     }
     return -1;
@@ -127,7 +145,8 @@ public final class SegmentShortSwarScan {
               & SHORT_HIGH_BITS;
 
       if (matches != 0) {
-        for (int i = pos; i < pos + 4; i++) {
+        int limit = pos + 4;
+        for (int i = pos; i < limit; i++) {
           if (i + prefixLen <= charLength
               && regionMatchesAsciiIgnoreCaseUtf16(segment, byteOffset, i, prefix, prefixLen)) {
             return i;
@@ -143,6 +162,12 @@ public final class SegmentShortSwarScan {
       }
     }
     return -1;
+  }
+
+  private static long exactShortRangeMask(long word, long repeatedLow, long repeatedHigh) {
+    long atLeastLow = ((word | SHORT_HIGH_BITS) - repeatedLow) & SHORT_HIGH_BITS;
+    long atMostHigh = ((repeatedHigh | SHORT_HIGH_BITS) - word) & SHORT_HIGH_BITS;
+    return atLeastLow & atMostHigh;
   }
 
   private static boolean regionMatchesAsciiIgnoreCaseUtf16(
