@@ -15,25 +15,25 @@ import org.safere.Pattern.FixedOffsetLiteral;
 sealed interface Utf8StartAccelerator {
 
   /**
-   * Creates a {@link Utf8StartAccelerator} for the given pattern metadata, or {@code null} if no
+   * Creates a {@link Utf8StartAccelerator} for the given pattern descriptor, or {@code null} if no
    * acceleration strategy applies.
    */
-  static Utf8StartAccelerator create(
-      byte[] prefixUtf8,
-      boolean prefixFoldCase,
-      int[] prefixUtf8Failure,
-      int[] prefixUtf8Shifts,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      CharClassScanInfo charClassPrefixScanInfo,
-      boolean hasWordBoundary) {
-    if (prefixUtf8 != null && !prefixFoldCase) {
-      return new Literal(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts);
+  static Utf8StartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
+    if (descriptor == null) {
+      return null;
     }
-    if (fixedOffsetLiteral != null) {
-      return new FixedOffset(fixedOffsetLiteral);
+    if (descriptor.prefixUtf8() != null && !descriptor.prefixFoldCase()) {
+      return new Literal(descriptor.prefixUtf8());
     }
-    if (charClassPrefixScanInfo != null && !hasWordBoundary) {
-      return new CharClass(charClassPrefixScanInfo);
+    if (descriptor.fixedOffsetLiteral() != null) {
+      return new FixedOffset(descriptor.fixedOffsetLiteral());
+    }
+    if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
+      CharClassScanInfo scanInfo =
+          Pattern.buildAsciiClassScanInfo(descriptor.charClassPrefixAscii());
+      if (scanInfo != null) {
+        return new CharClass(scanInfo);
+      }
     }
     return null;
   }
@@ -58,10 +58,10 @@ sealed interface Utf8StartAccelerator {
     private final int[] prefixUtf8Failure;
     private final int[] prefixUtf8Shifts;
 
-    Literal(byte[] prefixUtf8, int[] prefixUtf8Failure, int[] prefixUtf8Shifts) {
+    Literal(byte[] prefixUtf8) {
       this.prefixUtf8 = prefixUtf8;
-      this.prefixUtf8Failure = prefixUtf8Failure;
-      this.prefixUtf8Shifts = prefixUtf8Shifts;
+      this.prefixUtf8Failure = Pattern.literalFailure(prefixUtf8);
+      this.prefixUtf8Shifts = Pattern.literalShifts(prefixUtf8);
     }
 
     public byte[] prefixUtf8() {

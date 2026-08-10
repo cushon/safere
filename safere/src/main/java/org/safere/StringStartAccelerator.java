@@ -15,27 +15,24 @@ import org.safere.Pattern.StartAcceleration;
 sealed interface StringStartAccelerator {
 
   /**
-   * Creates a {@link StringStartAccelerator} for the given pattern metadata, or {@code null} if no
-   * acceleration strategy applies.
+   * Creates a {@link StringStartAccelerator} for the given pattern descriptor, or {@code null} if
+   * no acceleration strategy applies.
    */
-  static StringStartAccelerator create(
-      String prefix,
-      boolean prefixFoldCase,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      boolean[] charClassPrefixAscii,
-      StartAcceleration startAcceleration,
-      boolean hasWordBoundary) {
-    if (prefix != null) {
-      return new Literal(prefix, prefixFoldCase);
+  static StringStartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
+    if (descriptor == null) {
+      return null;
     }
-    if (fixedOffsetLiteral != null) {
-      return new FixedOffset(fixedOffsetLiteral, charClassPrefixAscii);
+    if (descriptor.prefix() != null) {
+      return new Literal(descriptor.prefix(), descriptor.prefixFoldCase());
     }
-    if (charClassPrefixAscii != null && !hasWordBoundary) {
-      return new CharClass(charClassPrefixAscii);
+    if (descriptor.fixedOffsetLiteral() != null) {
+      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
-    if (startAcceleration != null && !hasWordBoundary) {
-      return new LineAnchor(startAcceleration);
+    if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
+      return new CharClass(descriptor.charClassPrefixAscii());
+    }
+    if (descriptor.lineAnchor() != null && !hasWordBoundary) {
+      return new LineAnchor(descriptor.lineAnchor());
     }
     return null;
   }

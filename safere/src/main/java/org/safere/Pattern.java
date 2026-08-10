@@ -145,8 +145,6 @@ public final class Pattern implements Serializable {
   private final transient int[] literalMatchFailure;
   private final transient int[] literalMatchShifts;
   private final transient byte[] prefixUtf8;
-  private final transient int[] prefixUtf8Failure;
-  private final transient int[] prefixUtf8Shifts;
   private final transient boolean hasLazy;
   private final transient boolean hasAlternation;
   private final transient boolean hasNullableAlternation;
@@ -154,9 +152,7 @@ public final class Pattern implements Serializable {
   private final transient boolean startsWithGraphemeClusterBoundary;
   private final transient boolean hasInternalGraphemeClusterBoundary;
   private final transient boolean[] charClassPrefixAscii;
-  private final transient CharClassScanInfo charClassPrefixScanInfo;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
-  private final transient StartAcceleration startAcceleration;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
   private final transient KeywordAlternation keywordAlternation;
@@ -307,8 +303,7 @@ public final class Pattern implements Serializable {
       Prog prog,
       Regexp ast,
       Map<String, Integer> namedGroups,
-      String prefix,
-      boolean prefixFoldCase,
+      StartDescriptor startDescriptor,
       String literalMatch,
       boolean hasLazy,
       boolean hasAlternation,
@@ -316,9 +311,6 @@ public final class Pattern implements Serializable {
       boolean canMatchEmpty,
       boolean startsWithGraphemeClusterBoundary,
       boolean hasInternalGraphemeClusterBoundary,
-      boolean[] charClassPrefixAscii,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      StartAcceleration startAcceleration,
       KeywordAlternation keywordAlternation,
       int[] charClassMatchRanges,
       long charClassMatchBitmap0,
@@ -358,14 +350,9 @@ public final class Pattern implements Serializable {
 
     this.ast = ast;
     this.namedGroups = namedGroups;
-    this.prefix = prefix;
-    this.prefixFoldCase = prefixFoldCase;
-    this.prefixUtf8 =
-        prefix == null || prefix.isEmpty()
-            ? null
-            : prefix.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-    this.prefixUtf8Failure = prefixUtf8 == null ? null : literalFailure(prefixUtf8);
-    this.prefixUtf8Shifts = prefixUtf8 == null ? null : literalShifts(prefixUtf8);
+    this.prefix = startDescriptor.prefix();
+    this.prefixFoldCase = startDescriptor.prefixFoldCase();
+    this.prefixUtf8 = startDescriptor.prefixUtf8();
     this.literalMatch = literalMatch;
     this.literalMatchUtf8 =
         literalMatch == null
@@ -379,27 +366,12 @@ public final class Pattern implements Serializable {
     this.canMatchEmpty = canMatchEmpty;
     this.startsWithGraphemeClusterBoundary = startsWithGraphemeClusterBoundary;
     this.hasInternalGraphemeClusterBoundary = hasInternalGraphemeClusterBoundary;
-    this.charClassPrefixAscii = charClassPrefixAscii;
-    this.charClassPrefixScanInfo = buildAsciiClassScanInfo(charClassPrefixAscii);
-    this.fixedOffsetLiteral = fixedOffsetLiteral;
-    this.startAcceleration = startAcceleration;
+    this.charClassPrefixAscii = startDescriptor.charClassPrefixAscii();
+    this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
     this.utf8StartAccelerator =
-        Utf8StartAccelerator.create(
-            prefixUtf8,
-            prefixFoldCase,
-            prefixUtf8Failure,
-            prefixUtf8Shifts,
-            fixedOffsetLiteral,
-            this.charClassPrefixScanInfo,
-            prog.hasWordBoundary());
+        Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
     this.stringStartAccelerator =
-        StringStartAccelerator.create(
-            prefix,
-            prefixFoldCase,
-            fixedOffsetLiteral,
-            charClassPrefixAscii,
-            startAcceleration,
-            prog.hasWordBoundary());
+        StringStartAccelerator.create(startDescriptor, prog.hasWordBoundary());
     this.keywordAlternation = keywordAlternation;
     this.enginePathOptions = enginePathOptions;
     this.charClassMatchRanges = charClassMatchRanges;
@@ -519,9 +491,7 @@ public final class Pattern implements Serializable {
       throw new PatternSyntaxException("pattern too large to simplify", regex, -1);
     }
     Map<String, Integer> named = extractNamedGroups(re);
-    PrefixResult prefixResult = extractPrefix(metadataAst);
-    String prefix = prefixResult.prefix();
-    boolean prefixFoldCase = prefixResult.foldCase();
+    StartDescriptor startDescriptor = extractStartDescriptor(metadataAst);
     String literalMatch = extractLiteralMatch(metadataAst);
     boolean hasLazy = hasLazyQuantifiers(re);
     boolean hasAlt = hasAlternation(re);
@@ -529,23 +499,18 @@ public final class Pattern implements Serializable {
     boolean hasNullableAlt = hasAlt && hasNullableAlternation(re);
     boolean startsWithGcb = startsWithGraphemeClusterBoundary(metadataAst);
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
-    FixedOffsetLiteral fixedOffsetLiteral =
-        prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
-    // Extract character-class prefix for acceleration when no literal prefix exists.
-    boolean[] ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
-    StartAcceleration startAcceleration =
-        (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
-            ? extractStartAcceleration(metadataAst)
-            : null;
     KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
     // Detect "repeated character class" pattern for matches() fast path.
     CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
     CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
     CharClassScanInfo requiredMatchClass =
-        extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
-    String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
+        extractRequiredMatchClass(
+            metadataAst,
+            startDescriptor.prefix() == null && startDescriptor.charClassPrefixAscii() == null);
+    String requiredLiteral =
+        startDescriptor.prefix() == null ? extractRequiredLiteral(metadataAst) : null;
     DisjointRequiredLiterals disjointRequiredLiterals =
-        (prefix == null && requiredLiteral == null)
+        (startDescriptor.prefix() == null && requiredLiteral == null)
             ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
             : null;
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
@@ -555,8 +520,7 @@ public final class Pattern implements Serializable {
         compiled,
         re,
         named,
-        prefix,
-        prefixFoldCase,
+        startDescriptor,
         literalMatch,
         hasLazy,
         hasAlt,
@@ -564,9 +528,6 @@ public final class Pattern implements Serializable {
         canMatchEmpty,
         startsWithGcb,
         hasInternalGcb,
-        ccPrefixAscii,
-        fixedOffsetLiteral,
-        startAcceleration,
         keywordAlternation,
         ccMatch != null ? ccMatch.ranges : null,
         ccMatch != null ? ccMatch.bitmap0 : 0,
@@ -579,6 +540,25 @@ public final class Pattern implements Serializable {
         requiredLiteral,
         disjointRequiredLiterals,
         enginePathOptions);
+  }
+
+  private static StartDescriptor extractStartDescriptor(Regexp metadataAst) {
+    PrefixResult prefixResult = extractPrefix(metadataAst);
+    String prefix = prefixResult.prefix();
+    boolean prefixFoldCase = prefixResult.foldCase();
+    byte[] prefixUtf8 =
+        prefix == null || prefix.isEmpty()
+            ? null
+            : prefix.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    FixedOffsetLiteral fixedOffsetLiteral =
+        prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
+    boolean[] ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
+    StartAcceleration startAcceleration =
+        (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
+            ? extractStartAcceleration(metadataAst)
+            : null;
+    return new StartDescriptor(
+        prefix, prefixFoldCase, prefixUtf8, fixedOffsetLiteral, ccPrefixAscii, startAcceleration);
   }
 
   /**
@@ -852,7 +832,7 @@ public final class Pattern implements Serializable {
     return -1;
   }
 
-  private static int[] literalFailure(byte[] literal) {
+  static int[] literalFailure(byte[] literal) {
     int[] failure = new int[literal.length];
     int matched = 0;
     for (int index = 1; index < literal.length; index++) {
@@ -867,7 +847,7 @@ public final class Pattern implements Serializable {
     return failure;
   }
 
-  private static int[] literalShifts(byte[] literal) {
+  static int[] literalShifts(byte[] literal) {
     if (literal.length < 2) {
       return null;
     }
@@ -1311,19 +1291,9 @@ public final class Pattern implements Serializable {
     return charClassPrefixAscii;
   }
 
-  /** Returns preclassified UTF-8 scan data for the character-class prefix, or {@code null}. */
-  CharClassScanInfo charClassPrefixScanInfo() {
-    return charClassPrefixScanInfo;
-  }
-
   /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
   FixedOffsetLiteral fixedOffsetLiteral() {
     return fixedOffsetLiteral;
-  }
-
-  /** Returns conservative start-position acceleration data, or {@code null} if unavailable. */
-  StartAcceleration startAcceleration() {
-    return startAcceleration;
   }
 
   /** Returns the compiled UTF-8 start-position accelerator strategy, or {@code null}. */
@@ -1506,14 +1476,6 @@ public final class Pattern implements Serializable {
 
   byte[] prefixUtf8() {
     return prefixUtf8;
-  }
-
-  int[] prefixUtf8Failure() {
-    return prefixUtf8Failure;
-  }
-
-  int[] prefixUtf8Shifts() {
-    return prefixUtf8Shifts;
   }
 
   /** Returns {@code true} if this pattern is a simple literal with no metacharacters. */
@@ -2447,7 +2409,7 @@ public final class Pattern implements Serializable {
       }
       return node.charClass.hi(node.charClass.numRanges() - 1) < 128
           ? AsciiWidthRange.ONE
-          : AsciiWidthRange.NON_DISCRETE_ONE;
+          : AsciiWidthRange.INVALID;
     }
 
     private static AsciiWidthRange repeatWidth(Regexp node, List<AsciiWidthRange> childArgs) {
@@ -2578,7 +2540,6 @@ public final class Pattern implements Serializable {
     static final AsciiWidthRange INVALID = new AsciiWidthRange(-1, -1, null);
     static final AsciiWidthRange ZERO = new AsciiWidthRange(0, 0, new int[] {0});
     static final AsciiWidthRange ONE = new AsciiWidthRange(1, 1, new int[] {1});
-    static final AsciiWidthRange NON_DISCRETE_ONE = new AsciiWidthRange(1, 1, null);
 
     final int minWidth;
     final int maxWidth;
