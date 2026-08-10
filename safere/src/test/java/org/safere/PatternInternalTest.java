@@ -231,7 +231,7 @@ class PatternInternalTest {
   void dotStarAroundWhitespaceRecordsRequiredWhitespaceClass() {
     Pattern p = Pattern.compile(".*\\s+.*");
 
-    assertThat(p.requiredMatchClassRanges()).isNotNull();
+    assertThat(p.rejectDescriptor().requiredCharClass()).isNotNull();
   }
 
   @ParameterizedTest
@@ -311,7 +311,7 @@ class PatternInternalTest {
       String regex, String members, String nonMembers) {
     Pattern p = Pattern.compile(regex);
 
-    assertThat(p.requiredMatchClassRanges()).isNotNull();
+    assertThat(p.rejectDescriptor().requiredCharClass()).isNotNull();
     members
         .codePoints()
         .forEach(codePoint -> assertThat(requiredClassContains(p, codePoint)).isTrue());
@@ -323,7 +323,7 @@ class PatternInternalTest {
   @ParameterizedTest
   @ValueSource(strings = {".*(x|).*", ".*(?:x|y)?.*", ".*(?:x|y){0,3}.*", ".*(?:x|y|.*).*"})
   void nullableAlternativesDoNotRecordRequiredCharacterClasses(String regex) {
-    assertThat(Pattern.compile(regex).requiredMatchClassRanges()).isNull();
+    assertThat(Pattern.compile(regex).rejectDescriptor().requiredCharClass()).isNull();
   }
 
   @ParameterizedTest
@@ -335,7 +335,7 @@ class PatternInternalTest {
     "'.*前置.*かなり長い必要語.*', かなり長い必要語"
   })
   void mandatoryCaseSensitiveLiteralsAreRecorded(String regex, String expected) {
-    assertThat(Pattern.compile(regex).requiredLiteral()).isEqualTo(expected);
+    assertThat(Pattern.compile(regex).rejectDescriptor().requiredLiteral()).isEqualTo(expected);
   }
 
   @ParameterizedTest
@@ -348,7 +348,7 @@ class PatternInternalTest {
         "needle.*"
       })
   void optionalCaseInsensitiveAndAlreadyPrefixedLiteralsAreNotRecorded(String regex) {
-    assertThat(Pattern.compile(regex).requiredLiteral()).isNull();
+    assertThat(Pattern.compile(regex).rejectDescriptor().requiredLiteral()).isNull();
   }
 
   @Test
@@ -423,22 +423,20 @@ class PatternInternalTest {
   void boundaryPrefixedLiteralRecordsRequiredClass() {
     Pattern p = Pattern.compile("\\b{g}z");
 
-    assertThat(p.requiredMatchClassRanges()).isNotNull();
+    assertThat(p.rejectDescriptor().requiredCharClass()).isNotNull();
   }
 
   @Test
   void pureNullablePatternsDoNotRecordRequiredCharacterClasses() {
     Pattern p = Pattern.compile(".*");
 
-    assertThat(p.requiredMatchClassRanges()).isNull();
+    assertThat(p.rejectDescriptor().requiredCharClass()).isNull();
   }
 
   private static boolean requiredClassContains(Pattern pattern, int codePoint) {
-    return InputScanner.classContains(
-        pattern.requiredMatchClassRanges(),
-        pattern.requiredMatchClassBitmap0(),
-        pattern.requiredMatchClassBitmap1(),
-        codePoint);
+    Pattern.CharClassScanInfo info = pattern.rejectDescriptor().requiredCharClass();
+    return info != null
+        && InputScanner.classContains(info.ranges, info.bitmap0, info.bitmap1, codePoint);
   }
 
   private static Pattern.CharClassScanInfo assertAsciiScanInfo(

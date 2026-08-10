@@ -21,7 +21,6 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import org.safere.Pattern.DisjointRequiredLiterals;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by
@@ -98,7 +97,6 @@ public final class Matcher implements MatchResult {
   private int regionEnd;
   private boolean fullTextRegionContext;
   private boolean findExhaustedAfterTerminalEmptyMatch;
-  private boolean disjointRequiredLiteralsChecked;
   private int modCount;
   private DiagnosticOperation diagnosticOperation;
   private boolean diagnosticCaptureSearch;
@@ -421,7 +419,6 @@ public final class Matcher implements MatchResult {
     resetReplacementState();
     clearCurrentResult();
     eagerFallbackCaptures = false;
-    disjointRequiredLiteralsChecked = false;
   }
 
   private PreparedMatchRunner preparedMatchRunner;
@@ -433,12 +430,10 @@ public final class Matcher implements MatchResult {
     resetSearchStateForRegionStart();
     resetReplacementState();
     clearCurrentResult();
-    disjointRequiredLiteralsChecked = false;
   }
 
   private void invalidatePatternCaches() {
     preparedMatchRunner = null;
-    disjointRequiredLiteralsChecked = false;
     cachedForwardFirstMatchDfa = null;
     cachedForwardLongestMatchDfa = null;
     cachedReverseDfa = null;
@@ -591,16 +586,6 @@ public final class Matcher implements MatchResult {
       return applyFullMatchResult(new int[] {idx, idx + Character.charCount(cp)});
     }
     return applyFailedMatchResult();
-  }
-
-  private boolean containsRequiredMatchClass(int[] ranges) {
-    return containsRequiredMatchClass(ranges, 0);
-  }
-
-  private boolean containsRequiredMatchClass(int[] ranges, int fromIndex) {
-    long b0 = parentPattern.requiredMatchClassBitmap0();
-    long b1 = parentPattern.requiredMatchClassBitmap1();
-    return activeScanner().indexOfCodePointClass(ranges, b0, b1, fromIndex) >= 0;
   }
 
   /**
@@ -895,13 +880,12 @@ public final class Matcher implements MatchResult {
   private boolean matchesCore() {
     capturesResolved = true;
 
-    int[] requiredRanges = parentPattern.requiredMatchClassRanges();
-    if (enginePathOptions().charClassMatchFastPaths()
-        && requiredRanges != null
+    RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+    if (rejectPrefilter != null
         && text != null
-        && !containsRequiredMatchClass(requiredRanges)) {
-      diagnosticParticipation(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
-      diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
+        && rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())) {
+      diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
+      diagnosticBoundary(rejectPrefilter.strategy());
       return applyFailedMatchResult();
     }
 
@@ -1469,53 +1453,15 @@ public final class Matcher implements MatchResult {
             || (prog.anchorEnd()
                 && scanner.length() >= MIN_REVERSE_FIRST_LEN
                 && canUseReverseDfa());
-    String requiredLiteral = parentPattern.requiredLiteral();
-    if (options.literalFastPaths()
-        && requiredLiteral != null
-        && !hasAcceleratedSearchPath
+    RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+    if (!hasAcceleratedSearchPath
+        && rejectPrefilter != null
         && (text != null || scanner instanceof Utf8InputScanner)) {
-      int idx =
-          scanner instanceof Utf8InputScanner utf8Scanner
-              ? utf8Scanner.indexOf(
-                  parentPattern.requiredLiteralUtf8(),
-                  parentPattern.requiredLiteralFailure(),
-                  parentPattern.requiredLiteralShifts(),
-                  searchFrom)
-              : indexOfRequiredLiteral(requiredLiteral);
-      if (idx < 0) {
+      if (rejectPrefilter.canReject(scanner, text, searchFrom, options)) {
+        diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(rejectPrefilter.strategy());
         return applyFailedMatchResult();
       }
-    }
-    DisjointRequiredLiterals disjointRequiredLiterals = parentPattern.disjointRequiredLiterals();
-    if (options.literalFastPaths()
-        && disjointRequiredLiterals != null
-        && !disjointRequiredLiteralsChecked
-        && !hasAcceleratedSearchPath
-        && !prog.anchorStart()
-        && text != null) {
-      disjointRequiredLiteralsChecked = true;
-      boolean found = false;
-      for (String lit : disjointRequiredLiterals.literals()) {
-        if (indexOfRequiredLiteral(lit) >= 0) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
-        diagnosticBoundary(MatchStrategy.LITERAL);
-        return applyFailedMatchResult();
-      }
-    }
-
-    int[] requiredRanges = parentPattern.requiredMatchClassRanges();
-    if (options.charClassMatchFastPaths()
-        && requiredRanges != null
-        && !hasAcceleratedSearchPath
-        && !containsRequiredMatchClass(requiredRanges, searchFrom)) {
-      diagnosticParticipation(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
-      diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
-      return applyFailedMatchResult();
     }
 
     // Prefix acceleration: if the pattern starts with a literal prefix, skip ahead to where
@@ -1984,13 +1930,6 @@ public final class Matcher implements MatchResult {
     } else {
       return applyDeferredMatchResult(result[0], result[1], prog.numCaptures(), true, false);
     }
-  }
-
-  private int indexOfRequiredLiteral(String requiredLiteral) {
-    if (WorkCounterConfig.ENABLED) {
-      WorkCounter.record(Math.max(0, text.length() - searchFrom));
-    }
-    return text.indexOf(requiredLiteral, searchFrom);
   }
 
   private int nextFixedOffsetCandidate(
