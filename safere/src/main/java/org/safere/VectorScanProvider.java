@@ -13,4 +13,12 @@ interface VectorScanProvider {
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
+
+  static char asciiLower(char ch) {
+    return ch >= 'A' && ch <= 'Z' ? (char) (ch + 32) : ch;
+  }
+
+  static char asciiUpper(char ch) {
+    return ch >= 'a' && ch <= 'z' ? (char) (ch - 32) : ch;
+  }
 }

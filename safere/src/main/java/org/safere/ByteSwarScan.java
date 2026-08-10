@@ -12,7 +12,7 @@ import static java.util.Objects.requireNonNull;
 import java.lang.invoke.VarHandle;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 1-byte sequences. */
-abstract class ByteSwarScan {
+public abstract class ByteSwarScan {
   static final long BYTE_ONES = 0x0101_0101_0101_0101L;
   static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
@@ -313,6 +313,71 @@ abstract class ByteSwarScan {
       position += Long.BYTES;
     }
     return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, length);
+  }
+
+  static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
+    int numRanges = ranges.length / 2;
+    if (numRanges < 1 || numRanges > 2 || (ranges.length & 1) != 0) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+
+    int pos = Math.max(0, start);
+    int wordEnd = length - Long.BYTES;
+
+    long low0 = (ranges[0] & 0xFFL) * BYTE_ONES;
+    long high0 = (ranges[1] & 0xFFL) * BYTE_ONES;
+    long low1 = numRanges > 1 ? (ranges[2] & 0xFFL) * BYTE_ONES : 0;
+    long high1 = numRanges > 1 ? (ranges[3] & 0xFFL) * BYTE_ONES : 0;
+
+    if (numRanges == 1) {
+      while (pos <= wordEnd) {
+        long word = (long) LONG_VIEW.get(bytes, offset + pos);
+        long values = word & ~BYTE_HIGH_BITS;
+        long ascii = ~word & BYTE_HIGH_BITS;
+        long matches = exactAsciiRangeMask(values, ascii, low0, high0);
+
+        if (matches != 0) {
+          int limit = pos + Long.BYTES;
+          for (int i = pos; i < limit; i++) {
+            int b = bytes[offset + i] & 0xFF;
+            if (b >= ranges[0] && b <= ranges[1]) {
+              return i;
+            }
+          }
+        }
+        pos += Long.BYTES;
+      }
+    } else {
+      while (pos <= wordEnd) {
+        long word = (long) LONG_VIEW.get(bytes, offset + pos);
+        long values = word & ~BYTE_HIGH_BITS;
+        long ascii = ~word & BYTE_HIGH_BITS;
+        long matches =
+            exactAsciiRangeMask(values, ascii, low0, high0)
+                | exactAsciiRangeMask(values, ascii, low1, high1);
+
+        if (matches != 0) {
+          int limit = pos + Long.BYTES;
+          for (int i = pos; i < limit; i++) {
+            int b = bytes[offset + i] & 0xFF;
+            if ((b >= ranges[0] && b <= ranges[1]) || (b >= ranges[2] && b <= ranges[3])) {
+              return i;
+            }
+          }
+        }
+        pos += Long.BYTES;
+      }
+    }
+
+    for (; pos < length; pos++) {
+      int b = bytes[offset + pos] & 0xFF;
+      for (int r = 0; r < numRanges; r++) {
+        if (b >= ranges[r * 2] && b <= ranges[r * 2 + 1]) {
+          return pos;
+        }
+      }
+    }
+    return -1;
   }
 
   private static int scalarRangeCheck(

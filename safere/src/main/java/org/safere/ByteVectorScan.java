@@ -15,7 +15,7 @@ import jdk.incubator.vector.VectorSpecies;
 /**
  * Stateless SIMD kernels using the incubating Vector API for 1-byte sequences (UTF-8 and Latin-1).
  */
-final class ByteVectorScan {
+public final class ByteVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
   public static int indexOfAsciiClass(
