@@ -124,4 +124,45 @@ public final class RE2FfmTest {
 
     assertFalse(m.find());
   }
+
+  @Test
+  public void testReplacementReferencesMatchJdk() {
+    String regex = "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)";
+    String input = "abcdefghij-abcdefghij";
+    String[] replacements = {"$10", "$11", "$101", "$00", "$01", "$09", "\\$1", "\\\\$1"};
+    RE2FfmPattern actualPattern = RE2FfmPattern.compile(regex);
+    java.util.regex.Pattern expectedPattern = java.util.regex.Pattern.compile(regex);
+
+    for (String replacement : replacements) {
+      assertEquals(
+          replacement,
+          expectedPattern.matcher(input).replaceFirst(replacement),
+          actualPattern.matcher(input).replaceFirst(replacement));
+      assertEquals(
+          replacement,
+          expectedPattern.matcher(input).replaceAll(replacement),
+          actualPattern.matcher(input).replaceAll(replacement));
+    }
+  }
+
+  @Test
+  public void testZeroWidthUnicodeReplacementMatchesJdk() {
+    String regex = "()()()()()()()()()()";
+    String input = "é";
+    RE2FfmPattern actualPattern = RE2FfmPattern.compile(regex);
+    java.util.regex.Pattern expectedPattern = java.util.regex.Pattern.compile(regex);
+
+    assertEquals(
+        expectedPattern.matcher(input).replaceAll("x"),
+        actualPattern.matcher(input).replaceAll("x"));
+  }
+
+  @Test
+  public void testReplaceAllExhaustsTerminalEmptyMatch() {
+    RE2FfmMatcher matcher = RE2FfmPattern.compile("$").matcher("text");
+
+    assertEquals("textx", matcher.replaceAll("x"));
+
+    assertFalse(matcher.find());
+  }
 }
