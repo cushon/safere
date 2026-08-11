@@ -24,6 +24,12 @@ sealed interface RejectPrefilter
   /** Returns whether the input starting from {@code searchFrom} can be rejected. */
   boolean canReject(InputScanner scanner, String text, int searchFrom, EnginePathOptions options);
 
+  /** Returns the strategy that rejected the input, or {@code null} if it cannot be rejected. */
+  default MatchStrategy rejectionStrategy(
+      InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
+    return canReject(scanner, text, searchFrom, options) ? strategy() : null;
+  }
+
   /** Returns whether the UTF-8 input starting from {@code searchFrom} can be rejected. */
   boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options);
 
@@ -180,6 +186,18 @@ sealed interface RejectPrefilter
         }
       }
       return false;
+    }
+
+    @Override
+    public MatchStrategy rejectionStrategy(
+        InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
+      for (RejectPrefilter filter : filters) {
+        MatchStrategy strategy = filter.rejectionStrategy(scanner, text, searchFrom, options);
+        if (strategy != null) {
+          return strategy;
+        }
+      }
+      return null;
     }
 
     @Override

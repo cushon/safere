@@ -885,11 +885,13 @@ public final class Matcher implements MatchResult {
     capturesResolved = true;
 
     RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
-    if (rejectPrefilter != null
-        && text != null
-        && rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())) {
-      diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
-      diagnosticBoundary(rejectPrefilter.strategy());
+    MatchStrategy rejectionStrategy =
+        rejectPrefilter != null && text != null
+            ? rejectPrefilter.rejectionStrategy(activeScanner(), text, 0, enginePathOptions())
+            : null;
+    if (rejectionStrategy != null) {
+      diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+      diagnosticBoundary(rejectionStrategy);
       return applyFailedMatchResult();
     }
     Pattern.DisjointRequiredLiterals disjoint = parentPattern.disjointRequiredLiterals();
@@ -1479,9 +1481,11 @@ public final class Matcher implements MatchResult {
     if (!hasAcceleratedSearchPath
         && rejectPrefilter != null
         && (text != null || scanner instanceof Utf8InputScanner)) {
-      if (rejectPrefilter.canReject(scanner, text, searchFrom, options)) {
-        diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
-        diagnosticBoundary(rejectPrefilter.strategy());
+      MatchStrategy rejectionStrategy =
+          rejectPrefilter.rejectionStrategy(scanner, text, searchFrom, options);
+      if (rejectionStrategy != null) {
+        diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(rejectionStrategy);
         return applyFailedMatchResult();
       }
     }
