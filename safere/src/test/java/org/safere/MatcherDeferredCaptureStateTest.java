@@ -101,6 +101,27 @@ class MatcherDeferredCaptureStateTest {
   }
 
   @Test
+  @DisplayName("optimized replacement returns borrowed DFA to its pool")
+  void optimizedReplacementReturnsBorrowedDfa() throws ReflectiveOperationException {
+    Pattern pattern = Pattern.compile("a+b");
+    Matcher matcher = pattern.matcher("aaab xx ab");
+
+    assertThat(matcher.replaceAll("x")).isEqualTo("x xx x");
+
+    assertThat(field(Matcher.class, "cachedForwardFirstMatchDfa").get(matcher)).isNull();
+  }
+
+  @Test
+  @DisplayName("split returns borrowed DFA to its pool")
+  void splitReturnsBorrowedDfa() throws ReflectiveOperationException {
+    Pattern pattern = Pattern.compile("a+b");
+
+    assertThat(pattern.split("xaaaabyabz")).containsExactly("x", "y", "z");
+
+    assertThat(firstPooled(pattern, "cachedForwardFirstMatchDfa")).isNotNull();
+  }
+
+  @Test
   @DisplayName("inner capture demand makes later small full matches capture eagerly")
   void innerCaptureDemandMakesLaterSmallFullMatchesCaptureEagerly()
       throws ReflectiveOperationException {
@@ -217,6 +238,20 @@ class MatcherDeferredCaptureStateTest {
 
   private static Field field(String name) throws ReflectiveOperationException {
     return field(Matcher.class, name);
+  }
+
+  private static Object firstPooled(Pattern pattern, String fieldName)
+      throws ReflectiveOperationException {
+    ArrayPool<?> pool = (ArrayPool<?>) field(Pattern.class, fieldName).get(pattern);
+    AtomicReferenceArray<?> array =
+        (AtomicReferenceArray<?>) field(ArrayPool.class, "array").get(pool);
+    for (int i = 0; i < array.length(); i++) {
+      Object item = array.get(i);
+      if (item != null) {
+        return item;
+      }
+    }
+    return null;
   }
 
   private static Field field(Class<?> type, String name) throws ReflectiveOperationException {

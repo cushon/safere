@@ -2714,6 +2714,8 @@ public final class Matcher implements MatchResult {
     } catch (RuntimeException | Error e) {
       abortDiagnostics(operation);
       throw e;
+    } finally {
+      releaseCaches();
     }
   }
 
@@ -3117,6 +3119,8 @@ public final class Matcher implements MatchResult {
     } catch (RuntimeException | Error e) {
       abortDiagnostics(operation);
       throw e;
+    } finally {
+      releaseCaches();
     }
   }
 
@@ -3145,16 +3149,20 @@ public final class Matcher implements MatchResult {
    */
   public String replaceAll(String replacement) {
     DiagnosticOperation operation = beginDiagnostics(MatchOperation.REPLACE_ALL);
-    if (operation == null) {
-      return replaceAllImpl(replacement);
-    }
     try {
+      if (operation == null) {
+        return replaceAllImpl(replacement);
+      }
       String result = replaceAllImpl(replacement);
       completeDiagnostics(operation, diagnosticMatchCount());
       return result;
     } catch (RuntimeException | Error e) {
-      abortDiagnostics(operation);
+      if (operation != null) {
+        abortDiagnostics(operation);
+      }
       throw e;
+    } finally {
+      releaseCaches();
     }
   }
 
@@ -3188,6 +3196,8 @@ public final class Matcher implements MatchResult {
     } catch (RuntimeException | Error e) {
       abortDiagnostics(operation);
       throw e;
+    } finally {
+      releaseCaches();
     }
   }
 
@@ -4108,40 +4118,44 @@ public final class Matcher implements MatchResult {
   }
 
   int findSplitPositions(int limit, SplitBuffer buffer) {
-    int last = 0;
-    int searchFrom = 0;
-    int textLen = text.length();
+    try {
+      int last = 0;
+      int searchFrom = 0;
+      int textLen = text.length();
 
-    while (searchFrom <= textLen) {
-      long packed = findNextMatchPacked(searchFrom);
-      if (packed == -1L) {
-        break;
-      }
-      int start = unpackStart(packed);
-      int end = unpackEnd(packed);
+      while (searchFrom <= textLen) {
+        long packed = findNextMatchPacked(searchFrom);
+        if (packed == -1L) {
+          break;
+        }
+        int start = unpackStart(packed);
+        int end = unpackEnd(packed);
 
-      if (limit > 0 && (buffer.size / 2) >= limit - 1) {
-        break;
-      }
+        if (limit > 0 && (buffer.size / 2) >= limit - 1) {
+          break;
+        }
 
-      if (last == 0 && start == 0 && end == 0) {
-        searchFrom = 1;
-        continue;
-      }
+        if (last == 0 && start == 0 && end == 0) {
+          searchFrom = 1;
+          continue;
+        }
 
-      buffer.add(start, end);
-      last = end;
-      if (start == end) {
-        searchFrom = end + 1;
-      } else if (parentPattern.hasInternalGraphemeClusterBoundary()
-          && end < textLen
-          && endedAfterCrLf(end)) {
-        searchFrom = end + 1;
-      } else {
-        searchFrom = end;
+        buffer.add(start, end);
+        last = end;
+        if (start == end) {
+          searchFrom = end + 1;
+        } else if (parentPattern.hasInternalGraphemeClusterBoundary()
+            && end < textLen
+            && endedAfterCrLf(end)) {
+          searchFrom = end + 1;
+        } else {
+          searchFrom = end;
+        }
       }
+      return buffer.size / 2;
+    } finally {
+      releaseCaches();
     }
-    return buffer.size / 2;
   }
 
   private long findNextMatchPacked(int fromIndex) {
