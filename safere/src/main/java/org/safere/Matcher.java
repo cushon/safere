@@ -1125,6 +1125,8 @@ public final class Matcher implements MatchResult {
     } catch (RuntimeException | Error e) {
       abortDiagnostics(operation);
       throw e;
+    } finally {
+      releaseCaches();
     }
   }
 
@@ -1227,6 +1229,8 @@ public final class Matcher implements MatchResult {
     } catch (RuntimeException | Error e) {
       abortDiagnostics(operation);
       throw e;
+    } finally {
+      releaseCaches();
     }
   }
 

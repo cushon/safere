@@ -822,10 +822,17 @@ public final class Pattern implements Serializable {
     if (!prog.anchorEnd() && !prog.hasGraphemeSemantics() && prog.numLoopRegs() == 0) {
       diagnostics.participate(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
       diagnostics.incrementForwardDfaSearchCount();
-      Dfa.SearchResult result = forwardFirstMatchDfa().doSearch(scanner, searchStart, false, false);
-      if (result != null) {
-        diagnostics.boundary(MatchStrategy.DFA);
-        return result.matched();
+      Dfa dfa = borrowForwardFirstMatchDfa();
+      if (dfa != null) {
+        try {
+          Dfa.SearchResult result = dfa.doSearch(scanner, searchStart, false, false);
+          if (result != null) {
+            diagnostics.boundary(MatchStrategy.DFA);
+            return result.matched();
+          }
+        } finally {
+          returnForwardFirstMatchDfa(dfa);
+        }
       }
       diagnostics.decision(
           MatchStrategy.DFA, StrategyDisposition.FALLBACK, StrategyReason.DFA_BUDGET_EXCEEDED);
