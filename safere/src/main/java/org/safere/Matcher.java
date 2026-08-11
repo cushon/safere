@@ -1464,10 +1464,8 @@ public final class Matcher implements MatchResult {
     }
 
     boolean hasAcceleratedSearchPath =
-        (options.startAcceleration()
-                && (parentPattern.utf8StartAccelerator() != null
-                    || parentPattern.stringStartAccelerator() != null))
-            || (parentPattern.prefix() != null)
+        (parentPattern.prefix() != null)
+            || (options.startAcceleration() && parentPattern.fixedOffsetLiteral() != null)
             || (prog.anchorEnd()
                 && scanner.length() >= MIN_REVERSE_FIRST_LEN
                 && canUseReverseDfa());
