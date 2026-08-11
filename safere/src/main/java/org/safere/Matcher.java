@@ -98,6 +98,7 @@ public final class Matcher implements MatchResult {
   private int regionEnd;
   private boolean fullTextRegionContext;
   private boolean findExhaustedAfterTerminalEmptyMatch;
+  private boolean disjointRequiredLiteralsChecked;
   private int modCount;
   private DiagnosticOperation diagnosticOperation;
   private boolean diagnosticCaptureSearch;
@@ -420,6 +421,7 @@ public final class Matcher implements MatchResult {
     resetReplacementState();
     clearCurrentResult();
     eagerFallbackCaptures = false;
+    disjointRequiredLiteralsChecked = false;
   }
 
   private PreparedMatchRunner preparedMatchRunner;
@@ -431,6 +433,7 @@ public final class Matcher implements MatchResult {
     resetSearchStateForRegionStart();
     resetReplacementState();
     clearCurrentResult();
+    disjointRequiredLiteralsChecked = false;
   }
 
   private void invalidatePatternCaches() {
@@ -1485,8 +1488,10 @@ public final class Matcher implements MatchResult {
     DisjointRequiredLiterals disjointRequiredLiterals = parentPattern.disjointRequiredLiterals();
     if (options.literalFastPaths()
         && disjointRequiredLiterals != null
+        && !disjointRequiredLiteralsChecked
         && !hasAcceleratedSearchPath
         && (text != null || scanner instanceof Utf8InputScanner)) {
+      disjointRequiredLiteralsChecked = true;
       boolean found;
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         found = disjointRequiredLiterals.matchesAny(utf8Scanner, searchFrom);
