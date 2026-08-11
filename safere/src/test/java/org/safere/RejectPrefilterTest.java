@@ -49,8 +49,7 @@ class RejectPrefilterTest {
     assertThat(prefilter.canReject(nonMatchingScanner, 0, options)).isTrue();
 
     // Disabled option
-    EnginePathOptions disabled =
-        EnginePathOptions.builder().literalFastPaths(false).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().literalFastPaths(false).build();
     assertThat(prefilter.canReject(nonMatchingScanner, 0, disabled)).isFalse();
   }
 
@@ -81,8 +80,7 @@ class RejectPrefilterTest {
     assertThat(prefilter.canReject(nonMatchingScanner, 0, options)).isTrue();
 
     // Disabled option
-    EnginePathOptions disabled =
-        EnginePathOptions.builder().charClassMatchFastPaths(false).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().charClassMatchFastPaths(false).build();
     assertThat(prefilter.canReject(nonMatchingScanner, 0, disabled)).isFalse();
   }
 
@@ -136,6 +134,36 @@ class RejectPrefilterTest {
     assertThat(event.auxiliaryStrategies())
         .contains(new StrategyParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER));
     assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.LITERAL);
+  }
+
+  @Test
+  void disjointLiteralsRejectPrefilterRejectsWhenAllMissing() {
+    String[] literals = new String[] {"apple", "banana", "orange"};
+    Pattern.DisjointRequiredLiterals disjoint = new Pattern.DisjointRequiredLiterals(literals);
+    RejectDescriptor desc = new RejectDescriptor(null, null, disjoint);
+    assertThat(desc.hasRejectionFilter()).isTrue();
+
+    RejectPrefilter prefilter = RejectPrefilter.create(desc);
+    assertThat(prefilter).isInstanceOf(RejectPrefilter.DisjointLiterals.class);
+    RejectPrefilter.DisjointLiterals disjointPrefilter =
+        (RejectPrefilter.DisjointLiterals) prefilter;
+    assertThat(disjointPrefilter.strategy()).isEqualTo(MatchStrategy.LITERAL);
+    assertThat(disjointPrefilter.literals()).isEqualTo(literals);
+
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    // String input
+    assertThat(prefilter.canReject(null, "I like banana smoothie", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "I like apple pie", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "I like grape juice", 0, options)).isTrue();
+
+    // UTF-8 input
+    assertThat(prefilter.canReject(utf8Scanner("I like orange juice"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("I like grape juice"), 0, options)).isTrue();
+
+    // Disabled option
+    EnginePathOptions disabled = EnginePathOptions.builder().literalFastPaths(false).build();
+    assertThat(prefilter.canReject(utf8Scanner("I like grape juice"), 0, disabled)).isFalse();
   }
 
   private static Utf8InputScanner utf8Scanner(String text) {

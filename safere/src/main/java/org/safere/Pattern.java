@@ -190,9 +190,9 @@ public final class Pattern implements Serializable {
   private final transient RejectDescriptor rejectDescriptor;
 
   /**
-   * Whole-input rejection filter for Tier 0 acceleration. Non-null when matching can quickly
-   * reject by verifying that mandatory literal content or character classes appear anywhere in the
-   * input before running automata.
+   * Whole-input rejection filter for Tier 0 acceleration. Non-null when matching can quickly reject
+   * by verifying that mandatory literal content or character classes appear anywhere in the input
+   * before running automata.
    */
   private final transient RejectPrefilter rejectPrefilter;
 
@@ -488,8 +488,7 @@ public final class Pattern implements Serializable {
     // Detect "repeated character class" pattern for matches() fast path.
     CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
     CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
-    RejectDescriptor rejectDescriptor =
-        extractRejectDescriptor(metadataAst, prefix, ccPrefixAscii);
+    RejectDescriptor rejectDescriptor = extractRejectDescriptor(metadataAst, prefix, ccPrefixAscii);
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,

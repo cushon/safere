@@ -24,17 +24,10 @@ sealed interface RejectPrefilter
         RejectPrefilter.Composite {
 
   /** Returns whether the input starting from {@code searchFrom} can be rejected. */
-  boolean canReject(
-      InputScanner scanner,
-      String text,
-      int searchFrom,
-      EnginePathOptions options);
+  boolean canReject(InputScanner scanner, String text, int searchFrom, EnginePathOptions options);
 
   /** Returns whether the UTF-8 input starting from {@code searchFrom} can be rejected. */
-  boolean canReject(
-      Utf8InputScanner scanner,
-      int searchFrom,
-      EnginePathOptions options);
+  boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options);
 
   default boolean canRejectWithDiagnostics(
       Utf8InputScanner scanner,
@@ -56,9 +49,7 @@ sealed interface RejectPrefilter
       return null;
     }
     RejectPrefilter litFilter =
-        descriptor.requiredLiteral() != null
-            ? Literal.create(descriptor.requiredLiteral())
-            : null;
+        descriptor.requiredLiteral() != null ? Literal.create(descriptor.requiredLiteral()) : null;
     RejectPrefilter ccFilter =
         descriptor.requiredCharClass() != null
             ? CharClass.create(descriptor.requiredCharClass())
@@ -89,11 +80,7 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record Literal(
-      String literal,
-      byte[] utf8,
-      int[] failure,
-      int[] shifts)
+  record Literal(String literal, byte[] utf8, int[] failure, int[] shifts)
       implements RejectPrefilter {
 
     static Literal create(String literal) {
@@ -105,10 +92,7 @@ sealed interface RejectPrefilter
 
     @Override
     public boolean canReject(
-        InputScanner scanner,
-        String text,
-        int searchFrom,
-        EnginePathOptions options) {
+        InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
       if (!options.literalFastPaths()) {
         return false;
       }
@@ -125,10 +109,7 @@ sealed interface RejectPrefilter
     }
 
     @Override
-    public boolean canReject(
-        Utf8InputScanner scanner,
-        int searchFrom,
-        EnginePathOptions options) {
+    public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
       if (!options.literalFastPaths()) {
         return false;
       }
@@ -142,11 +123,7 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record CharClass(
-      int[] ranges,
-      long bitmap0,
-      long bitmap1)
-      implements RejectPrefilter {
+  record CharClass(int[] ranges, long bitmap0, long bitmap1) implements RejectPrefilter {
 
     static CharClass create(CharClassScanInfo scanInfo) {
       return new CharClass(scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1);
@@ -154,10 +131,7 @@ sealed interface RejectPrefilter
 
     @Override
     public boolean canReject(
-        InputScanner scanner,
-        String text,
-        int searchFrom,
-        EnginePathOptions options) {
+        InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
       if (!options.charClassMatchFastPaths()) {
         return false;
       }
@@ -165,10 +139,7 @@ sealed interface RejectPrefilter
     }
 
     @Override
-    public boolean canReject(
-        Utf8InputScanner scanner,
-        int searchFrom,
-        EnginePathOptions options) {
+    public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
       if (!options.charClassMatchFastPaths()) {
         return false;
       }
@@ -183,10 +154,7 @@ sealed interface RejectPrefilter
 
   @SuppressWarnings("ArrayRecordComponent")
   record DisjointLiterals(
-      String[] literals,
-      byte[][] utf8Literals,
-      int[][] failures,
-      int[][] shifts)
+      String[] literals, byte[][] utf8Literals, int[][] failures, int[][] shifts)
       implements RejectPrefilter {
 
     static DisjointLiterals create(DisjointRequiredLiterals disjoint) {
@@ -204,10 +172,7 @@ sealed interface RejectPrefilter
 
     @Override
     public boolean canReject(
-        InputScanner scanner,
-        String text,
-        int searchFrom,
-        EnginePathOptions options) {
+        InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
       if (!options.literalFastPaths()) {
         return false;
       }
@@ -234,10 +199,7 @@ sealed interface RejectPrefilter
     }
 
     @Override
-    public boolean canReject(
-        Utf8InputScanner scanner,
-        int searchFrom,
-        EnginePathOptions options) {
+    public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
       if (!options.literalFastPaths()) {
         return false;
       }
@@ -259,10 +221,7 @@ sealed interface RejectPrefilter
   record Composite(RejectPrefilter[] filters) implements RejectPrefilter {
     @Override
     public boolean canReject(
-        InputScanner scanner,
-        String text,
-        int searchFrom,
-        EnginePathOptions options) {
+        InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
       for (RejectPrefilter filter : filters) {
         if (filter.canReject(scanner, text, searchFrom, options)) {
           return true;
@@ -272,10 +231,7 @@ sealed interface RejectPrefilter
     }
 
     @Override
-    public boolean canReject(
-        Utf8InputScanner scanner,
-        int searchFrom,
-        EnginePathOptions options) {
+    public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
       for (RejectPrefilter filter : filters) {
         if (filter.canReject(scanner, searchFrom, options)) {
           return true;

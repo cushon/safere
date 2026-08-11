@@ -9,8 +9,8 @@ import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.DisjointRequiredLiterals;
 
 /**
- * Metadata extracted from a regular expression AST describing mandatory content that any match
- * must contain across the entire input (Tier 0 whole-input rejection).
+ * Metadata extracted from a regular expression AST describing mandatory content that any match must
+ * contain across the entire input (Tier 0 whole-input rejection).
  */
 record RejectDescriptor(
     String requiredLiteral,
@@ -20,8 +20,6 @@ record RejectDescriptor(
   static final RejectDescriptor NONE = new RejectDescriptor(null, null, null);
 
   boolean hasRejectionFilter() {
-    return requiredLiteral != null
-        || requiredCharClass != null
-        || disjointRequiredLiterals != null;
+    return requiredLiteral != null || requiredCharClass != null || disjointRequiredLiterals != null;
   }
 }
