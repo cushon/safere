@@ -3782,11 +3782,19 @@ public final class Matcher implements MatchResult {
    * (fo|foo)} matching "fo" rather than "foo"). For {@code matches()}, the deferred search must
    * still cover the whole input.
    */
-  @SuppressWarnings("ReferenceEquality")
   private void resolveCaptures() {
     if (capturesResolved) {
       return;
     }
+    try {
+      resolveCapturesImpl();
+    } finally {
+      releaseCaches();
+    }
+  }
+
+  @SuppressWarnings("ReferenceEquality")
+  private void resolveCapturesImpl() {
     Prog prog = parentPattern.prog();
     InputScanner scanner = activeScanner();
     // Search anchored at matchStart, bounded by matchEnd, to extract inner capture groups.

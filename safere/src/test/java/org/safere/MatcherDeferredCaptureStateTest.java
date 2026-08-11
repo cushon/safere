@@ -122,6 +122,24 @@ class MatcherDeferredCaptureStateTest {
   }
 
   @Test
+  @DisplayName("deferred capture resolution returns its borrowed NFA")
+  void deferredCaptureResolutionReturnsBorrowedNfa() throws ReflectiveOperationException {
+    Pattern pattern =
+        Pattern.compile(
+            "([a-z]+)([0-9]+)",
+            0,
+            EnginePathOptions.builder().onePass(false).bitState(false).build());
+    Matcher matcher = pattern.matcher("x".repeat(300) + "123");
+
+    assertThat(matcher.find()).isTrue();
+    assertThat(booleanField(matcher, "capturesResolved")).isFalse();
+    assertThat(matcher.group(2)).isEqualTo("123");
+
+    assertThat(field(Matcher.class, "cachedNfa").get(matcher)).isNull();
+    assertThat(firstPooled(pattern, "cachedNfa")).isNotNull();
+  }
+
+  @Test
   @DisplayName("inner capture demand makes later small full matches capture eagerly")
   void innerCaptureDemandMakesLaterSmallFullMatchesCaptureEagerly()
       throws ReflectiveOperationException {
