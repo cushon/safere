@@ -532,10 +532,10 @@ public final class Matcher implements MatchResult {
    * (e.g., {@code [a-zA-Z]+}, {@code \d*}). Uses precomputed ASCII bitmaps for O(1) per-character
    * checks and falls back to binary search for non-ASCII code points.
    */
-  private boolean charClassMatchFastPath(int[] ranges) {
-    long b0 = parentPattern.charClassMatchBitmap0();
-    long b1 = parentPattern.charClassMatchBitmap1();
-    boolean allowEmpty = parentPattern.charClassMatchAllowEmpty();
+  private boolean charClassMatchFastPath(Pattern.CharClassMatchInfo matchInfo) {
+    long b0 = matchInfo.bitmap0();
+    long b1 = matchInfo.bitmap1();
+    boolean allowEmpty = matchInfo.allowEmpty();
 
     int len = text.length();
     if (len == 0) {
@@ -545,6 +545,7 @@ public final class Matcher implements MatchResult {
       return applyFailedMatchResult();
     }
 
+    int[] ranges = matchInfo.ranges();
     // Scan every code point.
     int i = 0;
     while (i < len) {
@@ -3305,8 +3306,9 @@ public final class Matcher implements MatchResult {
   }
 
   private String charClassReplaceFastPath(LazyTemplate template, int limit) {
+    Pattern.CharClassMatchInfo ccMatch = parentPattern.matchDescriptor().charClassMatch();
     if (!enginePathOptions().charClassReplacementFastPath()
-        || parentPattern.charClassMatchRanges() == null
+        || ccMatch == null
         || parentPattern.hasLazyQuantifiers()) {
       return null;
     }
@@ -3316,8 +3318,8 @@ public final class Matcher implements MatchResult {
     if (accumulator != null) {
       accumulator.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.CANDIDATE_VERIFICATION);
     }
-    if (parentPattern.charClassMatchAllowEmpty()) {
-      return nullableCharClassReplaceFastPath(template, limit);
+    if (ccMatch.allowEmpty()) {
+      return nullableCharClassReplaceFastPath(template, limit, ccMatch);
     }
     String repText = null;
 
@@ -3327,9 +3329,9 @@ public final class Matcher implements MatchResult {
     int matchesFound = 0;
     StringBuilder sb = null;
 
-    int[] ranges = parentPattern.charClassMatchRanges();
-    long b0 = parentPattern.charClassMatchBitmap0();
-    long b1 = parentPattern.charClassMatchBitmap1();
+    int[] ranges = ccMatch.ranges();
+    long b0 = ccMatch.bitmap0();
+    long b1 = ccMatch.bitmap1();
 
     int firstMatchStart = -1;
     int firstMatchEnd = -1;
@@ -3413,10 +3415,11 @@ public final class Matcher implements MatchResult {
     return sb.toString();
   }
 
-  private String nullableCharClassReplaceFastPath(LazyTemplate template, int limit) {
-    int[] ranges = parentPattern.charClassMatchRanges();
-    long b0 = parentPattern.charClassMatchBitmap0();
-    long b1 = parentPattern.charClassMatchBitmap1();
+  private String nullableCharClassReplaceFastPath(
+      LazyTemplate template, int limit, Pattern.CharClassMatchInfo ccMatch) {
+    int[] ranges = ccMatch.ranges();
+    long b0 = ccMatch.bitmap0();
+    long b1 = ccMatch.bitmap1();
     int textLen = text.length();
     int firstMatchEnd = 0;
     while (firstMatchEnd < textLen) {
@@ -4169,7 +4172,7 @@ public final class Matcher implements MatchResult {
     }
 
     // Char class fast path
-    Pattern.CharClassScanInfo singleCharClass = parentPattern.singleCharClassScanInfo();
+    Pattern.CharClassScanInfo singleCharClass = parentPattern.matchDescriptor().singleCharClass();
     if (options.charClassMatchFastPaths() && singleCharClass != null) {
       if (singleCharClass.isAscii) {
         int idx = scanner.indexOfCharClass(singleCharClass, fromIndex);
@@ -4408,15 +4411,15 @@ public final class Matcher implements MatchResult {
 
   private static final class SingleCharClassPreparedRunner implements PreparedMatchRunner {
     private final Pattern.CharClassScanInfo singleCharClass;
-    private final int[] charClassMatchRanges;
+    private final Pattern.CharClassMatchInfo charClassMatch;
     private final boolean isStartAnchored;
 
     SingleCharClassPreparedRunner(
         Pattern.CharClassScanInfo singleCharClass,
-        int[] charClassMatchRanges,
+        Pattern.CharClassMatchInfo charClassMatch,
         boolean isStartAnchored) {
       this.singleCharClass = singleCharClass;
-      this.charClassMatchRanges = charClassMatchRanges;
+      this.charClassMatch = charClassMatch;
       this.isStartAnchored = isStartAnchored;
     }
 
@@ -4438,9 +4441,9 @@ public final class Matcher implements MatchResult {
         return matcher.applyFailedMatchResult();
       }
       matcher.capturesResolved = true;
-      if (charClassMatchRanges != null && matcher.text != null) {
+      if (charClassMatch != null && matcher.text != null) {
         matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
-        return matcher.charClassMatchFastPath(charClassMatchRanges);
+        return matcher.charClassMatchFastPath(charClassMatch);
       }
       return matcher.matchesCore();
     }
@@ -4594,12 +4597,11 @@ public final class Matcher implements MatchResult {
 
     // Single char class runner
     Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
-    int[] charClassMatchRanges = parentPattern.charClassMatchRanges();
+    Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
     if (options.charClassMatchFastPaths()
-        && (singleCharClass != null || charClassMatchRanges != null)
+        && (singleCharClass != null || charClassMatch != null)
         && text != null) {
-      return new SingleCharClassPreparedRunner(
-          singleCharClass, charClassMatchRanges, prog.anchorStart());
+      return new SingleCharClassPreparedRunner(singleCharClass, charClassMatch, prog.anchorStart());
     }
 
     if (regionActive) {

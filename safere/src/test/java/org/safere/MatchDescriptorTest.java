@@ -36,7 +36,7 @@ class MatchDescriptorTest {
     MatchDescriptor desc = p.matchDescriptor();
     assertThat(desc.hasFastPath()).isTrue();
     assertThat(desc.singleCharClass()).isNotNull();
-    assertThat(p.singleCharClassScanInfo()).isNotNull();
+    assertThat(desc.singleCharClass().isAscii).isTrue();
   }
 
   @Test
@@ -45,7 +45,7 @@ class MatchDescriptorTest {
     MatchDescriptor desc = p.matchDescriptor();
     assertThat(desc.hasFastPath()).isTrue();
     assertThat(desc.charClassMatch()).isNotNull();
-    assertThat(p.charClassMatchRanges()).isNotNull();
+    assertThat(desc.charClassMatch().ranges()).isNotNull();
   }
 
   @Test
@@ -54,7 +54,7 @@ class MatchDescriptorTest {
     MatchDescriptor desc = p.matchDescriptor();
     if (desc.keywordAlternation() != null) {
       assertThat(desc.hasFastPath()).isTrue();
-      assertThat(p.keywordAlternation()).isNotNull();
+      assertThat(desc.keywordAlternation().keywords).isNotEmpty();
     }
   }
 

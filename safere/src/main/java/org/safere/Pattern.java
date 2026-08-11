@@ -1316,46 +1316,6 @@ public final class Pattern implements Serializable {
     return matchDescriptor.keywordAlternation();
   }
 
-  /**
-   * Returns the precomputed ranges for the character-class-match fast path, or {@code null} if the
-   * pattern is not a simple repeated character class. When non-null, {@code matches()} can use a
-   * tight scanning loop instead of the full engine cascade.
-   */
-  int[] charClassMatchRanges() {
-    return matchDescriptor.charClassMatch() == null
-        ? null
-        : matchDescriptor.charClassMatch().ranges();
-  }
-
-  /** ASCII bitmap (code points 0–63) for the character-class-match fast path. */
-  long charClassMatchBitmap0() {
-    return matchDescriptor.charClassMatch() == null
-        ? 0L
-        : matchDescriptor.charClassMatch().bitmap0();
-  }
-
-  /** ASCII bitmap (code points 64–127) for the character-class-match fast path. */
-  long charClassMatchBitmap1() {
-    return matchDescriptor.charClassMatch() == null
-        ? 0L
-        : matchDescriptor.charClassMatch().bitmap1();
-  }
-
-  /**
-   * Whether the character-class-match fast path allows empty input (from {@code *} or {@code ?}).
-   */
-  boolean charClassMatchAllowEmpty() {
-    return matchDescriptor.charClassMatch() != null
-        && matchDescriptor.charClassMatch().allowEmpty();
-  }
-
-  /**
-   * Returns precomputed scan info when the pattern is exactly one character class, or {@code null}.
-   */
-  CharClassScanInfo singleCharClassScanInfo() {
-    return matchDescriptor.singleCharClass();
-  }
-
   /** Returns precomputed ranges for a required character class, or {@code null}. */
   int[] requiredMatchClassRanges() {
     return requiredMatchClassRanges;
