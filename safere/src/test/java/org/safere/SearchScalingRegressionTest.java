@@ -57,6 +57,22 @@ class SearchScalingRegressionTest {
         "UTF-8");
   }
 
+  @Test
+  void disjointRequiredLiteralOptimizationDoesNotAddRedundantUtf8Scans() {
+    String regex = "(?:banana\\d|apple\\d)";
+    Pattern defaultPattern = Pattern.compile(regex);
+    Pattern withoutLiteralFastPaths =
+        Pattern.compile(regex, 0, EnginePathOptions.builder().literalFastPaths(false).build());
+    Utf8Input input = Utf8Input.trusted("x".repeat(32_768).getBytes(UTF_8));
+
+    long defaultWork = countAllMatches(defaultPattern.matcher(input)::find, 0);
+    long fallbackWork = countAllMatches(withoutLiteralFastPaths.matcher(input)::find, 0);
+
+    assertThat(defaultWork)
+        .as("UTF-8 literal optimization should not add full-input scans before the DFA")
+        .isLessThanOrEqualTo(fallbackWork);
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);

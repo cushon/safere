@@ -1491,18 +1491,13 @@ public final class Matcher implements MatchResult {
         && disjointRequiredLiterals != null
         && !disjointRequiredLiteralsChecked
         && !hasAcceleratedSearchPath
-        && (text != null || scanner instanceof Utf8InputScanner)) {
+        && text != null) {
       disjointRequiredLiteralsChecked = true;
-      boolean found;
-      if (scanner instanceof Utf8InputScanner utf8Scanner) {
-        found = disjointRequiredLiterals.matchesAny(utf8Scanner, searchFrom);
-      } else {
-        found = false;
-        for (String lit : disjointRequiredLiterals.literals()) {
-          if (indexOfRequiredLiteral(lit) >= 0) {
-            found = true;
-            break;
-          }
+      boolean found = false;
+      for (String lit : disjointRequiredLiterals.literals()) {
+        if (indexOfRequiredLiteral(lit) >= 0) {
+          found = true;
+          break;
         }
       }
       if (!found) {

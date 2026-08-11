@@ -287,33 +287,15 @@ public final class Pattern implements Serializable {
       OnePass onePass, boolean canPrimary, boolean canFind, boolean canSubmatch) {}
 
   /** Precomputed metadata for a small disjoint set of required literal substrings. */
+  // The array is owned by the immutable compiled Pattern and is never exposed publicly.
   @SuppressWarnings("ArrayRecordComponent")
-  record DisjointRequiredLiterals(
-      String[] literals, byte[][] utf8, int[][] failure, int[][] shifts) {
+  record DisjointRequiredLiterals(String[] literals) {
 
     static DisjointRequiredLiterals create(String[] literals) {
       if (literals == null || literals.length == 0) {
         return null;
       }
-      byte[][] utf8 = new byte[literals.length][];
-      int[][] failure = new int[literals.length][];
-      int[][] shifts = new int[literals.length][];
-      for (int i = 0; i < literals.length; i++) {
-        byte[] bytes = literals[i].getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        utf8[i] = bytes;
-        failure[i] = literalFailure(bytes);
-        shifts[i] = literalShifts(bytes);
-      }
-      return new DisjointRequiredLiterals(literals, utf8, failure, shifts);
-    }
-
-    boolean matchesAny(Utf8InputScanner scanner, int searchFrom) {
-      for (int i = 0; i < utf8.length; i++) {
-        if (scanner.indexOf(utf8[i], failure[i], shifts[i], searchFrom) >= 0) {
-          return true;
-        }
-      }
-      return false;
+      return new DisjointRequiredLiterals(literals);
     }
   }
 
@@ -701,12 +683,6 @@ public final class Pattern implements Serializable {
             < 0) {
       return false;
     }
-    if (enginePathOptions.literalFastPaths()
-        && disjointRequiredLiterals != null
-        && prefixUtf8 == null
-        && !disjointRequiredLiterals.matchesAny(scanner, 0)) {
-      return false;
-    }
     if (enginePathOptions.charClassMatchFastPaths()
         && requiredMatchClassRanges != null
         && prefixUtf8 == null
@@ -776,14 +752,6 @@ public final class Pattern implements Serializable {
         && prefixUtf8 == null
         && scanner.indexOf(requiredLiteralUtf8, requiredLiteralFailure, requiredLiteralShifts, 0)
             < 0) {
-      diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
-      diagnostics.boundary(MatchStrategy.LITERAL);
-      return false;
-    }
-    if (enginePathOptions.literalFastPaths()
-        && disjointRequiredLiterals != null
-        && prefixUtf8 == null
-        && !disjointRequiredLiterals.matchesAny(scanner, 0)) {
       diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
       diagnostics.boundary(MatchStrategy.LITERAL);
       return false;
