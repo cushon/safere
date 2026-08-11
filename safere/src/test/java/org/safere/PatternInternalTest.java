@@ -355,7 +355,7 @@ class PatternInternalTest {
   void disjointRequiredLiteralsAreRecordedForAlternations() {
     Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");
     assertThat(p.requiredDisjointLiterals()).containsExactly("apple", "banana", "cherry");
-    assertThat(p.requiredLiteral()).isNull();
+    assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
 
     Pattern p2 = Pattern.compile("(foo.*|bar.*|baz.*)");
     assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "bar", "baz");
@@ -414,7 +414,7 @@ class PatternInternalTest {
       })
   void invalidOrNullableAlternationsDoNotRecordDisjointLiterals(String regex) {
     Pattern p = Pattern.compile(regex);
-    if (p.prefix() == null && p.requiredLiteral() == null) {
+    if (p.prefix() == null && p.rejectDescriptor().requiredLiteral() == null) {
       assertThat(p.requiredDisjointLiterals()).isNull();
     }
   }

@@ -17,6 +17,10 @@ record RejectDescriptor(
     CharClassScanInfo requiredCharClass,
     DisjointRequiredLiterals disjointRequiredLiterals) {
 
+  RejectDescriptor(String requiredLiteral, CharClassScanInfo requiredCharClass) {
+    this(requiredLiteral, requiredCharClass, null);
+  }
+
   static final RejectDescriptor NONE = new RejectDescriptor(null, null, null);
 
   boolean hasRejectionFilter() {
