@@ -390,6 +390,15 @@ class PatternInternalTest {
     assertThat(Pattern.compile(regex.toString()).requiredDisjointLiterals()).isNull();
   }
 
+  @Test
+  void disjointRequiredLiteralCountIsBoundedByMeasuredCrossover() {
+    assertThat(Pattern.compile("(?:apple|banana|cherry|orange)\\d").requiredDisjointLiterals())
+        .containsExactly("apple", "banana", "cherry", "orange");
+    assertThat(
+            Pattern.compile("(?:apple|banana|cherry|orange|papaya)\\d").requiredDisjointLiterals())
+        .isNull();
+  }
+
   @ParameterizedTest
   @ValueSource(
       strings = {

@@ -64,7 +64,7 @@ public final class Pattern implements Serializable {
   private static final MethodHandle UTF8_FIND_INVOKER = UTF8_FIND_SITE.dynamicInvoker();
   private static final MethodHandle UTF8_FIND_DISABLED = findUtf8Handle("findWithoutDiagnostics");
   private static final MethodHandle UTF8_FIND_ENABLED = findUtf8Handle("findWithDiagnostics");
-  private static final int MAX_DISJOINT_REQUIRED_LITERALS = 16;
+  private static final int MAX_DISJOINT_REQUIRED_LITERALS = 4;
 
   static {
     setDiagnosticsTarget(SafeReMatchDiagnostics.NONE);
@@ -3349,7 +3349,7 @@ public final class Pattern implements Serializable {
    * branch requires at least one literal substring (e.g., {@code (apple.*|banana.*|orange.*)}).
    *
    * <p>Returns {@code null} if any branch has no required literal, or if the number of distinct
-   * literals is outside [2, 16].
+   * literals is outside [2, 4].
    */
   private static String[] extractDisjointRequiredLiterals(Regexp re) {
     Regexp node = re;
