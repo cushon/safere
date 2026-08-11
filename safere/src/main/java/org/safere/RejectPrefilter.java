@@ -6,8 +6,6 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.DisjointRequiredLiterals;
 
@@ -45,7 +43,7 @@ sealed interface RejectPrefilter
   MatchStrategy strategy();
 
   static RejectPrefilter create(RejectDescriptor descriptor) {
-    if (descriptor == null || !descriptor.hasRejectionFilter()) {
+    if (descriptor == null) {
       return null;
     }
     RejectPrefilter litFilter =
@@ -54,29 +52,10 @@ sealed interface RejectPrefilter
         descriptor.requiredCharClass() != null
             ? CharClass.create(descriptor.requiredCharClass())
             : null;
-    RejectPrefilter disjointFilter =
-        descriptor.disjointRequiredLiterals() != null
-            ? DisjointLiterals.create(descriptor.disjointRequiredLiterals())
-            : null;
-
-    List<RejectPrefilter> active = new ArrayList<>(3);
-    if (litFilter != null) {
-      active.add(litFilter);
+    if (litFilter != null && ccFilter != null) {
+      return new Composite(new RejectPrefilter[] {litFilter, ccFilter});
     }
-    if (ccFilter != null) {
-      active.add(ccFilter);
-    }
-    if (disjointFilter != null) {
-      active.add(disjointFilter);
-    }
-
-    if (active.isEmpty()) {
-      return null;
-    }
-    if (active.size() == 1) {
-      return active.get(0);
-    }
-    return new Composite(active.toArray(new RejectPrefilter[0]));
+    return litFilter != null ? litFilter : ccFilter;
   }
 
   @SuppressWarnings("ArrayRecordComponent")
@@ -153,62 +132,35 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record DisjointLiterals(
-      String[] literals, byte[][] utf8Literals, int[][] failures, int[][] shifts)
-      implements RejectPrefilter {
+  record DisjointLiterals(String[] literals) implements RejectPrefilter {
 
     static DisjointLiterals create(DisjointRequiredLiterals disjoint) {
-      String[] literals = disjoint.literals();
-      byte[][] utf8Literals = new byte[literals.length][];
-      int[][] failures = new int[literals.length][];
-      int[][] shifts = new int[literals.length][];
-      for (int i = 0; i < literals.length; i++) {
-        utf8Literals[i] = literals[i].getBytes(StandardCharsets.UTF_8);
-        failures[i] = Pattern.literalFailure(utf8Literals[i]);
-        shifts[i] = Pattern.literalShifts(utf8Literals[i]);
+      if (disjoint == null || disjoint.literals() == null || disjoint.literals().length == 0) {
+        return null;
       }
-      return new DisjointLiterals(literals, utf8Literals, failures, shifts);
+      return new DisjointLiterals(disjoint.literals());
     }
 
     @Override
     public boolean canReject(
         InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
-      if (!options.literalFastPaths()) {
+      if (!options.literalFastPaths() || text == null) {
         return false;
       }
-      if (scanner instanceof Utf8InputScanner utf8Scanner) {
-        for (int i = 0; i < utf8Literals.length; i++) {
-          if (utf8Scanner.indexOf(utf8Literals[i], failures[i], shifts[i], searchFrom) >= 0) {
-            return false;
-          }
+      for (String literal : literals) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(Math.max(0, text.length() - searchFrom));
         }
-        return true;
-      }
-      if (text != null) {
-        for (String literal : literals) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(Math.max(0, text.length() - searchFrom));
-          }
-          if (text.indexOf(literal, searchFrom) >= 0) {
-            return false;
-          }
-        }
-        return true;
-      }
-      return false;
-    }
-
-    @Override
-    public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
-      if (!options.literalFastPaths()) {
-        return false;
-      }
-      for (int i = 0; i < utf8Literals.length; i++) {
-        if (scanner.indexOf(utf8Literals[i], failures[i], shifts[i], searchFrom) >= 0) {
+        if (text.indexOf(literal, searchFrom) >= 0) {
           return false;
         }
       }
       return true;
+    }
+
+    @Override
+    public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
+      return false;
     }
 
     @Override

@@ -97,6 +97,7 @@ public final class Matcher implements MatchResult {
   private int regionEnd;
   private boolean fullTextRegionContext;
   private boolean findExhaustedAfterTerminalEmptyMatch;
+  private boolean disjointRequiredLiteralsChecked;
   private int modCount;
   private DiagnosticOperation diagnosticOperation;
   private boolean diagnosticCaptureSearch;
@@ -419,6 +420,7 @@ public final class Matcher implements MatchResult {
     resetReplacementState();
     clearCurrentResult();
     eagerFallbackCaptures = false;
+    disjointRequiredLiteralsChecked = false;
   }
 
   private PreparedMatchRunner preparedMatchRunner;
@@ -430,10 +432,12 @@ public final class Matcher implements MatchResult {
     resetSearchStateForRegionStart();
     resetReplacementState();
     clearCurrentResult();
+    disjointRequiredLiteralsChecked = false;
   }
 
   private void invalidatePatternCaches() {
     preparedMatchRunner = null;
+    disjointRequiredLiteralsChecked = false;
     cachedForwardFirstMatchDfa = null;
     cachedForwardLongestMatchDfa = null;
     cachedReverseDfa = null;
@@ -887,6 +891,24 @@ public final class Matcher implements MatchResult {
       diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
       diagnosticBoundary(rejectPrefilter.strategy());
       return applyFailedMatchResult();
+    }
+    Pattern.DisjointRequiredLiterals disjoint = parentPattern.disjointRequiredLiterals();
+    if (enginePathOptions().literalFastPaths() && disjoint != null && text != null) {
+      boolean found = false;
+      for (String lit : disjoint.literals()) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(text.length());
+        }
+        if (text.indexOf(lit) >= 0) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(MatchStrategy.LITERAL);
+        return applyFailedMatchResult();
+      }
     }
 
     Prog prog = parentPattern.prog();
@@ -1460,6 +1482,31 @@ public final class Matcher implements MatchResult {
       if (rejectPrefilter.canReject(scanner, text, searchFrom, options)) {
         diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
         diagnosticBoundary(rejectPrefilter.strategy());
+        return applyFailedMatchResult();
+      }
+    }
+    Pattern.DisjointRequiredLiterals disjointRequiredLiterals =
+        parentPattern.disjointRequiredLiterals();
+    if (options.literalFastPaths()
+        && disjointRequiredLiterals != null
+        && !disjointRequiredLiteralsChecked
+        && !hasAcceleratedSearchPath
+        && !prog.anchorStart()
+        && text != null) {
+      disjointRequiredLiteralsChecked = true;
+      boolean found = false;
+      for (String lit : disjointRequiredLiterals.literals()) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(Math.max(0, text.length() - searchFrom));
+        }
+        if (text.indexOf(lit, searchFrom) >= 0) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(MatchStrategy.LITERAL);
         return applyFailedMatchResult();
       }
     }
