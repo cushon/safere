@@ -377,6 +377,11 @@ class PatternInternalTest {
     // https contains http, ftp is distinct
     Pattern p3 = Pattern.compile(".*(?:http|https|ftp).*");
     assertThat(p3.requiredDisjointLiterals()).containsExactly("http", "ftp");
+
+    // A lone surrogate is not a code-point substring of a supplementary character.
+    Pattern p4 = Pattern.compile("(?:a\uD83D|za\uD83D\uDE00|banana)");
+    assertThat(p4.requiredDisjointLiterals())
+        .containsExactly("a\uD83D", "za\uD83D\uDE00", "banana");
   }
 
   @Test
