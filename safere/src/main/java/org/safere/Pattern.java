@@ -352,7 +352,10 @@ public final class Pattern implements Serializable {
     this.namedGroups = namedGroups;
     this.prefix = startDescriptor.prefix();
     this.prefixFoldCase = startDescriptor.prefixFoldCase();
-    this.prefixUtf8 = startDescriptor.prefixUtf8();
+    this.prefixUtf8 =
+        startDescriptor.prefix() == null || startDescriptor.prefix().isEmpty()
+            ? null
+            : startDescriptor.prefix().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     this.literalMatch = literalMatch;
     this.literalMatchUtf8 =
         literalMatch == null
@@ -546,10 +549,6 @@ public final class Pattern implements Serializable {
     PrefixResult prefixResult = extractPrefix(metadataAst);
     String prefix = prefixResult.prefix();
     boolean prefixFoldCase = prefixResult.foldCase();
-    byte[] prefixUtf8 =
-        prefix == null || prefix.isEmpty()
-            ? null
-            : prefix.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     FixedOffsetLiteral fixedOffsetLiteral =
         prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
     boolean[] ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
@@ -557,8 +556,14 @@ public final class Pattern implements Serializable {
         (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
             ? extractStartAcceleration(metadataAst)
             : null;
+    if (prefix == null
+        && fixedOffsetLiteral == null
+        && ccPrefixAscii == null
+        && startAcceleration == null) {
+      return StartDescriptor.NONE;
+    }
     return new StartDescriptor(
-        prefix, prefixFoldCase, prefixUtf8, fixedOffsetLiteral, ccPrefixAscii, startAcceleration);
+        prefix, prefixFoldCase, fixedOffsetLiteral, ccPrefixAscii, startAcceleration);
   }
 
   /**
@@ -693,7 +698,7 @@ public final class Pattern implements Serializable {
     }
     int searchStart = 0;
     if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
-      searchStart = utf8StartAccelerator.findCandidate(this, scanner, 0);
+      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
       if (searchStart < 0) {
         return false;
       }
@@ -753,11 +758,11 @@ public final class Pattern implements Serializable {
     }
     int searchStart = 0;
     if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
-      MatchStrategy strategy = utf8StartAccelerator.diagnosticStrategy();
+      MatchStrategy strategy = utf8StartAccelerator.strategy();
       if (strategy != null) {
         diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
-      searchStart = utf8StartAccelerator.findCandidate(this, scanner, 0);
+      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
       if (searchStart < 0) {
         if (strategy != null) {
           diagnostics.boundary(strategy);
@@ -791,45 +796,6 @@ public final class Pattern implements Serializable {
             != null;
     diagnostics.boundary(MatchStrategy.NFA);
     return matched;
-  }
-
-  int nextFixedOffsetCandidate(Utf8InputScanner scanner, int searchFrom) {
-    int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
-    int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
-    while (literalFrom <= scanner.length()) {
-      int literalStart =
-          scanner.indexOf(
-              fixedOffsetLiteral.utf8(),
-              fixedOffsetLiteral.failure(),
-              fixedOffsetLiteral.shifts(),
-              literalFrom);
-      if (literalStart < 0) {
-        return -1;
-      }
-      if (discreteOffsets != null && discreteOffsets.length == 1 && charClassPrefixAscii != null) {
-        int earliestValid = -1;
-        for (int offset : discreteOffsets) {
-          int candidateStart = literalStart - offset;
-          if (candidateStart >= searchFrom) {
-            int first = scanner.asciiAt(candidateStart);
-            if (first >= 0
-                && first < charClassPrefixAscii.length
-                && charClassPrefixAscii[first]
-                && (earliestValid < 0 || candidateStart < earliestValid)) {
-              earliestValid = candidateStart;
-            }
-          }
-        }
-        if (earliestValid >= 0) {
-          return earliestValid;
-        }
-        literalFrom = literalStart + 1;
-        continue;
-      }
-      return Math.max(
-          searchFrom, scanner.retreatByCodePoints(literalStart, fixedOffsetLiteral.maxOffset()));
-    }
-    return -1;
   }
 
   static int[] literalFailure(byte[] literal) {

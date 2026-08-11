@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 
@@ -19,14 +20,14 @@ sealed interface Utf8StartAccelerator {
    * acceleration strategy applies.
    */
   static Utf8StartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
-    if (descriptor == null) {
+    if (descriptor == null || !descriptor.hasStartAcceleration()) {
       return null;
     }
-    if (descriptor.prefixUtf8() != null && !descriptor.prefixFoldCase()) {
-      return new Literal(descriptor.prefixUtf8());
+    if (descriptor.prefix() != null && !descriptor.prefixFoldCase()) {
+      return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral());
+      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
       CharClassScanInfo scanInfo =
@@ -42,10 +43,10 @@ sealed interface Utf8StartAccelerator {
    * Finds the next candidate match start position at or after {@code fromIndex}. Returns negative
    * if definitely not found.
    */
-  int findCandidate(Pattern pattern, Utf8InputScanner scanner, int fromIndex);
+  int findCandidate(Utf8InputScanner scanner, int fromIndex);
 
   /** Returns the diagnostic strategy associated with this accelerator, or {@code null} if none. */
-  MatchStrategy diagnosticStrategy();
+  MatchStrategy strategy();
 
   /**
    * Returns whether this accelerator identifies an exact candidate match start that can be directly
@@ -53,31 +54,17 @@ sealed interface Utf8StartAccelerator {
    */
   boolean isExactMatchCandidate();
 
-  final class Literal implements Utf8StartAccelerator {
-    private final byte[] prefixUtf8;
-    private final int[] prefixUtf8Failure;
-    private final int[] prefixUtf8Shifts;
+  @SuppressWarnings("ArrayRecordComponent")
+  record Literal(byte[] prefixUtf8, int[] prefixUtf8Failure, int[] prefixUtf8Shifts)
+      implements Utf8StartAccelerator {
 
-    Literal(byte[] prefixUtf8) {
-      this.prefixUtf8 = prefixUtf8;
-      this.prefixUtf8Failure = Pattern.literalFailure(prefixUtf8);
-      this.prefixUtf8Shifts = Pattern.literalShifts(prefixUtf8);
-    }
-
-    public byte[] prefixUtf8() {
-      return prefixUtf8;
-    }
-
-    public int[] prefixUtf8Failure() {
-      return prefixUtf8Failure;
-    }
-
-    public int[] prefixUtf8Shifts() {
-      return prefixUtf8Shifts;
+    static Literal create(String prefix) {
+      byte[] utf8 = prefix.getBytes(StandardCharsets.UTF_8);
+      return new Literal(utf8, Pattern.literalFailure(utf8), Pattern.literalShifts(utf8));
     }
 
     @Override
-    public MatchStrategy diagnosticStrategy() {
+    public MatchStrategy strategy() {
       return MatchStrategy.LITERAL;
     }
 
@@ -87,7 +74,7 @@ sealed interface Utf8StartAccelerator {
     }
 
     @Override
-    public int findCandidate(Pattern pattern, Utf8InputScanner scanner, int fromIndex) {
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (prefixUtf8 != null) {
         return scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts, fromIndex);
       }
@@ -95,19 +82,12 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  final class FixedOffset implements Utf8StartAccelerator {
-    private final FixedOffsetLiteral fixedOffset;
-
-    FixedOffset(FixedOffsetLiteral fixedOffset) {
-      this.fixedOffset = fixedOffset;
-    }
-
-    public FixedOffsetLiteral fixedOffset() {
-      return fixedOffset;
-    }
+  @SuppressWarnings("ArrayRecordComponent")
+  record FixedOffset(FixedOffsetLiteral fixedOffset, boolean[] charClassPrefixAscii)
+      implements Utf8StartAccelerator {
 
     @Override
-    public MatchStrategy diagnosticStrategy() {
+    public MatchStrategy strategy() {
       return MatchStrategy.LITERAL;
     }
 
@@ -117,24 +97,60 @@ sealed interface Utf8StartAccelerator {
     }
 
     @Override
-    public int findCandidate(Pattern pattern, Utf8InputScanner scanner, int fromIndex) {
-      return pattern.nextFixedOffsetCandidate(scanner, fromIndex);
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefixAscii, fromIndex);
+    }
+
+    private static int nextFixedOffsetCandidate(
+        Utf8InputScanner scanner,
+        FixedOffsetLiteral fixedOffsetLiteral,
+        boolean[] charClassPrefixAscii,
+        int searchFrom) {
+      int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
+      int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
+      while (literalFrom <= scanner.length()) {
+        int literalStart =
+            scanner.indexOf(
+                fixedOffsetLiteral.utf8(),
+                fixedOffsetLiteral.failure(),
+                fixedOffsetLiteral.shifts(),
+                literalFrom);
+        if (literalStart < 0) {
+          return -1;
+        }
+        if (discreteOffsets != null
+            && discreteOffsets.length == 1
+            && charClassPrefixAscii != null) {
+          int earliestValid = -1;
+          for (int offset : discreteOffsets) {
+            int candidateStart = literalStart - offset;
+            if (candidateStart >= searchFrom) {
+              int first = scanner.asciiAt(candidateStart);
+              if (first >= 0
+                  && first < charClassPrefixAscii.length
+                  && charClassPrefixAscii[first]
+                  && (earliestValid < 0 || candidateStart < earliestValid)) {
+                earliestValid = candidateStart;
+              }
+            }
+          }
+          if (earliestValid >= 0) {
+            return earliestValid;
+          }
+          literalFrom = literalStart + 1;
+          continue;
+        }
+        return Math.max(
+            searchFrom, scanner.retreatByCodePoints(literalStart, fixedOffsetLiteral.maxOffset()));
+      }
+      return -1;
     }
   }
 
-  final class CharClass implements Utf8StartAccelerator {
-    private final CharClassScanInfo scanInfo;
-
-    CharClass(CharClassScanInfo scanInfo) {
-      this.scanInfo = scanInfo;
-    }
-
-    public CharClassScanInfo scanInfo() {
-      return scanInfo;
-    }
+  record CharClass(CharClassScanInfo scanInfo) implements Utf8StartAccelerator {
 
     @Override
-    public MatchStrategy diagnosticStrategy() {
+    public MatchStrategy strategy() {
       return MatchStrategy.CHARACTER_CLASS;
     }
 
@@ -144,10 +160,7 @@ sealed interface Utf8StartAccelerator {
     }
 
     @Override
-    public int findCandidate(Pattern pattern, Utf8InputScanner scanner, int fromIndex) {
-      if (pattern.prog().hasWordBoundary()) {
-        return fromIndex;
-      }
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (scanInfo != null) {
         return scanner.indexOfCodePointClass(
             scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex);

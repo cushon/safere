@@ -19,7 +19,7 @@ sealed interface StringStartAccelerator {
    * no acceleration strategy applies.
    */
   static StringStartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
-    if (descriptor == null) {
+    if (descriptor == null || !descriptor.hasStartAcceleration()) {
       return null;
     }
     if (descriptor.prefix() != null) {
@@ -44,7 +44,7 @@ sealed interface StringStartAccelerator {
   int findCandidate(String text, int fromIndex, boolean unixLines);
 
   /** Returns the diagnostic strategy associated with this accelerator, or {@code null} if none. */
-  MatchStrategy diagnosticStrategy();
+  MatchStrategy strategy();
 
   /**
    * Returns whether this accelerator identifies an exact candidate match start that can be directly
@@ -70,7 +70,7 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public MatchStrategy diagnosticStrategy() {
+    public MatchStrategy strategy() {
       return MatchStrategy.LITERAL;
     }
 
@@ -109,7 +109,7 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public MatchStrategy diagnosticStrategy() {
+    public MatchStrategy strategy() {
       return MatchStrategy.LITERAL;
     }
 
@@ -199,7 +199,7 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public MatchStrategy diagnosticStrategy() {
+    public MatchStrategy strategy() {
       return MatchStrategy.CHARACTER_CLASS;
     }
 
@@ -239,7 +239,7 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public MatchStrategy diagnosticStrategy() {
+    public MatchStrategy strategy() {
       return null;
     }
 

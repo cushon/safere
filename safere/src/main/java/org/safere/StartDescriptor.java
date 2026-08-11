@@ -16,7 +16,16 @@ import org.safere.Pattern.StartAcceleration;
 record StartDescriptor(
     String prefix,
     boolean prefixFoldCase,
-    byte[] prefixUtf8,
     FixedOffsetLiteral fixedOffsetLiteral,
     boolean[] charClassPrefixAscii,
-    StartAcceleration lineAnchor) {}
+    StartAcceleration lineAnchor) {
+
+  static final StartDescriptor NONE = new StartDescriptor(null, false, null, null, null);
+
+  boolean hasStartAcceleration() {
+    return prefix != null
+        || fixedOffsetLiteral != null
+        || charClassPrefixAscii != null
+        || lineAnchor != null;
+  }
+}

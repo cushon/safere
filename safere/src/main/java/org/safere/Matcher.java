@@ -1527,11 +1527,11 @@ public final class Matcher implements MatchResult {
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         Utf8StartAccelerator accelerator = parentPattern.utf8StartAccelerator();
         if (accelerator != null) {
-          MatchStrategy strategy = accelerator.diagnosticStrategy();
+          MatchStrategy strategy = accelerator.strategy();
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
-          int idx = accelerator.findCandidate(parentPattern, utf8Scanner, searchFrom);
+          int idx = accelerator.findCandidate(utf8Scanner, searchFrom);
           if (idx < 0) {
             if (strategy != null) {
               diagnosticBoundary(strategy);
@@ -1544,7 +1544,7 @@ public final class Matcher implements MatchResult {
       } else if (text != null) {
         StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
         if (accelerator != null) {
-          MatchStrategy strategy = accelerator.diagnosticStrategy();
+          MatchStrategy strategy = accelerator.strategy();
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
