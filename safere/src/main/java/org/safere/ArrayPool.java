@@ -45,9 +45,6 @@ final class ArrayPool<T> {
     this.supplier = supplier;
     this.cleaner = cleaner;
     this.mask = limit - 1;
-
-    // Eagerly pre-warm slot 0 to prevent first-request latency spikes (cold starts)
-    this.array.set(0, supplier.get());
   }
 
   T acquire() {

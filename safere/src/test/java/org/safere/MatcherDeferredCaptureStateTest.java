@@ -21,6 +21,18 @@ class MatcherDeferredCaptureStateTest {
   private static final String CSV = "id,name\n42,\"Ada Lovelace\"";
 
   @Test
+  @DisplayName("new patterns do not prewarm engine pools")
+  void newPatternsDoNotPrewarmEnginePools() throws ReflectiveOperationException {
+    Pattern pattern = Pattern.compile("a+b");
+
+    assertThat(firstPooled(pattern, "cachedBitState")).isNull();
+    assertThat(firstPooled(pattern, "cachedNfa")).isNull();
+    assertThat(firstPooled(pattern, "cachedForwardFirstMatchDfa")).isNull();
+    assertThat(firstPooled(pattern, "cachedForwardLongestMatchDfa")).isNull();
+    assertThat(firstPooled(pattern, "cachedReverseDfa")).isNull();
+  }
+
+  @Test
   @DisplayName("reset clears stale deferred captures")
   void resetClearsStaleDeferredCaptures() throws ReflectiveOperationException {
     Matcher matcher = matcherWithDeferredCaptures();
