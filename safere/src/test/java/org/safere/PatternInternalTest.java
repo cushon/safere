@@ -352,6 +352,74 @@ class PatternInternalTest {
   }
 
   @Test
+  void disjointRequiredLiteralsAreRecordedForAlternations() {
+    Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");
+    assertThat(p.requiredDisjointLiterals()).containsExactly("apple", "banana", "cherry");
+    assertThat(p.requiredLiteral()).isNull();
+
+    Pattern p2 = Pattern.compile("(foo.*|bar.*|baz.*)");
+    assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "bar", "baz");
+
+    Pattern p3 = Pattern.compile("(?:\\bfirstToken\\b|\\bsecondToken\\b)");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("firstToken", "secondToken");
+  }
+
+  @Test
+  void disjointRequiredLiteralsSubsumptionMinimization() {
+    // pineapple contains apple, so pineapple is pruned and apple + banana are required.
+    Pattern p1 = Pattern.compile(".*(?:apple|pineapple|banana).*");
+    assertThat(p1.requiredDisjointLiterals()).containsExactly("apple", "banana");
+
+    // prefix_foo contains foo, bar_baz contains baz
+    Pattern p2 = Pattern.compile(".*(?:prefix_foo|foo|bar_baz|baz).*");
+    assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "baz");
+
+    // https contains http, ftp is distinct
+    Pattern p3 = Pattern.compile(".*(?:http|https|ftp).*");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("http", "ftp");
+
+    // A lone surrogate is not a code-point substring of a supplementary character.
+    Pattern p4 = Pattern.compile("(?:a\uD83D|za\uD83D\uDE00|banana)");
+    assertThat(p4.requiredDisjointLiterals())
+        .containsExactly("a\uD83D", "za\uD83D\uDE00", "banana");
+  }
+
+  @Test
+  void tooManyRawDisjointLiteralsAreRejectedBeforeMinimization() {
+    StringBuilder regex = new StringBuilder("(?:banana");
+    for (int i = 0; i < 16; i++) {
+      regex.append('|').append("x".repeat(i)).append("apple");
+    }
+    regex.append(')');
+
+    assertThat(Pattern.compile(regex.toString()).requiredDisjointLiterals()).isNull();
+  }
+
+  @Test
+  void disjointRequiredLiteralCountIsBoundedByMeasuredCrossover() {
+    assertThat(Pattern.compile("(?:apple|banana|cherry|orange)\\d").requiredDisjointLiterals())
+        .containsExactly("apple", "banana", "cherry", "orange");
+    assertThat(
+            Pattern.compile("(?:apple|banana|cherry|orange|papaya)\\d").requiredDisjointLiterals())
+        .isNull();
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        ".*(?:apple|banana)?.*",
+        ".*(?:apple|.*).*",
+        ".*(?:apple|a).*",
+        "(?i).*(?:apple|banana).*"
+      })
+  void invalidOrNullableAlternationsDoNotRecordDisjointLiterals(String regex) {
+    Pattern p = Pattern.compile(regex);
+    if (p.prefix() == null && p.requiredLiteral() == null) {
+      assertThat(p.requiredDisjointLiterals()).isNull();
+    }
+  }
+
+  @Test
   void boundaryPrefixedLiteralRecordsRequiredClass() {
     Pattern p = Pattern.compile("\\b{g}z");
 

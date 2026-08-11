@@ -21,6 +21,7 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import org.safere.Pattern.DisjointRequiredLiterals;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by
@@ -97,6 +98,7 @@ public final class Matcher implements MatchResult {
   private int regionEnd;
   private boolean fullTextRegionContext;
   private boolean findExhaustedAfterTerminalEmptyMatch;
+  private boolean disjointRequiredLiteralsChecked;
   private int modCount;
   private DiagnosticOperation diagnosticOperation;
   private boolean diagnosticCaptureSearch;
@@ -419,6 +421,7 @@ public final class Matcher implements MatchResult {
     resetReplacementState();
     clearCurrentResult();
     eagerFallbackCaptures = false;
+    disjointRequiredLiteralsChecked = false;
   }
 
   private PreparedMatchRunner preparedMatchRunner;
@@ -430,10 +433,12 @@ public final class Matcher implements MatchResult {
     resetSearchStateForRegionStart();
     resetReplacementState();
     clearCurrentResult();
+    disjointRequiredLiteralsChecked = false;
   }
 
   private void invalidatePatternCaches() {
     preparedMatchRunner = null;
+    disjointRequiredLiteralsChecked = false;
     cachedForwardFirstMatchDfa = null;
     cachedForwardLongestMatchDfa = null;
     cachedReverseDfa = null;
@@ -1478,6 +1483,27 @@ public final class Matcher implements MatchResult {
                   searchFrom)
               : indexOfRequiredLiteral(requiredLiteral);
       if (idx < 0) {
+        return applyFailedMatchResult();
+      }
+    }
+    DisjointRequiredLiterals disjointRequiredLiterals = parentPattern.disjointRequiredLiterals();
+    if (options.literalFastPaths()
+        && disjointRequiredLiterals != null
+        && !disjointRequiredLiteralsChecked
+        && !hasAcceleratedSearchPath
+        && !prog.anchorStart()
+        && text != null) {
+      disjointRequiredLiteralsChecked = true;
+      boolean found = false;
+      for (String lit : disjointRequiredLiterals.literals()) {
+        if (indexOfRequiredLiteral(lit) >= 0) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(MatchStrategy.LITERAL);
         return applyFailedMatchResult();
       }
     }

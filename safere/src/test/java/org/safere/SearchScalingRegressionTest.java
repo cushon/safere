@@ -10,6 +10,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.function.IntFunction;
 import java.util.function.IntPredicate;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,75 @@ class SearchScalingRegressionTest {
                 .matcher(Utf8Input.trusted(("a".repeat(size) + " YOUR tail").getBytes(UTF_8)))
                 .find(),
         "UTF-8 keyword search");
+  }
+
+  @Test
+  void disjointRequiredLiteralPrefilterIsLinearAcrossStringFindIteration() {
+    Pattern pattern = Pattern.compile("(?:banana\\d|apple\\d)");
+    assertRepeatedFindWorkIsLinear(size -> pattern.matcher("apple0 ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void disjointRequiredLiteralPrefilterIsLinearAcrossUtf8FindIteration() {
+    Pattern pattern = Pattern.compile("(?:banana\\d|apple\\d)");
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher(Utf8Input.trusted("apple0 ".repeat(size).getBytes(UTF_8)))::find,
+        "UTF-8");
+  }
+
+  @Test
+  void disjointRequiredLiteralOptimizationDoesNotAddRedundantUtf8Scans() {
+    String regex = "(?:banana\\d|apple\\d)";
+    Pattern defaultPattern = Pattern.compile(regex);
+    Pattern withoutLiteralFastPaths =
+        Pattern.compile(regex, 0, EnginePathOptions.builder().literalFastPaths(false).build());
+    Utf8Input input = Utf8Input.trusted("x".repeat(32_768).getBytes(UTF_8));
+
+    long defaultWork = countAllMatches(defaultPattern.matcher(input)::find, 0);
+    long fallbackWork = countAllMatches(withoutLiteralFastPaths.matcher(input)::find, 0);
+
+    assertThat(defaultWork)
+        .as("UTF-8 literal optimization should not add full-input scans before the DFA")
+        .isLessThanOrEqualTo(fallbackWork);
+  }
+
+  @Test
+  void disjointRequiredLiteralOptimizationDoesNotScanStartAnchoredInput() {
+    Pattern pattern = Pattern.compile("^(?:banana\\d|apple\\d)");
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher("x".repeat(32_768)).find()).isFalse());
+
+    assertThat(work)
+        .as("start-anchored rejection should inspect only the viable start position")
+        .isLessThan(100);
+  }
+
+  private static void assertRepeatedFindWorkIsLinear(
+      IntFunction<FindIterator> matcherFactory, String description) {
+    long smallerWork = countAllMatches(matcherFactory.apply(500), 500);
+    long largerWork = countAllMatches(matcherFactory.apply(2_000), 2_000);
+
+    assertThat(largerWork)
+        .as("%s repeated find work should scale linearly", description)
+        .isLessThan(smallerWork * 6);
+  }
+
+  private static long countAllMatches(FindIterator matcher, int expectedMatches) {
+    return WorkCounter.countForTesting(
+        () -> {
+          int matches = 0;
+          while (matcher.find()) {
+            matches++;
+          }
+          assertThat(matches).isEqualTo(expectedMatches);
+        });
+  }
+
+  @FunctionalInterface
+  private interface FindIterator {
+    boolean find();
   }
 
   private static void assertReverseDfaSuffixFailureIsConstantWork(IntPredicate find) {
