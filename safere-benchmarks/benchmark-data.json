@@ -86,6 +86,23 @@
         "pair/first/late/32768/7",
         "range/first/absent/32768/7",
         "range/first/late/32768/7",
+        "range2/first/absent/64/0",
+        "range2/first/absent/256/0",
+        "range2/first/absent/1024/0",
+        "range2/first/absent/32768/0",
+        "range2/first/late/32768/0",
+        "range2/all/sparse/32768/0",
+        "range2/all/dense/32768/0",
+        "range2/first/prefixFalse/32768/0",
+        "range2/first/nonascii/32768/0",
+        "range2/first/late/32768/7",
+        "alnum3/first/absent/15/0",
+        "alnum3/first/absent/16/0",
+        "alnum3/first/absent/17/0",
+        "alnum3/first/absent/31/0",
+        "alnum3/first/absent/32/0",
+        "alnum3/first/absent/33/0",
+        "alnum3/first/absent/63/0",
         "alnum3/first/absent/64/0",
         "alnum3/first/absent/256/0",
         "alnum3/first/absent/1024/0",
@@ -100,6 +117,15 @@
         "alnum3/all/dense/32768/0",
         "alnum3/first/absent/32768/7",
         "alnum3/first/late/32768/7",
+        "alnum3/first/prefixFalse/32768/0",
+        "alnum3/first/nonascii/32768/0",
+        "mixed4/first/absent/15/0",
+        "mixed4/first/absent/16/0",
+        "mixed4/first/absent/17/0",
+        "mixed4/first/absent/31/0",
+        "mixed4/first/absent/32/0",
+        "mixed4/first/absent/33/0",
+        "mixed4/first/absent/63/0",
         "mixed4/first/absent/64/0",
         "mixed4/first/absent/256/0",
         "mixed4/first/absent/1024/0",
@@ -113,7 +139,9 @@
         "mixed4/all/sparse/32768/0",
         "mixed4/all/dense/32768/0",
         "mixed4/first/absent/32768/7",
-        "mixed4/first/late/32768/7"
+        "mixed4/first/late/32768/7",
+        "mixed4/first/prefixFalse/32768/0",
+        "mixed4/first/nonascii/32768/0"
       ]
     }
   },
@@ -412,6 +440,24 @@
       "shared": true
     },
     {
+      "id": "vectorScan.multi.prefixFalse.32768",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "_",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.nonascii.32768",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "é",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
       "id": "vectorScan.sparse.32768",
       "recipe": {
         "kind": "sparseMatchToLength",
@@ -437,6 +483,13 @@
       "id": "vectorScan.multi.absent.{length}",
       "axes": {
         "length": [
+          15,
+          16,
+          17,
+          31,
+          32,
+          33,
+          63,
           64,
           256,
           1024,
@@ -600,6 +653,22 @@
         "delimiterAlphabet": " .,;:-",
         "seed": 20260729,
         "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "charClassSearch.singleCharAbsent.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "The quick brown fox jumps over the lazy dog without any numbers. ",
+        "length": "{size}"
       },
       "shared": true
     },
@@ -2202,6 +2271,76 @@
       "recipe": {
         "kind": "literal",
         "text": "no digits here"
+      }
+    },
+    {
+      "id": "realWorldRegex.bracketCitation.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "Refer to prior art [1, 2].",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.bracketCitation.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "Refer to prior art (unbracketed 1, 2).",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "replace.emptyReplaceAllScaling.{size}",
+      "axes": {
+        "size": [
+          100,
+          1000,
+          10000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "abc",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      }
+    },
+    {
+      "id": "replace.literalReplaceAllScaling.{size}",
+      "axes": {
+        "size": [
+          100,
+          1000,
+          10000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "ababababab",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
       }
     }
   ],
@@ -9032,6 +9171,314 @@
         "constraints": [
           "prematerializedInput",
           "allocationProfile"
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.customProtocolLinkReplace.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customProtocol://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "realWorldRegex.customProtocolLink.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "[](https://example.com/resolved)"
+      },
+      "requirements": [
+        "numberedReplacement"
+      ],
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.markupEntityStrip.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "<<!entity.*?>>"
+      ],
+      "inputs": [
+        "realWorldRegex.markupEntity.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.bracketCitation.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "(?:^\\s*|([^,])\\s+)\\[\\d+(?:,\\s*\\d+)*\\]([\\p{P}&&[^\\]]](?:\\s|$))"
+      ],
+      "inputs": [
+        "realWorldRegex.bracketCitation.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ],
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "ReplaceBenchmark.emptyReplaceAllScaling.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "a*"
+      ],
+      "inputs": [
+        "replace.emptyReplaceAllScaling.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "x"
+      },
+      "axes": {
+        "size": [
+          100,
+          1000,
+          10000
+        ]
+      }
+    },
+    {
+      "id": "ReplaceBenchmark.literalReplaceAllScaling.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "b"
+      ],
+      "inputs": [
+        "replace.literalReplaceAllScaling.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "bb"
+      },
+      "axes": {
+        "size": [
+          100,
+          1000,
+          10000
+        ]
+      }
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.128",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.128"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.1024",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.1024"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.10240",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.10240"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.102400",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.102400"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.1048576",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.1048576"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "SingleCharClassBenchmark.findDigitAbsent.{size}",
+      "operation": "find",
+      "patterns": [
+        "[0-9]"
+      ],
+      "inputs": [
+        "charClassSearch.singleCharAbsent.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString"
+      ],
+      "inputRepresentationReason": "Measures single character class find fast-path throughput over non-matching input strings.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
         ]
       }
     }

@@ -418,6 +418,33 @@ final class FuzzSupport {
           () -> runJdkOracle("replaceFirst", null, () -> jdkMatcher.replaceFirst(replacement)));
     }
 
+    boolean hasReplacementMatchState() {
+      boolean safeRe;
+      try {
+        safeReMatcher.start();
+        safeRe = true;
+      } catch (IllegalStateException e) {
+        safeRe = false;
+      }
+      boolean jdk =
+          runJdkOracle(
+              "replacement match state",
+              safeRe,
+              () -> {
+                try {
+                  jdkMatcher.start();
+                  return true;
+                } catch (IllegalStateException e) {
+                  return false;
+                }
+              });
+      assertSame("replacement match state", safeRe, jdk);
+      if (safeRe) {
+        assertMatchState("replacement match state");
+      }
+      return safeRe;
+    }
+
     boolean appendReplacement(StringBuilder output, String replacement) {
       StringBuilder safeRe = new StringBuilder();
       StringBuilder jdk = new StringBuilder();
@@ -548,8 +575,8 @@ final class FuzzSupport {
       }
       if (safeRe.throwable() != null
           && jdk.throwable() != null
-          && safeRe.throwable().getClass().equals(jdk.throwable().getClass())
-          && isExpectedReplacementException(safeRe.throwable())) {
+          && isExpectedReplacementException(safeRe.throwable())
+          && isExpectedReplacementException(jdk.throwable())) {
         return false;
       }
       throw divergence(operation, replacement, safeRe.describe(), jdk.describe());
@@ -763,7 +790,7 @@ final class FuzzSupport {
   }
 
   private static boolean hasBackreference(String regex) {
-    return regex.matches(".*\\\\[1-9].*")
+    return regex.matches("(?s).*\\\\[1-9].*")
         || regex.contains("\\k<")
         || regex.contains("\\g{")
         || regex.contains("\\g");
