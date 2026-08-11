@@ -330,6 +330,27 @@ class DiagnosticsTest {
   }
 
   @Test
+  void usePatternRunsDisjointLiteralPrefilterForReplacementPattern() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern first = Pattern.compile("(?:banana\\d|apple\\d)");
+    Pattern replacement = Pattern.compile("(?:cherry\\d|pear\\d)");
+    Matcher matcher = first.matcher("apple0 remainder");
+
+    assertThat(matcher.find()).isTrue();
+    matcher.usePattern(replacement);
+    assertThat(matcher.find()).isFalse();
+
+    assertThat(operationsFor(replacement))
+        .singleElement()
+        .satisfies(
+            event ->
+                assertThat(event.auxiliaryStrategies())
+                    .contains(
+                        new StrategyParticipation(
+                            MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER)));
+  }
+
+  @Test
   void prefixCandidateFailureContinuesThroughDfa() {
     Pattern.setDiagnostics(diagnostics);
     Pattern pattern =

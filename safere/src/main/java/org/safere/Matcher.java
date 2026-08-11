@@ -438,6 +438,7 @@ public final class Matcher implements MatchResult {
 
   private void invalidatePatternCaches() {
     preparedMatchRunner = null;
+    disjointRequiredLiteralsChecked = false;
     cachedForwardFirstMatchDfa = null;
     cachedForwardLongestMatchDfa = null;
     cachedReverseDfa = null;
