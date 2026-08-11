@@ -73,6 +73,19 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(fallbackWork);
   }
 
+  @Test
+  void disjointRequiredLiteralOptimizationDoesNotScanStartAnchoredInput() {
+    Pattern pattern = Pattern.compile("^(?:banana\\d|apple\\d)");
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher("x".repeat(32_768)).find()).isFalse());
+
+    assertThat(work)
+        .as("start-anchored rejection should inspect only the viable start position")
+        .isLessThan(100);
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);

@@ -1491,6 +1491,7 @@ public final class Matcher implements MatchResult {
         && disjointRequiredLiterals != null
         && !disjointRequiredLiteralsChecked
         && !hasAcceleratedSearchPath
+        && !prog.anchorStart()
         && text != null) {
       disjointRequiredLiteralsChecked = true;
       boolean found = false;
