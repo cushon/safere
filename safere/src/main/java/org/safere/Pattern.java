@@ -632,11 +632,24 @@ public final class Pattern implements Serializable {
     if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
       return keywordAlternation.find(scanner, 0) >= 0;
     }
-    if (rejectPrefilter != null
-        && prefixUtf8 == null
-        && charClassPrefixAscii == null
-        && rejectPrefilter.canReject(scanner, 0, enginePathOptions)) {
-      return false;
+    if (rejectPrefilter != null && prefixUtf8 == null && charClassPrefixAscii == null) {
+      boolean rejected;
+      if (rejectPrefilter instanceof RejectPrefilter.Literal literal) {
+        rejected =
+            enginePathOptions.literalFastPaths()
+                && scanner.indexOf(literal.utf8(), literal.failure(), literal.shifts(), 0) < 0;
+      } else if (rejectPrefilter instanceof RejectPrefilter.CharClass charClass) {
+        rejected =
+            enginePathOptions.charClassMatchFastPaths()
+                && scanner.indexOfCodePointClass(
+                        charClass.ranges(), charClass.bitmap0(), charClass.bitmap1(), 0)
+                    < 0;
+      } else {
+        rejected = rejectPrefilter.canReject(scanner, 0, enginePathOptions);
+      }
+      if (rejected) {
+        return false;
+      }
     }
     int searchStart = 0;
     if (prefixUtf8 != null && !prefixFoldCase) {

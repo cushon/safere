@@ -885,10 +885,15 @@ public final class Matcher implements MatchResult {
     capturesResolved = true;
 
     RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
-    MatchStrategy rejectionStrategy =
-        rejectPrefilter != null && text != null
-            ? rejectPrefilter.rejectionStrategy(activeScanner(), text, 0, enginePathOptions())
-            : null;
+    MatchStrategy rejectionStrategy = null;
+    if (rejectPrefilter != null && text != null) {
+      rejectionStrategy =
+          rejectPrefilter instanceof RejectPrefilter.Composite composite
+              ? composite.rejectionStrategy(activeScanner(), text, 0, enginePathOptions())
+              : rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())
+                  ? rejectPrefilter.strategy()
+                  : null;
+    }
     if (rejectionStrategy != null) {
       diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
       diagnosticBoundary(rejectionStrategy);
@@ -1482,7 +1487,11 @@ public final class Matcher implements MatchResult {
         && rejectPrefilter != null
         && (text != null || scanner instanceof Utf8InputScanner)) {
       MatchStrategy rejectionStrategy =
-          rejectPrefilter.rejectionStrategy(scanner, text, searchFrom, options);
+          rejectPrefilter instanceof RejectPrefilter.Composite composite
+              ? composite.rejectionStrategy(scanner, text, searchFrom, options)
+              : rejectPrefilter.canReject(scanner, text, searchFrom, options)
+                  ? rejectPrefilter.strategy()
+                  : null;
       if (rejectionStrategy != null) {
         diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
         diagnosticBoundary(rejectionStrategy);
