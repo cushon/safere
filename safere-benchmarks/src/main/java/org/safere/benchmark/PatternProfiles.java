@@ -13,39 +13,58 @@ import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
-/** Explicit engine-profile alternatives for Java-canonical benchmark patterns. */
+/** Explicit engine-profile alternatives for Java-canonical benchmark regex syntax. */
 final class PatternProfiles {
   private static final Pattern PROFILE_ID = Pattern.compile("[a-z][a-z0-9-]*");
+  private static final Set<String> FLAG_SETS =
+      Set.of(
+          "0",
+          "CASE_INSENSITIVE",
+          "CASE_INSENSITIVE_UNICODE_CASE",
+          "UNICODE_CHARACTER_CLASS",
+          "CASE_INSENSITIVE_UNICODE_CHARACTER_CLASS");
 
-  private final Map<String, Map<String, String>> profiles;
+  private final Map<String, Map<String, Selection>> profiles;
 
-  private PatternProfiles(Map<String, Map<String, String>> profiles) {
+  private PatternProfiles(Map<String, Map<String, Selection>> profiles) {
     this.profiles = Collections.unmodifiableMap(new LinkedHashMap<>(profiles));
   }
 
   static JsonObject normalizeInline(JsonObject source) {
-    if (source.has("patternProfiles")) {
+    if (source.has("patternProfiles") || source.has("replacementProfiles")) {
       throw new IllegalArgumentException(
-          "benchmark-data.json must define pattern alternates next to their Java patterns");
+          "benchmark-data.json must define syntax alternates next to their Java values");
     }
     JsonObject normalized = source.deepCopy();
-    Map<String, Map<String, Alternate>> profiles = new LinkedHashMap<>();
-    Deque<JsonElement> pending = new ArrayDeque<>();
-    pending.push(normalized);
+    Map<String, Map<String, Alternate>> patternProfiles = new LinkedHashMap<>();
+    Map<String, Map<String, Alternate>> replacementProfiles = new LinkedHashMap<>();
+    Deque<NormalizationFrame> pending = new ArrayDeque<>();
+    JsonElement syntaxRoot =
+        normalized.has("schemaVersion") ? normalized.getAsJsonArray("workloads") : normalized;
+    if (syntaxRoot != null) {
+      pending.push(new NormalizationFrame(syntaxRoot, null));
+    }
     while (!pending.isEmpty()) {
-      JsonElement element = pending.pop();
+      NormalizationFrame frame = pending.pop();
+      JsonElement element = frame.element();
       if (element.isJsonObject()) {
         JsonObject object = element.getAsJsonObject();
         for (Map.Entry<String, JsonElement> entry : List.copyOf(object.entrySet())) {
           JsonElement child = entry.getValue();
+          ValueKind childKind = valueKind(entry.getKey(), frame.kind());
           if (isInlinePattern(child)) {
-            object.add(entry.getKey(), normalizePattern(child.getAsJsonObject(), profiles));
+            object.add(
+                entry.getKey(),
+                normalizePattern(
+                    child.getAsJsonObject(), childKind, patternProfiles, replacementProfiles));
           } else if (child.isJsonArray() || child.isJsonObject()) {
-            pending.push(child);
+            pending.push(new NormalizationFrame(child, childKind));
           }
         }
       } else {
@@ -53,14 +72,18 @@ final class PatternProfiles {
         for (int index = 0; index < array.size(); index++) {
           JsonElement child = array.get(index);
           if (isInlinePattern(child)) {
-            array.set(index, normalizePattern(child.getAsJsonObject(), profiles));
+            array.set(
+                index,
+                normalizePattern(
+                    child.getAsJsonObject(), frame.kind(), patternProfiles, replacementProfiles));
           } else if (child.isJsonArray() || child.isJsonObject()) {
-            pending.push(child);
+            pending.push(new NormalizationFrame(child, frame.kind()));
           }
         }
       }
     }
-    normalized.add("patternProfiles", profileJson(profiles));
+    normalized.add("patternProfiles", profileJson(patternProfiles));
+    normalized.add("replacementProfiles", profileJson(replacementProfiles));
     return normalized;
   }
 
@@ -69,8 +92,25 @@ final class PatternProfiles {
         && (element.getAsJsonObject().has("java") || element.getAsJsonObject().has("alternates"));
   }
 
+  private static ValueKind valueKind(String field, ValueKind inherited) {
+    if (field.equals("pattern")
+        || field.equals("patterns")
+        || field.equals("regex")
+        || field.endsWith("Pattern")) {
+      return ValueKind.PATTERN;
+    }
+    return field.equals("replacement") ? ValueKind.REPLACEMENT : inherited;
+  }
+
   private static JsonPrimitive normalizePattern(
-      JsonObject definition, Map<String, Map<String, Alternate>> profiles) {
+      JsonObject definition,
+      ValueKind expectedKind,
+      Map<String, Map<String, Alternate>> patternProfiles,
+      Map<String, Map<String, Alternate>> replacementProfiles) {
+    if (expectedKind == null) {
+      throw new IllegalArgumentException(
+          "Inline benchmark syntax definition is not inside a pattern or replacement field");
+    }
     for (String field : definition.keySet()) {
       if (!field.equals("java") && !field.equals("alternates")) {
         throw new IllegalArgumentException("Inline benchmark pattern has unknown field: " + field);
@@ -85,6 +125,7 @@ final class PatternProfiles {
     if (alternates.isEmpty()) {
       throw new IllegalArgumentException("Inline benchmark pattern alternates must not be empty");
     }
+    String definitionKind = null;
     for (Map.Entry<String, JsonElement> entry : alternates.entrySet()) {
       String profileId = entry.getKey();
       if (!PROFILE_ID.matcher(profileId).matches()) {
@@ -96,24 +137,73 @@ final class PatternProfiles {
       }
       JsonObject alternateObject = entry.getValue().getAsJsonObject();
       for (String field : alternateObject.keySet()) {
-        if (!field.equals("pattern") && !field.equals("reason")) {
+        if (!field.equals("pattern")
+            && !field.equals("replacement")
+            && !field.equals("unsupported")
+            && !field.equals("reason")
+            && !field.equals("flagSets")) {
           throw new IllegalArgumentException(
               "Inline benchmark pattern alternate " + profileId + " has unknown field: " + field);
         }
       }
+      boolean hasPattern = alternateObject.has("pattern");
+      boolean hasReplacement = alternateObject.has("replacement");
+      boolean unsupported = alternateObject.has("unsupported");
+      int selectionCount = (hasPattern ? 1 : 0) + (hasReplacement ? 1 : 0) + (unsupported ? 1 : 0);
+      if (selectionCount != 1) {
+        throw new IllegalArgumentException(
+            "Inline benchmark pattern alternate "
+                + profileId
+                + " requires exactly one of: pattern, replacement, unsupported");
+      }
+      if (unsupported
+          && (!alternateObject.get("unsupported").isJsonPrimitive()
+              || !alternateObject.getAsJsonPrimitive("unsupported").isBoolean()
+              || !alternateObject.get("unsupported").getAsBoolean())) {
+        throw new IllegalArgumentException(
+            "Inline benchmark pattern alternate " + profileId + " field unsupported must be true");
+      }
+      String valueField = hasPattern ? "pattern" : hasReplacement ? "replacement" : null;
+      ValueKind alternateKind =
+          hasPattern ? ValueKind.PATTERN : hasReplacement ? ValueKind.REPLACEMENT : expectedKind;
+      if (alternateKind != expectedKind) {
+        throw new IllegalArgumentException(
+            "Inline benchmark "
+                + expectedKind.field()
+                + " definition contains "
+                + alternateKind.field()
+                + " alternate");
+      }
+      if (valueField != null && definitionKind != null && !definitionKind.equals(valueField)) {
+        throw new IllegalArgumentException(
+            "Inline benchmark definition mixes pattern and replacement alternates");
+      }
+      if (valueField != null) {
+        definitionKind = valueField;
+      }
       Alternate alternate =
           new Alternate(
+              unsupported
+                  ? null
+                  : requiredInlineString(
+                      alternateObject,
+                      valueField,
+                      "Inline benchmark pattern alternate " + profileId),
               requiredInlineString(
-                  alternateObject, "pattern", "Inline benchmark pattern alternate " + profileId),
-              requiredInlineString(
-                  alternateObject, "reason", "Inline benchmark pattern alternate " + profileId));
+                  alternateObject, "reason", "Inline benchmark pattern alternate " + profileId),
+              optionalFlagSets(alternateObject, "Inline benchmark pattern alternate " + profileId));
       Alternate previous =
-          profiles
-              .computeIfAbsent(profileId, unused -> new LinkedHashMap<>())
+          (expectedKind == ValueKind.PATTERN ? patternProfiles : replacementProfiles)
+              .computeIfAbsent(profileId, _ -> new LinkedHashMap<>())
               .putIfAbsent(javaPattern, alternate);
       if (previous != null && !previous.equals(alternate)) {
         throw new IllegalArgumentException(
-            "Conflicting " + profileId + " alternates for Java pattern: " + javaPattern);
+            "Conflicting "
+                + profileId
+                + " alternates for Java "
+                + expectedKind.field()
+                + ": "
+                + javaPattern);
       }
     }
     return new JsonPrimitive(javaPattern);
@@ -138,8 +228,17 @@ final class PatternProfiles {
       for (Map.Entry<String, Alternate> alternate : profile.getValue().entrySet()) {
         JsonObject entry = new JsonObject();
         entry.addProperty("java", alternate.getKey());
-        entry.addProperty("alternate", alternate.getValue().pattern());
+        if (alternate.getValue().value() == null) {
+          entry.addProperty("unsupported", true);
+        } else {
+          entry.addProperty("alternate", alternate.getValue().value());
+        }
         entry.addProperty("reason", alternate.getValue().reason());
+        if (!alternate.getValue().flagSets().isEmpty()) {
+          JsonArray flagSets = new JsonArray();
+          alternate.getValue().flagSets().forEach(flagSets::add);
+          entry.add("flagSets", flagSets);
+        }
         entries.add(entry);
       }
       result.add(profile.getKey(), entries);
@@ -154,7 +253,7 @@ final class PatternProfiles {
     if (!element.isJsonObject()) {
       throw new IllegalArgumentException("patternProfiles must be an object");
     }
-    Map<String, Map<String, String>> profiles = new LinkedHashMap<>();
+    Map<String, Map<String, Selection>> profiles = new LinkedHashMap<>();
     for (Map.Entry<String, JsonElement> profileEntry : element.getAsJsonObject().entrySet()) {
       String profileId = profileEntry.getKey();
       if (!PROFILE_ID.matcher(profileId).matches()) {
@@ -163,15 +262,15 @@ final class PatternProfiles {
       if (!profileEntry.getValue().isJsonArray()) {
         throw new IllegalArgumentException("Pattern profile " + profileId + " must be an array");
       }
-      Map<String, String> alternatives =
+      Map<String, Selection> alternatives =
           parseProfile(profileId, profileEntry.getValue().getAsJsonArray());
       profiles.put(profileId, Collections.unmodifiableMap(alternatives));
     }
     return new PatternProfiles(profiles);
   }
 
-  private static Map<String, String> parseProfile(String profileId, JsonArray entries) {
-    Map<String, String> alternatives = new LinkedHashMap<>();
+  private static Map<String, Selection> parseProfile(String profileId, JsonArray entries) {
+    Map<String, Selection> alternatives = new LinkedHashMap<>();
     for (JsonElement element : entries) {
       if (!element.isJsonObject()) {
         throw new IllegalArgumentException(
@@ -179,15 +278,36 @@ final class PatternProfiles {
       }
       JsonObject entry = element.getAsJsonObject();
       for (String field : entry.keySet()) {
-        if (!field.equals("java") && !field.equals("alternate") && !field.equals("reason")) {
+        if (!field.equals("java")
+            && !field.equals("alternate")
+            && !field.equals("unsupported")
+            && !field.equals("reason")
+            && !field.equals("flagSets")) {
           throw new IllegalArgumentException(
               "Pattern profile " + profileId + " entry has unknown field: " + field);
         }
       }
       String javaPattern = requiredString(entry, profileId, "java");
-      String alternate = requiredString(entry, profileId, "alternate");
-      requiredString(entry, profileId, "reason");
-      if (alternatives.put(javaPattern, alternate) != null) {
+      boolean unsupported =
+          entry.has("unsupported")
+              && entry.get("unsupported").isJsonPrimitive()
+              && entry.getAsJsonPrimitive("unsupported").isBoolean()
+              && entry.get("unsupported").getAsBoolean();
+      if (entry.has("alternate") == unsupported) {
+        throw new IllegalArgumentException(
+            "Pattern profile "
+                + profileId
+                + " entry requires exactly one of alternate or unsupported=true");
+      }
+      String reason = requiredString(entry, profileId, "reason");
+      Selection selection =
+          unsupported
+              ? new Selection(null, reason, optionalFlagSets(entry, "Pattern profile " + profileId))
+              : new Selection(
+                  requiredString(entry, profileId, "alternate"),
+                  null,
+                  optionalFlagSets(entry, "Pattern profile " + profileId));
+      if (alternatives.put(javaPattern, selection) != null) {
         throw new IllegalArgumentException(
             "Pattern profile " + profileId + " repeats Java pattern: " + javaPattern);
       }
@@ -209,10 +329,90 @@ final class PatternProfiles {
     return string;
   }
 
-  String select(String profileId, String javaPattern) {
-    Map<String, String> alternatives = profiles.get(profileId);
-    return alternatives == null ? javaPattern : alternatives.getOrDefault(javaPattern, javaPattern);
+  private static Set<String> optionalFlagSets(JsonObject entry, String description) {
+    JsonElement value = entry.get("flagSets");
+    if (value == null) {
+      return Set.of();
+    }
+    if (!value.isJsonArray() || value.getAsJsonArray().isEmpty()) {
+      throw new IllegalArgumentException(description + " field flagSets must be a nonempty array");
+    }
+    Set<String> result = new LinkedHashSet<>();
+    for (JsonElement element : value.getAsJsonArray()) {
+      if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+        throw new IllegalArgumentException(description + " flagSets must contain strings");
+      }
+      String flagSet = element.getAsString();
+      if (!FLAG_SETS.contains(flagSet)) {
+        throw new IllegalArgumentException(description + " has unknown flag set: " + flagSet);
+      }
+      if (!result.add(flagSet)) {
+        throw new IllegalArgumentException(description + " repeats flag set: " + flagSet);
+      }
+    }
+    return Collections.unmodifiableSet(result);
   }
 
-  private record Alternate(String pattern, String reason) {}
+  String select(String profileId, String javaPattern) {
+    return select(profileId, javaPattern, "0");
+  }
+
+  String select(String profileId, String javaPattern, String flagSet) {
+    Selection selection = resolve(profileId, javaPattern, flagSet);
+    if (selection.unsupportedReason() != null) {
+      throw new IllegalArgumentException(
+          "Profile "
+              + profileId
+              + " does not support Java syntax "
+              + javaPattern
+              + ": "
+              + selection.unsupportedReason());
+    }
+    return selection.value();
+  }
+
+  Selection resolve(String profileId, String javaPattern) {
+    return resolve(profileId, javaPattern, "0");
+  }
+
+  Selection resolve(String profileId, String javaPattern, String flagSet) {
+    Map<String, Selection> alternatives = profiles.get(profileId);
+    Selection selection = alternatives == null ? null : alternatives.get(javaPattern);
+    return selection == null
+            || (!selection.flagSets().isEmpty() && !selection.flagSets().contains(flagSet))
+        ? new Selection(javaPattern, null, Set.of())
+        : selection;
+  }
+
+  void validateReferences(Set<String> authoritativeValues, String kind) {
+    for (Map.Entry<String, Map<String, Selection>> profile : profiles.entrySet()) {
+      for (String javaValue : profile.getValue().keySet()) {
+        if (!authoritativeValues.contains(javaValue)) {
+          throw new IllegalArgumentException(
+              "Unreferenced " + kind + " profile value for " + profile.getKey() + ": " + javaValue);
+        }
+      }
+    }
+  }
+
+  private enum ValueKind {
+    PATTERN("pattern"),
+    REPLACEMENT("replacement");
+
+    private final String field;
+
+    ValueKind(String field) {
+      this.field = field;
+    }
+
+    String field() {
+      return field;
+    }
+  }
+
+  private record NormalizationFrame(JsonElement element, ValueKind kind) {}
+
+  record Selection(String value, String unsupportedReason, Set<String> flagSets) {}
+
+  private record Alternate(String value, String reason, Set<String> flagSets) {}
 }

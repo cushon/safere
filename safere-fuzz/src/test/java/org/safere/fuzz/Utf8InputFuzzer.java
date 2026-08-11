@@ -10,6 +10,8 @@ import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.PatternSyntaxException;
 import org.safere.Pattern;
@@ -18,9 +20,15 @@ import org.safere.Utf8Matcher;
 
 /** Exercises arbitrary UTF-8 storage, windows, and repeated matcher transitions. */
 final class Utf8InputFuzzer {
+  private record RegionCaptureCase(String regex, String input, int start, int end) {}
+
   @FuzzTest(maxDuration = "30s")
   void arbitraryWindow(FuzzedDataProvider data) {
     assertLiteralSearchMatchesString("XXXXXX", "..XXXXXX");
+    assertBoundarySensitiveRegionCaptures();
+    assertKeywordAlternationMatchesString(data);
+    assertFixedOffsetAccelerationMatchesString(data);
+    assertMultiOffsetLiteralOccurrencesMatchString(data);
     String repeatedLiteral =
         String.valueOf((char) data.consumeInt('A', 'Z')).repeat(data.consumeInt(2, 32));
     String suffix = new String(data.consumeBytes(data.consumeInt(0, 64)), StandardCharsets.UTF_8);
@@ -53,6 +61,45 @@ final class Utf8InputFuzzer {
     }
   }
 
+  private static void assertBoundarySensitiveRegionCaptures() {
+    for (RegionCaptureCase testCase :
+        List.of(
+            new RegionCaptureCase("(\\b(?:a|aa))", "xaa", 1, 3),
+            new RegionCaptureCase("((?:a|aa)\\b)", "aax", 0, 2))) {
+      for (String operation : List.of("matches", "lookingAt", "find")) {
+        java.util.regex.Matcher stringMatcher =
+            java.util.regex.Pattern.compile(testCase.regex()).matcher(testCase.input());
+        stringMatcher.region(testCase.start(), testCase.end());
+        Utf8Matcher utf8Matcher =
+            Pattern.compile(testCase.regex())
+                .matcher(Utf8Input.validated(testCase.input().getBytes(StandardCharsets.UTF_8)))
+                .region(testCase.start(), testCase.end());
+
+        boolean stringMatched =
+            switch (operation) {
+              case "matches" -> stringMatcher.matches();
+              case "lookingAt" -> stringMatcher.lookingAt();
+              case "find" -> stringMatcher.find();
+              default -> throw new AssertionError(operation);
+            };
+        boolean utf8Matched =
+            switch (operation) {
+              case "matches" -> utf8Matcher.matches();
+              case "lookingAt" -> utf8Matcher.lookingAt();
+              case "find" -> utf8Matcher.find();
+              default -> throw new AssertionError(operation);
+            };
+        if (utf8Matched != stringMatched
+            || (utf8Matched
+                && (utf8Matcher.start(1) != stringMatcher.start(1)
+                    || utf8Matcher.end(1) != stringMatcher.end(1)))) {
+          throw new AssertionError(
+              "UTF-8 region capture bounds differ from String matcher for " + operation);
+        }
+      }
+    }
+  }
+
   private static void assertLiteralSearchMatchesString(String regex, String input) {
     Pattern pattern = Pattern.compile(regex);
     org.safere.Matcher stringMatcher = pattern.matcher(input);
@@ -71,6 +118,87 @@ final class Utf8InputFuzzer {
             || utf8Matcher.end() > bytes.length)) {
       throw new AssertionError("UTF-8 literal search bounds differ from String search");
     }
+  }
+
+  private static void assertKeywordAlternationMatchesString(FuzzedDataProvider data) {
+    String keyword = data.pickValue(List.of("you", "your", "error", "timeout"));
+    String prefix = data.pickValue(List.of("", "plain ", "é ", "β-", "word_"));
+    String suffix = data.pickValue(List.of("", "!", " 中", "2", "_word"));
+    boolean greedy = data.consumeBoolean();
+    String beforeBoundaryMode = data.pickValue(List.of("", "(?U)", "(?-U)"));
+    String afterBoundaryMode = data.pickValue(List.of("", "(?U)", "(?-U)"));
+    String core =
+        beforeBoundaryMode + "\\b(?i)(you|your|error|timeout)" + afterBoundaryMode + "\\b";
+    String regex = greedy ? "(?s).*" + core + ".*" : core;
+    String input =
+        prefix + data.pickValue(List.of(keyword, keyword.toUpperCase(Locale.ROOT))) + suffix;
+    Pattern pattern = Pattern.compile(regex);
+    org.safere.Matcher stringMatcher = pattern.matcher(input);
+    byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+    Utf8Input utf8Input = Utf8Input.validated(bytes);
+    Utf8Matcher utf8Matcher = pattern.matcher(utf8Input);
+
+    boolean stringFound = stringMatcher.find();
+    if (utf8Matcher.find() != stringFound || pattern.find(utf8Input) != stringFound) {
+      throw new AssertionError("UTF-8 keyword alternation result differs from String search");
+    }
+    if (stringFound
+        && (utf8Matcher.start() != utf8Offset(input, stringMatcher.start())
+            || utf8Matcher.end() != utf8Offset(input, stringMatcher.end())
+            || utf8Matcher.start(1) != utf8Offset(input, stringMatcher.start(1))
+            || utf8Matcher.end(1) != utf8Offset(input, stringMatcher.end(1)))) {
+      throw new AssertionError("UTF-8 keyword alternation bounds differ from String search");
+    }
+  }
+
+  private static void assertFixedOffsetAccelerationMatchesString(FuzzedDataProvider data) {
+    String leadingClass = data.pickValue(List.of("[aé]", "[a-ÿ]", "[a😀]", "[^x]"));
+    String leadingMember =
+        switch (leadingClass) {
+          case "[a😀]" -> "😀";
+          default -> "é";
+        };
+    String literal = data.pickValue(List.of("bc", "tag", "literal"));
+    String input =
+        data.pickValue(List.of("", "x", "😀")) + leadingMember + literal + " a" + literal;
+    Pattern pattern = Pattern.compile(leadingClass + literal);
+    org.safere.Matcher stringMatcher = pattern.matcher(input);
+    byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+    Utf8Input utf8Input = Utf8Input.validated(bytes);
+    Utf8Matcher utf8Matcher = pattern.matcher(utf8Input);
+
+    boolean stringFound = stringMatcher.find();
+    if (utf8Matcher.find() != stringFound || pattern.find(utf8Input) != stringFound) {
+      throw new AssertionError("UTF-8 fixed-offset search result differs from String search");
+    }
+    if (stringFound
+        && (utf8Matcher.start() != utf8Offset(input, stringMatcher.start())
+            || utf8Matcher.end() != utf8Offset(input, stringMatcher.end())
+            || !Objects.equals(stringMatcher.group(), decodeGroup(bytes, utf8Matcher)))) {
+      throw new AssertionError("UTF-8 fixed-offset search bounds differ from String search");
+    }
+  }
+
+  private static void assertMultiOffsetLiteralOccurrencesMatchString(FuzzedDataProvider data) {
+    int longWidth = data.consumeInt(6, 16);
+    String literal = data.pickValue(List.of("z", "tag"));
+    String regex = "(aq|b[a-z]{" + longWidth + "})" + literal;
+    String body = "xax" + literal + "x".repeat(longWidth - literal.length() - 3);
+    String input = "b" + body + literal;
+    Pattern pattern = Pattern.compile(regex);
+    org.safere.Matcher stringMatcher = pattern.matcher(input);
+    byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+    Utf8Input utf8Input = Utf8Input.validated(bytes);
+    Utf8Matcher utf8Matcher = pattern.matcher(utf8Input);
+
+    boolean stringFound = stringMatcher.find();
+    if (utf8Matcher.find() != stringFound || pattern.find(utf8Input) != stringFound) {
+      throw new AssertionError("UTF-8 multi-offset search result differs from String search");
+    }
+  }
+
+  private static int utf8Offset(String input, int utf16Offset) {
+    return input.substring(0, utf16Offset).getBytes(StandardCharsets.UTF_8).length;
   }
 
   private static String decodeGroup(byte[] bytes, Utf8Matcher matcher) {

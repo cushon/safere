@@ -16,7 +16,8 @@
 # batches sequentially, captures raw output, and generates markdown tables.
 # By default it collects the Java/JMH results and the separately licensed
 # OpenJDK-derived suite from an external checkout. Use --cross-language to also
-# collect C++ RE2 and Go regexp results.
+# collect C++ RE2, PCRE2 JIT, Go regexp, Rust regex, and .NET
+# non-backtracking results.
 
 set -euo pipefail
 
@@ -42,7 +43,8 @@ Collects benchmark outputs for updating BENCHMARKS.md.
 
 Options:
   --long            Use the longer Java confirmation mode.
-  --cross-language  Also run C++ RE2 and Go regexp benchmark harnesses.
+  --cross-language  Also run C++ RE2, PCRE2 JIT, Go regexp, Rust regex, and
+                    .NET non-backtracking harnesses.
   --openjdk-regex-repo PATH
                     Select the external OpenJDK-derived suite checkout.
   --skip-openjdk-regex
@@ -255,15 +257,35 @@ if [ "$CROSS_LANGUAGE" = true ]; then
   log "Extracting Go JSONL"
   extract_jsonl "$OUTPUT_DIR/go-raw.txt" "$OUTPUT_DIR/go-results.jsonl"
 
+  if [ "$MODE" = "smoke" ]; then
+    run_and_capture "$OUTPUT_DIR/rust-raw.txt" \
+      ./run-rust-benchmarks.sh "$NATIVE_SMOKE_WORKLOAD"
+    run_and_capture "$OUTPUT_DIR/dotnet-raw.txt" \
+      ./run-dotnet-benchmarks.sh --smoke "$NATIVE_SMOKE_WORKLOAD"
+  else
+    run_and_capture "$OUTPUT_DIR/rust-raw.txt" \
+      ./run-rust-benchmarks.sh
+    run_and_capture "$OUTPUT_DIR/dotnet-raw.txt" \
+      ./run-dotnet-benchmarks.sh
+  fi
+
+  log "Extracting Rust JSONL"
+  extract_jsonl "$OUTPUT_DIR/rust-raw.txt" "$OUTPUT_DIR/rust-results.jsonl"
+
+  log "Extracting .NET JSONL"
+  extract_jsonl "$OUTPUT_DIR/dotnet-raw.txt" "$OUTPUT_DIR/dotnet-results.jsonl"
+
   COMPARE_ARGS+=(
-    --json "$OUTPUT_DIR/cpp-results.jsonl" "$OUTPUT_DIR/go-results.jsonl"
+    --json "$OUTPUT_DIR/cpp-results.jsonl" "$OUTPUT_DIR/go-results.jsonl" \
+      "$OUTPUT_DIR/rust-results.jsonl" "$OUTPUT_DIR/dotnet-results.jsonl"
   )
-  COMPARE_ENGINES="safere,safere_utf8,jdk,re2j,re2_ffm,re2_cpp,go"
+  COMPARE_ENGINES="safere,safere_utf8,jdk,re2j,re2_ffm,re2_cpp,pcre2_jit,go,rust,dotnet_nonbacktracking"
 fi
 
 log "Generating markdown tables"
 COMPARE_ARGS+=(--engines "$COMPARE_ENGINES")
 COMPARE_ARGS+=(--declared-plan "$OUTPUT_DIR/declared-report-plan.json")
+COMPARE_ARGS+=(--output-jsonl "$OUTPUT_DIR/normalized-results.jsonl")
 python3 safere-benchmarks/scripts/compare-benchmarks.py "${COMPARE_ARGS[@]}" \
   > "$OUTPUT_DIR/merged-tables.md"
 
@@ -271,7 +293,9 @@ if [ "$CROSS_LANGUAGE" = true ]; then
   log "Generating separate cross-runtime context tables"
   python3 safere-benchmarks/scripts/compare-benchmarks.py \
     --json "$OUTPUT_DIR/cpp-results.jsonl" "$OUTPUT_DIR/go-results.jsonl" \
-    --engines re2_cpp,go \
+      "$OUTPUT_DIR/rust-results.jsonl" \
+      "$OUTPUT_DIR/dotnet-results.jsonl" \
+    --engines re2_cpp,pcre2_jit,go,rust,dotnet_nonbacktracking \
     > "$OUTPUT_DIR/cross-runtime-tables.md"
 fi
 
@@ -316,6 +340,7 @@ Point the agent at:
 
 Key files:
   jmh-output.txt
+  normalized-results.jsonl
   declared-report-plan.json
   merged-tables.md
   java-memory.txt
@@ -326,6 +351,8 @@ if [ "$CROSS_LANGUAGE" = true ]; then
   cat <<EOF
   cpp-results.jsonl
   go-results.jsonl
+  rust-results.jsonl
+  dotnet-results.jsonl
   cross-runtime-tables.md
 EOF
 fi

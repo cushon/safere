@@ -1,10 +1,149 @@
 {
   "schemaVersion": 1,
-  "collection": {
-    "allocationWorkloadPrefixes": [
-      "RegexBenchmark.",
-      "SearchScalingBenchmark."
-    ]
+  "configuration": {
+    "collection": {
+      "allocationWorkloadPrefixes": [
+        "RegexBenchmark.",
+        "SearchScalingBenchmark."
+      ]
+    },
+    "crosscheckOverhead": {
+      "pattern": "([a-z]+)(\\d+)",
+      "replacement": "$2:$1"
+    },
+    "vectorScan": {
+      "smokeTrials": [
+        "singleton/first/absent/64/0",
+        "pair/first/late/64/7",
+        "range/all/dense/32768/0",
+        "alnum3/first/absent/32768/0",
+        "mixed4/all/sparse/32768/0"
+      ],
+      "standardTrials": [
+        "singleton/first/absent/15/0",
+        "singleton/first/absent/16/0",
+        "singleton/first/absent/17/0",
+        "singleton/first/absent/31/0",
+        "singleton/first/absent/32/0",
+        "singleton/first/absent/33/0",
+        "singleton/first/absent/63/0",
+        "singleton/first/absent/64/0",
+        "singleton/first/absent/65/0",
+        "singleton/first/absent/256/0",
+        "singleton/first/absent/1024/0",
+        "singleton/first/absent/32768/0",
+        "singleton/first/absent/1048576/0",
+        "pair/first/absent/15/0",
+        "pair/first/absent/16/0",
+        "pair/first/absent/17/0",
+        "pair/first/absent/31/0",
+        "pair/first/absent/32/0",
+        "pair/first/absent/33/0",
+        "pair/first/absent/63/0",
+        "pair/first/absent/64/0",
+        "pair/first/absent/65/0",
+        "pair/first/absent/256/0",
+        "pair/first/absent/1024/0",
+        "pair/first/absent/32768/0",
+        "pair/first/absent/1048576/0",
+        "range/first/absent/15/0",
+        "range/first/absent/16/0",
+        "range/first/absent/17/0",
+        "range/first/absent/31/0",
+        "range/first/absent/32/0",
+        "range/first/absent/33/0",
+        "range/first/absent/63/0",
+        "range/first/absent/64/0",
+        "range/first/absent/65/0",
+        "range/first/absent/256/0",
+        "range/first/absent/1024/0",
+        "range/first/absent/32768/0",
+        "range/first/absent/1048576/0",
+        "singleton/first/late/32768/0",
+        "singleton/first/sparse/32768/0",
+        "singleton/first/dense/32768/0",
+        "singleton/all/absent/32768/0",
+        "singleton/all/late/32768/0",
+        "singleton/all/sparse/32768/0",
+        "singleton/all/dense/32768/0",
+        "pair/first/late/32768/0",
+        "pair/first/sparse/32768/0",
+        "pair/first/dense/32768/0",
+        "pair/all/absent/32768/0",
+        "pair/all/late/32768/0",
+        "pair/all/sparse/32768/0",
+        "pair/all/dense/32768/0",
+        "range/first/late/32768/0",
+        "range/first/sparse/32768/0",
+        "range/first/dense/32768/0",
+        "range/all/absent/32768/0",
+        "range/all/late/32768/0",
+        "range/all/sparse/32768/0",
+        "range/all/dense/32768/0",
+        "singleton/first/absent/32768/7",
+        "singleton/first/late/32768/7",
+        "pair/first/absent/32768/7",
+        "pair/first/late/32768/7",
+        "range/first/absent/32768/7",
+        "range/first/late/32768/7",
+        "range2/first/absent/64/0",
+        "range2/first/absent/256/0",
+        "range2/first/absent/1024/0",
+        "range2/first/absent/32768/0",
+        "range2/first/late/32768/0",
+        "range2/all/sparse/32768/0",
+        "range2/all/dense/32768/0",
+        "range2/first/prefixFalse/32768/0",
+        "range2/first/nonascii/32768/0",
+        "range2/first/late/32768/7",
+        "alnum3/first/absent/15/0",
+        "alnum3/first/absent/16/0",
+        "alnum3/first/absent/17/0",
+        "alnum3/first/absent/31/0",
+        "alnum3/first/absent/32/0",
+        "alnum3/first/absent/33/0",
+        "alnum3/first/absent/63/0",
+        "alnum3/first/absent/64/0",
+        "alnum3/first/absent/256/0",
+        "alnum3/first/absent/1024/0",
+        "alnum3/first/absent/32768/0",
+        "alnum3/first/absent/1048576/0",
+        "alnum3/first/late/32768/0",
+        "alnum3/first/sparse/32768/0",
+        "alnum3/first/dense/32768/0",
+        "alnum3/all/absent/32768/0",
+        "alnum3/all/late/32768/0",
+        "alnum3/all/sparse/32768/0",
+        "alnum3/all/dense/32768/0",
+        "alnum3/first/absent/32768/7",
+        "alnum3/first/late/32768/7",
+        "alnum3/first/prefixFalse/32768/0",
+        "alnum3/first/nonascii/32768/0",
+        "mixed4/first/absent/15/0",
+        "mixed4/first/absent/16/0",
+        "mixed4/first/absent/17/0",
+        "mixed4/first/absent/31/0",
+        "mixed4/first/absent/32/0",
+        "mixed4/first/absent/33/0",
+        "mixed4/first/absent/63/0",
+        "mixed4/first/absent/64/0",
+        "mixed4/first/absent/256/0",
+        "mixed4/first/absent/1024/0",
+        "mixed4/first/absent/32768/0",
+        "mixed4/first/absent/1048576/0",
+        "mixed4/first/late/32768/0",
+        "mixed4/first/sparse/32768/0",
+        "mixed4/first/dense/32768/0",
+        "mixed4/all/absent/32768/0",
+        "mixed4/all/late/32768/0",
+        "mixed4/all/sparse/32768/0",
+        "mixed4/all/dense/32768/0",
+        "mixed4/first/absent/32768/7",
+        "mixed4/first/late/32768/7",
+        "mixed4/first/prefixFalse/32768/0",
+        "mixed4/first/nonascii/32768/0"
+      ]
+    }
   },
   "inputs": [
     {
@@ -254,6 +393,282 @@
         "alphabet": "abcdefghijklmnopqrstuvwxyz",
         "length": 32768,
         "seed": 20260721
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.absent.{length}",
+      "axes": {
+        "length": [
+          15,
+          16,
+          17,
+          31,
+          32,
+          33,
+          63,
+          64,
+          65,
+          256,
+          1023,
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "b",
+        "length": "{length}"
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.late.{length}",
+      "axes": {
+        "length": [
+          64,
+          32768
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "b",
+        "suffix": "xy5",
+        "length": "{length}"
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.prefixFalse.32768",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "_",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.nonascii.32768",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "é",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.sparse.32768",
+      "recipe": {
+        "kind": "sparseMatchToLength",
+        "match": "xy5",
+        "nonMatch": "b",
+        "nonMatchRepeats": 127,
+        "delimiterAlphabet": "b",
+        "seed": 20260731,
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.dense.32768",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "bxy5",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.absent.{length}",
+      "axes": {
+        "length": [
+          15,
+          16,
+          17,
+          31,
+          32,
+          33,
+          63,
+          64,
+          256,
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "~",
+        "length": "{length}"
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.late.32768",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "~",
+        "suffix": "!#5Aa",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.sparse.32768",
+      "recipe": {
+        "kind": "sparseMatchToLength",
+        "match": "!#5Aa",
+        "nonMatch": "~",
+        "nonMatchRepeats": 127,
+        "delimiterAlphabet": "~",
+        "seed": 20260801,
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "vectorScan.multi.dense.32768",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "~!#5Aa",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "utf8Matching.asciiClassNonmatch.text",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "a",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "utf8AsciiPrefix.shortFirst.text",
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "x5",
+        "unit": "b",
+        "suffix": "",
+        "length": 256
+      },
+      "shared": true
+    },
+    {
+      "id": "utf8AsciiPrefix.shortAbsent.text",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "b",
+        "length": 256
+      },
+      "shared": true
+    },
+    {
+      "id": "utf8AsciiPrefix.longAbsent.text",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "b",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "utf8AsciiPrefix.longLate.text",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "b",
+        "suffix": "x5",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "utf8AsciiPrefix.sparse.text",
+      "recipe": {
+        "kind": "sparseMatchToLength",
+        "match": "x5",
+        "nonMatch": "bbb",
+        "nonMatchRepeats": 31,
+        "delimiterAlphabet": "b",
+        "seed": 20260731,
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "utf8AsciiPrefix.dense.text",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "bxy5",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "phoneSearch.digitsNoSlash.text",
+      "recipe": {
+        "kind": "randomChars",
+        "alphabet": "abcdefghijklmnopqrstuvwxyz0123456789 ",
+        "length": 32768,
+        "seed": 20260729
+      },
+      "shared": true
+    },
+    {
+      "id": "phoneSearch.slashNoise.text",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "service 42 completed path /api/v1/items with 7 records ",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "phoneSearch.denseDigitsAndSlashes.text",
+      "recipe": {
+        "kind": "randomChars",
+        "alphabet": "/0123456789",
+        "length": 32768,
+        "seed": 20260729
+      },
+      "shared": true
+    },
+    {
+      "id": "phoneSearch.sparseMatches.{nonMatchRepeats}",
+      "axes": {
+        "nonMatchRepeats": [
+          511,
+          63,
+          7,
+          1
+        ]
+      },
+      "recipe": {
+        "kind": "sparseMatchToLength",
+        "match": "123/456/7890",
+        "nonMatch": "ordinary prose event 42 completed normally",
+        "nonMatchRepeats": "{nonMatchRepeats}",
+        "delimiterAlphabet": " .,;:-",
+        "seed": 20260729,
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "charClassSearch.singleCharAbsent.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "The quick brown fox jumps over the lazy dog without any numbers. ",
+        "length": "{size}"
       },
       "shared": true
     },
@@ -1408,6 +1823,42 @@
       "shared": true
     },
     {
+      "id": "realWorldRegex.recitation.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "[",
+        "unit": "1.2.3,",
+        "suffix": "4.5.6]",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.recitation.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "[",
+        "unit": "1.2.3,",
+        "suffix": "4.5.6",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "scrubber.withoutDirectives",
       "recipe": {
         "kind": "repeat",
@@ -1589,6 +2040,13 @@
       "recipe": {
         "kind": "literal",
         "text": "abc"
+      }
+    },
+    {
+      "id": "replace.anchoredReplace.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "user@example.com"
       }
     },
     {
@@ -1814,844 +2272,78 @@
         "kind": "literal",
         "text": "no digits here"
       }
+    },
+    {
+      "id": "realWorldRegex.bracketCitation.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "Refer to prior art [1, 2].",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.bracketCitation.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "Refer to prior art (unbracketed 1, 2).",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "replace.emptyReplaceAllScaling.{size}",
+      "axes": {
+        "size": [
+          100,
+          1000,
+          10000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "abc",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      }
+    },
+    {
+      "id": "replace.literalReplaceAllScaling.{size}",
+      "axes": {
+        "size": [
+          100,
+          1000,
+          10000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "ababababab",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      }
     }
   ],
-  "regex": {
-    "literalMatch": {
-      "id": "RegexBenchmark.literalMatch",
-      "pattern": "hello",
-      "text": "hello",
-      "op": "matches"
-    },
-    "charClassMatch": {
-      "id": "RegexBenchmark.charClassMatch",
-      "pattern": "[a-zA-Z]+",
-      "text": "TheQuickBrownFoxJumpsOverTheLazyDog",
-      "op": "matches"
-    },
-    "alternationFind": {
-      "id": "RegexBenchmark.alternationFind",
-      "pattern": "foo|bar|baz|qux|quux|corge|grault|garply",
-      "text": "the garply went to the baz and met a quux",
-      "op": "findAllCount"
-    },
-    "captureGroups": {
-      "id": "RegexBenchmark.captureGroups",
-      "pattern": "(\\d{4})-(\\d{2})-(\\d{2})",
-      "text": "2025-12-25",
-      "op": "matchAndExtract",
-      "groups": 3
-    },
-    "findInText": {
-      "id": "RegexBenchmark.findInText",
-      "pattern": "\\b\\w+ing\\b",
-      "text": "The morning sun was shining brightly, casting long shadows across the rolling hills. Birds were singing their melodious songs while children were playing in the sprawling gardens. A gentle breeze was blowing through the swaying trees, carrying the scent of blooming flowers. People were walking along the winding paths, enjoying the refreshing air and the stunning views of the surrounding countryside. Everything was moving in perfect harmony.",
-      "op": "findAllCount"
-    },
-    "emailFind": {
-      "id": "RegexBenchmark.emailFind",
-      "pattern": "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}",
-      "text": "contact user.name+tag@example.co.uk for info",
-      "op": "find"
-    }
-  },
-  "matcherApi": {
-    "lookingAt": {
-      "pattern": "[A-Za-z]+:\\s+\\d+",
-      "text": "requests: 1234 completed"
-    },
-    "regionFind": {
-      "pattern": "\\b[A-Za-z]+ing\\b",
-      "text": "IGNORE morning shining IGNORE",
-      "start": 7,
-      "end": 22
-    },
-    "resetAndFind": {
-      "pattern": "[A-Za-z]+\\d+",
-      "text": "item1 item22 item333"
-    }
-  },
-  "utf8Matching": {
-    "literalScan": {
-      "seed": 20260721,
-      "textSize": 32768,
-      "alphabet": "abcdefghijklmnopqrstuvwxyz",
-      "patterns": {
-        "fourByte": "qjxv",
-        "shortWord": "literal",
-        "longWord": "coolfunctionname"
-      }
-    },
-    "captureFreeFind": {
-      "asciiEarly": {
-        "pattern": "ERROR",
-        "text": "ERROR request completed"
-      },
-      "asciiLate": {
-        "pattern": "ERROR",
-        "text": "request completed with ERROR"
-      },
-      "asciiNoMatch": {
-        "pattern": "ERROR",
-        "text": "request completed normally"
-      },
-      "multibyteEarly": {
-        "pattern": "错误",
-        "text": "错误：请求失败"
-      },
-      "multibyteLate": {
-        "pattern": "错误",
-        "text": "请求处理结束：错误"
-      },
-      "multibyteNoMatch": {
-        "pattern": "错误",
-        "text": "请求处理成功"
-      }
-    },
-    "requiredClassNonmatch": {
-      "pattern": "[一-龥]{3,}",
-      "unit": "This is a sentence containing only English characters. ",
-      "textSize": 10000
-    },
-    "repeatedFind": {
-      "ascii": {
-        "pattern": "[A-Za-z]+",
-        "text": "one two three four five"
-      },
-      "multibyte": {
-        "pattern": "\\p{L}+",
-        "text": "one café 東京 naïve"
-      }
-    },
-    "captureBounds": {
-      "numbered": {
-        "pattern": "([A-Za-z]+)=([^&]+)",
-        "text": "user=service&token=abc123"
-      },
-      "named": {
-        "pattern": "(?<key>[A-Za-z]+)=(?<value>[^&]+)",
-        "text": "city=東京&name=Renée"
-      },
-      "nonparticipating": {
-        "pattern": "(cat)|(dog)",
-        "text": "dog"
-      }
-    },
-    "emptyMatchIteration": {
-      "pattern": "",
-      "text": "a💰有"
-    },
-    "replacement": {
-      "literal": {
-        "pattern": "错误",
-        "text": "错误 then 错误",
-        "replacement": "OK"
-      },
-      "numbered": {
-        "pattern": "([A-Za-z]+)=([^&]+)",
-        "text": "city=東京&name=Renée",
-        "replacement": "$1=[$2]"
-      },
-      "named": {
-        "pattern": "(?<key>[A-Za-z]+)=(?<value>[^&]+)",
-        "text": "city=東京&name=Renée",
-        "replacement": "${key}=[${value}]"
-      }
-    },
-    "window": {
-      "prefix": "sentinel-before-",
-      "text": "city=東京&name=Renée",
-      "suffix": "-sentinel-after",
-      "pattern": "東京"
-    },
-    "hardFailure": {
-      "pattern": "[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$",
-      "unit": "ordinary ASCII text without the required suffix ",
-      "textSizes": [
-        1024,
-        10240,
-        102400,
-        1048576
-      ]
-    },
-    "constructionModes": [
-      "trusted",
-      "validated"
-    ]
-  },
-  "compile": {
-    "simple": {
-      "pattern": "hello"
-    },
-    "medium": {
-      "pattern": "(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})"
-    },
-    "complex": {
-      "pattern": "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}"
-    },
-    "alternation": {
-      "pattern": "foo|bar|baz|qux|quux|corge|grault|garply|waldo|fred|plugh|xyzzy"
-    }
-  },
-  "searchScaling": {
-    "workloadIds": {
-      "easyFail": "SearchScalingBenchmark.searchEasyFail",
-      "easySuccess": "SearchScalingBenchmark.searchEasySuccess",
-      "mediumFail": "SearchScalingBenchmark.searchMediumFail",
-      "hardFail": "SearchScalingBenchmark.searchHardFail",
-      "findIngScaled": "SearchScalingBenchmark.findIngScaled"
-    },
-    "patterns": {
-      "easy": "ABCDEFGHIJKLMNOPQRSTUVWXYZ$",
-      "medium": "[XYZ]ABCDEFGHIJKLMNOPQRSTUVWXYZ$",
-      "hard": "[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$"
-    },
-    "matchSuffix": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "findIngPattern": "\\b\\w+ing\\b",
-    "textSizes": [
-      1024,
-      10240,
-      102400,
-      1048576
-    ],
-    "randomText": {
-      "alphabet": "abcdefghijklmnopqrstuvwxyz0123456789 \n",
-      "seed": 42
-    },
-    "proseUnit": "The morning sun was shining brightly casting long shadows across the rolling hills Birds were singing their melodious songs while children were playing in the sprawling gardens A gentle breeze was blowing through the swaying trees carrying the scent of blooming flowers People were walking along the winding paths enjoying the refreshing air and the stunning views "
-  },
-  "issue481Scaling": {
-    "textSizes": [
-      128,
-      1024,
-      10240,
-      102400,
-      1048576
-    ],
-    "splitW": {
-      "pattern": "\\W+",
-      "unit": "This is a generic sentence containing words that will be used to test splitting routines. "
-    },
-    "block": {
-      "pattern": "(?s)<block>.*?</block>",
-      "prefix": "This is a <block>",
-      "unit": "content bytes here... blah blah blah ",
-      "suffix": "</block> transcript.",
-      "negativeSuffix": " transcript without a closing block tag."
-    },
-    "tag": {
-      "pattern": "<<tag.*?>>",
-      "prefixUnit": "plain text before the tagged value ",
-      "match": "Hello <<tag type=\"typeA\" value=\"valA\">>!",
-      "negativeMatch": "Hello <<notag type=\"typeA\" value=\"valA\">>!"
-    },
-    "scheme": {
-      "pattern": "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)",
-      "prefixUnit": "ordinary prose without a custom scheme link ",
-      "match": "Check [this link](customScheme://<id_1>) or [another](customScheme://id_2).",
-      "negativeMatch": "Check [this link](https://example.test/id_1) or [another](otherScheme://id_2)."
-    }
-  },
-  "issue488ReplaceAll": {
-    "textSizes": [
-      1000,
-      10000,
-      100000
-    ],
-    "lazyAlt": {
-      "pattern": "(?i)(?s)\\s*\\n*(?:<block>|\\[block\\])\\s*\\n?renderElement\\(.*?\\)\\s*\\n?(?:</block>|\\[/block\\])",
-      "replacement": "",
-      "prefixUnit": "Some prefix text preceding the render block element. ",
-      "match": "\n<block>\nrenderElement(id=\"el-42\", width=100, height=200, label=\"hello world\")\n</block>\n",
-      "suffixUnit": "Some suffix text following the render block element. "
-    },
-    "altCapture": {
-      "pattern": "(^|[^#])(#!customTag)",
-      "replacement": "$1<tag type=\"custom\"",
-      "hitUnit": "This is some sample prose text that contains a tag marker #!customTag and more text here. ",
-      "missUnit": "This is some sample prose text that contains a tag marker #customTag and more text here. ",
-      "hitInterval": 5
-    }
-  },
-  "captureScaling": {
-    "capture0": {
-      "pattern": "[0-9]+-[0-9]+-[0-9]+",
-      "text": "650-253-0001",
-      "groups": 0
-    },
-    "capture1": {
-      "pattern": "([0-9]+)-[0-9]+-[0-9]+",
-      "text": "650-253-0001",
-      "groups": 1
-    },
-    "capture3": {
-      "pattern": "([0-9]+)-([0-9]+)-([0-9]+)",
-      "text": "650-253-0001",
-      "groups": 3
-    },
-    "capture10": {
-      "pattern": "(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+)",
-      "text": "a=1;b=2;c=3;d=4;e=5",
-      "groups": 10
-    }
-  },
-  "http": {
-    "workloadIds": {
-      "full": "HttpBenchmark.httpFull",
-      "small": "HttpBenchmark.httpSmall",
-      "extract": "HttpBenchmark.httpExtract"
-    },
-    "pattern": "^(?:GET|POST) +([^ ]+) HTTP",
-    "fullRequest": "GET /asdfhjasdhfasdlfhasdflkjasdfkljasdhflaskdjhflkajsdhflkajshfklasjdhfklasjdhfklashdflka HTTP/1.1",
-    "smallRequest": "GET /abc HTTP/1.1"
-  },
-  "replace": {
-    "literalReplaceFirst": {
-      "pattern": "b",
-      "text": "ababababab",
-      "replacement": "bb",
-      "op": "replaceFirst"
-    },
-    "literalReplaceFirstNoMatch": {
-      "pattern": "authorization=",
-      "text": "INFO service=checkout method=GET path=/api/orders/123 status=200 latency_ms=17 trace_id=8f14e45fceea167a user=anonymous region=us-east-1 cache=hit; INFO service=checkout method=POST path=/api/orders status=201 latency_ms=42 trace_id=c9f0f895fb98ab91 user=anonymous region=us-east-1 cache=miss; INFO service=inventory method=GET path=/api/items/sku-481516 status=200 latency_ms=11 trace_id=45c48cce2e2d7fbdea1afc51c7c6ad26 user=anonymous region=us-west-2 cache=hit; INFO service=payments method=GET path=/api/charges/ch_123 status=404 latency_ms=23 trace_id=d3d9446802a44259755d38e6d163e820 user=anonymous region=us-east-2 cache=miss; INFO service=shipping method=PATCH path=/api/shipments/shp_987 status=202 latency_ms=36 trace_id=6512bd43d9caa6e02c990b0a82652dca user=anonymous region=us-west-1 cache=hit",
-      "replacement": "authorization=REDACTED",
-      "op": "replaceFirst"
-    },
-    "literalReplaceAll": {
-      "pattern": "b",
-      "text": "ababababab",
-      "replacement": "bb",
-      "op": "replaceAll"
-    },
-    "pigLatinReplaceAll": {
-      "pattern": "(qu|[b-df-hj-np-tv-z]*)([a-z]+)",
-      "text": "the quick brown fox jumps over the lazy dogs",
-      "replacement": "$2$1ay",
-      "op": "replaceAll"
-    },
-    "digitReplaceAll": {
-      "pattern": "\\d+",
-      "text": "order 12345 shipped on 2025-03-22 tracking 9876543210 weight 42kg price $199",
-      "replacement": "NUM",
-      "op": "replaceAll"
-    },
-    "emptyReplaceAll": {
-      "pattern": "a*",
-      "text": "abc",
-      "replacement": "x",
-      "op": "replaceAll"
-    }
-  },
-  "scrubber": {
-    "repeatCount": 500,
-    "linePattern": "[^\\n]*\\bSCRUB:strip_line\\b[^\\n]*\\n?",
-    "blockPattern": "\\bSCRUB:begin_strip\\b(?s:.*?)\\bSCRUB:end_strip\\b",
-    "baseWithoutDirectives": "public class Foo {\n  // Some comment\n  public void bar() {\n    System.out.println(\"Hello, world!\");\n  }\n}\n",
-    "baseWithDirectives": "public class Foo {\n  // SCRUB:strip_line\n  public void bar() {\n    // SCRUB:begin_strip\n    System.out.println(\"Secret code\");\n    // SCRUB:end_strip\n  }\n}\n"
-  },
-  "realWorldRegex": {
-    "textSizes": [
-      1000,
-      10000,
-      100000
-    ],
-    "safeDelimiterAlphabet": " ",
-    "seed": 42,
-    "cases": [
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.mapFieldPath",
-        "name": "mapFieldPath",
-        "pattern": "([\\S]+)\\b\\[(.+)\\]",
-        "op": "find",
-        "match": "config.overrides[some_value]",
-        "nonMatch": "config.overrides"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.markupImageLink",
-        "name": "markupImageLink",
-        "pattern": "<<!(image|media|link)(\\([^\\)]*\\))?/?>?>",
-        "op": "replaceAllEmpty",
-        "match": "<<!image(src=\"http://image.png\")>>",
-        "nonMatch": "<<!image"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.versionList",
-        "name": "versionList",
-        "pattern": " ?[\\[［](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]］]",
-        "op": "replaceAllEmpty",
-        "match": "[1.2.3, 4.5.6]",
-        "nonMatch": "[1.2.3,"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.malformedEntity",
-        "name": "malformedEntity",
-        "pattern": "<[^>]*entity[^>]*>{1,2}",
-        "op": "replaceAllEmpty",
-        "match": "<entity id=\"123\">",
-        "nonMatch": "<ent id=\"123\">"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.markupEntity",
-        "name": "markupEntity",
-        "pattern": "<<!entity.*?>>",
-        "op": "find",
-        "match": "<<!entity(id=\"123\")>>",
-        "nonMatch": "<<entity(id=\"123\")"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.customProtocolLink",
-        "name": "customProtocolLink",
-        "pattern": "\\[(.*?)]\\(customProtocol://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)",
-        "op": "find",
-        "match": "[Click here](customProtocol://<doc_1>)",
-        "nonMatch": "[Click here](http://google.com)"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.wildcardSearch",
-        "name": "wildcardSearch",
-        "pattern": "(?is).*\\b(you|your)\\b.*",
-        "op": "find",
-        "match": "What can I do for you today?",
-        "nonMatch": "What is the capital of France?"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.metadataBlock",
-        "name": "metadataBlock",
-        "pattern": "(?s)<meta_start>.*?<meta_end>",
-        "op": "replaceAllEmpty",
-        "match": "<meta_start>Thinking process: analyzing query...<meta_end>",
-        "nonMatch": "<meta_start>Thinking process: analyzing query..."
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.blockedTags1",
-        "name": "blockedTags1",
-        "pattern": "```code_block\\n(\\s)*# (topic|tags)_identified:.*?\\n```",
-        "op": "replaceAllEmpty",
-        "match": "```code_block\n# tags_identified: shopping\n```",
-        "nonMatch": "```code_block\n# tags: shopping\n```"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.blockedTags2",
-        "name": "blockedTags2",
-        "pattern": "<container>\\n(\\s)*# (topic|tags)_identified:.*?\\n</container>",
-        "op": "replaceAllEmpty",
-        "match": "<container>\n# topic_identified: sports\n</container>",
-        "nonMatch": "<container>\n# topic: sports\n</container>"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.overlappingUrl",
-        "name": "overlappingUrl",
-        "pattern": "(?i)\\b(?:https?://|www\\.)(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}(?:/[a-zA-Z0-9-._~:/?#\\[\\]@!$&'()*+,;=]*)?",
-        "op": "replaceAllEmpty",
-        "match": "https://www.example.com/search?q=testing&hl=en",
-        "nonMatch": "some-random-domain-name"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.caseInsensitiveKeyword",
-        "name": "caseInsensitiveKeyword",
-        "pattern": "(?i)keyword_to_find",
-        "op": "replaceAllEmpty",
-        "match": "KEYWORD_TO_FIND",
-        "nonMatch": "other_random_words"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.boundedNameMatch",
-        "name": "boundedNameMatch",
-        "pattern": "\\b[Ff]irst [Nn]ame (\\bvalue\\b|\\*\\*value\\*\\*)",
-        "op": "replaceAllEmpty",
-        "match": "first name value",
-        "nonMatch": "first name other_value"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.templateTagMatch",
-        "name": "templateTagMatch",
-        "pattern": "(?s)(<template\\s+name\\s*>.*?<\\s*/\\s*template[ \\t]*)([^>]|$)",
-        "op": "replaceAllEmpty",
-        "match": "<template name>content to match</template",
-        "nonMatch": "plain text without template tag"
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.sparseUrl",
-        "name": "sparseUrl",
-        "pattern": "(?i)\\b(?:https?://|www\\.)(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}(?:/[a-zA-Z0-9-._~:/?#\\[\\]@!$&'()*+,;=]*)?",
-        "op": "replaceAllEmpty",
-        "match": "https://www.example.com/search?q=testing&hl=en",
-        "nonMatch": "some-random-domain-name",
-        "matchInput": {
-          "kind": "sparseMatch",
-          "nonMatchRepeats": 20,
-          "delimiterAlphabet": "bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ0123456789"
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.unprefixedWordBoundary",
-        "name": "unprefixedWordBoundary",
-        "pattern": "\\b[a-zA-Z]{3,5}\\b",
-        "op": "find",
-        "match": "hello",
-        "nonMatch": "12345",
-        "matchInput": {
-          "kind": "prefixedRepeat",
-          "prefix": "12345 "
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.fruitSearchQuery",
-        "name": "fruitSearchQuery",
-        "pattern": "(?is).*\\b(apples?.*for banana|cherry.*dates?|elderberry lists?|fig lists?|grape lists?)\\b.*",
-        "op": "replaceAllGroup1",
-        "match": "Here are the apples to show for banana in this session.",
-        "nonMatch": "Orange lemon melon peach pear plum.",
-        "matchInput": {
-          "kind": "repeat"
-        },
-        "nonMatchInput": {
-          "kind": "repeat"
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.fruitMarkupTag",
-        "name": "fruitMarkupTag",
-        "pattern": "^\\s*<(\\QApple\\E|\\QBanana\\E|\\QCherry\\E)>\\s*$",
-        "op": "replaceAllGroup1",
-        "match": "  <Banana>  ",
-        "nonMatch": "  <Orange>  ",
-        "matchInput": {
-          "kind": "surroundWithSpaces",
-          "body": "<Banana>"
-        },
-        "nonMatchInput": {
-          "kind": "surroundWithSpaces",
-          "body": "<Orange>"
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.jsonBlock",
-        "name": "jsonBlock",
-        "pattern": "(\\{[\\s\\S]*\\})",
-        "op": "replaceAllGroup1",
-        "match": "{\n  \"key1\": \"value1\",\n  \"key2\": \"value2\",\n  \"key3\": \"value3\"\n}",
-        "nonMatch": "some non-matching string containing no braces",
-        "matchInput": {
-          "kind": "scaledSurroundWithSpaces",
-          "bodyPrefix": "{ \"key\": \"value\", \"padding\": \"",
-          "bodyFill": "a",
-          "bodySuffix": "\" }",
-          "bodyScalePercent": 5
-        },
-        "nonMatchInput": {
-          "kind": "repeat"
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.charReplace",
-        "name": "charReplace",
-        "pattern": "a",
-        "op": "replaceAllLiteral",
-        "match": "a",
-        "nonMatch": "b",
-        "matchInput": {
-          "kind": "repeat"
-        },
-        "nonMatchInput": {
-          "kind": "repeat"
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.greedyOnePass",
-        "name": "greedyOnePass",
-        "pattern": "^(.+)",
-        "op": "matches",
-        "match": "abcdefghijklmnopqrstuvwxyz",
-        "nonMatch": "\nabcdefghijklmnopqrstuvwxyz",
-        "matchInput": {
-          "kind": "repeat"
-        },
-        "nonMatchInput": {
-          "kind": "repeat"
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.layoutBlock",
-        "name": "layoutBlock",
-        "pattern": "(?s)<block>\\n(\\s)*# (category|group)_defined:.*?\\n</block>",
-        "op": "replaceAllEmpty",
-        "match": "<block>\n  # category_defined: alpha, beta\n  entry: apple\n  entry: banana\n</block>\n",
-        "nonMatch": "<block>\n  # comment but not defined tag\n  entry: orange\n</block>\n",
-        "matchInput": {
-          "kind": "sparseMatch",
-          "nonMatchRepeats": 5,
-          "delimiterAlphabet": " "
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.turnTitleWhitespaceCjk",
-        "name": "turnTitleWhitespaceCjk",
-        "pattern": "[ \\f\\r\\t\\v\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}\\x{feff}\\x{3164}]+",
-        "op": "replaceAllEmpty",
-        "match": "いくつもの　中国語と日本語の文字　がここにあります　そして　いくつかのスペース　があります",
-        "nonMatch": "いくつもの中国語と日本語の文字がここにありますそしていくつかのスペースがあります",
-        "matchInput": {
-          "kind": "repeat"
-        },
-        "nonMatchInput": {
-          "kind": "repeat"
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.cjkSearch",
-        "name": "cjkSearch",
-        "pattern": "[一-龥]{3,}",
-        "op": "find",
-        "match": "这是一个中文测试句子",
-        "nonMatch": "This is a sentence containing only English characters.",
-        "matchInput": {
-          "kind": "repeat"
-        },
-        "nonMatchInput": {
-          "kind": "repeat"
-        }
-      },
-      {
-        "id": "RealWorldRegexBenchmark.runBenchmark.emojiSearch",
-        "name": "emojiSearch",
-        "pattern": "[😀-😇]",
-        "op": "find",
-        "match": "Today is a beautiful day 😇 with warm sunshine.",
-        "nonMatch": "Today is a beautiful day with warm sunshine.",
-        "matchInput": {
-          "kind": "repeat"
-        },
-        "nonMatchInput": {
-          "kind": "repeat"
-        }
-      }
-    ]
-  },
-  "application": [
-    {
-      "id": "ApplicationBenchmark.uuidValidation",
-      "name": "uuidValidation",
-      "op": "matchesCorpus",
-      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
-      "texts": [
-        "550e8400-e29b-41d4-a716-446655440000",
-        "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-        "not-a-uuid",
-        "550e8400e29b41d4a716446655440000",
-        "ffffffff-ffff-5fff-bfff-ffffffffffff",
-        "12345678-1234-7234-9234-123456789abc"
-      ],
-      "expected": 3
-    },
-    {
-      "id": "ApplicationBenchmark.logLineParse",
-      "name": "logLineParse",
-      "op": "matchesGroupLengthSum",
-      "pattern": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)\\s+(INFO|WARN|ERROR)\\s+([A-Za-z0-9_.-]+)\\s+-\\s+(.+)$",
-      "texts": [
-        "2026-03-31T14:22:08Z INFO api.gateway - request completed status=200 latency=38ms",
-        "2026-03-31T14:22:09Z WARN db.pool - connection wait exceeded threshold=100ms",
-        "2026-03-31T14:22:10Z ERROR worker-7 - job failed id=abc123 retry=2",
-        "debug line without structured prefix",
-        "2026-03-31 14:22:11 INFO api.gateway - malformed timestamp"
-      ],
-      "groups": [
-        2,
-        3
-      ],
-      "expected": 39
-    },
-    {
-      "id": "ApplicationBenchmark.apiRouteMatch",
-      "name": "apiRouteMatch",
-      "op": "matchesGroupLengthSum",
-      "pattern": "^/api/v[0-9]+/(users|orders|inventory)/([A-Za-z0-9_-]+)(?:\\?.*)?$",
-      "texts": [
-        "/api/v1/users/12345",
-        "/api/v2/orders/ord_9f3a?include=items",
-        "/api/v3/inventory/sku-7788",
-        "/assets/app.js",
-        "/api/v1/users/",
-        "/api/latest/users/12345"
-      ],
-      "groups": [
-        1,
-        2
-      ],
-      "expected": 41
-    },
-    {
-      "id": "ApplicationBenchmark.stackTraceExtract",
-      "name": "stackTraceExtract",
-      "op": "findAllGroupLengthSum",
-      "pattern": "(?m)^\\s+at\\s+([A-Za-z0-9_.$]+)\\.([A-Za-z0-9_$<>]+)\\(([^:()]+):(\\d+)\\)$",
-      "text": "java.lang.IllegalStateException: failed to process request\n\tat org.example.api.Handler.handle(Handler.java:87)\n\tat org.example.api.Router.dispatch(Router.java:142)\n\tat org.example.Main.main(Main.java:25)\nCaused by: java.io.IOException: timeout\n\tat org.example.net.Client.read(Client.java:203)",
-      "groups": [
-        1,
-        4
-      ],
-      "expected": 93
-    },
-    {
-      "id": "ApplicationBenchmark.caseInsensitiveKeywords",
-      "name": "caseInsensitiveKeywords",
-      "op": "findAllCount",
-      "pattern": "(?i)\\b(error|warning|timeout|failed)\\b",
-      "text": "INFO startup complete\nWarning cache miss ratio high\nrequest failed after TIMEOUT waiting for backend\nERROR circuit breaker opened\nhealth check passed",
-      "expected": 4
-    },
-    {
-      "id": "ApplicationBenchmark.urlExtraction",
-      "name": "urlExtraction",
-      "op": "findAllLengthSum",
-      "pattern": "(https?://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=%-]*)?)",
-      "text": "Docs: https://example.com/docs/v1/index.html?lang=en and callback http://localhost:8080/api/callback?id=42; mirror at https://cdn.example.org/assets/app.js",
-      "expected": 124
-    },
-    {
-      "id": "ApplicationBenchmark.csvFieldScan",
-      "name": "csvFieldScan",
-      "op": "findAllLengthSum",
-      "pattern": "(?m)(?:^|,)(?:\"([^\"]*)\"|([^,\\r\\n]+))",
-      "text": "id,name,email,status,created_at\n42,\"Ada Lovelace\",ada@example.com,active,2026-03-31T14:22:08Z\n43,\"Grace Hopper\",grace@example.com,pending,2026-04-01T09:15:00Z",
-      "expected": 156
-    },
-    {
-      "id": "ApplicationBenchmark.secretRedaction",
-      "name": "secretRedaction",
-      "op": "replaceAll",
-      "pattern": "(?i)\\b(password|token|secret)=([^\\s&]+)",
-      "text": "user=service password=hunter2 token=abc123XYZ path=/api secret=prod-key-9 debug=true",
-      "replacement": "$1=REDACTED",
-      "expected": "user=service password=REDACTED token=REDACTED path=/api secret=REDACTED debug=true"
-    }
-  ],
-  "pathological": {
-    "nValues": [
-      10,
-      15,
-      20,
-      25,
-      30,
-      50,
-      100
-    ],
-    "nValuesComparison": [
-      10,
-      15,
-      20
-    ],
-    "note": "Pattern is 'a?' repeated n times followed by 'a' repeated n times. Text is 'a' repeated n times."
-  },
-  "fanout": {
-    "unicodeFanout": {
-      "id": "FanoutBenchmark.fanoutUnicode",
-      "pattern": "(?:[\\x{80}-\\x{10FFFF}]?){100}[\\x{80}-\\x{10FFFF}]",
-      "codePoints": [
-        19968,
-        19969,
-        19970,
-        233,
-        241,
-        252,
-        1040,
-        1041,
-        1042,
-        12354,
-        12356,
-        12358
-      ],
-      "seed": 42
-    },
-    "nestedQuantifier": {
-      "id": "FanoutBenchmark.nestedQuantifier",
-      "pattern": "(?:a?){20}a{20}",
-      "alphabet": "abcdefghijklmnopqrstuvwxyz",
-      "seed": 42
-    },
-    "textSizes": [
-      1024,
-      10240,
-      102400
-    ]
-  },
-  "patternSet": {
-    "basePatterns": [
-      "ERROR",
-      "WARNING",
-      "INFO",
-      "DEBUG",
-      "FATAL",
-      "connection\\s+timeout",
-      "\\d+\\.\\d+\\.\\d+\\.\\d+",
-      "host\\s+\\S+",
-      "port\\s*:\\s*\\d+",
-      "after\\s+\\d+s",
-      "[A-Z]{2,}:",
-      "\\w+\\.internal",
-      "db-\\w+",
-      "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}:\\d+",
-      "timeout|refused|reset|closed",
-      "\\[\\w+\\]",
-      "status\\s*=\\s*\\d+",
-      "retry\\s+\\d+/\\d+",
-      "latency\\s*>\\s*\\d+ms",
-      "queue\\s+full",
-      "memory\\s+\\d+[kmg]b?",
-      "cpu\\s+\\d+%",
-      "disk\\s+(full|low)",
-      "\\w+Exception",
-      "at\\s+\\w+\\.\\w+\\(",
-      "null\\s*pointer",
-      "stack\\s*overflow",
-      "out\\s+of\\s+memory",
-      "permission\\s+denied",
-      "not\\s+found",
-      "already\\s+exists",
-      "invalid\\s+\\w+",
-      "expired",
-      "unauthorized",
-      "rate\\s+limit",
-      "circuit\\s+breaker",
-      "health\\s+check\\s+failed",
-      "graceful\\s+shutdown",
-      "leader\\s+election",
-      "split\\s+brain",
-      "rebalancing",
-      "partition\\s+\\d+",
-      "offset\\s+\\d+",
-      "consumer\\s+group",
-      "dead\\s+letter",
-      "backpressure",
-      "throttled",
-      "degraded",
-      "failover",
-      "rollback",
-      "checkpoint\\s+\\d+",
-      "snapshot\\s+\\w+",
-      "compaction",
-      "gc\\s+pause\\s+\\d+ms",
-      "safepoint",
-      "jit\\s+compilation",
-      "class\\s+loading",
-      "thread\\s+pool\\s+\\w+",
-      "blocked\\s+thread",
-      "deadlock",
-      "lock\\s+contention",
-      "cache\\s+(hit|miss)",
-      "eviction",
-      "bloom\\s+filter"
-    ],
-    "patternCounts": [
-      4,
-      16,
-      64
-    ],
-    "matchText": "ERROR: connection timeout after 30s to host db-primary.internal:5432",
-    "noMatchText": "The quick brown fox jumps over the lazy dog near the riverbank"
-  },
   "workloads": [
     {
       "id": "RegexBenchmark.literalMatch",
@@ -2661,11 +2353,6 @@
       ],
       "inputs": [
         "crossEngine.RegexBenchmark.literalMatch.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -2685,11 +2372,6 @@
       "inputs": [
         "crossEngine.RegexBenchmark.charClassMatch.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -2708,11 +2390,6 @@
       "inputs": [
         "crossEngine.RegexBenchmark.alternationFind.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -2726,15 +2403,22 @@
       "id": "RegexBenchmark.findInText",
       "operation": "findAllCount",
       "patterns": [
-        "\\b\\w+ing\\b"
+        {
+          "java": "\\b\\w+ing\\b",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?-u:\\b)[A-Za-z0-9_]+ing(?-u:\\b)",
+              "reason": "Rust regex gives word classes and boundaries Unicode semantics"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII word-boundary semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "crossEngine.RegexBenchmark.findInText.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -2753,11 +2437,6 @@
       ],
       "inputs": [
         "crossEngine.RegexBenchmark.emailFind.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -2782,11 +2461,6 @@
         "crossEngine.ApplicationBenchmark.uuidValidation.input.4",
         "crossEngine.ApplicationBenchmark.uuidValidation.input.5"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -2804,7 +2478,19 @@
       "id": "ApplicationBenchmark.logLineParse",
       "operation": "matchesGroupLengthSum",
       "patterns": [
-        "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)\\s+(INFO|WARN|ERROR)\\s+([A-Za-z0-9_.-]+)\\s+-\\s+(.+)$"
+        {
+          "java": "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z)\\s+(INFO|WARN|ERROR)\\s+([A-Za-z0-9_.-]+)\\s+-\\s+(.+)$",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)(?-u:\\s)+(INFO|WARN|ERROR)(?-u:\\s)+([A-Za-z0-9_.-]+)(?-u:\\s)+-(?-u:\\s)+(.+)$",
+              "reason": "Rust regex gives \\d and \\s Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)[ \\t\\n\\x0B\\f\\r]+(INFO|WARN|ERROR)[ \\t\\n\\x0B\\f\\r]+([A-Za-z0-9_.-]+)[ \\t\\n\\x0B\\f\\r]+-[ \\t\\n\\x0B\\f\\r]+(.+)$",
+              "reason": ".NET gives \\d and \\s Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "crossEngine.ApplicationBenchmark.logLineParse.input.0",
@@ -2812,11 +2498,6 @@
         "crossEngine.ApplicationBenchmark.logLineParse.input.2",
         "crossEngine.ApplicationBenchmark.logLineParse.input.3",
         "crossEngine.ApplicationBenchmark.logLineParse.input.4"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -2851,11 +2532,6 @@
         "crossEngine.ApplicationBenchmark.apiRouteMatch.input.4",
         "crossEngine.ApplicationBenchmark.apiRouteMatch.input.5"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -2879,15 +2555,22 @@
       "id": "ApplicationBenchmark.stackTraceExtract",
       "operation": "findAllGroupLengthSum",
       "patterns": [
-        "(?m)^\\s+at\\s+([A-Za-z0-9_.$]+)\\.([A-Za-z0-9_$<>]+)\\(([^:()]+):(\\d+)\\)$"
+        {
+          "java": "(?m)^\\s+at\\s+([A-Za-z0-9_.$]+)\\.([A-Za-z0-9_$<>]+)\\(([^:()]+):(\\d+)\\)$",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?m)^(?-u:\\s)+at(?-u:\\s)+([A-Za-z0-9_.$]+)\\.([A-Za-z0-9_$<>]+)\\(([^:()]+):([0-9]+)\\)$",
+              "reason": "Rust regex gives \\d and \\s Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "(?m)^[ \\t\\n\\x0B\\f\\r]+at[ \\t\\n\\x0B\\f\\r]+([A-Za-z0-9_.$]+)\\.([A-Za-z0-9_$<>]+)\\(([^:()]+):([0-9]+)\\)$",
+              "reason": ".NET gives \\d and \\s Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "crossEngine.ApplicationBenchmark.stackTraceExtract.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -2912,15 +2595,22 @@
       "id": "ApplicationBenchmark.caseInsensitiveKeywords",
       "operation": "findAllCount",
       "patterns": [
-        "(?i)\\b(error|warning|timeout|failed)\\b"
+        {
+          "java": "(?i)\\b(error|warning|timeout|failed)\\b",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?i)(?-u:\\b)(error|warning|timeout|failed)(?-u:\\b)",
+              "reason": "Rust regex gives word boundaries Unicode semantics"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "crossEngine.ApplicationBenchmark.caseInsensitiveKeywords.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -2944,11 +2634,6 @@
       "inputs": [
         "crossEngine.ApplicationBenchmark.urlExtraction.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -2971,11 +2656,6 @@
       "inputs": [
         "crossEngine.ApplicationBenchmark.csvFieldScan.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -2993,15 +2673,22 @@
       "id": "ApplicationBenchmark.secretRedaction",
       "operation": "replaceAll",
       "patterns": [
-        "(?i)\\b(password|token|secret)=([^\\s&]+)"
+        {
+          "java": "(?i)\\b(password|token|secret)=([^\\s&]+)",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?i)(?-u:\\b)(password|token|secret)=([^\\x20\\t\\n\\x0B\\f\\r&]+)",
+              "reason": "Rust regex gives \\s and word boundaries Unicode semantics"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "crossEngine.ApplicationBenchmark.secretRedaction.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3012,7 +2699,15 @@
         ]
       },
       "arguments": {
-        "replacement": "$1=REDACTED"
+        "replacement": {
+          "java": "$1=REDACTED",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "\\1=REDACTED",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
       },
       "requirements": [
         "numberedReplacement"
@@ -3026,15 +2721,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.mapFieldPath.{matchLabel}.{size}",
       "operation": "find",
       "patterns": [
-        "([\\S]+)\\b\\[(.+)\\]"
+        {
+          "java": "([\\S]+)\\b\\[(.+)\\]",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "([^\\x20\\t\\n\\x0B\\f\\r]+)(?-u:\\b)\\[(.+)\\]",
+              "reason": "Rust regex gives \\S and word boundaries Unicode semantics"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII word-boundary semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.mapFieldPath.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -3065,11 +2767,6 @@
       "inputs": [
         "realWorldRegex.markupImageLink.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -3098,15 +2795,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.versionList.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        " ?[\\[［](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]］]"
+        {
+          "java": " ?[\\[［](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]］]",
+          "alternates": {
+            "rust-regex": {
+              "pattern": " ?[\\[［](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]］]",
+              "reason": "Rust regex gives \\d Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": " ?[\\[［](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]］]",
+              "reason": ".NET gives \\d Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.versionList.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3141,11 +2845,6 @@
       "inputs": [
         "realWorldRegex.malformedEntity.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -3179,11 +2878,6 @@
       "inputs": [
         "realWorldRegex.markupEntity.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -3213,11 +2907,6 @@
       "inputs": [
         "realWorldRegex.customProtocolLink.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -3242,15 +2931,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.wildcardSearch.{matchLabel}.{size}",
       "operation": "find",
       "patterns": [
-        "(?is).*\\b(you|your)\\b.*"
+        {
+          "java": "(?is).*\\b(you|your)\\b.*",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?is).*(?-u:\\b)(you|your)(?-u:\\b).*",
+              "reason": "Rust regex gives word boundaries Unicode semantics"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.wildcardSearch.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -3281,11 +2977,6 @@
       "inputs": [
         "realWorldRegex.metadataBlock.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -3314,15 +3005,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.blockedTags1.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "```code_block\\n(\\s)*# (topic|tags)_identified:.*?\\n```"
+        {
+          "java": "```code_block\\n(\\s)*# (topic|tags)_identified:.*?\\n```",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "```code_block\\n((?-u:\\s))*# (topic|tags)_identified:.*?\\n```",
+              "reason": "Rust regex gives \\s Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "```code_block\\n([ \\t\\n\\x0B\\f\\r])*# (topic|tags)_identified:.*?\\n```",
+              "reason": ".NET gives \\s Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.blockedTags1.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3352,15 +3050,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.blockedTags2.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "<container>\\n(\\s)*# (topic|tags)_identified:.*?\\n</container>"
+        {
+          "java": "<container>\\n(\\s)*# (topic|tags)_identified:.*?\\n</container>",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "<container>\\n((?-u:\\s))*# (topic|tags)_identified:.*?\\n</container>",
+              "reason": "Rust regex gives \\s Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "<container>\\n([ \\t\\n\\x0B\\f\\r])*# (topic|tags)_identified:.*?\\n</container>",
+              "reason": ".NET gives \\s Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.blockedTags2.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3390,15 +3095,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.overlappingUrl.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "(?i)\\b(?:https?://|www\\.)(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}(?:/[a-zA-Z0-9-._~:/?#\\[\\]@!$&'()*+,;=]*)?"
+        {
+          "java": "(?i)\\b(?:https?://|www\\.)(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}(?:/[a-zA-Z0-9-._~:/?#\\[\\]@!$&'()*+,;=]*)?",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?i)(?-u:\\b)(?:https?://|www\\.)(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}(?:/[a-zA-Z0-9-._~:/?#\\[\\]@!$&'()*+,;=]*)?",
+              "reason": "Rust regex gives word boundaries Unicode semantics"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.overlappingUrl.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3428,15 +3140,18 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.caseInsensitiveKeyword.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "(?i)keyword_to_find"
+        {
+          "java": "(?i)keyword_to_find",
+          "alternates": {
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.caseInsensitiveKeyword.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3466,15 +3181,18 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.boundedNameMatch.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "\\b[Ff]irst [Nn]ame (\\bvalue\\b|\\*\\*value\\*\\*)"
+        {
+          "java": "\\b[Ff]irst [Nn]ame (\\bvalue\\b|\\*\\*value\\*\\*)",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?-u:\\b)[Ff]irst [Nn]ame ((?-u:\\b)value(?-u:\\b)|\\*\\*value\\*\\*)",
+              "reason": "Rust regex gives word boundaries Unicode semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.boundedNameMatch.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3504,15 +3222,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.templateTagMatch.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "(?s)(<template\\s+name\\s*>.*?<\\s*/\\s*template[ \\t]*)([^>]|$)"
+        {
+          "java": "(?s)(<template\\s+name\\s*>.*?<\\s*/\\s*template[ \\t]*)([^>]|$)",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?s)(<template(?-u:\\s)+name(?-u:\\s)*>.*?<(?-u:\\s)*/(?-u:\\s)*template[ \\t]*)([^>]|$)",
+              "reason": "Rust regex gives \\s Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "(?s)(<template[ \\t\\n\\x0B\\f\\r]+name[ \\t\\n\\x0B\\f\\r]*>.*?<[ \\t\\n\\x0B\\f\\r]*/[ \\t\\n\\x0B\\f\\r]*template[ \\t]*)([^>]|$)",
+              "reason": ".NET gives \\s Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.templateTagMatch.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3547,11 +3272,6 @@
       "inputs": [
         "realWorldRegex.sparseUrl.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -3580,15 +3300,18 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.unprefixedWordBoundary.{matchLabel}.{size}",
       "operation": "find",
       "patterns": [
-        "\\b[a-zA-Z]{3,5}\\b"
+        {
+          "java": "\\b[a-zA-Z]{3,5}\\b",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?-u:\\b)[a-zA-Z]{3,5}(?-u:\\b)",
+              "reason": "Rust regex gives word boundaries Unicode semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.unprefixedWordBoundary.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -3614,15 +3337,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.fruitSearchQuery.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "(?is).*\\b(apples?.*for banana|cherry.*dates?|elderberry lists?|fig lists?|grape lists?)\\b.*"
+        {
+          "java": "(?is).*\\b(apples?.*for banana|cherry.*dates?|elderberry lists?|fig lists?|grape lists?)\\b.*",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?is).*(?-u:\\b)(apples?.*for banana|cherry.*dates?|elderberry lists?|fig lists?|grape lists?)(?-u:\\b).*",
+              "reason": "Rust regex gives word boundaries Unicode semantics"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.fruitSearchQuery.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3644,7 +3374,15 @@
         ]
       },
       "arguments": {
-        "replacement": "$1"
+        "replacement": {
+          "java": "$1",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "\\1",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
       },
       "requirements": [
         "numberedReplacement"
@@ -3654,15 +3392,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.fruitMarkupTag.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "^\\s*<(\\QApple\\E|\\QBanana\\E|\\QCherry\\E)>\\s*$"
+        {
+          "java": "^\\s*<(\\QApple\\E|\\QBanana\\E|\\QCherry\\E)>\\s*$",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "^[[:space:]]*<(Apple|Banana|Cherry)>[[:space:]]*$",
+              "reason": "Rust regex lacks Java quoted literals and gives \\s Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "^[ \\t\\n\\x0B\\f\\r]*<(Apple|Banana|Cherry)>[ \\t\\n\\x0B\\f\\r]*$",
+              "reason": ".NET lacks Java quoted literals and gives \\s Unicode semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.fruitMarkupTag.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3694,15 +3439,18 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.jsonBlock.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "(\\{[\\s\\S]*\\})"
+        {
+          "java": "(\\{[\\s\\S]*\\})",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(\\{(?s:.)*\\})",
+              "reason": "Rust regex gives \\s and \\S Unicode semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.jsonBlock.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3739,11 +3487,6 @@
       "inputs": [
         "realWorldRegex.charReplace.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -3777,11 +3520,6 @@
       "inputs": [
         "realWorldRegex.greedyOnePass.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -3806,15 +3544,22 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.layoutBlock.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "(?s)<block>\\n(\\s)*# (category|group)_defined:.*?\\n</block>"
+        {
+          "java": "(?s)<block>\\n(\\s)*# (category|group)_defined:.*?\\n</block>",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "(?s)<block>\\n((?-u:\\s))*# (category|group)_defined:.*?\\n</block>",
+              "reason": "Rust regex gives \\s Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "(?s)<block>\\n([ \\t\\n\\x0B\\f\\r])*# (category|group)_defined:.*?\\n</block>",
+              "reason": ".NET gives \\s Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.layoutBlock.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3844,15 +3589,18 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.turnTitleWhitespaceCjk.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "[ \\f\\r\\t\\v\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}\\x{feff}\\x{3164}]+"
+        {
+          "java": "[ \\f\\r\\t\\v\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}\\x{feff}\\x{3164}]+",
+          "alternates": {
+            "dotnet": {
+              "pattern": "[ \\f\\r\\t\\v\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff\\u3164]+",
+              "reason": ".NET uses UTF-16 escapes rather than Java code-point hex escapes"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.turnTitleWhitespaceCjk.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -3887,11 +3635,6 @@
       "inputs": [
         "realWorldRegex.cjkSearch.{matchLabel}.{size}"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -3916,15 +3659,18 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.emojiSearch.{matchLabel}.{size}",
       "operation": "find",
       "patterns": [
-        "[😀-😇]"
+        {
+          "java": "[😀-😇]",
+          "alternates": {
+            "dotnet": {
+              "pattern": "\\uD83D[\\uDE00-\\uDE07]",
+              "reason": ".NET character classes operate on UTF-16 code units"
+            }
+          }
+        }
       ],
       "inputs": [
         "realWorldRegex.emojiSearch.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -3947,6 +3693,52 @@
       }
     },
     {
+      "id": "RealWorldRegexBenchmark.runBenchmark.recitation.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\s*[\\[［]\\s*(?:(?:[0-9]+\\.?){3,4}(?:\\s*[,、]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]］]"
+      ],
+      "inputs": [
+        "realWorldRegex.recitation.{matchLabel}.{size}"
+      ],
+      "trialExclusions": [
+        {
+          "engineIds": [
+            "jdk-string"
+          ],
+          "when": {
+            "size": [
+              10000,
+              100000
+            ]
+          },
+          "reason": "JDK's backtracking matcher throws StackOverflowError for the nested quantified recitation pattern at these input sizes"
+        }
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
       "id": "HttpBenchmark.httpFull",
       "operation": "findGroupPresent",
       "patterns": [
@@ -3954,11 +3746,6 @@
       ],
       "inputs": [
         "crossEngine.HttpBenchmark.httpFull.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -3981,11 +3768,6 @@
       "inputs": [
         "crossEngine.HttpBenchmark.httpSmall.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4006,11 +3788,6 @@
       ],
       "inputs": [
         "crossEngine.HttpBenchmark.httpFull.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -4033,11 +3810,6 @@
       "inputs": [
         "searchScaling.random.1024"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4055,11 +3827,6 @@
       ],
       "inputs": [
         "searchScaling.success.1024"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4079,11 +3846,6 @@
       "inputs": [
         "searchScaling.random.1024"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4101,11 +3863,6 @@
       ],
       "inputs": [
         "searchScaling.random.1024"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4125,11 +3882,6 @@
       "inputs": [
         "searchScaling.prose.1024"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -4147,11 +3899,6 @@
       ],
       "inputs": [
         "searchScaling.random.10240"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4171,11 +3918,6 @@
       "inputs": [
         "searchScaling.success.10240"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4193,11 +3935,6 @@
       ],
       "inputs": [
         "searchScaling.random.10240"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4217,11 +3954,6 @@
       "inputs": [
         "searchScaling.random.10240"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4239,11 +3971,6 @@
       ],
       "inputs": [
         "searchScaling.prose.10240"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -4263,11 +3990,6 @@
       "inputs": [
         "searchScaling.random.102400"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4285,11 +4007,6 @@
       ],
       "inputs": [
         "searchScaling.success.102400"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4309,11 +4026,6 @@
       "inputs": [
         "searchScaling.random.102400"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4331,11 +4043,6 @@
       ],
       "inputs": [
         "searchScaling.random.102400"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4355,11 +4062,6 @@
       "inputs": [
         "searchScaling.prose.102400"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -4377,11 +4079,6 @@
       ],
       "inputs": [
         "searchScaling.random.1048576"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4401,11 +4098,6 @@
       "inputs": [
         "searchScaling.success.1048576"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4423,11 +4115,6 @@
       ],
       "inputs": [
         "searchScaling.random.1048576"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4447,11 +4134,6 @@
       "inputs": [
         "searchScaling.random.1048576"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4470,11 +4152,6 @@
       "inputs": [
         "searchScaling.prose.1048576"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -4488,15 +4165,18 @@
       "id": "FanoutBenchmark.fanoutUnicode.1024",
       "operation": "find",
       "patterns": [
-        "(?:[\\x{80}-\\x{10FFFF}]?){100}[\\x{80}-\\x{10FFFF}]"
+        {
+          "java": "(?:[\\x{80}-\\x{10FFFF}]?){100}[\\x{80}-\\x{10FFFF}]",
+          "alternates": {
+            "dotnet": {
+              "pattern": "(?:(?:[\\u0080-\\uD7FF\\uE000-\\uFFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF])?){100}(?:[\\u0080-\\uD7FF\\uE000-\\uFFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF])",
+              "reason": ".NET character classes operate on UTF-16 code units"
+            }
+          }
+        }
       ],
       "inputs": [
         "fanout.unicode.1024"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4516,11 +4196,6 @@
       "inputs": [
         "fanout.ascii.1024"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4534,15 +4209,18 @@
       "id": "FanoutBenchmark.fanoutUnicode.10240",
       "operation": "find",
       "patterns": [
-        "(?:[\\x{80}-\\x{10FFFF}]?){100}[\\x{80}-\\x{10FFFF}]"
+        {
+          "java": "(?:[\\x{80}-\\x{10FFFF}]?){100}[\\x{80}-\\x{10FFFF}]",
+          "alternates": {
+            "dotnet": {
+              "pattern": "(?:(?:[\\u0080-\\uD7FF\\uE000-\\uFFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF])?){100}(?:[\\u0080-\\uD7FF\\uE000-\\uFFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF])",
+              "reason": ".NET character classes operate on UTF-16 code units"
+            }
+          }
+        }
       ],
       "inputs": [
         "fanout.unicode.10240"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4562,11 +4240,6 @@
       "inputs": [
         "fanout.ascii.10240"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -4580,15 +4253,18 @@
       "id": "FanoutBenchmark.fanoutUnicode.102400",
       "operation": "find",
       "patterns": [
-        "(?:[\\x{80}-\\x{10FFFF}]?){100}[\\x{80}-\\x{10FFFF}]"
+        {
+          "java": "(?:[\\x{80}-\\x{10FFFF}]?){100}[\\x{80}-\\x{10FFFF}]",
+          "alternates": {
+            "dotnet": {
+              "pattern": "(?:(?:[\\u0080-\\uD7FF\\uE000-\\uFFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF])?){100}(?:[\\u0080-\\uD7FF\\uE000-\\uFFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF])",
+              "reason": ".NET character classes operate on UTF-16 code units"
+            }
+          }
+        }
       ],
       "inputs": [
         "fanout.unicode.102400"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4607,11 +4283,6 @@
       ],
       "inputs": [
         "fanout.ascii.102400"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4632,6 +4303,7 @@
         "javaString",
         "javaStringWithTimedUtf8Conversion"
       ],
+      "inputRepresentationReason": "Compilation has no subject input; omit the SafeRE UTF-8 variant to avoid duplicating the same compiler.",
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "compileOnly",
@@ -4642,12 +4314,25 @@
       "id": "CompileBenchmark.compileMedium",
       "operation": "compile",
       "patterns": [
-        "(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})"
+        {
+          "java": "(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})",
+              "reason": "Rust regex gives \\d Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})",
+              "reason": ".NET gives \\d Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputRepresentations": [
         "javaString",
         "javaStringWithTimedUtf8Conversion"
       ],
+      "inputRepresentationReason": "Compilation has no subject input; omit the SafeRE UTF-8 variant to avoid duplicating the same compiler.",
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "compileOnly",
@@ -4664,6 +4349,7 @@
         "javaString",
         "javaStringWithTimedUtf8Conversion"
       ],
+      "inputRepresentationReason": "Compilation has no subject input; omit the SafeRE UTF-8 variant to avoid duplicating the same compiler.",
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "compileOnly",
@@ -4680,6 +4366,7 @@
         "javaString",
         "javaStringWithTimedUtf8Conversion"
       ],
+      "inputRepresentationReason": "Compilation has no subject input; omit the SafeRE UTF-8 variant to avoid duplicating the same compiler.",
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "compileOnly",
@@ -4694,10 +4381,6 @@
       ],
       "inputs": [
         "captureScaling.capture0.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4716,10 +4399,6 @@
       ],
       "inputs": [
         "captureScaling.capture1.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -4744,10 +4423,6 @@
       "inputs": [
         "captureScaling.capture3.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -4768,14 +4443,22 @@
       "id": "CaptureScalingBenchmark.capture10",
       "operation": "captureGroups",
       "patterns": [
-        "(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+)"
+        {
+          "java": "(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+);(\\w+)=(\\w+)",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "([A-Za-z0-9_]+)=([A-Za-z0-9_]+);([A-Za-z0-9_]+)=([A-Za-z0-9_]+);([A-Za-z0-9_]+)=([A-Za-z0-9_]+);([A-Za-z0-9_]+)=([A-Za-z0-9_]+);([A-Za-z0-9_]+)=([A-Za-z0-9_]+)",
+              "reason": "Rust regex gives \\w Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "([A-Za-z0-9_]+)=([A-Za-z0-9_]+);([A-Za-z0-9_]+)=([A-Za-z0-9_]+);([A-Za-z0-9_]+)=([A-Za-z0-9_]+);([A-Za-z0-9_]+)=([A-Za-z0-9_]+);([A-Za-z0-9_]+)=([A-Za-z0-9_]+)",
+              "reason": ".NET gives \\w Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "captureScaling.capture10.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -4804,14 +4487,22 @@
       "id": "RegexBenchmark.captureGroups",
       "operation": "captureGroups",
       "patterns": [
-        "(\\d{4})-(\\d{2})-(\\d{2})"
+        {
+          "java": "(\\d{4})-(\\d{2})-(\\d{2})",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "([0-9]{4})-([0-9]{2})-([0-9]{2})",
+              "reason": "Rust regex gives \\d Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "([0-9]{4})-([0-9]{2})-([0-9]{2})",
+              "reason": ".NET gives \\d Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "crossEngine.RegexBenchmark.captureGroups.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -4838,10 +4529,6 @@
       "inputs": [
         "replace.literalReplaceFirst.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -4862,10 +4549,6 @@
       ],
       "inputs": [
         "replace.literalReplaceFirstNoMatch.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -4888,10 +4571,6 @@
       "inputs": [
         "replace.literalReplaceAll.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -4913,10 +4592,6 @@
       "inputs": [
         "replace.pigLatinReplaceAll.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -4926,7 +4601,23 @@
         ]
       },
       "arguments": {
-        "replacement": "$2$1ay"
+        "replacement": {
+          "java": "$2$1ay",
+          "alternates": {
+            "go-regexp": {
+              "replacement": "${2}${1}ay",
+              "reason": "Go replacement references need braces before adjacent letters"
+            },
+            "rust-regex": {
+              "replacement": "${2}${1}ay",
+              "reason": "Rust replacement references need braces before adjacent letters"
+            },
+            "re2-cpp": {
+              "replacement": "\\2\\1ay",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
       },
       "requirements": [
         "numberedReplacement"
@@ -4936,14 +4627,27 @@
       "id": "ReplaceBenchmark.digitReplaceAll",
       "operation": "replaceAll",
       "patterns": [
-        "\\d+"
+        {
+          "java": "\\d+",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "[0-9]+",
+              "reason": "Rust regex gives \\d Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "[0-9]+",
+              "reason": ".NET gives \\d Unicode semantics while Java defaults to ASCII",
+              "flagSets": [
+                "0",
+                "CASE_INSENSITIVE",
+                "CASE_INSENSITIVE_UNICODE_CASE"
+              ]
+            }
+          }
+        }
       ],
       "inputs": [
         "replace.digitReplaceAll.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -4966,10 +4670,6 @@
       "inputs": [
         "replace.emptyReplaceAll.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -4983,6 +4683,35 @@
       }
     },
     {
+      "id": "ReplaceBenchmark.anchoredReplace",
+      "operation": "replaceAll",
+      "patterns": [
+        "^([a-z]+)@([a-z]+)\\.com$"
+      ],
+      "inputs": [
+        "replace.anchoredReplace.input"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "javaStringWithTimedUtf8Conversion"
+      ],
+      "inputRepresentationReason": "The Matcher replacement fast path operates on Java strings; preexisting UTF-8 replacement uses a separate API.",
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "$1 AT $2 DOT com"
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
       "id": "ReplaceBenchmark.manualReplaceAll",
       "operation": "manualReplaceAll",
       "patterns": [
@@ -4990,10 +4719,6 @@
       ],
       "inputs": [
         "replace.pigLatinReplaceAll.input"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -5004,7 +4729,19 @@
         ]
       },
       "arguments": {
-        "replacement": "$2$1ay"
+        "replacement": {
+          "java": "$2$1ay",
+          "alternates": {
+            "go-regexp": {
+              "replacement": "${2}${1}ay",
+              "reason": "Go replacement references need braces before adjacent letters"
+            },
+            "rust-regex": {
+              "replacement": "${2}${1}ay",
+              "reason": "Rust replacement references need braces before adjacent letters"
+            }
+          }
+        }
       },
       "requirements": [
         "numberedReplacement",
@@ -5015,14 +4752,22 @@
       "id": "Issue481ScalingBenchmark.splitWords.128",
       "operation": "splitLengthSum",
       "patterns": [
-        "\\W+"
+        {
+          "java": "\\W+",
+          "alternates": {
+            "rust-regex": {
+              "pattern": "[^A-Za-z0-9_]+",
+              "reason": "Rust regex gives \\W Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": "[^A-Za-z0-9_]+",
+              "reason": ".NET gives \\W Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "issue481Scaling.splitW.128"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5042,10 +4787,6 @@
       "inputs": [
         "issue481Scaling.block.128"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5063,10 +4804,6 @@
       ],
       "inputs": [
         "issue481Scaling.blockNegative.128"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -5086,10 +4823,6 @@
       "inputs": [
         "issue481Scaling.tag.128"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5108,10 +4841,6 @@
       "inputs": [
         "issue481Scaling.tagNegative.128"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5129,10 +4858,6 @@
       ],
       "inputs": [
         "issue481Scaling.scheme.128"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5158,10 +4883,6 @@
       "inputs": [
         "issue481Scaling.schemeNegative.128"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5179,10 +4900,6 @@
       ],
       "inputs": [
         "issue481Scaling.splitW.1024"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5202,10 +4919,6 @@
       "inputs": [
         "issue481Scaling.block.1024"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5223,10 +4936,6 @@
       ],
       "inputs": [
         "issue481Scaling.blockNegative.1024"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -5246,10 +4955,6 @@
       "inputs": [
         "issue481Scaling.tag.1024"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5268,10 +4973,6 @@
       "inputs": [
         "issue481Scaling.tagNegative.1024"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5289,10 +4990,6 @@
       ],
       "inputs": [
         "issue481Scaling.scheme.1024"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5318,10 +5015,6 @@
       "inputs": [
         "issue481Scaling.schemeNegative.1024"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5339,10 +5032,6 @@
       ],
       "inputs": [
         "issue481Scaling.splitW.10240"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5362,10 +5051,6 @@
       "inputs": [
         "issue481Scaling.block.10240"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5383,10 +5068,6 @@
       ],
       "inputs": [
         "issue481Scaling.blockNegative.10240"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -5406,10 +5087,6 @@
       "inputs": [
         "issue481Scaling.tag.10240"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5428,10 +5105,6 @@
       "inputs": [
         "issue481Scaling.tagNegative.10240"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5449,10 +5122,6 @@
       ],
       "inputs": [
         "issue481Scaling.scheme.10240"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5478,10 +5147,6 @@
       "inputs": [
         "issue481Scaling.schemeNegative.10240"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5499,10 +5164,6 @@
       ],
       "inputs": [
         "issue481Scaling.splitW.102400"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5522,10 +5183,6 @@
       "inputs": [
         "issue481Scaling.block.102400"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5543,10 +5200,6 @@
       ],
       "inputs": [
         "issue481Scaling.blockNegative.102400"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -5566,10 +5219,6 @@
       "inputs": [
         "issue481Scaling.tag.102400"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5588,10 +5237,6 @@
       "inputs": [
         "issue481Scaling.tagNegative.102400"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5609,10 +5254,6 @@
       ],
       "inputs": [
         "issue481Scaling.scheme.102400"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5638,10 +5279,6 @@
       "inputs": [
         "issue481Scaling.schemeNegative.102400"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5659,10 +5296,6 @@
       ],
       "inputs": [
         "issue481Scaling.splitW.1048576"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5682,10 +5315,6 @@
       "inputs": [
         "issue481Scaling.block.1048576"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5703,10 +5332,6 @@
       ],
       "inputs": [
         "issue481Scaling.blockNegative.1048576"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -5726,10 +5351,6 @@
       "inputs": [
         "issue481Scaling.tag.1048576"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5748,10 +5369,6 @@
       "inputs": [
         "issue481Scaling.tagNegative.1048576"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5769,10 +5386,6 @@
       ],
       "inputs": [
         "issue481Scaling.scheme.1048576"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -5798,10 +5411,6 @@
       "inputs": [
         "issue481Scaling.schemeNegative.1048576"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -5815,14 +5424,18 @@
       "id": "Issue488ReplaceAllBenchmark.lazyAlt.1000",
       "operation": "replaceAll",
       "patterns": [
-        "(?i)(?s)\\s*\\n*(?:<block>|\\[block\\])\\s*\\n?renderElement\\(.*?\\)\\s*\\n?(?:</block>|\\[/block\\])"
+        {
+          "java": "(?i)(?s)\\s*\\n*(?:<block>|\\[block\\])\\s*\\n?renderElement\\(.*?\\)\\s*\\n?(?:</block>|\\[/block\\])",
+          "alternates": {
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "issue488ReplaceAll.lazyAlt.1000"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -5845,10 +5458,6 @@
       "inputs": [
         "issue488ReplaceAll.altCapture.1000"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -5858,7 +5467,15 @@
         ]
       },
       "arguments": {
-        "replacement": "$1<tag type=\"custom\""
+        "replacement": {
+          "java": "$1<tag type=\"custom\"",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "\\1<tag type=\"custom\"",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
       },
       "requirements": [
         "numberedReplacement"
@@ -5872,10 +5489,6 @@
       ],
       "inputs": [
         "issue488ReplaceAll.lazyAlt.10000"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -5897,10 +5510,6 @@
       ],
       "inputs": [
         "issue488ReplaceAll.altCapture.10000"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -5926,10 +5535,6 @@
       "inputs": [
         "issue488ReplaceAll.lazyAlt.100000"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -5950,10 +5555,6 @@
       ],
       "inputs": [
         "issue488ReplaceAll.altCapture.100000"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "string",
       "measurement": {
@@ -5980,10 +5581,6 @@
       "inputs": [
         "scrubber.withoutDirectives"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -6006,10 +5603,6 @@
       "inputs": [
         "scrubber.withDirectives"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -6026,13 +5619,18 @@
       "id": "MatcherApiBenchmark.lookingAt",
       "operation": "lookingAt",
       "patterns": [
-        "[A-Za-z]+:\\s+\\d+"
+        {
+          "java": "[A-Za-z]+:\\s+\\d+",
+          "alternates": {
+            "dotnet": {
+              "pattern": "[A-Za-z]+:[ \\t\\n\\x0B\\f\\r]+[0-9]+",
+              "reason": ".NET gives \\s and \\d Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
       ],
       "inputs": [
         "matcherApi.lookingAt.input"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -6058,9 +5656,6 @@
       ],
       "inputs": [
         "matcherApi.regionFind.input"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -6094,9 +5689,6 @@
       "inputs": [
         "matcherApi.resetAndFind.input"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -6128,10 +5720,6 @@
         "pathological.text.10"
       ],
       "requirements": [],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -6156,10 +5744,6 @@
         "pathological.text.15"
       ],
       "requirements": [],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -6184,10 +5768,6 @@
         "pathological.text.20"
       ],
       "requirements": [],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -6213,10 +5793,6 @@
       ],
       "requirements": [
         "linearTime"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "expected": {
@@ -6244,10 +5820,6 @@
       "requirements": [
         "linearTime"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -6273,10 +5845,6 @@
       ],
       "requirements": [
         "linearTime"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "expected": {
@@ -6304,10 +5872,6 @@
       "requirements": [
         "linearTime"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -6333,10 +5897,6 @@
       ],
       "requirements": [
         "linearTime"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "expected": {
@@ -6364,10 +5924,6 @@
       "requirements": [
         "linearTime"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -6393,10 +5949,6 @@
       ],
       "requirements": [
         "linearTime"
-      ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
       ],
       "resultConsumption": "boolean",
       "expected": {
@@ -6438,19 +5990,51 @@
           },
           {
             "id": "alphabetic",
-            "value": "\\p{IsAlphabetic}+"
+            "value": {
+              "java": "\\p{IsAlphabetic}+",
+              "alternates": {
+                "dotnet": {
+                  "unsupported": true,
+                  "reason": ".NET does not expose Java's IsAlphabetic Unicode property"
+                }
+              }
+            }
           },
           {
             "id": "ideographic",
-            "value": "\\p{IsIdeographic}+"
+            "value": {
+              "java": "\\p{IsIdeographic}+",
+              "alternates": {
+                "dotnet": {
+                  "unsupported": true,
+                  "reason": ".NET does not expose Java's IsIdeographic Unicode property"
+                }
+              }
+            }
           },
           {
             "id": "emoji",
-            "value": "\\p{IsEmoji}+"
+            "value": {
+              "java": "\\p{IsEmoji}+",
+              "alternates": {
+                "dotnet": {
+                  "unsupported": true,
+                  "reason": ".NET does not expose Java's IsEmoji Unicode property"
+                }
+              }
+            }
           },
           {
             "id": "extendedPictographic",
-            "value": "\\p{IsExtended_Pictographic}+"
+            "value": {
+              "java": "\\p{IsExtended_Pictographic}+",
+              "alternates": {
+                "dotnet": {
+                  "unsupported": true,
+                  "reason": ".NET does not expose Java's IsExtended_Pictographic Unicode property"
+                }
+              }
+            }
           },
           {
             "id": "scriptLatin",
@@ -6460,6 +6044,10 @@
                 "re2": {
                   "pattern": "\\p{Latin}+",
                   "reason": "RE2 uses bare Unicode script names"
+                },
+                "dotnet": {
+                  "unsupported": true,
+                  "reason": ".NET does not expose Java Unicode script properties"
                 }
               }
             }
@@ -6472,6 +6060,10 @@
                 "re2": {
                   "pattern": "\\p{Han}+",
                   "reason": "RE2 uses bare Unicode script names"
+                },
+                "dotnet": {
+                  "unsupported": true,
+                  "reason": ".NET does not expose Java Unicode script properties"
                 }
               }
             }
@@ -6484,6 +6076,18 @@
                 "re2": {
                   "pattern": "[\\x{0}-\\x{7F}]+",
                   "reason": "RE2 does not expose Java Unicode block names"
+                },
+                "rust-regex": {
+                  "pattern": "[\\x{0}-\\x{7F}]+",
+                  "reason": "Rust regex does not expose Java Unicode block names"
+                },
+                "dotnet": {
+                  "pattern": "[\\u0000-\\u007F]+",
+                  "reason": ".NET uses UTF-16 escapes rather than Java Unicode block names"
+                },
+                "pcre2": {
+                  "pattern": "[\\x{0}-\\x{7F}]+",
+                  "reason": "PCRE2 does not expose Java Unicode block names"
                 }
               }
             }
@@ -6496,21 +6100,72 @@
                 "re2": {
                   "pattern": "[\\x{4E00}-\\x{9FFF}]+",
                   "reason": "RE2 does not expose Java Unicode block names"
+                },
+                "rust-regex": {
+                  "pattern": "[\\x{4E00}-\\x{9FFF}]+",
+                  "reason": "Rust regex does not expose Java Unicode block names"
+                },
+                "dotnet": {
+                  "pattern": "[\\u4E00-\\u9FFF]+",
+                  "reason": ".NET uses UTF-16 escapes rather than Java Unicode block names"
+                },
+                "pcre2": {
+                  "pattern": "[\\x{4E00}-\\x{9FFF}]+",
+                  "reason": "PCRE2 does not expose Java Unicode block names"
                 }
               }
             }
           },
           {
             "id": "word",
-            "value": "\\w+"
+            "value": {
+              "java": "\\w+",
+              "alternates": {
+                "dotnet": {
+                  "pattern": "[A-Za-z0-9_]+",
+                  "reason": ".NET gives \\w Unicode semantics while Java defaults to ASCII",
+                  "flagSets": [
+                    "0",
+                    "CASE_INSENSITIVE",
+                    "CASE_INSENSITIVE_UNICODE_CASE"
+                  ]
+                }
+              }
+            }
           },
           {
             "id": "digit",
-            "value": "\\d+"
+            "value": {
+              "java": "\\d+",
+              "alternates": {
+                "dotnet": {
+                  "pattern": "[0-9]+",
+                  "reason": ".NET gives \\d Unicode semantics while Java defaults to ASCII",
+                  "flagSets": [
+                    "0",
+                    "CASE_INSENSITIVE",
+                    "CASE_INSENSITIVE_UNICODE_CASE"
+                  ]
+                }
+              }
+            }
           },
           {
             "id": "space",
-            "value": "\\s+"
+            "value": {
+              "java": "\\s+",
+              "alternates": {
+                "dotnet": {
+                  "pattern": "[ \\t\\n\\x0B\\f\\r]+",
+                  "reason": ".NET gives \\s Unicode semantics while Java defaults to ASCII",
+                  "flagSets": [
+                    "0",
+                    "CASE_INSENSITIVE",
+                    "CASE_INSENSITIVE_UNICODE_CASE"
+                  ]
+                }
+              }
+            }
           },
           {
             "id": "asciiLower",
@@ -6528,6 +6183,14 @@
                 "re2": {
                   "pattern": "[\\p{Ll}\\p{Lt}\\p{Lm}\\p{Lo}]+",
                   "reason": "RE2 does not support Java character-class intersection"
+                },
+                "dotnet": {
+                  "pattern": "[\\p{L}-[\\p{Lu}]]+",
+                  "reason": ".NET expresses character-class subtraction with a hyphen"
+                },
+                "pcre2": {
+                  "pattern": "[\\p{Ll}\\p{Lt}\\p{Lm}\\p{Lo}]+",
+                  "reason": "PCRE2 default character classes do not use Java intersection syntax"
                 }
               }
             }
@@ -6553,6 +6216,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "This Java-specific flagged compilation suite uses the Java String engine identity and omits the duplicate SafeRE UTF-8 compiler variant.",
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "compileOnly",
@@ -6619,6 +6283,18 @@
                 "re2": {
                   "pattern": "[\\x{0}-\\x{7F}]+",
                   "reason": "RE2 does not expose Java Unicode block names"
+                },
+                "rust-regex": {
+                  "pattern": "[\\x{0}-\\x{7F}]+",
+                  "reason": "Rust regex does not expose Java Unicode block names"
+                },
+                "dotnet": {
+                  "pattern": "[\\u0000-\\u007F]+",
+                  "reason": ".NET uses UTF-16 escapes rather than Java Unicode block names"
+                },
+                "pcre2": {
+                  "pattern": "[\\x{0}-\\x{7F}]+",
+                  "reason": "PCRE2 does not expose Java Unicode block names"
                 }
               }
             }
@@ -6655,6 +6331,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "This Java-specific flagged compilation suite uses the Java String engine identity and omits the duplicate SafeRE UTF-8 compiler variant.",
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "singleShotColdStart",
@@ -6672,9 +6349,6 @@
       ],
       "requirements": [
         "retainedHeap"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "compiledObject",
       "measurement": {
@@ -6694,9 +6368,6 @@
       "requirements": [
         "retainedHeap"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "retainedMemory",
@@ -6714,9 +6385,6 @@
       ],
       "requirements": [
         "retainedHeap"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "compiledObject",
       "measurement": {
@@ -6736,9 +6404,6 @@
       "requirements": [
         "retainedHeap"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "retainedMemory",
@@ -6756,9 +6421,6 @@
       ],
       "requirements": [
         "retainedHeap"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "compiledObject",
       "measurement": {
@@ -6778,9 +6440,6 @@
       "requirements": [
         "retainedHeap"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "retainedMemory",
@@ -6798,9 +6457,6 @@
       ],
       "requirements": [
         "retainedHeap"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "compiledObject",
       "measurement": {
@@ -6820,9 +6476,6 @@
       "requirements": [
         "retainedHeap"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "retainedMemory",
@@ -6840,9 +6493,6 @@
       ],
       "requirements": [
         "retainedHeap"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "compiledObject",
       "measurement": {
@@ -6862,9 +6512,6 @@
       "requirements": [
         "retainedHeap"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "compiledObject",
       "measurement": {
         "mode": "retainedMemory",
@@ -6882,9 +6529,6 @@
       ],
       "inputs": [
         "memory.dfaCacheText"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -6904,9 +6548,6 @@
       "inputs": [
         "memory.dfaCacheText"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "retainedMemory",
@@ -6925,9 +6566,6 @@
       "inputs": [
         "memory.dfaCacheText"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "retainedMemory",
@@ -6945,9 +6583,6 @@
       ],
       "inputs": [
         "memory.dfaCacheText"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "integer",
       "measurement": {
@@ -7041,9 +6676,6 @@
         "anchor": "unanchored",
         "patternCount": "{patternCount}"
       },
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -7136,9 +6768,6 @@
         "anchor": "unanchored",
         "patternCount": "{patternCount}"
       },
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -7231,9 +6860,6 @@
         "anchor": "anchored",
         "patternCount": "{patternCount}"
       },
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -7326,9 +6952,6 @@
         "anchor": "anchored",
         "patternCount": "{patternCount}"
       },
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -7346,9 +6969,6 @@
       ],
       "inputs": [
         "utf8.captureFree.asciiEarly"
-      ],
-      "inputRepresentations": [
-        "preexistingUtf8"
       ],
       "requirements": [],
       "resultConsumption": "boolean",
@@ -7369,9 +6989,6 @@
       "inputs": [
         "utf8.captureFree.asciiLate"
       ],
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7390,9 +7007,6 @@
       ],
       "inputs": [
         "utf8.captureFree.asciiNoMatch"
-      ],
-      "inputRepresentations": [
-        "preexistingUtf8"
       ],
       "requirements": [],
       "resultConsumption": "boolean",
@@ -7413,9 +7027,6 @@
       "inputs": [
         "utf8.captureFree.multibyteEarly"
       ],
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7435,9 +7046,6 @@
       "inputs": [
         "utf8.captureFree.multibyteLate"
       ],
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7456,9 +7064,6 @@
       ],
       "inputs": [
         "utf8.captureFree.multibyteNoMatch"
-      ],
-      "inputRepresentations": [
-        "preexistingUtf8"
       ],
       "requirements": [],
       "resultConsumption": "boolean",
@@ -7482,6 +7087,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7504,6 +7110,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7526,6 +7133,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7548,6 +7156,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7570,6 +7179,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7592,6 +7202,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7614,6 +7225,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7636,6 +7248,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7658,6 +7271,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7680,6 +7294,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7702,6 +7317,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7724,6 +7340,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -7748,9 +7365,6 @@
           0
         ]
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -7774,9 +7388,6 @@
           0
         ]
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -7802,9 +7413,6 @@
           2
         ]
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -7830,9 +7438,6 @@
           2
         ]
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -7858,9 +7463,6 @@
           2
         ]
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -7885,9 +7487,6 @@
         ],
         "bounds": "start"
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -7906,10 +7505,11 @@
       "inputs": [
         "utf8.window"
       ],
-      "arguments": {},
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures matching within a byte-offset window over preexisting UTF-8 input.",
+      "arguments": {},
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -7944,6 +7544,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures construction of a SafeRE matcher over preexisting UTF-8 bytes, including input validation policy.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -7968,6 +7569,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures construction of a SafeRE matcher over preexisting UTF-8 bytes, including input validation policy.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -7989,8 +7591,490 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE required-class rejection over preexisting UTF-8 bytes.",
       "requirements": [],
       "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8MatchingBenchmark.requiredSingleAsciiNonmatchBytes",
+      "operation": "find",
+      "patterns": [
+        ".*x.*"
+      ],
+      "inputs": [
+        "utf8Matching.asciiClassNonmatch.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures SafeRE single-ASCII required-class rejection over preexisting UTF-8 bytes.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8MatchingBenchmark.asciiRangePrefixNonmatchBytes",
+      "operation": "find",
+      "patterns": [
+        "\\d{3}/\\d{3}/\\d{4}"
+      ],
+      "inputs": [
+        "utf8Matching.asciiClassNonmatch.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures SafeRE contiguous-ASCII class start acceleration over preexisting UTF-8 bytes.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8MatchingBenchmark.literalPrefixNonmatchBytes",
+      "operation": "find",
+      "patterns": [
+        "x.*"
+      ],
+      "inputs": [
+        "utf8Matching.asciiClassNonmatch.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Controls for SafeRE literal start acceleration over the same preexisting UTF-8 bytes.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.findPair.shortFirst",
+      "operation": "find",
+      "patterns": [
+        "[xy]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.shortFirst.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures a short UTF-8 search whose first byte is in a two-member ASCII prefix class.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.findRange.shortFirst",
+      "operation": "find",
+      "patterns": [
+        "[0-9]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.shortFirst.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures a short UTF-8 search whose first candidate is in a contiguous ASCII prefix range.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.findPair.shortAbsent",
+      "operation": "find",
+      "patterns": [
+        "[xy]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.shortAbsent.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures fixed prefix-class metadata cost when a short UTF-8 input contains no pair member.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.findRange.shortAbsent",
+      "operation": "find",
+      "patterns": [
+        "[0-9]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.shortAbsent.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures fixed prefix-class metadata cost when a short UTF-8 input contains no range member.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.findPair.longAbsent",
+      "operation": "find",
+      "patterns": [
+        "[xy]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.longAbsent.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Controls for a long absent pair scan where input traversal dominates fixed prefix metadata cost.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.findRange.longAbsent",
+      "operation": "find",
+      "patterns": [
+        "[0-9]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.longAbsent.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Controls for a long absent range scan where input traversal dominates fixed prefix metadata cost.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.findPair.longLate",
+      "operation": "find",
+      "patterns": [
+        "[xy]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.longLate.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Controls for a pair candidate near the end of a long UTF-8 input.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.findRange.longLate",
+      "operation": "find",
+      "patterns": [
+        "[0-9]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.longLate.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Controls for a range candidate near the end of a long UTF-8 input.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.countPair.sparse",
+      "operation": "findAllCount",
+      "patterns": [
+        "[xy]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.sparse.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures repeated UTF-8 searches with pair-prefix candidates approximately every 128 bytes.",
+      "requirements": [],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.countRange.sparse",
+      "operation": "findAllCount",
+      "patterns": [
+        "[0-9]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.sparse.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures repeated UTF-8 searches with range-prefix candidates approximately every 128 bytes.",
+      "requirements": [],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.countPair.dense",
+      "operation": "findAllCount",
+      "patterns": [
+        "[xy]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.dense.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures repeated UTF-8 searches over dense two-member ASCII prefix candidates.",
+      "requirements": [],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "Utf8AsciiPrefixBenchmark.countRange.dense",
+      "operation": "findAllCount",
+      "patterns": [
+        "[0-9]q?"
+      ],
+      "inputs": [
+        "utf8AsciiPrefix.dense.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures repeated UTF-8 searches over dense contiguous-range prefix candidates.",
+      "requirements": [],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "FixedOffsetAccelerationBenchmark.findDigitsWithoutSlash",
+      "operation": "find",
+      "patterns": [
+        "\\d{3}/\\d{3}/\\d{4}"
+      ],
+      "inputs": [
+        "phoneSearch.digitsNoSlash.text"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Compares fixed-offset phone-pattern rejection over Java strings and preexisting UTF-8 in realistic text containing unrelated digits but no slash.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "FixedOffsetAccelerationBenchmark.findSlashNoise",
+      "operation": "find",
+      "patterns": [
+        "\\d{3}/\\d{3}/\\d{4}"
+      ],
+      "inputs": [
+        "phoneSearch.slashNoise.text"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Compares fixed-offset candidate filtering over Java strings and preexisting UTF-8 when unrelated digits and slashes are present.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "FixedOffsetAccelerationBenchmark.findSparse.{nonMatchRepeats}",
+      "operation": "find",
+      "patterns": [
+        "\\d{3}/\\d{3}/\\d{4}"
+      ],
+      "inputs": [
+        "phoneSearch.sparseMatches.{nonMatchRepeats}"
+      ],
+      "axes": {
+        "nonMatchRepeats": [
+          511,
+          63,
+          7,
+          1
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Compares Java-string and preexisting-UTF-8 searches for planted phone numbers at several realistic match densities.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "FixedOffsetAccelerationBenchmark.countSparse.{nonMatchRepeats}",
+      "operation": "findAllCount",
+      "patterns": [
+        "\\d{3}/\\d{3}/\\d{4}"
+      ],
+      "inputs": [
+        "phoneSearch.sparseMatches.{nonMatchRepeats}"
+      ],
+      "axes": {
+        "nonMatchRepeats": [
+          511,
+          63,
+          7,
+          1
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Compares repeated Java-string and UTF-8 find cost for planted phone numbers at several match densities.",
+      "requirements": [],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "FixedOffsetAccelerationBenchmark.countDenseDigitsAndSlashes",
+      "operation": "findAllCount",
+      "patterns": [
+        "\\d{3}/\\d{3}/\\d{4}"
+      ],
+      "inputs": [
+        "phoneSearch.denseDigitsAndSlashes.text"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Provides Java-string and UTF-8 dense synthetic controls where neither digit nor slash filtering is selective.",
+      "requirements": [],
+      "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
@@ -8011,6 +8095,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE required-class rejection over preexisting UTF-8 bytes.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8036,6 +8121,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Measures the paired SafeRE required-class rejection path over a Java String.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8058,6 +8144,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8080,6 +8167,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8102,6 +8190,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8124,6 +8213,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8146,6 +8236,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8168,6 +8259,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8190,6 +8282,7 @@
       "inputRepresentations": [
         "preexistingUtf8"
       ],
+      "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
       "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
@@ -8212,9 +8305,6 @@
       "arguments": {
         "replacement": "OK"
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -8234,11 +8324,16 @@
         "utf8.replacement.numbered"
       ],
       "arguments": {
-        "replacement": "$1=[$2]"
+        "replacement": {
+          "java": "$1=[$2]",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "\\1=[\\2]",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -8258,11 +8353,16 @@
         "utf8.replacement.named"
       ],
       "arguments": {
-        "replacement": "${key}=[${value}]"
+        "replacement": {
+          "java": "${key}=[${value}]",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "\\1=[\\2]",
+              "reason": "C++ RE2 replacements reference named captures by number"
+            }
+          }
+        }
       },
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -8278,9 +8378,6 @@
       "patterns": [
         "^(?:(a)?)*$|(?i)\\b(error|warning|timeout)\\b"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8293,9 +8390,6 @@
       "patterns": [
         "^(?:(a)?)*$|(?i)\\b(error|warning|timeout)\\b"
       ],
-      "inputRepresentations": [
-        "javaString"
-      ],
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8307,9 +8401,6 @@
       "operation": "compileAndAnalyze",
       "patterns": [
         "^(?:(a)?)*$|(?i)\\b(error|warning|timeout)\\b"
-      ],
-      "inputRepresentations": [
-        "javaString"
       ],
       "resultConsumption": "blackholeObject",
       "measurement": {
@@ -8327,6 +8418,18 @@
             "re2": {
               "pattern": "\\p{L}",
               "reason": "RE2 uses the Unicode letter category rather than Java character properties"
+            },
+            "rust-regex": {
+              "pattern": "\\p{L}",
+              "reason": "Rust regex uses the Unicode letter category rather than Java properties"
+            },
+            "dotnet": {
+              "pattern": "\\p{L}",
+              "reason": ".NET uses Unicode general categories rather than Java character properties"
+            },
+            "pcre2": {
+              "pattern": "\\p{L}",
+              "reason": "PCRE2 uses the Unicode letter category rather than Java character properties"
             }
           }
         }
@@ -8335,9 +8438,13 @@
         "seed": 95413077,
         "count": 4096
       },
+      "requirements": [
+        "javaCharacterClass"
+      ],
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Rotating UTF-16 inputs specifically measure Java String character-class processing.",
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8354,6 +8461,18 @@
             "re2": {
               "pattern": "\\p{L}",
               "reason": "RE2 uses the Unicode letter category rather than Java character properties"
+            },
+            "rust-regex": {
+              "pattern": "\\p{L}",
+              "reason": "Rust regex uses the Unicode letter category rather than Java properties"
+            },
+            "dotnet": {
+              "pattern": "\\p{L}",
+              "reason": ".NET uses Unicode general categories rather than Java character properties"
+            },
+            "pcre2": {
+              "pattern": "\\p{L}",
+              "reason": "PCRE2 uses the Unicode letter category rather than Java character properties"
             }
           }
         }
@@ -8362,9 +8481,13 @@
         "seed": 95413077,
         "count": 4096
       },
+      "requirements": [
+        "javaCharacterClass"
+      ],
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Rotating UTF-16 inputs specifically measure Java String character-class processing.",
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8389,6 +8512,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8416,6 +8540,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8443,6 +8568,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8470,6 +8596,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8497,6 +8624,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8524,6 +8652,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8551,6 +8680,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8578,6 +8708,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8605,6 +8736,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8632,6 +8764,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8664,6 +8797,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8696,6 +8830,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8728,6 +8863,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8760,6 +8896,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8792,6 +8929,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8824,6 +8962,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8856,6 +8995,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8888,6 +9028,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8920,6 +9061,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8952,6 +9094,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Diagnostics instrumentation is measured on the Java String matcher path.",
       "resultConsumption": "blackholeObject",
       "measurement": {
         "mode": "averageTime",
@@ -8981,6 +9124,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Allocation profiles intentionally compare Java String matcher paths; UTF-8 allocation is a separate boundary.",
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -9015,6 +9159,7 @@
       "inputRepresentations": [
         "javaString"
       ],
+      "inputRepresentationReason": "Allocation profiles intentionally compare Java String matcher paths; UTF-8 allocation is a separate boundary.",
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -9026,6 +9171,314 @@
         "constraints": [
           "prematerializedInput",
           "allocationProfile"
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.customProtocolLinkReplace.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customProtocol://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "realWorldRegex.customProtocolLink.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "[](https://example.com/resolved)"
+      },
+      "requirements": [
+        "numberedReplacement"
+      ],
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.markupEntityStrip.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "<<!entity.*?>>"
+      ],
+      "inputs": [
+        "realWorldRegex.markupEntity.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.bracketCitation.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "(?:^\\s*|([^,])\\s+)\\[\\d+(?:,\\s*\\d+)*\\]([\\p{P}&&[^\\]]](?:\\s|$))"
+      ],
+      "inputs": [
+        "realWorldRegex.bracketCitation.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ],
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "ReplaceBenchmark.emptyReplaceAllScaling.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "a*"
+      ],
+      "inputs": [
+        "replace.emptyReplaceAllScaling.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "x"
+      },
+      "axes": {
+        "size": [
+          100,
+          1000,
+          10000
+        ]
+      }
+    },
+    {
+      "id": "ReplaceBenchmark.literalReplaceAllScaling.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "b"
+      ],
+      "inputs": [
+        "replace.literalReplaceAllScaling.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "bb"
+      },
+      "axes": {
+        "size": [
+          100,
+          1000,
+          10000
+        ]
+      }
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.128",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.128"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.1024",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.1024"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.10240",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.10240"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.102400",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.102400"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "Issue481ScalingBenchmark.schemeReplace.1048576",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\[(.*?)]\\(customScheme://((?:<[^>]*>|[^()]*|\\([^()]*\\))*)\\)"
+      ],
+      "inputs": [
+        "issue481Scaling.scheme.1048576"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "requirements": [
+        "numberedReplacement"
+      ]
+    },
+    {
+      "id": "SingleCharClassBenchmark.findDigitAbsent.{size}",
+      "operation": "find",
+      "patterns": [
+        "[0-9]"
+      ],
+      "inputs": [
+        "charClassSearch.singleCharAbsent.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString"
+      ],
+      "inputRepresentationReason": "Measures single character class find fast-path throughput over non-matching input strings.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
         ]
       }
     }

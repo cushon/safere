@@ -9,17 +9,19 @@ parameters, expected results, and deterministic input recipes.
 
 Before execution, each benchmark runner invokes the central materializer. It
 writes a resolved manifest and exact UTF-8 inputs under
-`target/benchmark-corpus/`. Java, C++, Go, and future harnesses read only
-those generated artifacts; they do not read or interpret `benchmark-data.json`.
+`target/benchmark-corpus/`. Java, C++ RE2, PCRE2 JIT, Go, Rust, .NET, and future
+harnesses read only those generated artifacts; they do not read or interpret
+`benchmark-data.json`.
 Java string engines decode input files as UTF-8 during benchmark setup, while
 byte-oriented engines use the bytes directly. Materialization and decoding are
 outside the timed operation.
 
-Patterns remain Java-canonical in `benchmark-data.json`. Explicit
-engine-dialect alternatives live beside the pattern that needs them. The
-materializer collects those inline definitions into the resolved manifest;
-runners select their profile there and otherwise use the Java string unchanged.
-See [DECLARATIVE_BENCHMARK_PLAN.md](DECLARATIVE_BENCHMARK_PLAN.md#pattern-profiles).
+Regex patterns and replacement templates remain Java-canonical in
+`benchmark-data.json`. Explicit engine-dialect alternatives and unsupported
+syntax declarations live beside the value that needs them. The materializer
+selects those values while building the execution plan; runners receive only
+the exact syntax selected for their engine. See
+[DECLARATIVE_BENCHMARK_PLAN.md](DECLARATIVE_BENCHMARK_PLAN.md#pattern-profiles).
 
 The normal runner scripts materialize automatically. To prepare the corpus
 without starting a benchmark, run from the repository root:
@@ -29,9 +31,15 @@ without starting a benchmark, run from the repository root:
 ```
 
 The manifest records each input's UTF-8 byte length, UTF-16 code-unit length,
-Unicode scalar count, and SHA-256 digest, along with the resolved benchmark
-configuration. The generated directory is ignored and is replaced on every
-materialization, so there is no second checked-in representation to update.
+Unicode scalar count, and SHA-256 digest, along with the normalized benchmark
+configuration and a versioned `executionPlan`. Its entries are the complete
+Cartesian product of expanded workloads and declared engines. Every entry is
+either runnable, with exact patterns, inputs, arguments, options, lifecycle,
+and measurement boundaries, or excluded with a durable kind and reason. Java
+and native runners consume this same join and do not repeat capability or
+syntax selection. The generated directory is ignored and is
+replaced on every materialization, so there is no second checked-in
+representation to update.
 
 Every benchmark input is an explicit declaration in `benchmark-data.json`.
 The materializer evaluates only the schema's bounded, generic recipe kinds; it

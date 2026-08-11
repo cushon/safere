@@ -88,6 +88,46 @@ class MatcherTest {
     }
 
     @Test
+    @DisplayName("discrete multi-offset shifted start acceleration matches correctly")
+    void discreteMultiOffsetShiftedStartAcceleration() {
+      Pattern p = Pattern.compile("(^|[^#])(#!customTag)");
+      Matcher m = p.matcher("###!customTag #!customTag\n#!customTag");
+
+      assertThat(m.find()).isTrue();
+      assertThat(m.group()).isEqualTo(" #!customTag");
+      assertThat(m.start()).isEqualTo(13);
+
+      assertThat(m.find()).isTrue();
+      assertThat(m.group()).isEqualTo("\n#!customTag");
+      assertThat(m.start()).isEqualTo(25);
+
+      assertThat(m.find()).isFalse();
+    }
+
+    @Test
+    @DisplayName("bounded range shifted start acceleration matches correctly")
+    void boundedRangeShiftedStartAcceleration() {
+      Pattern p = Pattern.compile("\\s{0,8}renderElement\\(");
+      Matcher m = p.matcher("ignore text    renderElement(arg)");
+
+      assertThat(m.find()).isTrue();
+      assertThat(m.group()).isEqualTo("    renderElement(");
+      assertThat(m.start()).isEqualTo(11);
+      assertThat(m.find()).isFalse();
+    }
+
+    @Test
+    @DisplayName("multi-offset acceleration preserves starts belonging to later literals")
+    void multiOffsetAccelerationPreservesEarlierStartFromLaterLiteral() {
+      Matcher matcher = Pattern.compile("(aq|b[a-z]{9})z").matcher("bxxaxzxxxxz");
+
+      assertThat(matcher.find()).isTrue();
+      assertThat(matcher.group()).isEqualTo("bxxaxzxxxxz");
+      assertThat(matcher.start()).isZero();
+      assertThat(matcher.end()).isEqualTo(11);
+    }
+
+    @Test
     @DisplayName("lookingAt() respects lazy quantifier priority")
     void lookingAtRespectsLazyQuantifierPriority() {
       Matcher m = Pattern.compile("(a+?)").matcher("aaa");
@@ -562,6 +602,13 @@ class MatcherTest {
     }
 
     @Test
+    @DisplayName("keyword alternation preserves independently scoped boundary modes")
+    void keywordAlternationPreservesIndependentlyScopedBoundaryModes() {
+      assertAllFindsMatchJdk("(?-U)\\b(?i)(foo|bar)(?U)\\b", "éfoo! fooé bar!");
+      assertAllFindsMatchJdk("(?U)\\b(?i)(foo|bar)(?-U)\\b", "éfoo! fooé bar!");
+    }
+
+    @Test
     @DisplayName("find() keyword alternation rejects partly case-sensitive scoped flags")
     void findKeywordAlternationRejectsPartlyCaseSensitiveScopedFlags() {
       assertAllFindsMatchJdk("\\b((?i:a)B|(?i:x)Y)\\b", "ab aB AB xy xY XY");
@@ -624,6 +671,14 @@ class MatcherTest {
     @DisplayName("find() start acceleration handles Unicode line terminators")
     void findStartAccelerationWithUnicodeLineTerminators() {
       assertAllFindsMatchJdk("(?m)^\\s+at\\s+(\\w+)$", "header\u2028\tat alpha\u2029\tat beta");
+    }
+
+    @Test
+    @DisplayName("find() skips fixed-offset literals that cannot start a match")
+    void findSkipsInvalidFixedOffsetLiteralCandidates() {
+      assertAllFindsMatchJdk(
+          "\\d{3}/\\d{3}/\\d{4}",
+          "path /api/42 then 12/345/6789 and finally 123/456/7890 plus 987/654/3210");
     }
 
     @ParameterizedTest
@@ -1317,20 +1372,22 @@ class MatcherTest {
     @ValueSource(strings = {"$", "\\"})
     @DisplayName("replaceAll() with no match does not validate malformed replacement")
     void replaceAllNoMatchDoesNotValidateMalformedReplacement(String replacement) {
-      Pattern p = Pattern.compile("\\d+");
-      Matcher m = p.matcher("abc");
+      for (String regex : new String[] {"\\d+", "literal"}) {
+        Matcher matcher = Pattern.compile(regex).matcher("abc");
 
-      assertThat(m.replaceAll(replacement)).isEqualTo("abc");
+        assertThat(matcher.replaceAll(replacement)).as("pattern %s", regex).isEqualTo("abc");
+      }
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"$", "\\"})
     @DisplayName("replaceFirst() with no match does not validate malformed replacement")
     void replaceFirstNoMatchDoesNotValidateMalformedReplacement(String replacement) {
-      Pattern p = Pattern.compile("\\d+");
-      Matcher m = p.matcher("abc");
+      for (String regex : new String[] {"\\d+", "literal"}) {
+        Matcher matcher = Pattern.compile(regex).matcher("abc");
 
-      assertThat(m.replaceFirst(replacement)).isEqualTo("abc");
+        assertThat(matcher.replaceFirst(replacement)).as("pattern %s", regex).isEqualTo("abc");
+      }
     }
 
     @ParameterizedTest
@@ -1455,6 +1512,60 @@ class MatcherTest {
     }
 
     @Test
+    @DisplayName("anchored OnePass replaceFirst preserves the matched occurrence")
+    void anchoredOnePassReplaceFirstPreservesMatchedOccurrence() {
+      Matcher m = Pattern.compile("^([a-z]+)$").matcher("abc");
+
+      assertThat(m.replaceFirst("[$1]")).isEqualTo("[abc]");
+
+      assertThat(m.start()).isZero();
+      assertThat(m.end()).isEqualTo(3);
+      assertThat(m.group(1)).isEqualTo("abc");
+      assertThat(m.find()).isFalse();
+    }
+
+    @Test
+    @DisplayName("literal replaceFirst() retains numbered and named captures")
+    void literalReplaceFirstRetainsCaptures() {
+      Matcher matcher = Pattern.compile("(?<word>(foo))").matcher("foo bar");
+
+      assertThat(matcher.replaceFirst("X")).isEqualTo("X bar");
+
+      assertThat(matcher.group()).isEqualTo("foo");
+      assertThat(matcher.group(1)).isEqualTo("foo");
+      assertThat(matcher.group(2)).isEqualTo("foo");
+      assertThat(matcher.group("word")).isEqualTo("foo");
+      assertThat(matcher.start(1)).isZero();
+      assertThat(matcher.end(2)).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("anchored OnePass replaceFirst preserves the append position")
+    void anchoredOnePassReplaceFirstPreservesAppendPosition() {
+      Matcher m = Pattern.compile("^([a-z]+)$").matcher("abc\n");
+
+      assertThat(m.replaceFirst("[$1]")).isEqualTo("[abc]\n");
+      StringBuilder sb = new StringBuilder();
+      m.appendTail(sb);
+
+      assertThat(sb).hasToString("\n");
+    }
+
+    @Test
+    @DisplayName("anchored OnePass replaceAll leaves the matcher exhausted")
+    void anchoredOnePassReplaceAllLeavesMatcherExhausted() {
+      Matcher m = Pattern.compile("^([a-z]+)$").matcher("abc\n");
+
+      assertThat(m.replaceAll("[$1]")).isEqualTo("[abc]\n");
+      StringBuilder sb = new StringBuilder();
+      m.appendTail(sb);
+
+      assertThat(sb).hasToString("\n");
+      assertThat(m.find()).isFalse();
+      assertThatThrownBy(m::start).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     @DisplayName("replaceFirst() preserves dollar-anchor match before trailing line terminator")
     void replaceFirstPreservesDollarAnchorBeforeTrailingLineTerminator() {
       Matcher m = Pattern.compile("([^a](\\s\\s)+)*$").matcher("a\n");
@@ -1482,6 +1593,19 @@ class MatcherTest {
       assertThat(sb).hasToString("");
       assertThat(m.find()).isFalse();
       assertThatThrownBy(() -> m.toMatchResult().start()).isInstanceOf(IllegalStateException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "b", "bbb"})
+    @DisplayName("nullable DFA replaceAll() consumes its terminal empty match")
+    void nullableDfaReplaceAllConsumesTerminalEmptyMatch(String input) {
+      Matcher matcher = Pattern.compile("a?").matcher(input);
+      java.util.regex.Matcher jdkMatcher = java.util.regex.Pattern.compile("a?").matcher(input);
+
+      assertThat(matcher.replaceAll("X")).isEqualTo(jdkMatcher.replaceAll("X"));
+
+      assertThat(matcher.find()).isEqualTo(jdkMatcher.find()).isFalse();
+      assertThatThrownBy(matcher::start).isInstanceOf(IllegalStateException.class);
     }
 
     @Test

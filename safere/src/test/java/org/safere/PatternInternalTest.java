@@ -64,6 +64,30 @@ class PatternInternalTest {
   }
 
   @Test
+  void asciiPrefixScanInfoHandlesMissingAndEmptyClasses() {
+    assertThat(Pattern.buildAsciiClassScanInfo(null)).isNull();
+    assertThat(Pattern.buildAsciiClassScanInfo(new boolean[128])).isNull();
+  }
+
+  @Test
+  void asciiPrefixScanInfoExactlyRepresentsCommonClassShapes() {
+    assertAsciiScanInfo(new int[] {'x'}, new int[] {'x', 'x'});
+    assertAsciiScanInfo(new int[] {'x', 'y'}, new int[] {'x', 'y'});
+    assertAsciiScanInfo(new int[] {'x', 'z'}, new int[] {'x', 'x', 'z', 'z'});
+    assertAsciiScanInfo(asciiRange('0', '9'), new int[] {'0', '9'});
+    assertAsciiScanInfo(new int[] {'a', 'c', 'e'}, new int[] {'a', 'a', 'c', 'c', 'e', 'e'});
+  }
+
+  @Test
+  void asciiPrefixScanInfoPreservesMembersAcrossBitmapBoundary() {
+    Pattern.CharClassScanInfo info =
+        assertAsciiScanInfo(new int[] {62, 63, 64, 65}, new int[] {62, 65});
+
+    assertThat(info.bitmap0).isEqualTo((1L << 62) | (1L << 63));
+    assertThat(info.bitmap1).isEqualTo((1L << 0) | (1L << 1));
+  }
+
+  @Test
   void transparentGroupsPreserveKeywordAlternationAccelerator() {
     Pattern p = Pattern.compile("(?i)\\b(?:error|warning)\\b");
 
@@ -174,6 +198,27 @@ class PatternInternalTest {
   }
 
   @Test
+  void deeplyNestedFixedOffsetWidthExtractionIsStackSafe() {
+    Pattern p = Pattern.compile(nestedFixedOffsetPattern(2_000));
+
+    assertThat(p.fixedOffsetLiteral()).isNotNull();
+  }
+
+  @Test
+  void largeCapturedLiteralConcatenationRecordsMaximalSuffix() {
+    StringBuilder regex = new StringBuilder("[ab]");
+    for (int i = 0; i < 2_000; i++) {
+      regex.append("(x)");
+    }
+
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile(regex.toString()).fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).hasSize(2_000);
+    assertThat(fixed.minOffset()).isEqualTo(1);
+  }
+
+  @Test
   void caseInsensitiveAsciiLiteralUsesLiteralMatchMetadata() {
     Pattern p = Pattern.compile("(?i)i");
 
@@ -187,6 +232,71 @@ class PatternInternalTest {
     Pattern p = Pattern.compile(".*\\s+.*");
 
     assertThat(p.requiredMatchClassRanges()).isNotNull();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "'\\d{3}/\\d{3}/\\d{4}', /, 0",
+    "'[A-Z]{2}:[0-9]{4}',    :, A",
+    "'\\w+#[a-f0-9]{8}',     #, a"
+  })
+  void requiredCharacterClassPrefersTheMostSelectiveMandatoryAtom(
+      String regex, char expectedMember, char expectedNonMember) {
+    Pattern p = Pattern.compile(regex);
+
+    assertThat(requiredClassContains(p, expectedMember)).isTrue();
+    assertThat(requiredClassContains(p, expectedNonMember)).isFalse();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "'\\d{3}/\\d{3}/\\d{4}', /, 3",
+    "'[A-Z][0-9]::[a-z]+',   ::, 2",
+    "'[ab][cd]-xyz',          -xyz, 2"
+  })
+  void fixedOffsetAsciiLiteralsAreRecorded(String regex, String literal, int offset) {
+    Pattern.FixedOffsetLiteral fixedOffsetLiteral = Pattern.compile(regex).fixedOffsetLiteral();
+
+    assertThat(fixedOffsetLiteral).isNotNull();
+    assertThat(fixedOffsetLiteral.literal()).isEqualTo(literal);
+    assertThat(fixedOffsetLiteral.offset()).isEqualTo(offset);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"\\d+/x", "[ab](?i:x)", "literal-prefix"})
+  void variableWidthUnicodeAndOrdinaryPrefixesDoNotRecordFixedOffsetLiterals(String regex) {
+    assertThat(Pattern.compile(regex).fixedOffsetLiteral()).isNull();
+  }
+
+  @Test
+  void unicodeClassOffsetsAreRecordedAsNonDiscreteCodePointRanges() {
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile("[αβ]/x").fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.minOffset()).isEqualTo(1);
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).isNull();
+  }
+
+  @Test
+  void discreteMultiOffsetLiteralsAreRecorded() {
+    Pattern.FixedOffsetLiteral fixed =
+        Pattern.compile("(^|[a-z])(#!customTag)").fixedOffsetLiteral();
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).isEqualTo("#!customTag");
+    assertThat(fixed.minOffset()).isZero();
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).containsExactly(0, 1);
+  }
+
+  @Test
+  void boundedRangeOffsetLiteralsAreRecorded() {
+    Pattern.FixedOffsetLiteral fixed =
+        Pattern.compile("\\s{0,8}renderElement\\(").fixedOffsetLiteral();
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).isEqualTo("renderElement(");
+    assertThat(fixed.minOffset()).isEqualTo(0);
+    assertThat(fixed.maxOffset()).isEqualTo(8);
   }
 
   @ParameterizedTest
@@ -263,6 +373,33 @@ class PatternInternalTest {
         codePoint);
   }
 
+  private static Pattern.CharClassScanInfo assertAsciiScanInfo(
+      int[] members, int[] expectedRanges) {
+    boolean[] asciiClass = new boolean[128];
+    for (int member : members) {
+      asciiClass[member] = true;
+    }
+
+    Pattern.CharClassScanInfo info = Pattern.buildAsciiClassScanInfo(asciiClass);
+
+    assertThat(info).isNotNull();
+    assertThat(info.ranges).containsExactly(expectedRanges);
+    for (int codePoint = 0; codePoint < asciiClass.length; codePoint++) {
+      assertThat(InputScanner.classContains(info.ranges, info.bitmap0, info.bitmap1, codePoint))
+          .as("ASCII member %s", codePoint)
+          .isEqualTo(asciiClass[codePoint]);
+    }
+    return info;
+  }
+
+  private static int[] asciiRange(int low, int high) {
+    int[] members = new int[high - low + 1];
+    for (int index = 0; index < members.length; index++) {
+      members[index] = low + index;
+    }
+    return members;
+  }
+
   @ParameterizedTest(name = "compile(\"{0}\").numGroups() == {1}")
   @CsvSource({
     "'',         0",
@@ -313,6 +450,19 @@ class PatternInternalTest {
     for (int i = 0; i < depth; i++) {
       regex.append(")x");
     }
+    return regex.toString();
+  }
+
+  private static String nestedFixedOffsetPattern(int depth) {
+    StringBuilder regex = new StringBuilder(depth * 3 + 6);
+    for (int i = 0; i < depth; i++) {
+      regex.append('(');
+    }
+    regex.append("[ab]");
+    for (int i = 0; i < depth; i++) {
+      regex.append(")x");
+    }
+    regex.append("ZZ");
     return regex.toString();
   }
 

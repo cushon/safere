@@ -135,6 +135,7 @@ public final class Matcher implements MatchResult {
   }
 
   /** Returns the input subsequence captured by the given named group. */
+  @Override
   public String group(String name) {
     String sr = safereMatcher.group(name);
     String jr = jdkMatcher.group(name);
@@ -171,6 +172,7 @@ public final class Matcher implements MatchResult {
   }
 
   /** Returns the start index of the given named group. */
+  @Override
   public int start(String name) {
     int sr = safereMatcher.start(name);
     int jr = jdkMatcher.start(name);
@@ -207,6 +209,7 @@ public final class Matcher implements MatchResult {
   }
 
   /** Returns the end index (exclusive) of the given named group. */
+  @Override
   public int end(String name) {
     int sr = safereMatcher.end(name);
     int jr = jdkMatcher.end(name);
@@ -457,6 +460,7 @@ public final class Matcher implements MatchResult {
   }
 
   /** Returns the named groups from the pattern. */
+  @Override
   public Map<String, Integer> namedGroups() {
     return crosscheckPattern.namedGroups();
   }
@@ -597,6 +601,12 @@ public final class Matcher implements MatchResult {
 
   boolean utf8ShadowActive() {
     return utf8Shadow != null;
+  }
+
+  /** Returns a string representation of this matcher's state. */
+  @Override
+  public String toString() {
+    return safereMatcher.toString();
   }
 
   private void checkBoolean(String method, String args, boolean sr, boolean jr) {

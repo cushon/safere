@@ -106,8 +106,7 @@ final class FuzzSupport {
 
   static boolean jdkOracleCompletesForTesting(String regex, String input) {
     java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
-    return runJdkOracle(
-            "matches", regex, 0, input, () -> pattern.matcher(interruptible(input)).matches())
+    return runJdkOracle("matches", () -> pattern.matcher(interruptible(input)).matches())
         .available();
   }
 
@@ -156,8 +155,7 @@ final class FuzzSupport {
     void split(CharSequence input) {
       String inputText = input.toString();
       JdkOracleResult<String[]> jdk =
-          runJdkOracle(
-              "split", regex, flags, inputText, () -> jdkPattern.split(interruptible(input)));
+          runJdkOracle("split", () -> jdkPattern.split(interruptible(input)));
       if (!jdk.available()) {
         return;
       }
@@ -167,12 +165,7 @@ final class FuzzSupport {
     void split(CharSequence input, int limit) {
       String inputText = input.toString();
       JdkOracleResult<String[]> jdk =
-          runJdkOracle(
-              "split(" + limit + ")",
-              regex,
-              flags,
-              inputText,
-              () -> jdkPattern.split(interruptible(input), limit));
+          runJdkOracle("split(" + limit + ")", () -> jdkPattern.split(interruptible(input), limit));
       if (!jdk.available()) {
         return;
       }
@@ -184,11 +177,7 @@ final class FuzzSupport {
       String inputText = input.toString();
       JdkOracleResult<String[]> jdk =
           runJdkOracle(
-              "splitWithDelimiters",
-              regex,
-              flags,
-              inputText,
-              () -> jdkPattern.splitWithDelimiters(interruptible(input), 0));
+              "splitWithDelimiters", () -> jdkPattern.splitWithDelimiters(interruptible(input), 0));
       if (!jdk.available()) {
         return;
       }
@@ -201,9 +190,6 @@ final class FuzzSupport {
       JdkOracleResult<String[]> jdk =
           runJdkOracle(
               "splitWithDelimiters(" + limit + ")",
-              regex,
-              flags,
-              inputText,
               () -> jdkPattern.splitWithDelimiters(interruptible(input), limit));
       if (!jdk.available()) {
         return;
@@ -432,6 +418,33 @@ final class FuzzSupport {
           () -> runJdkOracle("replaceFirst", null, () -> jdkMatcher.replaceFirst(replacement)));
     }
 
+    boolean hasReplacementMatchState() {
+      boolean safeRe;
+      try {
+        safeReMatcher.start();
+        safeRe = true;
+      } catch (IllegalStateException e) {
+        safeRe = false;
+      }
+      boolean jdk =
+          runJdkOracle(
+              "replacement match state",
+              safeRe,
+              () -> {
+                try {
+                  jdkMatcher.start();
+                  return true;
+                } catch (IllegalStateException e) {
+                  return false;
+                }
+              });
+      assertSame("replacement match state", safeRe, jdk);
+      if (safeRe) {
+        assertMatchState("replacement match state");
+      }
+      return safeRe;
+    }
+
     boolean appendReplacement(StringBuilder output, String replacement) {
       StringBuilder safeRe = new StringBuilder();
       StringBuilder jdk = new StringBuilder();
@@ -562,15 +575,11 @@ final class FuzzSupport {
       }
       if (safeRe.throwable() != null
           && jdk.throwable() != null
-          && safeRe.throwable().getClass().equals(jdk.throwable().getClass())
-          && isExpectedReplacementException(safeRe.throwable())) {
+          && isExpectedReplacementException(safeRe.throwable())
+          && isExpectedReplacementException(jdk.throwable())) {
         return false;
       }
       throw divergence(operation, replacement, safeRe.describe(), jdk.describe());
-    }
-
-    private AssertionError divergence(String operation, Object safeRe, Object jdk) {
-      return divergence(operation, lastReplacement, safeRe, jdk);
     }
 
     private AssertionError divergence(
@@ -605,8 +614,7 @@ final class FuzzSupport {
       if (!jdkOracleAvailable) {
         return fallback;
       }
-      JdkOracleResult<T> result =
-          FuzzSupport.runJdkOracle(operation, regex, flags, input, jdkOperation);
+      JdkOracleResult<T> result = FuzzSupport.runJdkOracle(operation, jdkOperation);
       if (!result.available()) {
         jdkOracleAvailable = false;
         return fallback;
@@ -642,7 +650,7 @@ final class FuzzSupport {
   private record JdkOracleResult<T>(boolean available, T value) {}
 
   private static <T> JdkOracleResult<T> runJdkOracle(
-      String operation, String regex, int flags, String input, JdkOracleOperation<T> jdkOperation) {
+      String operation, JdkOracleOperation<T> jdkOperation) {
     Future<T> task = JDK_ORACLE_EXECUTOR.submit(jdkOperation::run);
 
     try {
@@ -652,7 +660,8 @@ final class FuzzSupport {
       return unavailableJdkOracle();
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new AssertionError("interrupted while waiting for JDK regex oracle", e);
+      throw new AssertionError(
+          "interrupted while waiting for JDK regex oracle during " + operation, e);
     } catch (ExecutionException e) {
       Throwable cause = e.getCause();
       if (cause instanceof JdkOracleInterruptedException) {
@@ -770,7 +779,7 @@ final class FuzzSupport {
   }
 
   private static boolean isOverCompilerBudget(PatternSyntaxException safeReException) {
-    return "compiled program too large".equals(safeReException.getDescription());
+    return Objects.equals(safeReException.getDescription(), "compiled program too large");
   }
 
   private static boolean hasLookaround(String regex) {
@@ -781,7 +790,7 @@ final class FuzzSupport {
   }
 
   private static boolean hasBackreference(String regex) {
-    return regex.matches(".*\\\\[1-9].*")
+    return regex.matches("(?s).*\\\\[1-9].*")
         || regex.contains("\\k<")
         || regex.contains("\\g{")
         || regex.contains("\\g");

@@ -87,7 +87,7 @@ final class BenchmarkCollectionPlan {
 
   List<Runner> allocationRunners() {
     List<String> prefixes =
-        BenchmarkData.get().getStringList("collection.allocationWorkloadPrefixes");
+        BenchmarkData.get().getStringList("configuration.collection.allocationWorkloadPrefixes");
     Set<String> allocationOnly = allocationOnlyTrialIds();
     return filterRunners(
         allRunners(),
@@ -189,7 +189,7 @@ final class BenchmarkCollectionPlan {
     return new ReportPlan(trials, exclusions.stream().distinct().toList());
   }
 
-  static void main(String[] args) {
+  public static void main(String[] args) {
     if (args.length == 0) {
       throw new IllegalArgumentException(
           "Usage: BenchmarkCollectionPlan "
@@ -252,12 +252,12 @@ final class BenchmarkCollectionPlan {
       DeclarativeBenchmarkPlan.Measurement measurement) {}
 
   record ReportExclusion(String workloadId, String executionVariant, String kind, String reason) {
-    static ReportExclusion from(DeclarativeBenchmarkPlan.Exclusion exclusion) {
+    static ReportExclusion from(MaterializedExecutionPlan.Entry exclusion) {
       return new ReportExclusion(
           exclusion.workloadId(),
           exclusion.engineId(),
-          exclusion.kind().name(),
-          exclusion.reason());
+          exclusion.exclusion().kind(),
+          exclusion.exclusion().reason());
     }
   }
 

@@ -48,7 +48,7 @@ class CrossEngineBenchmarkPlanTest {
             "HttpBenchmark.httpFull",
             "SearchScalingBenchmark.searchEasyFail.1024",
             "FanoutBenchmark.fanoutUnicode.1024");
-    assertThat(ids).hasSize(408);
+    assertThat(ids).hasSize(470);
   }
 
   @Test
@@ -77,9 +77,39 @@ class CrossEngineBenchmarkPlanTest {
                   .map(CrossEngineBenchmarkPlan.Trial::variant))
           .containsAnyOf(RegexEngineVariant.SAFERE_STRING, RegexEngineVariant.SAFERE_UTF8);
     }
-    assertThat(allTrials).hasSize(1406);
-    assertThat(plan.exclusions()).hasSize(634);
-    assertThat(accounted).hasSize(408 * RegexEngineVariant.values().length);
+    assertThat(allTrials).hasSize(1654);
+    assertThat(plan.exclusions()).hasSize(696);
+    assertThat(accounted).hasSize(470 * RegexEngineVariant.values().length);
+  }
+
+  @Test
+  void longRecitationListsExcludeOnlyJdkTrialsThatOverflowItsStack() {
+    List<MaterializedExecutionPlan.Entry> exclusions =
+        CrossEngineBenchmarkPlan.load().exclusions().stream()
+            .filter(
+                exclusion ->
+                    exclusion
+                            .workloadId()
+                            .startsWith("RealWorldRegexBenchmark.runBenchmark.recitation.")
+                        && exclusion.engineId().equals("jdk-string"))
+            .toList();
+
+    assertThat(exclusions)
+        .extracting(MaterializedExecutionPlan.Entry::id)
+        .containsExactly(
+            "RealWorldRegexBenchmark.runBenchmark.recitation.match.10000@jdk-string",
+            "RealWorldRegexBenchmark.runBenchmark.recitation.match.100000@jdk-string",
+            "RealWorldRegexBenchmark.runBenchmark.recitation.noMatch.10000@jdk-string",
+            "RealWorldRegexBenchmark.runBenchmark.recitation.noMatch.100000@jdk-string");
+    assertThat(exclusions)
+        .allSatisfy(
+            exclusion -> {
+              assertThat(exclusion.exclusion().kind()).isEqualTo("explicitTrialExclusion");
+              assertThat(exclusion.exclusion().reason())
+                  .isEqualTo(
+                      "JDK's backtracking matcher throws StackOverflowError for the nested "
+                          + "quantified recitation pattern at these input sizes");
+            });
   }
 
   @Test
@@ -93,14 +123,14 @@ class CrossEngineBenchmarkPlanTest {
             second.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(809);
+        .hasSize(1004);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
             second.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(525);
+        .hasSize(578);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MILLISECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
@@ -111,7 +141,7 @@ class CrossEngineBenchmarkPlanTest {
   }
 
   @Test
-  void utf8ParticipatesOnlyInNativeSupportedOperations() {
+  void utf8ParticipatesInEveryOperationSupportedByItsNativeApi() {
     CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
     List<CrossEngineBenchmarkPlan.Trial> utf8Trials =
         List.of(
@@ -124,20 +154,32 @@ class CrossEngineBenchmarkPlanTest {
 
     assertThat(utf8Trials).isNotEmpty();
     assertThat(utf8Trials)
-        .allMatch(
-            trial ->
-                trial.workload().operation() == BenchmarkOperation.FIND
-                    || trial.workload().operation() == BenchmarkOperation.FIND_ALL_COUNT);
+        .extracting(trial -> trial.workload().operation())
+        .contains(
+            BenchmarkOperation.FIND,
+            BenchmarkOperation.FIND_ALL_COUNT,
+            BenchmarkOperation.MATCHES,
+            BenchmarkOperation.MATCHES_CORPUS,
+            BenchmarkOperation.LOOKING_AT,
+            BenchmarkOperation.MATCHER_RESET_FIND,
+            BenchmarkOperation.MATCHER_REGION_FIND,
+            BenchmarkOperation.FIND_GROUP_PRESENT)
+        .doesNotContain(
+            BenchmarkOperation.CAPTURE_GROUPS,
+            BenchmarkOperation.FIND_GROUP,
+            BenchmarkOperation.REPLACE_ALL,
+            BenchmarkOperation.SPLIT_LENGTH_SUM);
   }
 
   @Test
   void unsupportedCombinationIsDistinctFromMissingImplementation() {
     CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
 
-    assertThatThrownBy(() -> plan.resolve("RegexBenchmark.literalMatch@safere-utf8"))
+    assertThat(plan.resolve("RegexBenchmark.literalMatch@safere-utf8")).isNotNull();
+    assertThatThrownBy(() -> plan.resolve("HttpBenchmark.httpExtract@safere-utf8"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Unsupported cross-engine combination")
-        .hasMessageContaining("MATCHES");
+        .hasMessageContaining("captureText");
     assertThatThrownBy(() -> plan.resolve("missing.workload@safere-string"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("Unknown cross-engine workload ID: missing.workload");
@@ -223,6 +265,52 @@ class CrossEngineBenchmarkPlanTest {
   }
 
   @Test
+  void expandedUtf8OperationsPrepareAndRunThroughTheGenericAdapter() {
+    CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
+    Blackhole blackhole =
+        new Blackhole(
+            "Today's password is swordfish. I understand instantiating Blackholes directly is"
+                + " dangerous.");
+    for (String id :
+        List.of(
+            "RegexBenchmark.literalMatch@safere-utf8",
+            "ApplicationBenchmark.uuidValidation@safere-utf8",
+            "HttpBenchmark.httpFull@safere-utf8",
+            "MatcherApiBenchmark.lookingAt@safere-utf8",
+            "MatcherApiBenchmark.regionFind@safere-utf8",
+            "MatcherApiBenchmark.resetAndFind@safere-utf8",
+            "Issue481ScalingBenchmark.blockFind.128@safere-utf8",
+            "PathologicalBenchmark.pathological.10@safere-utf8")) {
+      CrossEngineBenchmarkPlan.Trial trial = plan.resolve(id);
+      try (CrossEngineTrialRunner runner =
+          CrossEngineTrialRunner.prepare(id, trial.workload().timingGroup())) {
+        runner.run(blackhole);
+      }
+    }
+    assertThat(plan.resolve("MatcherApiBenchmark.resetAndFind@re2-ffm-string-conversion"))
+        .isNotNull();
+  }
+
+  @Test
+  void groupParticipationUsesBoundsWithoutMaterializingCaptureText() {
+    RegexEngineVariant.MatchCursor cursor =
+        new RegexEngineVariant.MatchCursor() {
+          @Override
+          public int start(int group) {
+            return group == 1 ? 4 : -1;
+          }
+
+          @Override
+          public String group(int group) {
+            throw new AssertionError("group participation must not materialize capture text");
+          }
+        };
+
+    assertThat(cursor.groupParticipated(1)).isTrue();
+    assertThat(cursor.groupParticipated(2)).isFalse();
+  }
+
+  @Test
   void coldStartPreparationDefersCompilationUntilTheMeasuredTask() {
     CrossEngineWorkload workload =
         new CrossEngineWorkload(
@@ -271,6 +359,9 @@ class CrossEngineBenchmarkPlanTest {
             "ReplaceBenchmark.literalReplaceFirst@safere-string",
             "ReplaceBenchmark.literalReplaceFirst@jdk-string",
             "ReplaceBenchmark.literalReplaceFirst@re2j-string",
+            "ReplaceBenchmark.anchoredReplace@safere-string",
+            "ReplaceBenchmark.anchoredReplace@jdk-string",
+            "ReplaceBenchmark.anchoredReplace@re2j-string",
             "ReplaceBenchmark.manualReplaceAll@safere-string",
             "ReplaceBenchmark.manualReplaceAll@jdk-string",
             "ReplaceBenchmark.manualReplaceAll@re2j-string",
@@ -293,10 +384,8 @@ class CrossEngineBenchmarkPlanTest {
             "MatcherApiBenchmark.resetAndFind@re2j-string",
             "JavaCharacterClassBenchmark.compileAndFindJavaLetter@safere-string",
             "JavaCharacterClassBenchmark.compileAndFindJavaLetter@jdk-string",
-            "JavaCharacterClassBenchmark.compileAndFindJavaLetter@re2j-string",
             "JavaCharacterClassBenchmark.findJavaLetter@safere-string",
-            "JavaCharacterClassBenchmark.findJavaLetter@jdk-string",
-            "JavaCharacterClassBenchmark.findJavaLetter@re2j-string");
+            "JavaCharacterClassBenchmark.findJavaLetter@jdk-string");
     CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
 
     for (String trialId : trials) {
@@ -340,8 +429,8 @@ class CrossEngineBenchmarkPlanTest {
         .allMatch(runner -> !runner.trialIds().isEmpty())
         .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
         .doesNotHaveDuplicates()
-        .hasSize(1445);
-    assertThat(plan.reportPlan().trials()).hasSize(1445);
+        .hasSize(1693);
+    assertThat(plan.reportPlan().trials()).hasSize(1693);
     assertThat(plan.reportPlan().exclusions()).isNotEmpty().doesNotHaveDuplicates();
     assertThat(
             plan.reportPlan(true).trials().stream()

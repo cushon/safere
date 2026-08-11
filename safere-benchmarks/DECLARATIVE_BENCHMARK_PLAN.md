@@ -6,6 +6,14 @@ declarations are authoritative for materialized inputs and ordinary/scaling
 cross-engine workloads, specialized modes, collection, and reporting. The
 schema preserves the established benchmark timing boundaries.
 
+The complete checked-in document is validated before materialization. Its only
+top-level fields are `schemaVersion`, `configuration`, `inputs`, and
+`workloads`. `configuration` holds typed non-workload settings for collection
+and the crosscheck instrumentation diagnostic; workload-family data is not
+allowed there. Syntax normalization visits only authoritative `workloads`, and
+rejects any engine-specific profile whose canonical value is not referenced by
+an expanded workload.
+
 The normalized plan has this shape:
 
 ```json
@@ -32,11 +40,6 @@ The normalized plan has this shape:
       "axes": {"size": [1024, 10240]},
       "flags": [],
       "requirements": ["find"],
-      "inputRepresentations": [
-        "javaString",
-        "preexistingUtf8",
-        "javaStringWithTimedUtf8Conversion"
-      ],
       "resultConsumption": "boolean",
       "expected": {"type": "boolean", "value": false},
       "measurement": {
@@ -76,6 +79,34 @@ A materially changed operation, input, result-consumption rule, lifecycle, or
 timing boundary requires a new workload ID. Reordering JSON or changing a
 display label does not.
 
+### Explicit trial exclusions
+
+A workload may declare known-unsafe engine trials with `trialExclusions`. Each
+rule names one or more exact execution-plan engine IDs, a nonblank reason, and
+optional axis selectors:
+
+```json
+"trialExclusions": [{
+  "engineIds": ["jdk-string"],
+  "when": {"size": [10000, 100000]},
+  "reason": "OpenJDK 26.0.2 throws StackOverflowError for this pattern at these sizes"
+}]
+```
+
+Conditions within `when` are conjunctive. An omitted axis is a wildcard, and
+an omitted or empty `when` selects every expansion of the workload for the
+named engines. Selector values use the same typed scalar or labeled
+`{"id": ..., "value": ...}` representation as the corresponding axis and
+must exactly equal a declared value.
+
+Engine IDs are exact; report-engine names, runners, and syntax profiles are not
+selectors. Rules may not overlap on an expanded workload/engine pair. Unknown
+engines, axes, and values, duplicate selectors, empty selections, and blank
+reasons are rejected. Explicit trial exclusions are resolved before general
+engine capability and syntax exclusions so the checked-in reason remains the
+auditable explanation. A workload cannot combine `trialExclusions` with
+`disabledReason`.
+
 ## Pattern profiles
 
 All workload patterns use Java regex syntax as their canonical representation.
@@ -98,19 +129,73 @@ the pattern definition declares an exact alternate inline:
 }
 ```
 
-An engine adapter selects one syntax-family profile. SafeRE and JDK select
-`java`; RE2/J, RE2-FFM, native C++ RE2, and Go select `re2`. If the selected
-profile has no entry for a Java pattern, the adapter uses the Java pattern
-unchanged.
+Java-canonical replacement templates use the same colocated declaration shape,
+with a `replacement` field instead of `pattern`:
 
-Alternates are exact reviewed strings. Runners must not rewrite regex syntax
-automatically. The required nonblank `reason` records why the alternate is
-necessary. The materializer replaces inline definitions with their Java strings
-and emits a resolved profile lookup in the generated manifest. Conflicting
-alternates for the same Java pattern and profile, malformed profile IDs, blank
-fields, and unknown fields are rejected during materialization.
-Pattern selection and compilation happen outside timed matching operations;
-compile benchmarks select the alternate before starting the timed compilation.
+```json
+{
+  "replacement": {
+    "java": "$2$1ay",
+    "alternates": {
+      "rust-regex": {
+        "replacement": "${2}${1}ay",
+        "reason": "Rust replacement references need braces before adjacent letters"
+      }
+    }
+  }
+}
+```
+
+The execution-plan materializer selects one profile for each engine and syntax kind. SafeRE and JDK use
+the Java values directly. RE2/J and RE2-FFM select the `re2` pattern profile;
+native C++ RE2 selects `re2` patterns and `re2-cpp` replacements; Go selects
+`re2` patterns and `go-regexp` replacements where adjacent text makes a Java
+capture reference ambiguous; and Rust `regex` selects `rust-regex` for both
+kinds. PCRE2 JIT selects `pcre2` for both kinds; this remains separate from
+`re2` because PCRE2 accepts some Java-canonical forms that RE2 does not, while
+other forms need PCRE2-specific equivalents. If the selected profile has no
+entry for a Java syntax value, the materializer uses the Java value unchanged.
+An alternate may instead declare `unsupported: true` and a reason when the
+same semantics cannot be expressed in that dialect; the corresponding
+workload/engine entry is then an explicit `unsupportedSyntax` exclusion.
+An optional nonempty `flagSets` array restricts an alternate to the listed
+exact Java flag-set IDs. For other flag sets, the materializer retains the
+canonical Java value. This represents cases such as .NET's Unicode shorthand
+defaults without making runners infer or rewrite syntax from flags.
+
+Alternates are exact reviewed strings. Runners must not rewrite regex or
+replacement syntax automatically or derive replacement templates from operation
+names. The required nonblank `reason` records why the alternate is necessary.
+The materializer replaces inline definitions with their Java strings, keeps
+pattern and replacement namespaces separate, and writes only the selected
+values into runnable execution-plan entries. Keeping the namespaces separate prevents the same Java string from
+selecting a pattern alternate when it is used as a replacement, or vice versa.
+Conflicting alternates for the same Java value, kind, and profile, malformed
+profile IDs, blank fields, and unknown fields are rejected during
+materialization.
+Pattern selection happens before any runner starts. Compilation happens outside
+timed matching operations; compile benchmarks receive the selected pattern
+before starting timed compilation.
+
+## Materialized execution plan
+
+The generated manifest's `executionPlan.version` is independent of
+`schemaVersion`, so the runner contract can evolve explicitly. Version 1
+declares the engine catalog, workload and engine counts, and an `entries`
+array containing exactly one entry for every expanded workload and engine.
+Consumers reject unknown versions and incomplete joins.
+
+Runnable entries contain engine-selected `patterns`, materialized input IDs,
+resolved `arguments`, `options`, `inputRepresentation`, `resultConsumption`,
+`measurement`, and optional expected results and lifecycle. Excluded entries
+contain an `exclusion` object with a stable kind and explanatory reason.
+Runners may implement generic regex operations only; an entry declared
+runnable that cannot be prepared is an error rather than a new runtime
+exclusion.
+
+Explicit trial rules materialize with exclusion kind
+`explicitTrialExclusion`. They remain in the complete execution-plan join but
+are omitted from runner trial lists.
 
 ## Bounded input recipes
 
@@ -155,7 +240,12 @@ A workload describes behavior without naming engines:
 - `requirements` declares engine-neutral API features such as capture text,
   named groups, replacement, matcher state, regions, PatternSet, UTF-8 input,
   or diagnostics.
-- `inputRepresentations` declares acceptable timing boundaries, not engines.
+- Omitted `inputRepresentations` accepts every input representation. An explicit
+  proper subset restricts the workload to those timing boundaries, not to
+  particular engines. Every explicit subset requires a nonblank
+  `inputRepresentationReason`; declaring a reason without a restriction is
+  also rejected. Empty lists and lists containing every known representation
+  are rejected.
 - `resultConsumption` controls how the result enters the blackhole.
 - `expected` is a typed optional correctness value.
 

@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Set up JDK
-        uses: actions/setup-java@v5
+      - name: Set up production JDK
+        uses: actions/setup-java@v5.6.0
         with:
           java-version-file: .sdkmanrc
           cache: maven

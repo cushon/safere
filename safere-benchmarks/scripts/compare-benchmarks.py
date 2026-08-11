@@ -15,7 +15,8 @@ Usage examples:
   python3 compare-benchmarks.py --jmh jmh-output.txt
 
   # JMH + one or more JSON-lines files
-  python3 compare-benchmarks.py --jmh jmh-output.txt --json cpp.jsonl go.jsonl
+  python3 compare-benchmarks.py --jmh jmh-output.txt \
+      --json cpp.jsonl go.jsonl rust.jsonl
 
   # Specify engine column order
   python3 compare-benchmarks.py --jmh jmh.txt --json cpp.jsonl \
@@ -55,6 +56,7 @@ _ENGINE_SUFFIXES = collections.OrderedDict([
 _DEFAULT_ENGINE = "safere"
 _ENGINE_ALIASES = {
     "go_regexp": "go",
+    "rust_regex": "rust",
 }
 _JMH_ENGINE_PARAMS = {
     "SafeRE": "safere",
@@ -275,6 +277,20 @@ def parse_jsonl(path):
     return results
 
 
+def generate_jsonl(results):
+    """Serialize normalized results as stable JSON Lines."""
+    lines = []
+    for result in results:
+        lines.append(json.dumps({
+            "engine": result.engine,
+            "benchmark": result.benchmark,
+            "score": result.score,
+            "error": result.error,
+            "unit": result.unit,
+        }, separators=(",", ":")))
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
@@ -491,6 +507,11 @@ def main(argv=None):
         help="Comma-separated engine names in desired column order "
              "(e.g. safere,jdk,re2j,re2_cpp).",
     )
+    parser.add_argument(
+        "--output-jsonl",
+        metavar="FILE",
+        help="Write all parsed results in the normalized JSON-lines format.",
+    )
     args = parser.parse_args(argv)
 
     if not args.jmh and not args.json:
@@ -506,6 +527,10 @@ def main(argv=None):
     if not results:
         print("No benchmark results found.", file=sys.stderr)
         sys.exit(1)
+
+    if args.output_jsonl:
+        with open(args.output_jsonl, "w", encoding="utf-8") as output:
+            output.write(generate_jsonl(results))
 
     engines = [e.strip() for e in args.engines.split(",")] if args.engines else []
     declared_statuses = (

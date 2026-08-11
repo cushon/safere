@@ -11,7 +11,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -38,10 +38,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v5.6.0
         with:
           java-version-file: .sdkmanrc
           cache: maven
@@ -63,16 +63,138 @@ jobs:
           -Dtest.parallelism=4
           --batch-mode --no-transfer-progress
 
+  build-vector-runtime-artifacts:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up production JDK
+        uses: actions/setup-java@v5.6.0
+        with:
+          java-version-file: .sdkmanrc
+          cache: maven
+
+      - name: Compile production and runtime-test artifacts
+        run: |
+          mvn clean install -pl safere -am \
+            -DskipTests \
+            --batch-mode --no-transfer-progress
+          mvn clean process-test-classes \
+            -f safere-crosscheck/pom.xml \
+            -Pcrosscheck-public-api-tests \
+            -DskipTests \
+            --batch-mode --no-transfer-progress
+          mvn clean process-test-classes \
+            -f safere-exhaustive/pom.xml \
+            -DskipTests \
+            --batch-mode --no-transfer-progress
+
+      - name: Package regular runtime-test artifacts
+        run: |
+          mkdir -p ci-artifacts
+          tar -czf ci-artifacts/vector-runtime-tests.tar.gz \
+            safere/target \
+            safere-crosscheck/target \
+            safere-exhaustive/target
+          tar -C "$HOME/.m2/repository" \
+            -czf "$PWD/ci-artifacts/safere-maven-repository.tar.gz" \
+            org/safere
+
+      - name: Compile and package work-counter runtime-test artifacts
+        run: |
+          mvn clean package -pl safere \
+            -Pwork-counters \
+            -DskipTests \
+            --batch-mode --no-transfer-progress
+          tar -czf ci-artifacts/vector-work-counter-tests.tar.gz \
+            safere/target
+
+      - name: Upload runtime-test artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: vector-runtime-tests
+          path: ci-artifacts/*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  build-vector:
+    needs: build-vector-runtime-artifacts
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['21', '22', '23', '24', '25', '26']
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up runtime JDK ${{ matrix.java }}
+        uses: actions/setup-java@v5.6.0
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Download runtime-test artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: vector-runtime-tests
+          path: ci-artifacts
+
+      - name: Restore runtime-test artifacts
+        run: |
+          mkdir -p "$HOME/.m2/repository"
+          tar -C "$HOME/.m2/repository" \
+            -xzf ci-artifacts/safere-maven-repository.tar.gz
+          tar -xzf ci-artifacts/vector-runtime-tests.tar.gz
+
+      - name: Run full SafeRE tests with Vector enabled
+        run: >
+          mvn jacoco:prepare-agent surefire:test -pl safere
+          -Pvector-tests
+          -Dtest.parallelism=4
+          --batch-mode --no-transfer-progress
+
+      - name: Run public API crosscheck with Vector enabled
+        run: >
+          mvn surefire:test
+          -f safere-crosscheck/pom.xml
+          -Pcrosscheck-public-api-tests
+          -DargLine="--add-modules=jdk.incubator.vector
+          -Dorg.safere.experimental.vectorScanProvider=vector"
+          -Dtest.parallelism=4
+          --batch-mode --no-transfer-progress
+
+      - name: Run exhaustive validation tests with Vector enabled
+        run: >
+          mvn surefire:test
+          -f safere-exhaustive/pom.xml
+          -DargLine="--add-modules=jdk.incubator.vector
+          -Dorg.safere.experimental.vectorScanProvider=vector"
+          -Dtest.parallelism=4
+          --batch-mode --no-transfer-progress
+
+      - name: Run work-counter scaling tests with Vector enabled
+        run: |
+          tar -xzf ci-artifacts/vector-work-counter-tests.tar.gz
+          mvn jacoco:prepare-agent surefire:test -pl safere \
+            -Pwork-counters,vector-tests \
+            -Dtest.parallelism=4 \
+            --batch-mode --no-transfer-progress
+
   fuzz-regression:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v5.6.0
         with:
           java-version-file: .sdkmanrc
           cache: maven
@@ -88,16 +210,32 @@ jobs:
           mvn -pl safere-fuzz test
           --batch-mode --no-transfer-progress
 
+  benchmark-python-tests:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Test benchmark result processing
+        run: python -m unittest safere-benchmarks/scripts/test_compare_benchmarks.py
+
   benchmark-smoke-test-java:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v5.6.0
         with:
           java-version-file: .sdkmanrc
           cache: maven
@@ -127,6 +265,47 @@ jobs:
             -cp safere-benchmarks/target/benchmarks.jar \
             org.safere.benchmark.MemoryBenchmark
 
+  vector-benchmark-smoke:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up production JDK
+        uses: actions/setup-java@v5.6.0
+        with:
+          java-version-file: .sdkmanrc
+          cache: maven
+
+      - name: Check Vector source formatting
+        run: |
+          mvn spotless:check \
+            --batch-mode --no-transfer-progress \
+            -f safere/pom.xml
+          mvn spotless:check \
+            --batch-mode --no-transfer-progress \
+            -f safere-vector-benchmarks/pom.xml
+
+      - name: Build and inspect SafeRE JAR
+        run: |
+          mvn package -pl safere -am -Prelease -DskipTests \
+            --batch-mode --no-transfer-progress
+          SAFERE_JAR="$(find safere/target -maxdepth 1 -name 'safere-*.jar' \
+            ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit)"
+          jar --list --file "$SAFERE_JAR" \
+            | grep 'org/safere/IncubatorVectorScanProvider.class'
+
+      - name: Smoke test experimental Vector scanner
+        run: |
+          ./run-vector-benchmarks.sh \
+            --fastbuild \
+            --smoke \
+            --end-to-end \
+            --trials \
+            'pair/first/absent/1024/0,range/first/absent/1024/0'
+
   benchmark-smoke-test-cpp:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -136,19 +315,18 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
+      - name: Set up production JDK
+        uses: actions/setup-java@v5.6.0
         with:
-          java-version: '25'
-          distribution: 'temurin'
+          java-version-file: .sdkmanrc
           cache: maven
 
       - name: Materialize shared benchmark inputs
         run: ./materialize-benchmark-inputs.sh
 
-      - name: Compile C++ RE2 benchmarks
+      - name: Compile native C++ regex benchmarks
         run: |
           mkdir -p safere-benchmarks/cpp/build
           cmake -S safere-benchmarks/cpp -B safere-benchmarks/cpp/build \
@@ -161,12 +339,26 @@ jobs:
       - name: Smoke test C++ RE2 benchmarks
         run: |
           safere-benchmarks/cpp/build/re2_benchmark \
-            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json literalMatch
+            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json \
+            --smoke RegexBenchmark.literalMatch
 
-      - name: Smoke test C++ RE2 memory benchmarks
+      - name: Check C++ RE2 planned exclusions
         run: |
           safere-benchmarks/cpp/build/re2_benchmark \
-            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json MemoryBenchmark
+            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json \
+            --list-exclusions MemoryBenchmark.compileSimple
+
+      - name: Smoke test PCRE2 JIT benchmarks
+        run: |
+          safere-benchmarks/cpp/build/pcre2_jit_benchmark \
+            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json \
+            --smoke RegexBenchmark.literalMatch
+
+      - name: Check PCRE2 JIT planned exclusions
+        run: |
+          safere-benchmarks/cpp/build/pcre2_jit_benchmark \
+            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json \
+            --list-exclusions ReplaceBenchmark
 
   benchmark-smoke-test-go:
     needs: changes
@@ -174,17 +366,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
+      - name: Set up production JDK
+        uses: actions/setup-java@v5.6.0
         with:
-          java-version: '25'
-          distribution: 'temurin'
+          java-version-file: .sdkmanrc
           cache: maven
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: '1.21'
           cache: false
@@ -198,9 +389,69 @@ jobs:
       - name: Smoke test Go benchmarks
         run: |
           safere-benchmarks/go/regexp_benchmark \
-            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json literalMatch
+            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json \
+            --smoke RegexBenchmark.literalMatch
 
-      - name: Smoke test Go memory benchmarks
+      - name: Check Go planned exclusions
         run: |
           safere-benchmarks/go/regexp_benchmark \
-            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json MemoryBenchmark
+            --manifest safere-benchmarks/target/benchmark-corpus/manifest.json \
+            --list-exclusions UnicodeCompileBenchmark
+
+  benchmark-smoke-test-rust:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up production JDK
+        uses: actions/setup-java@v5.6.0
+        with:
+          java-version-file: .sdkmanrc
+          cache: maven
+
+      - name: Set up Rust
+        # Pin the master ancestor behind the synthetic 1.85.0 ref. Synthetic commits may
+        # eventually be garbage-collected because they are outside master history.
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: 1.85.0
+          components: clippy, rustfmt
+
+      - name: Test Rust benchmark support code
+        run: |
+          cargo fmt --check --manifest-path safere-benchmarks/rust/Cargo.toml
+          cargo test --locked --all-features \
+            --manifest-path safere-benchmarks/rust/Cargo.toml
+          cargo clippy --locked --all-targets --all-features \
+            --manifest-path safere-benchmarks/rust/Cargo.toml -- -D warnings
+
+      - name: Smoke test Rust regex benchmarks
+        run: ./run-rust-benchmarks.sh --smoke RegexBenchmark.literalMatch
+
+  benchmark-smoke-test-dotnet:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5.6.0
+        with:
+          java-version-file: .sdkmanrc
+          cache: maven
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Smoke test .NET non-backtracking benchmarks
+        run: ./run-dotnet-benchmarks.sh --smoke RegexBenchmark.literalMatch
+
+      - name: Check .NET planned exclusions
+        run: ./run-dotnet-benchmarks.sh --list-exclusions UnicodeCompileBenchmark

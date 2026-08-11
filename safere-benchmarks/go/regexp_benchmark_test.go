@@ -4,53 +4,27 @@
 package main
 
 import (
-	"encoding/json"
-	"os"
 	"regexp"
 	"testing"
 )
 
-func TestCheckedInRE2PatternProfileCompiles(t *testing.T) {
-	contents, err := os.ReadFile("../benchmark-data.json")
-	if err != nil {
-		t.Fatal(err)
+func TestMaterializedReplacementIsUsedExactly(t *testing.T) {
+	re := regexp.MustCompile("(qu|[b-df-hj-np-tv-z]*)([a-z]+)")
+	if actual := re.ReplaceAllString("the", "${2}${1}ay"); actual != "ethay" {
+		t.Fatalf("replacement result %q, want %q", actual, "ethay")
 	}
-	var data map[string]any
-	if err := json.Unmarshal(contents, &data); err != nil {
-		t.Fatal(err)
+}
+
+func TestFullMatchIsNotWeakenedByMultilineMode(t *testing.T) {
+	re := compileFull("(?m)abc")
+	if !re.MatchString("abc") || re.MatchString("abc\nother") {
+		t.Fatal("full match did not anchor the complete input")
 	}
-	alternateCount := 0
-	var visit func(any)
-	visit = func(value any) {
-		switch current := value.(type) {
-		case map[string]any:
-			if javaPattern, ok := current["java"].(string); ok {
-				alternates := current["alternates"].(map[string]any)
-				if re2, ok := alternates["re2"].(map[string]any); ok {
-					alternate := re2["pattern"].(string)
-					alternateCount++
-					if _, err := regexp.Compile(alternate); err != nil {
-						t.Errorf(
-							"%q alternate for %q does not compile: %v",
-							alternate,
-							javaPattern,
-							err,
-						)
-					}
-				}
-				return
-			}
-			for _, child := range current {
-				visit(child)
-			}
-		case []any:
-			for _, child := range current {
-				visit(child)
-			}
-		}
-	}
-	visit(data)
-	if alternateCount == 0 {
-		t.Fatal("no inline re2 pattern alternates found")
+}
+
+func TestJavaZeroSplitLimitMeansUnlimitedAndDropsTrailingEmptyParts(t *testing.T) {
+	re := regexp.MustCompile(",")
+	if actual := splitLengthSum(re, "a,b,", 0); actual != 4 {
+		t.Fatalf("split length sum %d, want %d", actual, 4)
 	}
 }
