@@ -5,6 +5,8 @@
 
 package org.safere;
 
+import static java.nio.ByteOrder.BIG_ENDIAN;
+import static java.nio.ByteOrder.nativeOrder;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
 import static org.safere.internal.Ascii.toLowerCase;
@@ -15,6 +17,8 @@ import jdk.incubator.vector.ShortVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.safere.internal.Ascii;
+import org.safere.internal.Swar;
 
 /**
  * Stateless SIMD kernels using the incubating Vector API for 2-byte sequences (UTF-16 and char[]).
@@ -23,24 +27,17 @@ public final class ShortVectorScan {
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
   private static final VectorSpecies<Byte> BYTE_SPECIES = SPECIES.withLanes(byte.class);
 
-  private static final ShortVector SURROGATE_LOW = ShortVector.broadcast(SPECIES, (short) 0xD800);
-  private static final ShortVector SURROGATE_HIGH = ShortVector.broadcast(SPECIES, (short) 0xDFFF);
-
   public static int indexOfCharClass(
       char[] chars, int offset, int length, int[] ranges, int start) {
-    if (ranges.length < 2 || ranges.length > 8 || (ranges.length & 1) != 0) {
+    if (!Swar.supportsBmpCodeUnitRanges(ranges, 4)) {
       return VectorScanProvider.UNSUPPORTED;
     }
-    boolean checkSurrogates = overlapsSurrogates(ranges);
     int position = Math.max(0, start);
     int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
 
     for (; position <= limit; position += vectorLen) {
       ShortVector values = ShortVector.fromCharArray(SPECIES, chars, offset + position);
-      if (checkSurrogates && hasSurrogates(values)) {
-        return VectorScanProvider.UNSUPPORTED;
-      }
       VectorMask<Short> matches = matches(values, ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
@@ -49,9 +46,6 @@ public final class ShortVectorScan {
 
     for (; position < length; position++) {
       char ch = chars[offset + position];
-      if (checkSurrogates && Character.isSurrogate(ch)) {
-        return VectorScanProvider.UNSUPPORTED;
-      }
       if (matches(ch, ranges)) {
         return position;
       }
@@ -61,10 +55,9 @@ public final class ShortVectorScan {
 
   public static int indexOfCharClassUtf16(
       byte[] bytes, int offset, int length, int[] ranges, int start) {
-    if (ranges.length < 2 || ranges.length > 8 || (ranges.length & 1) != 0) {
+    if (!Swar.supportsBmpCodeUnitRanges(ranges, 4) || nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;
     }
-    boolean checkSurrogates = overlapsSurrogates(ranges);
     int position = Math.max(0, start);
     int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
@@ -72,9 +65,6 @@ public final class ShortVectorScan {
     for (; position <= limit; position += vectorLen) {
       ShortVector values =
           ByteVector.fromArray(BYTE_SPECIES, bytes, offset + (position << 1)).reinterpretAsShorts();
-      if (checkSurrogates && hasSurrogates(values)) {
-        return VectorScanProvider.UNSUPPORTED;
-      }
       VectorMask<Short> matches = matches(values, ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
@@ -86,9 +76,6 @@ public final class ShortVectorScan {
           (char)
               ((bytes[offset + (position << 1)] & 0xFF)
                   | ((bytes[offset + (position << 1) + 1] & 0xFF) << 8));
-      if (checkSurrogates && Character.isSurrogate(ch)) {
-        return VectorScanProvider.UNSUPPORTED;
-      }
       if (matches(ch, ranges)) {
         return position;
       }
@@ -99,10 +86,16 @@ public final class ShortVectorScan {
   public static int indexOfIgnoreCase(
       char[] chars, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
         return VectorScanProvider.UNSUPPORTED;
       }
+    }
+    if (prefixLen > 1) {
+      return Ascii.indexOfIgnoreCase(chars, offset, length, prefix, start);
     }
 
     int pos = Math.max(0, start);
@@ -148,10 +141,19 @@ public final class ShortVectorScan {
   public static int indexOfIgnoreCaseUtf16(
       byte[] bytes, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
         return VectorScanProvider.UNSUPPORTED;
       }
+    }
+    if (prefixLen > 1) {
+      return Ascii.indexOfIgnoreCaseUtf16(bytes, offset, length, prefix, start);
+    }
+    if (nativeOrder() == BIG_ENDIAN) {
+      return VectorScanProvider.UNSUPPORTED;
     }
 
     int pos = Math.max(0, start);
@@ -196,21 +198,6 @@ public final class ShortVectorScan {
     return -1;
   }
 
-  private static boolean overlapsSurrogates(int[] ranges) {
-    for (int i = 0; i < ranges.length; i += 2) {
-      int low = ranges[i];
-      int high = ranges[i + 1];
-      if (low <= 0xDFFF && high >= 0xD800) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private static boolean hasSurrogates(ShortVector values) {
-    return values.compare(GE, SURROGATE_LOW).and(values.compare(LE, SURROGATE_HIGH)).anyTrue();
-  }
-
   private static VectorMask<Short> matches(ShortVector values, int[] ranges) {
     VectorMask<Short> matches = matches(values, ranges[0], ranges[1]);
     if (ranges.length >= 4) {
@@ -234,7 +221,10 @@ public final class ShortVectorScan {
     if (high == low + 1) {
       return values.eq(low).or(values.eq(high));
     }
-    return values.compare(GE, low).and(values.compare(LE, high));
+    ShortVector biasedValues = values.lanewise(VectorOperators.XOR, Short.MIN_VALUE);
+    short biasedLow = (short) (low ^ Short.MIN_VALUE);
+    short biasedHigh = (short) (high ^ Short.MIN_VALUE);
+    return biasedValues.compare(GE, biasedLow).and(biasedValues.compare(LE, biasedHigh));
   }
 
   private static boolean matches(char value, int[] ranges) {

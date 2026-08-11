@@ -16,6 +16,7 @@ import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.safere.internal.Swar;
 
 /** Stateless 1-byte SIMD scanning kernels over {@link MemorySegment}. */
 public final class SegmentByteVectorScan {
@@ -32,33 +33,17 @@ public final class SegmentByteVectorScan {
   public static int indexOfAsciiClass(
       MemorySegment segment, long offset, long length, int[] ranges, int start) {
     int numRanges = ranges.length / 2;
-    if (numRanges < 1 || numRanges > 4 || (ranges.length & 1) != 0) {
+    if (length > Integer.MAX_VALUE || !Swar.supportsAsciiRanges(ranges, 4)) {
       return UNSUPPORTED;
     }
     int vectorLen = SPECIES.length();
-
-    byte low1 = (byte) ranges[0];
-    byte high1 = (byte) ranges[1];
-    ByteVector vLow1 = ByteVector.broadcast(SPECIES, low1);
-    ByteVector vHigh1 = ByteVector.broadcast(SPECIES, high1);
-
-    boolean hasSecondRange = ranges.length >= 4;
-    ByteVector vLow2 = hasSecondRange ? ByteVector.broadcast(SPECIES, (byte) ranges[2]) : null;
-    ByteVector vHigh2 = hasSecondRange ? ByteVector.broadcast(SPECIES, (byte) ranges[3]) : null;
 
     long pos = Math.max(0, start);
     long loopBound = length - vectorLen;
 
     while (pos <= loopBound) {
       ByteVector v = ByteVector.fromMemorySegment(SPECIES, segment, offset + pos, NATIVE_ORDER);
-      VectorMask<Byte> mask =
-          v.compare(VectorOperators.GE, vLow1).and(v.compare(VectorOperators.LE, vHigh1));
-
-      if (hasSecondRange) {
-        mask =
-            mask.or(
-                v.compare(VectorOperators.GE, vLow2).and(v.compare(VectorOperators.LE, vHigh2)));
-      }
+      VectorMask<Byte> mask = matches(v, ranges);
 
       int firstTrue = mask.firstTrue();
       if (firstTrue < vectorLen) {
@@ -82,11 +67,20 @@ public final class SegmentByteVectorScan {
 
   public static int indexOfIgnoreCase(
       MemorySegment segment, long offset, long length, String prefix, int start) {
+    if (length > Integer.MAX_VALUE) {
+      return UNSUPPORTED;
+    }
     int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), (int) length);
+    }
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
         return UNSUPPORTED;
       }
+    }
+    if (prefixLen > 1) {
+      return SegmentAsciiSearch.indexOfIgnoreCase(segment, offset, (int) length, prefix, start);
     }
 
     int vectorLen = SPECIES.length();
@@ -139,5 +133,19 @@ public final class SegmentByteVectorScan {
       }
     }
     return true;
+  }
+
+  private static VectorMask<Byte> matches(ByteVector values, int[] ranges) {
+    VectorMask<Byte> result = matches(values, ranges[0], ranges[1]);
+    for (int i = 2; i < ranges.length; i += 2) {
+      result = result.or(matches(values, ranges[i], ranges[i + 1]));
+    }
+    return result;
+  }
+
+  private static VectorMask<Byte> matches(ByteVector values, int low, int high) {
+    return values
+        .compare(VectorOperators.GE, (byte) low)
+        .and(values.compare(VectorOperators.LE, (byte) high));
   }
 }

@@ -314,10 +314,10 @@ public abstract class ByteSwarScan {
 
   public static int indexOfAsciiClass(
       byte[] bytes, int offset, int length, int[] ranges, int start) {
-    int numRanges = ranges.length / 2;
-    if (numRanges < 1 || numRanges > 2 || (ranges.length & 1) != 0) {
+    if (!Swar.supportsAsciiRanges(ranges, 2)) {
       return VectorScanProvider.UNSUPPORTED;
     }
+    int numRanges = ranges.length / 2;
 
     int pos = Math.max(0, start);
     int wordEnd = length - Long.BYTES;

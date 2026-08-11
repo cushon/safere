@@ -11,17 +11,18 @@ import static org.safere.internal.Swar.UNSUPPORTED;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
-import java.nio.ByteOrder;
 import jdk.incubator.vector.ShortVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.safere.internal.Swar;
 
 /** Stateless 2-byte UTF-16 SIMD scanning kernels over {@link MemorySegment}. */
 public final class SegmentShortVectorScan {
 
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
-  private static final ByteOrder NATIVE_ORDER = ByteOrder.nativeOrder();
+  private static final ValueLayout.OfShort UTF16_SHORT =
+      ValueLayout.JAVA_SHORT_UNALIGNED.withOrder(java.nio.ByteOrder.LITTLE_ENDIAN);
 
   private SegmentShortVectorScan() {}
 
@@ -31,50 +32,29 @@ public final class SegmentShortVectorScan {
 
   public static int indexOfCharClassUtf16(
       MemorySegment segment, long byteOffset, int charLength, int[] ranges, int start) {
-    int numRanges = ranges.length / 2;
-    if (numRanges < 1 || numRanges > 4 || (ranges.length & 1) != 0) {
+    if (!Swar.supportsBmpCodeUnitRanges(ranges, 4)) {
       return UNSUPPORTED;
     }
+    int numRanges = ranges.length / 2;
     int vectorLen = SPECIES.length();
-
-    short low1 = (short) ranges[0];
-    short high1 = (short) ranges[1];
-    ShortVector vLow1 = ShortVector.broadcast(SPECIES, low1);
-    ShortVector vHigh1 = ShortVector.broadcast(SPECIES, high1);
-
-    boolean hasSecondRange = ranges.length >= 4;
-    ShortVector vLow2 = hasSecondRange ? ShortVector.broadcast(SPECIES, (short) ranges[2]) : null;
-    ShortVector vHigh2 = hasSecondRange ? ShortVector.broadcast(SPECIES, (short) ranges[3]) : null;
 
     int pos = Math.max(0, start);
     int loopBound = charLength - vectorLen;
 
     while (pos <= loopBound) {
       long addr = byteOffset + ((long) pos << 1);
-      ShortVector v = ShortVector.fromMemorySegment(SPECIES, segment, addr, NATIVE_ORDER);
-      VectorMask<Short> mask =
-          v.compare(VectorOperators.GE, vLow1).and(v.compare(VectorOperators.LE, vHigh1));
-
-      if (hasSecondRange) {
-        mask =
-            mask.or(
-                v.compare(VectorOperators.GE, vLow2).and(v.compare(VectorOperators.LE, vHigh2)));
-      }
+      ShortVector v =
+          ShortVector.fromMemorySegment(SPECIES, segment, addr, java.nio.ByteOrder.LITTLE_ENDIAN);
+      VectorMask<Short> mask = matches(v, ranges);
 
       int firstTrue = mask.firstTrue();
       if (firstTrue < vectorLen) {
         int matchPos = pos + firstTrue;
         char matchedChar =
-            (char)
-                (segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) matchPos << 1))
-                    & 0xFFFF);
+            (char) (segment.get(UTF16_SHORT, byteOffset + ((long) matchPos << 1)) & 0xFFFF);
         if (Character.isLowSurrogate(matchedChar) && matchPos > 0) {
           char prevChar =
-              (char)
-                  (segment.get(
-                          ValueLayout.JAVA_SHORT_UNALIGNED,
-                          byteOffset + ((long) (matchPos - 1) << 1))
-                      & 0xFFFF);
+              (char) (segment.get(UTF16_SHORT, byteOffset + ((long) (matchPos - 1) << 1)) & 0xFFFF);
           if (Character.isHighSurrogate(prevChar)) {
             pos = matchPos + 1;
             continue;
@@ -87,15 +67,12 @@ public final class SegmentShortVectorScan {
 
     // Scalar tail
     for (int i = pos; i < charLength; i++) {
-      int c = segment.get(ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) i << 1)) & 0xFFFF;
+      int c = segment.get(UTF16_SHORT, byteOffset + ((long) i << 1)) & 0xFFFF;
       for (int r = 0; r < numRanges; r++) {
         if (c >= (ranges[r * 2] & 0xFFFF) && c <= (ranges[r * 2 + 1] & 0xFFFF)) {
           if (Character.isLowSurrogate((char) c) && i > 0) {
             char prev =
-                (char)
-                    (segment.get(
-                            ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (i - 1) << 1))
-                        & 0xFFFF);
+                (char) (segment.get(UTF16_SHORT, byteOffset + ((long) (i - 1) << 1)) & 0xFFFF);
             if (Character.isHighSurrogate(prev)) {
               continue;
             }
@@ -111,10 +88,17 @@ public final class SegmentShortVectorScan {
   public static int indexOfIgnoreCaseUtf16(
       MemorySegment segment, long byteOffset, int charLength, String prefix, int start) {
     int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), charLength);
+    }
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
         return UNSUPPORTED;
       }
+    }
+    if (prefixLen > 1) {
+      return SegmentAsciiSearch.indexOfIgnoreCaseUtf16(
+          segment, byteOffset, charLength, prefix, start);
     }
 
     int vectorLen = SPECIES.length();
@@ -131,7 +115,8 @@ public final class SegmentShortVectorScan {
 
     while (pos <= loopBound) {
       long addr = byteOffset + ((long) pos << 1);
-      ShortVector v = ShortVector.fromMemorySegment(SPECIES, segment, addr, NATIVE_ORDER);
+      ShortVector v =
+          ShortVector.fromMemorySegment(SPECIES, segment, addr, java.nio.ByteOrder.LITTLE_ENDIAN);
       VectorMask<Short> mask =
           v.compare(VectorOperators.EQ, vLow).or(v.compare(VectorOperators.EQ, vHigh));
 
@@ -162,15 +147,37 @@ public final class SegmentShortVectorScan {
       MemorySegment segment, long byteOffset, int charIndex, String prefix, int len) {
     for (int i = 0; i < len; i++) {
       char c1 =
-          (char)
-              (segment.get(
-                      ValueLayout.JAVA_SHORT_UNALIGNED, byteOffset + ((long) (charIndex + i) << 1))
-                  & 0xFFFF);
+          (char) (segment.get(UTF16_SHORT, byteOffset + ((long) (charIndex + i) << 1)) & 0xFFFF);
       char c2 = prefix.charAt(i);
       if (c1 != c2 && toLowerCase(c1) != toLowerCase(c2)) {
         return false;
       }
     }
     return true;
+  }
+
+  private static VectorMask<Short> matches(ShortVector values, int[] ranges) {
+    VectorMask<Short> result = matches(values, ranges[0], ranges[1]);
+    for (int i = 2; i < ranges.length; i += 2) {
+      result = result.or(matches(values, ranges[i], ranges[i + 1]));
+    }
+    return result;
+  }
+
+  private static VectorMask<Short> matches(ShortVector values, int lowBound, int highBound) {
+    short low = (short) lowBound;
+    short high = (short) highBound;
+    if (low == high) {
+      return values.eq(low);
+    }
+    if (highBound == lowBound + 1) {
+      return values.eq(low).or(values.eq(high));
+    }
+    ShortVector biasedValues = values.lanewise(VectorOperators.XOR, Short.MIN_VALUE);
+    short biasedLow = (short) (low ^ Short.MIN_VALUE);
+    short biasedHigh = (short) (high ^ Short.MIN_VALUE);
+    return biasedValues
+        .compare(VectorOperators.GE, biasedLow)
+        .and(biasedValues.compare(VectorOperators.LE, biasedHigh));
   }
 }

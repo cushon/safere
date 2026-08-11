@@ -34,4 +34,67 @@ public final class Ascii {
   public static boolean equalsIgnoreCase(char a, char b) {
     return a == b || toLowerCase(a) == toLowerCase(b);
   }
+
+  /** Builds the KMP failure function for an ASCII case-insensitive pattern. */
+  public static int[] ignoreCaseFailure(String pattern) {
+    int[] failure = new int[pattern.length()];
+    int matched = 0;
+    for (int i = 1; i < pattern.length(); i++) {
+      while (matched > 0 && !equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
+        matched = failure[matched - 1];
+      }
+      if (equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
+        matched++;
+      }
+      failure[i] = matched;
+    }
+    return failure;
+  }
+
+  /** Finds an ASCII prefix in UTF-16 code units in linear time. */
+  public static int indexOfIgnoreCase(
+      char[] input, int offset, int length, String pattern, int start) {
+    if (pattern.isEmpty()) {
+      return Math.min(Math.max(0, start), length);
+    }
+    int[] failure = ignoreCaseFailure(pattern);
+    int matched = 0;
+    for (int i = Math.max(0, start); i < length; i++) {
+      char ch = input[offset + i];
+      while (matched > 0 && !equalsIgnoreCase(ch, pattern.charAt(matched))) {
+        matched = failure[matched - 1];
+      }
+      if (equalsIgnoreCase(ch, pattern.charAt(matched))) {
+        matched++;
+        if (matched == pattern.length()) {
+          return i - pattern.length() + 1;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /** Finds an ASCII prefix in little-endian UTF-16 bytes in linear time. */
+  public static int indexOfIgnoreCaseUtf16(
+      byte[] input, int offset, int length, String pattern, int start) {
+    if (pattern.isEmpty()) {
+      return Math.min(Math.max(0, start), length);
+    }
+    int[] failure = ignoreCaseFailure(pattern);
+    int matched = 0;
+    for (int i = Math.max(0, start); i < length; i++) {
+      int byteIndex = offset + (i << 1);
+      char ch = (char) ((input[byteIndex] & 0xFF) | ((input[byteIndex + 1] & 0xFF) << 8));
+      while (matched > 0 && !equalsIgnoreCase(ch, pattern.charAt(matched))) {
+        matched = failure[matched - 1];
+      }
+      if (equalsIgnoreCase(ch, pattern.charAt(matched))) {
+        matched++;
+        if (matched == pattern.length()) {
+          return i - pattern.length() + 1;
+        }
+      }
+    }
+    return -1;
+  }
 }

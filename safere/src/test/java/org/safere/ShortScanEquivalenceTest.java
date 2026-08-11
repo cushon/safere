@@ -176,6 +176,77 @@ class ShortScanEquivalenceTest {
     }
   }
 
+  @Test
+  @DisplayName("UTF-16 kernels handle unsigned ranges and reject non-BMP ranges")
+  void utf16RangeBoundaries() {
+    char[] chars = new char[64];
+    java.util.Arrays.fill(chars, '\uA000');
+    chars[10] = '\u7500';
+    byte[] utf16Bytes = new String(chars).getBytes(UTF_16LE);
+    int[] crossingSignedBoundary = {'\u7000', '\u9000'};
+
+    assertThat(ShortSwarScan.indexOfCharClass(chars, 0, chars.length, crossingSignedBoundary, 0))
+        .isEqualTo(10);
+    assertThat(
+            ShortSwarScan.indexOfCharClassUtf16(
+                utf16Bytes, 0, chars.length, crossingSignedBoundary, 0))
+        .isEqualTo(10);
+    if (isVectorApiAvailable()) {
+      assertThat(
+              ShortVectorScan.indexOfCharClass(chars, 0, chars.length, crossingSignedBoundary, 0))
+          .isEqualTo(10);
+      assertThat(
+              ShortVectorScan.indexOfCharClassUtf16(
+                  utf16Bytes, 0, chars.length, crossingSignedBoundary, 0))
+          .isEqualTo(10);
+    }
+
+    int[] supplementaryRange = {0x1F600, 0x1F64F};
+    assertThat(ShortSwarScan.indexOfCharClass(chars, 0, chars.length, supplementaryRange, 0))
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+    assertThat(
+            ShortSwarScan.indexOfCharClassUtf16(utf16Bytes, 0, chars.length, supplementaryRange, 0))
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+    if (isVectorApiAvailable()) {
+      assertThat(ShortVectorScan.indexOfCharClass(chars, 0, chars.length, supplementaryRange, 0))
+          .isEqualTo(VectorScanProvider.UNSUPPORTED);
+      assertThat(
+              ShortVectorScan.indexOfCharClassUtf16(
+                  utf16Bytes, 0, chars.length, supplementaryRange, 0))
+          .isEqualTo(VectorScanProvider.UNSUPPORTED);
+    }
+  }
+
+  @Test
+  @DisplayName("Public array kernels handle empty prefixes and unsupported byte ranges")
+  void publicKernelEdgeInputs() {
+    char[] chars = "abc".toCharArray();
+    byte[] utf16 = "abc".getBytes(UTF_16LE);
+
+    assertThat(ShortSwarScan.indexOfIgnoreCase(chars, 0, chars.length, "", 1)).isEqualTo(1);
+    assertThat(ShortSwarScan.indexOfIgnoreCaseUtf16(utf16, 0, chars.length, "", 10))
+        .isEqualTo(chars.length);
+    if (isVectorApiAvailable()) {
+      assertThat(ShortVectorScan.indexOfIgnoreCase(chars, 0, chars.length, "", -1)).isZero();
+      assertThat(ShortVectorScan.indexOfIgnoreCaseUtf16(utf16, 0, chars.length, "", 1))
+          .isEqualTo(1);
+    }
+
+    byte[] bytes = new byte[64];
+    bytes[10] = (byte) 0xE9;
+    assertThat(ByteSwarScan.indexOfAsciiClass(bytes, 0, bytes.length, new int[] {233, 233}, 0))
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+    assertThat(ByteSwarScan.indexOfAsciiClass(bytes, 0, bytes.length, new int[] {'z', 'a'}, 0))
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+  }
+
+  @Test
+  @DisplayName("Ignore-case prefix scans use a linear failure function")
+  void ignoreCasePrefixFailureFunction() {
+    assertThat(org.safere.internal.Ascii.ignoreCaseFailure("aaaaab"))
+        .containsExactly(0, 1, 2, 3, 4, 0);
+  }
+
   private static int scalarIndexOfAsciiClass(byte[] input, int[] ranges, int start) {
     for (int i = start; i < input.length; i++) {
       int b = input[i] & 0xFF;

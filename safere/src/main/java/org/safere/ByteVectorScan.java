@@ -11,6 +11,7 @@ import static jdk.incubator.vector.VectorOperators.LE;
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorSpecies;
+import org.safere.internal.Swar;
 
 /**
  * Stateless SIMD kernels using the incubating Vector API for 1-byte sequences (UTF-8 and Latin-1).
@@ -20,7 +21,7 @@ public final class ByteVectorScan {
 
   public static int indexOfAsciiClass(
       byte[] bytes, int offset, int length, int[] ranges, int start) {
-    if (ranges.length < 2 || ranges.length > 8 || (ranges.length & 1) != 0) {
+    if (!Swar.supportsAsciiRanges(ranges, 4)) {
       return VectorScanProvider.UNSUPPORTED;
     }
     int position = Math.max(0, start);

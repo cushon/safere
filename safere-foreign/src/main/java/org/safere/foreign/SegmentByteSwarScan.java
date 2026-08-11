@@ -17,10 +17,13 @@ public final class SegmentByteSwarScan {
 
   public static int indexOfAsciiClass(
       MemorySegment segment, long offset, long length, int[] ranges, int start) {
-    int numRanges = ranges.length / 2;
-    if (numRanges < 1 || numRanges > 2 || (ranges.length & 1) != 0) {
+    if (length > Integer.MAX_VALUE) {
       return Swar.UNSUPPORTED;
     }
+    if (!Swar.supportsAsciiRanges(ranges, 2)) {
+      return Swar.UNSUPPORTED;
+    }
+    int numRanges = ranges.length / 2;
 
     long pos = Math.max(0, start);
     long wordEnd = length - Long.BYTES;
@@ -84,11 +87,20 @@ public final class SegmentByteSwarScan {
 
   public static int indexOfIgnoreCase(
       MemorySegment segment, long offset, long length, String prefix, int start) {
+    if (length > Integer.MAX_VALUE) {
+      return Swar.UNSUPPORTED;
+    }
     int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), (int) length);
+    }
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
         return Swar.UNSUPPORTED;
       }
+    }
+    if (prefixLen > 1) {
+      return SegmentAsciiSearch.indexOfIgnoreCase(segment, offset, (int) length, prefix, start);
     }
 
     long pos = Math.max(0, start);

@@ -6,6 +6,8 @@
 package org.safere;
 
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
+import static java.nio.ByteOrder.BIG_ENDIAN;
+import static java.nio.ByteOrder.LITTLE_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
 import static org.safere.internal.Ascii.toLowerCase;
 import static org.safere.internal.Ascii.toUpperCase;
@@ -13,18 +15,22 @@ import static org.safere.internal.Swar.SHORT_HIGH_BITS;
 import static org.safere.internal.Swar.SHORT_ONES;
 
 import java.lang.invoke.VarHandle;
+import org.safere.internal.Ascii;
 import org.safere.internal.Swar;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 2-byte sequences (UTF-16 and char[]). */
 public final class ShortSwarScan {
 
-  private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, nativeOrder());
+  private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, LITTLE_ENDIAN);
 
   public static int indexOfCharClass(
       char[] chars, int offset, int length, int[] ranges, int start) {
-    int numRanges = ranges.length / 2;
-    if (numRanges < 1 || numRanges > 2 || (ranges.length & 1) != 0) {
+    if (!Swar.supportsBmpCodeUnitRanges(ranges, 2)) {
       return VectorScanProvider.UNSUPPORTED;
+    }
+    int numRanges = ranges.length / 2;
+    if (requiresScalarRangeComparison(ranges)) {
+      return scalarIndexOfCharClass(chars, offset, length, ranges, start);
     }
 
     int pos = Math.max(0, start);
@@ -81,9 +87,12 @@ public final class ShortSwarScan {
 
   public static int indexOfCharClassUtf16(
       byte[] bytes, int offset, int length, int[] ranges, int start) {
-    int numRanges = ranges.length / 2;
-    if (numRanges < 1 || numRanges > 2 || (ranges.length & 1) != 0) {
+    if (!Swar.supportsBmpCodeUnitRanges(ranges, 2) || nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;
+    }
+    int numRanges = ranges.length / 2;
+    if (requiresScalarRangeComparison(ranges)) {
+      return scalarIndexOfCharClassUtf16(bytes, offset, length, ranges, start);
     }
 
     int pos = Math.max(0, start);
@@ -150,10 +159,16 @@ public final class ShortSwarScan {
   public static int indexOfIgnoreCase(
       char[] chars, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
         return VectorScanProvider.UNSUPPORTED;
       }
+    }
+    if (prefixLen > 1) {
+      return Ascii.indexOfIgnoreCase(chars, offset, length, prefix, start);
     }
 
     int pos = Math.max(0, start);
@@ -197,10 +212,19 @@ public final class ShortSwarScan {
   public static int indexOfIgnoreCaseUtf16(
       byte[] bytes, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
         return VectorScanProvider.UNSUPPORTED;
       }
+    }
+    if (prefixLen > 1) {
+      return Ascii.indexOfIgnoreCaseUtf16(bytes, offset, length, prefix, start);
+    }
+    if (nativeOrder() == BIG_ENDIAN) {
+      return VectorScanProvider.UNSUPPORTED;
     }
 
     int pos = Math.max(0, start);
@@ -243,6 +267,42 @@ public final class ShortSwarScan {
 
   static long exactShortRangeMask(long word, long repeatedLow, long repeatedHigh) {
     return Swar.exactShortRangeMask(word, repeatedLow, repeatedHigh);
+  }
+
+  private static boolean requiresScalarRangeComparison(int[] ranges) {
+    for (int i = 1; i < ranges.length; i += 2) {
+      if (ranges[i] > 0x7FFF) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static int scalarIndexOfCharClass(
+      char[] chars, int offset, int length, int[] ranges, int start) {
+    for (int i = Math.max(0, start); i < length; i++) {
+      char ch = chars[offset + i];
+      for (int r = 0; r < ranges.length; r += 2) {
+        if (ch >= ranges[r] && ch <= ranges[r + 1]) {
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  private static int scalarIndexOfCharClassUtf16(
+      byte[] bytes, int offset, int length, int[] ranges, int start) {
+    for (int i = Math.max(0, start); i < length; i++) {
+      int byteIndex = offset + (i << 1);
+      char ch = (char) ((bytes[byteIndex] & 0xFF) | ((bytes[byteIndex + 1] & 0xFF) << 8));
+      for (int r = 0; r < ranges.length; r += 2) {
+        if (ch >= ranges[r] && ch <= ranges[r + 1]) {
+          return i;
+        }
+      }
+    }
+    return -1;
   }
 
   private static long loadLongFromChars(char[] chars, int offset) {

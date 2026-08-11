@@ -14,6 +14,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.util.Random;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.safere.ByteSwarScan;
@@ -236,6 +237,96 @@ class MemorySegmentScanEquivalenceTest {
         }
       }
     }
+  }
+
+  @Test
+  @DisplayName("MemorySegment vector kernels include every accepted range")
+  void vectorKernelsIncludeAllAcceptedRanges() {
+    byte[] bytes = new byte[128];
+    java.util.Arrays.fill(bytes, (byte) 'x');
+    bytes[10] = '7';
+    int[] byteRanges = {'a', 'a', 'b', 'b', '0', '9', '_', '_'};
+
+    char[] chars = new char[128];
+    java.util.Arrays.fill(chars, 'x');
+    chars[10] = '7';
+    byte[] utf16 = new String(chars).getBytes(UTF_16LE);
+    int[] shortRanges = {'a', 'a', 'b', 'b', '0', '9', '_', '_'};
+
+    assertThat(
+            SegmentByteVectorScan.indexOfAsciiClass(
+                MemorySegment.ofArray(bytes), 0, bytes.length, byteRanges, 0))
+        .isEqualTo(10);
+    assertThat(
+            SegmentShortVectorScan.indexOfCharClassUtf16(
+                MemorySegment.ofArray(utf16), 0, chars.length, shortRanges, 0))
+        .isEqualTo(10);
+  }
+
+  @Test
+  @DisplayName("MemorySegment UTF-16 kernels handle range boundaries")
+  void segmentUtf16RangeBoundaries() {
+    char[] chars = new char[64];
+    java.util.Arrays.fill(chars, '\uA000');
+    chars[10] = '\u7500';
+    MemorySegment utf16 = MemorySegment.ofArray(new String(chars).getBytes(UTF_16LE));
+    int[] crossingSignedBoundary = {'\u7000', '\u9000'};
+
+    assertThat(
+            SegmentShortSwarScan.indexOfCharClassUtf16(
+                utf16, 0, chars.length, crossingSignedBoundary, 0))
+        .isEqualTo(10);
+    assertThat(
+            SegmentShortVectorScan.indexOfCharClassUtf16(
+                utf16, 0, chars.length, crossingSignedBoundary, 0))
+        .isEqualTo(10);
+
+    int[] supplementaryRange = {0x1F600, 0x1F64F};
+    assertThat(
+            SegmentShortSwarScan.indexOfCharClassUtf16(
+                utf16, 0, chars.length, supplementaryRange, 0))
+        .isEqualTo(-2);
+    assertThat(
+            SegmentShortVectorScan.indexOfCharClassUtf16(
+                utf16, 0, chars.length, supplementaryRange, 0))
+        .isEqualTo(-2);
+  }
+
+  @Test
+  @DisplayName("Byte MemorySegment kernels reject unrepresentable result positions")
+  void byteSegmentKernelsRejectUnrepresentableLength() {
+    MemorySegment segment = MemorySegment.ofArray(new byte[] {'a'});
+    long unrepresentableLength = (long) Integer.MAX_VALUE + 1;
+
+    assertThat(
+            SegmentByteSwarScan.indexOfAsciiClass(
+                segment, 0, unrepresentableLength, new int[] {'a', 'a'}, 0))
+        .isEqualTo(-2);
+    assertThat(
+            SegmentByteVectorScan.indexOfAsciiClass(
+                segment, 0, unrepresentableLength, new int[] {'a', 'a'}, 0))
+        .isEqualTo(-2);
+    assertThat(SegmentByteSwarScan.indexOfIgnoreCase(segment, 0, unrepresentableLength, "a", 0))
+        .isEqualTo(-2);
+    assertThat(SegmentByteVectorScan.indexOfIgnoreCase(segment, 0, unrepresentableLength, "a", 0))
+        .isEqualTo(-2);
+  }
+
+  @Test
+  @DisplayName("Public segment kernels handle empty prefixes and unsupported byte ranges")
+  void publicSegmentKernelEdgeInputs() {
+    MemorySegment bytes = MemorySegment.ofArray("abc".getBytes(ISO_8859_1));
+    MemorySegment utf16 = MemorySegment.ofArray("abc".getBytes(UTF_16LE));
+
+    assertThat(SegmentByteSwarScan.indexOfIgnoreCase(bytes, 0, 3, "", 1)).isEqualTo(1);
+    assertThat(SegmentByteVectorScan.indexOfIgnoreCase(bytes, 0, 3, "", 10)).isEqualTo(3);
+    assertThat(SegmentShortSwarScan.indexOfIgnoreCaseUtf16(utf16, 0, 3, "", -1)).isZero();
+    assertThat(SegmentShortVectorScan.indexOfIgnoreCaseUtf16(utf16, 0, 3, "", 1)).isEqualTo(1);
+
+    assertThat(SegmentByteSwarScan.indexOfAsciiClass(bytes, 0, 3, new int[] {233, 233}, 0))
+        .isEqualTo(-2);
+    assertThat(SegmentByteSwarScan.indexOfAsciiClass(bytes, 0, 3, new int[] {'z', 'a'}, 0))
+        .isEqualTo(-2);
   }
 
   private static int scalarIndexOfAsciiClass(byte[] bytes, int[] ranges, int start) {

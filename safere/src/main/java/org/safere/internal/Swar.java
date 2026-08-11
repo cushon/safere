@@ -18,6 +18,37 @@ public final class Swar {
 
   private Swar() {}
 
+  /** Returns whether the ranges can be matched one UTF-16 code unit at a time. */
+  public static boolean supportsBmpCodeUnitRanges(int[] ranges, int maximumRanges) {
+    if (ranges.length < 2 || ranges.length > maximumRanges * 2 || (ranges.length & 1) != 0) {
+      return false;
+    }
+    for (int i = 0; i < ranges.length; i += 2) {
+      int low = ranges[i];
+      int high = ranges[i + 1];
+      if (low < 0
+          || high > Character.MAX_VALUE
+          || low > high
+          || (low <= Character.MAX_SURROGATE && high >= Character.MIN_SURROGATE)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Returns whether the ranges can be matched by an ASCII byte kernel. */
+  public static boolean supportsAsciiRanges(int[] ranges, int maximumRanges) {
+    if (ranges.length < 2 || ranges.length > maximumRanges * 2 || (ranges.length & 1) != 0) {
+      return false;
+    }
+    for (int i = 0; i < ranges.length; i += 2) {
+      if (ranges[i] < 0 || ranges[i] > ranges[i + 1] || ranges[i + 1] > 0x7F) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** Computes a borrow-free 1-byte SWAR range mask for {@code [low, high]}. */
   public static long exactAsciiRangeMask(
       long values, long ascii, long repeatedLow, long repeatedHigh) {

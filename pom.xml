@@ -39,7 +39,6 @@
   <modules>
     <module>safere-unicode</module>
     <module>safere</module>
-    <module>safere-foreign</module>
     <module>safere-crosscheck</module>
     <module>safere-fuzz</module>
     <module>safere-exhaustive</module>
@@ -118,6 +117,15 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>foreign-memory</id>
+      <activation>
+        <jdk>[22,)</jdk>
+      </activation>
+      <modules>
+        <module>safere-foreign</module>
+      </modules>
+    </profile>
     <profile>
       <id>release</id>
       <build>
