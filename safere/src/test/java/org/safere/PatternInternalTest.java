@@ -379,6 +379,17 @@ class PatternInternalTest {
     assertThat(p3.requiredDisjointLiterals()).containsExactly("http", "ftp");
   }
 
+  @Test
+  void tooManyRawDisjointLiteralsAreRejectedBeforeMinimization() {
+    StringBuilder regex = new StringBuilder("(?:banana");
+    for (int i = 0; i < 16; i++) {
+      regex.append('|').append("x".repeat(i)).append("apple");
+    }
+    regex.append(')');
+
+    assertThat(Pattern.compile(regex.toString()).requiredDisjointLiterals()).isNull();
+  }
+
   @ParameterizedTest
   @ValueSource(
       strings = {

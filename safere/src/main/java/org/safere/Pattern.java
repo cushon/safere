@@ -64,6 +64,7 @@ public final class Pattern implements Serializable {
   private static final MethodHandle UTF8_FIND_INVOKER = UTF8_FIND_SITE.dynamicInvoker();
   private static final MethodHandle UTF8_FIND_DISABLED = findUtf8Handle("findWithoutDiagnostics");
   private static final MethodHandle UTF8_FIND_ENABLED = findUtf8Handle("findWithDiagnostics");
+  private static final int MAX_DISJOINT_REQUIRED_LITERALS = 16;
 
   static {
     setDiagnosticsTarget(SafeReMatchDiagnostics.NONE);
@@ -3426,12 +3427,22 @@ public final class Pattern implements Serializable {
         return null;
       }
       literalSet.add(req);
+      if (literalSet.size() > MAX_DISJOINT_REQUIRED_LITERALS) {
+        return null;
+      }
     }
     // Substring subsumption / set minimization:
     // If literal A is a substring of literal B, any text containing B already contains A.
     // Therefore, searching for A is sufficient to cover branch B, and the longer literal B can
     // be pruned from the required search set.
     List<String> rawList = new ArrayList<>(literalSet);
+    List<int[]> rawCodePoints = new ArrayList<>(rawList.size());
+    List<int[]> rawFailures = new ArrayList<>(rawList.size());
+    for (String literal : rawList) {
+      int[] codePoints = literal.codePoints().toArray();
+      rawCodePoints.add(codePoints);
+      rawFailures.add(literalFailure(codePoints));
+    }
     Set<String> pruned = new LinkedHashSet<>();
     for (int i = 0; i < rawList.size(); i++) {
       String s1 = rawList.get(i);
@@ -3439,7 +3450,8 @@ public final class Pattern implements Serializable {
       for (int j = 0; j < rawList.size(); j++) {
         if (i != j) {
           String s2 = rawList.get(j);
-          if (s1.contains(s2)
+          if (containsCodePointSequence(
+                  rawCodePoints.get(i), rawCodePoints.get(j), rawFailures.get(j))
               && (s1.length() > s2.length() || (s1.length() == s2.length() && j < i))) {
             subsumed = true;
             break;
@@ -3450,10 +3462,41 @@ public final class Pattern implements Serializable {
         pruned.add(s1);
       }
     }
-    if (pruned.size() < 2 || pruned.size() > 16) {
+    if (pruned.size() < 2) {
       return null;
     }
     return pruned.toArray(new String[0]);
+  }
+
+  private static int[] literalFailure(int[] literal) {
+    int[] failure = new int[literal.length];
+    int matched = 0;
+    for (int index = 1; index < literal.length; index++) {
+      while (matched > 0 && literal[index] != literal[matched]) {
+        matched = failure[matched - 1];
+      }
+      if (literal[index] == literal[matched]) {
+        matched++;
+      }
+      failure[index] = matched;
+    }
+    return failure;
+  }
+
+  private static boolean containsCodePointSequence(int[] value, int[] candidate, int[] failure) {
+    int matched = 0;
+    for (int codePoint : value) {
+      while (matched > 0 && codePoint != candidate[matched]) {
+        matched = failure[matched - 1];
+      }
+      if (codePoint == candidate[matched]) {
+        matched++;
+        if (matched == candidate.length) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private static CharClass literalCharClass(int cp, int flags) {

@@ -1119,5 +1119,17 @@ class PatternTest {
       assertThat(m2.find()).isTrue();
       assertThat(m2.group()).isEqualTo("there is a pineapple here");
     }
+
+    @Test
+    @DisplayName("supplementary literals are not subsumed by UTF-16 surrogate fragments")
+    void supplementaryLiteralIsNotPrunedBySurrogateFragment() {
+      Pattern p = Pattern.compile("(?:a\uD83D|za\uD83D\uDE00|banana)");
+      assertThat(p.requiredDisjointLiterals())
+          .containsExactly("a\uD83D", "za\uD83D\uDE00", "banana");
+      Utf8Input input =
+          Utf8Input.trusted("za\uD83D\uDE00".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+      assertThat(p.find(input)).isTrue();
+    }
   }
 }
