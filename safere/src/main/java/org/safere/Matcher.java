@@ -4581,9 +4581,10 @@ public final class Matcher implements MatchResult {
   private PreparedMatchRunner createPreparedRunner(boolean regionActive) {
     EnginePathOptions options = enginePathOptions();
     Prog prog = parentPattern.prog();
+    MatchDescriptor matchDescriptor = parentPattern.matchDescriptor();
 
     // Literal runner
-    String literal = parentPattern.literalMatch();
+    String literal = matchDescriptor.literalMatch();
     if (options.literalFastPaths()
         && literal != null
         && parentPattern.numGroups() == 0
@@ -4592,7 +4593,7 @@ public final class Matcher implements MatchResult {
     }
 
     // Single char class runner
-    Pattern.CharClassScanInfo singleCharClass = parentPattern.singleCharClassScanInfo();
+    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
     int[] charClassMatchRanges = parentPattern.charClassMatchRanges();
     if (options.charClassMatchFastPaths()
         && (singleCharClass != null || charClassMatchRanges != null)
@@ -4606,7 +4607,7 @@ public final class Matcher implements MatchResult {
     }
 
     // Keyword alternation runner
-    Pattern.KeywordAlternation keywordAlternation = parentPattern.keywordAlternation();
+    Pattern.KeywordAlternation keywordAlternation = matchDescriptor.keywordAlternation();
     if (options.keywordAlternationFastPath() && keywordAlternation != null) {
       return new KeywordAlternationPreparedRunner(
           keywordAlternation, prog.numCaptures(), prog.anchorStart());
