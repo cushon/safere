@@ -60,7 +60,7 @@ class PatternInternalTest {
     boolean[] prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
     assertThat(prefix['A']).isTrue();
-    assertThat(p.charClassMatchRanges()).isNotNull();
+    assertThat(p.matchDescriptor().charClassMatch()).isNotNull();
   }
 
   @Test

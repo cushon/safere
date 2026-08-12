@@ -140,7 +140,7 @@ public final class Pattern implements Serializable {
   private final transient Map<String, Integer> namedGroups;
   private final transient String prefix;
   private final transient boolean prefixFoldCase;
-  private final transient String literalMatch;
+  private final transient MatchDescriptor matchDescriptor;
   private final transient byte[] literalMatchUtf8;
   private final transient int[] literalMatchFailure;
   private final transient int[] literalMatchShifts;
@@ -155,34 +155,10 @@ public final class Pattern implements Serializable {
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
-  private final transient KeywordAlternation keywordAlternation;
   private final transient EnginePathOptions enginePathOptions;
   private final long patternId;
   private transient volatile PatternAnalysis patternAnalysis;
   private transient volatile PatternDescriptor patternDescriptor;
-
-  /**
-   * Precomputed character class data for the "repeated character class" fast path in {@code
-   * matches()}. Non-null when the pattern is structurally {@code [class]+}, {@code [class]*},
-   * {@code [class]{n,}}, or similar — a single character class quantified to cover the entire
-   * string. Stored as a flat {@code [lo0, hi0, lo1, hi1, ...]} array of inclusive Unicode code
-   * point ranges plus precomputed ASCII bitmaps for O(1) lookup.
-   *
-   * <p>When non-null, {@code matches()} can bypass the full engine cascade and use a tight
-   * character-scanning loop instead.
-   */
-  private final transient int[] charClassMatchRanges;
-
-  private final transient long charClassMatchBitmap0;
-  private final transient long charClassMatchBitmap1;
-  private final transient boolean charClassMatchAllowEmpty;
-
-  /**
-   * Precomputed character class data for a pattern that is exactly one character class, such as
-   * {@code \p{javaLetter}}. Non-null when {@code find()} can scan directly for one matching code
-   * point and produce group 0 without invoking the engine cascade.
-   */
-  private final transient CharClassScanInfo singleCharClassScanInfo;
 
   /** Whole-input rejection AST metadata for Tier 0 acceleration. */
   private final transient RejectDescriptor rejectDescriptor;
@@ -285,19 +261,13 @@ public final class Pattern implements Serializable {
       Regexp ast,
       Map<String, Integer> namedGroups,
       StartDescriptor startDescriptor,
-      String literalMatch,
+      MatchDescriptor matchDescriptor,
       boolean hasLazy,
       boolean hasAlternation,
       boolean hasNullableAlternation,
       boolean canMatchEmpty,
       boolean startsWithGraphemeClusterBoundary,
       boolean hasInternalGraphemeClusterBoundary,
-      KeywordAlternation keywordAlternation,
-      int[] charClassMatchRanges,
-      long charClassMatchBitmap0,
-      long charClassMatchBitmap1,
-      boolean charClassMatchAllowEmpty,
-      CharClassScanInfo singleCharClass,
       RejectDescriptor rejectDescriptor,
       EnginePathOptions enginePathOptions) {
     this.patternId = nextPatternId();
@@ -333,7 +303,8 @@ public final class Pattern implements Serializable {
         startDescriptor.prefix() == null || startDescriptor.prefix().isEmpty()
             ? null
             : startDescriptor.prefix().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-    this.literalMatch = literalMatch;
+    this.matchDescriptor = matchDescriptor != null ? matchDescriptor : MatchDescriptor.NONE;
+    String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
         literalMatch == null
             ? null
@@ -352,13 +323,7 @@ public final class Pattern implements Serializable {
         Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
     this.stringStartAccelerator =
         StringStartAccelerator.create(startDescriptor, prog.hasWordBoundary());
-    this.keywordAlternation = keywordAlternation;
     this.enginePathOptions = enginePathOptions;
-    this.charClassMatchRanges = charClassMatchRanges;
-    this.charClassMatchBitmap0 = charClassMatchBitmap0;
-    this.charClassMatchBitmap1 = charClassMatchBitmap1;
-    this.charClassMatchAllowEmpty = charClassMatchAllowEmpty;
-    this.singleCharClassScanInfo = singleCharClass;
     this.rejectDescriptor = rejectDescriptor != null ? rejectDescriptor : RejectDescriptor.NONE;
     this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
 
@@ -373,6 +338,20 @@ public final class Pattern implements Serializable {
     if (SafeReMatchDiagnostics.isEnabled(listener)) {
       listener.onPatternCompiled(new PatternCompiledEvent(descriptor()));
     }
+  }
+
+  private static MatchDescriptor extractMatchDescriptor(Regexp metadataAst, int flags) {
+    String literalMatch = extractLiteralMatch(metadataAst);
+    CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
+    KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
+    CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
+    if (literalMatch == null
+        && singleCharClass == null
+        && keywordAlternation == null
+        && ccMatch == null) {
+      return MatchDescriptor.NONE;
+    }
+    return new MatchDescriptor(literalMatch, singleCharClass, keywordAlternation, ccMatch);
   }
 
   private static long nextPatternId() {
@@ -461,17 +440,13 @@ public final class Pattern implements Serializable {
     }
     Map<String, Integer> named = extractNamedGroups(re);
     StartDescriptor startDescriptor = extractStartDescriptor(metadataAst);
-    String literalMatch = extractLiteralMatch(metadataAst);
+    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, flags);
     boolean hasLazy = hasLazyQuantifiers(re);
     boolean hasAlt = hasAlternation(re);
     boolean canMatchEmpty = canMatchEmpty(re);
     boolean hasNullableAlt = hasAlt && hasNullableAlternation(re);
     boolean startsWithGcb = startsWithGraphemeClusterBoundary(metadataAst);
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
-    KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
-    // Detect "repeated character class" pattern for matches() fast path.
-    CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
-    CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
     RejectDescriptor rejectDescriptor =
         extractRejectDescriptor(
             metadataAst, startDescriptor.prefix(), startDescriptor.charClassPrefixAscii());
@@ -483,19 +458,13 @@ public final class Pattern implements Serializable {
         re,
         named,
         startDescriptor,
-        literalMatch,
+        matchDescriptor,
         hasLazy,
         hasAlt,
         hasNullableAlt,
         canMatchEmpty,
         startsWithGcb,
         hasInternalGcb,
-        keywordAlternation,
-        ccMatch != null ? ccMatch.ranges : null,
-        ccMatch != null ? ccMatch.bitmap0 : 0,
-        ccMatch != null ? ccMatch.bitmap1 : 0,
-        ccMatch != null && ccMatch.allowEmpty,
-        singleCharClass,
         rejectDescriptor,
         enginePathOptions);
   }
@@ -632,8 +601,9 @@ public final class Pattern implements Serializable {
     if (literalMatchUtf8 != null && !prefixFoldCase) {
       return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
     }
-    if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
-      return keywordAlternation.find(scanner, 0) >= 0;
+    if (enginePathOptions.keywordAlternationFastPath()
+        && matchDescriptor.keywordAlternation() != null) {
+      return matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
     }
     if (rejectPrefilter != null && prefixUtf8 == null && charClassPrefixAscii == null) {
       boolean rejected;
@@ -689,8 +659,9 @@ public final class Pattern implements Serializable {
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }
-    if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
-      boolean matched = keywordAlternation.find(scanner, 0) >= 0;
+    if (enginePathOptions.keywordAlternationFastPath()
+        && matchDescriptor.keywordAlternation() != null) {
+      boolean matched = matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
       diagnostics.boundary(MatchStrategy.KEYWORD);
       return matched;
     }
@@ -1216,42 +1187,13 @@ public final class Pattern implements Serializable {
     return stringStartAccelerator;
   }
 
+  MatchDescriptor matchDescriptor() {
+    return matchDescriptor;
+  }
+
   /** Returns case-insensitive keyword-alternation fast-path data, or {@code null}. */
   KeywordAlternation keywordAlternation() {
-    return keywordAlternation;
-  }
-
-  /**
-   * Returns the precomputed ranges for the character-class-match fast path, or {@code null} if the
-   * pattern is not a simple repeated character class. When non-null, {@code matches()} can use a
-   * tight scanning loop instead of the full engine cascade.
-   */
-  int[] charClassMatchRanges() {
-    return charClassMatchRanges;
-  }
-
-  /** ASCII bitmap (code points 0–63) for the character-class-match fast path. */
-  long charClassMatchBitmap0() {
-    return charClassMatchBitmap0;
-  }
-
-  /** ASCII bitmap (code points 64–127) for the character-class-match fast path. */
-  long charClassMatchBitmap1() {
-    return charClassMatchBitmap1;
-  }
-
-  /**
-   * Whether the character-class-match fast path allows empty input (from {@code *} or {@code ?}).
-   */
-  boolean charClassMatchAllowEmpty() {
-    return charClassMatchAllowEmpty;
-  }
-
-  /**
-   * Returns precomputed scan info when the pattern is exactly one character class, or {@code null}.
-   */
-  CharClassScanInfo singleCharClassScanInfo() {
-    return singleCharClassScanInfo;
+    return matchDescriptor.keywordAlternation();
   }
 
   /** Returns AST metadata for whole-input rejection, or {@link RejectDescriptor#NONE}. */
@@ -1350,7 +1292,7 @@ public final class Pattern implements Serializable {
    * lowercase version.
    */
   String literalMatch() {
-    return literalMatch;
+    return matchDescriptor.literalMatch();
   }
 
   byte[] literalMatchUtf8() {
@@ -1371,7 +1313,7 @@ public final class Pattern implements Serializable {
 
   /** Returns {@code true} if this pattern is a simple literal with no metacharacters. */
   boolean isLiteral() {
-    return literalMatch != null;
+    return literalMatch() != null;
   }
 
   boolean startsWithGraphemeClusterBoundary() {
@@ -1439,7 +1381,7 @@ public final class Pattern implements Serializable {
     EnumSet<PatternCapability> capabilities = EnumSet.noneOf(PatternCapability.class);
     EnumSet<PatternLimitation> limitations = EnumSet.noneOf(PatternLimitation.class);
 
-    if (literalMatch != null) {
+    if (literalMatch() != null) {
       features.add(PatternFeature.LITERAL);
       capabilities.add(PatternCapability.LITERAL_MATCH);
     }
@@ -1483,10 +1425,10 @@ public final class Pattern implements Serializable {
     }
     addAstAnalysisFeatures(features);
 
-    if (charClassMatchRanges != null || singleCharClassScanInfo != null) {
+    if (matchDescriptor.charClassMatch() != null || matchDescriptor.singleCharClass() != null) {
       capabilities.add(PatternCapability.CHARACTER_CLASS_MATCH);
     }
-    if (keywordAlternation != null) {
+    if (matchDescriptor.keywordAlternation() != null) {
       capabilities.add(PatternCapability.KEYWORD_MATCH);
     }
     if (canOnePassPrimary()) {
@@ -2903,7 +2845,7 @@ public final class Pattern implements Serializable {
   /** Holds precomputed data for the character-class-match fast path. */
   // TODO(#98): Replace int[] with Guava ImmutableIntArray to get proper value semantics.
   @SuppressWarnings("ArrayRecordComponent")
-  private record CharClassMatchInfo(int[] ranges, long bitmap0, long bitmap1, boolean allowEmpty) {}
+  record CharClassMatchInfo(int[] ranges, long bitmap0, long bitmap1, boolean allowEmpty) {}
 
   /** Holds precomputed data for scanning one character class. */
   static final class CharClassScanInfo {
