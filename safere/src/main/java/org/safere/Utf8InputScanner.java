@@ -326,13 +326,16 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
-  int indexOfAsciiClass(boolean[] asciiClass, int start) {
+  int indexOfAsciiClass(AsciiBitmap asciiClass, int start) {
+    if (asciiClass == null || asciiClass.isEmpty()) {
+      return -1;
+    }
     int first = -1;
     int second = -1;
     int last = -1;
     boolean contiguous = true;
-    for (int value = 0; value < asciiClass.length; value++) {
-      if (asciiClass[value]) {
+    for (int value = 0; value < 128; value++) {
+      if (asciiClass.contains(value)) {
         if (first < 0) {
           first = value;
         } else if (second < 0) {
@@ -400,13 +403,13 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
-  private int indexOfAsciiClassScalar(boolean[] asciiClass, int start) {
+  private int indexOfAsciiClassScalar(AsciiBitmap asciiClass, int start) {
     for (int position = start; position < length; position++) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }
       int value = bytes[offset + position] & 0xFF;
-      if (value < asciiClass.length && asciiClass[value]) {
+      if (asciiClass.contains(value)) {
         return position;
       }
     }

@@ -44,8 +44,7 @@ class Utf8LinearTimeTest {
   void singleValueAsciiPrefixScanAccountsForEveryExaminedByte() {
     byte[] input = "a".repeat(10_000).getBytes(UTF_8);
     Utf8InputScanner scanner = new Utf8InputScanner(input);
-    boolean[] asciiClass = new boolean[128];
-    asciiClass['z'] = true;
+    AsciiBitmap asciiClass = AsciiBitmap.of('z');
 
     long work =
         WorkCounter.countForTesting(

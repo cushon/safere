@@ -57,16 +57,16 @@ class PatternInternalTest {
   void transparentGroupsPreserveCharacterClassAccelerators() {
     Pattern p = Pattern.compile("(?:[A-Z]+)");
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['A']).isTrue();
+    assertThat(prefix.contains('A')).isTrue();
     assertThat(p.matchDescriptor().charClassMatch()).isNotNull();
   }
 
   @Test
   void asciiPrefixScanInfoHandlesMissingAndEmptyClasses() {
     assertThat(Pattern.buildAsciiClassScanInfo(null)).isNull();
-    assertThat(Pattern.buildAsciiClassScanInfo(new boolean[128])).isNull();
+    assertThat(Pattern.buildAsciiClassScanInfo(AsciiBitmap.EMPTY)).isNull();
   }
 
   @Test
@@ -146,48 +146,48 @@ class PatternInternalTest {
   @Test
   void alternatePrefixAcceleration() {
     Pattern p = Pattern.compile("(?:cat|dog|bird)s?");
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['c']).isTrue();
-    assertThat(prefix['d']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['a']).isFalse();
+    assertThat(prefix.contains('c')).isTrue();
+    assertThat(prefix.contains('d')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
   }
 
   @Test
   void alternatePrefixCaseInsensitiveAcceleration() {
     Pattern p = Pattern.compile("(?i)(?:cat|dog|bird)s?");
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['c']).isTrue();
-    assertThat(prefix['C']).isTrue();
-    assertThat(prefix['d']).isTrue();
-    assertThat(prefix['D']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['B']).isTrue();
-    assertThat(prefix['a']).isFalse();
+    assertThat(prefix.contains('c')).isTrue();
+    assertThat(prefix.contains('C')).isTrue();
+    assertThat(prefix.contains('d')).isTrue();
+    assertThat(prefix.contains('D')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('B')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
   }
 
   @Test
   void deeplyNestedRequiredQuantifierPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedRequiredPlusPattern(1_000, "[ab]"));
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['a']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['c']).isFalse();
+    assertThat(prefix.contains('a')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('c')).isFalse();
   }
 
   @Test
   void deeplyNestedAlternationPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedAlternationPattern(1_000));
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['a']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['c']).isFalse();
+    assertThat(prefix.contains('a')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('c')).isFalse();
   }
 
   @Test
@@ -473,19 +473,20 @@ class PatternInternalTest {
 
   private static Pattern.CharClassScanInfo assertAsciiScanInfo(
       int[] members, int[] expectedRanges) {
-    boolean[] asciiClass = new boolean[128];
+    AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
     for (int member : members) {
-      asciiClass[member] = true;
+      builder.add(member);
     }
+    AsciiBitmap asciiClass = builder.build();
 
     Pattern.CharClassScanInfo info = Pattern.buildAsciiClassScanInfo(asciiClass);
 
     assertThat(info).isNotNull();
     assertThat(info.ranges).containsExactly(expectedRanges);
-    for (int codePoint = 0; codePoint < asciiClass.length; codePoint++) {
+    for (int codePoint = 0; codePoint < 128; codePoint++) {
       assertThat(InputScanner.classContains(info.ranges, info.bitmap0, info.bitmap1, codePoint))
           .as("ASCII member %s", codePoint)
-          .isEqualTo(asciiClass[codePoint]);
+          .isEqualTo(asciiClass.contains(codePoint));
     }
     return info;
   }

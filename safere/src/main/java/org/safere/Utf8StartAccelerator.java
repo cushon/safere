@@ -82,8 +82,7 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  @SuppressWarnings("ArrayRecordComponent")
-  record FixedOffset(FixedOffsetLiteral fixedOffset, boolean[] charClassPrefixAscii)
+  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap charClassPrefixAscii)
       implements Utf8StartAccelerator {
 
     @Override
@@ -104,7 +103,7 @@ sealed interface Utf8StartAccelerator {
     private static int nextFixedOffsetCandidate(
         Utf8InputScanner scanner,
         FixedOffsetLiteral fixedOffsetLiteral,
-        boolean[] charClassPrefixAscii,
+        AsciiBitmap charClassPrefixAscii,
         int searchFrom) {
       int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
       int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
@@ -126,9 +125,7 @@ sealed interface Utf8StartAccelerator {
             int candidateStart = literalStart - offset;
             if (candidateStart >= searchFrom) {
               int first = scanner.asciiAt(candidateStart);
-              if (first >= 0
-                  && first < charClassPrefixAscii.length
-                  && charClassPrefixAscii[first]
+              if (charClassPrefixAscii.contains(first)
                   && (earliestValid < 0 || candidateStart < earliestValid)) {
                 earliestValid = candidateStart;
               }

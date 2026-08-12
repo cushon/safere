@@ -896,13 +896,13 @@ public final class Matcher implements MatchResult {
         }
       }
     } else if (parentPattern.charClassPrefixAscii() != null) {
-      boolean[] cc = parentPattern.charClassPrefixAscii();
+      AsciiBitmap cc = parentPattern.charClassPrefixAscii();
       if (text != null) {
         if (searchFrom >= text.length()) {
           return true;
         }
         char c = text.charAt(searchFrom);
-        if (c >= 128 || !cc[c]) {
+        if (!cc.contains(c)) {
           if (WorkCounterConfig.ENABLED) {
             WorkCounter.record(1);
           }
@@ -910,7 +910,7 @@ public final class Matcher implements MatchResult {
         }
       } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
         int ascii = utf8Scanner.asciiAt(searchFrom);
-        if (ascii < 0 || !cc[ascii]) {
+        if (!cc.contains(ascii)) {
           return true;
         }
       }

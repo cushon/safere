@@ -299,8 +299,7 @@ sealed interface RejectPrefilter
     }
   }
 
-  @SuppressWarnings("ArrayRecordComponent")
-  record EndAnchoredCharClass(boolean[] bitmap, boolean wasDollar) implements RejectPrefilter {
+  record EndAnchoredCharClass(AsciiBitmap bitmap, boolean wasDollar) implements RejectPrefilter {
     static EndAnchoredCharClass create(EndAnchoredCharClassInfo info) {
       if (info == null || info.bitmap() == null) {
         return null;
@@ -333,7 +332,7 @@ sealed interface RejectPrefilter
         return true;
       }
       int ascii = scanner.asciiAt(len - 1);
-      if (ascii >= 0 && bitmap[ascii]) {
+      if (bitmap.contains(ascii)) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(1);
         }
@@ -345,7 +344,7 @@ sealed interface RejectPrefilter
       int prevPos = scanner.trailingLineTerminatorStart(false, len);
       if (prevPos > 0) {
         int prevAscii = scanner.asciiAt(prevPos - 1);
-        if (prevAscii >= 0 && bitmap[prevAscii]) {
+        if (bitmap.contains(prevAscii)) {
           if (WorkCounterConfig.ENABLED) {
             WorkCounter.record(1);
           }
@@ -361,7 +360,7 @@ sealed interface RejectPrefilter
         return true;
       }
       char last = text.charAt(len - 1);
-      if (last < 128 && bitmap[last]) {
+      if (bitmap.contains(last)) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(1);
         }
@@ -374,7 +373,7 @@ sealed interface RejectPrefilter
         int effectiveLen = (len >= 2 && text.charAt(len - 2) == '\r') ? len - 2 : len - 1;
         if (effectiveLen > 0) {
           char prev = text.charAt(effectiveLen - 1);
-          if (prev < 128 && bitmap[prev]) {
+          if (bitmap.contains(prev)) {
             if (WorkCounterConfig.ENABLED) {
               WorkCounter.record(1);
             }
@@ -385,7 +384,7 @@ sealed interface RejectPrefilter
         int effectiveLen = len - 1;
         if (effectiveLen > 0) {
           char prev = text.charAt(effectiveLen - 1);
-          if (prev < 128 && bitmap[prev]) {
+          if (bitmap.contains(prev)) {
             if (WorkCounterConfig.ENABLED) {
               WorkCounter.record(1);
             }
