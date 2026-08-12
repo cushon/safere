@@ -1042,6 +1042,9 @@ public final class Pattern implements Serializable {
   private OnePassAnalysis onePassAnalysis() {
     OnePassAnalysis analysis = onePassAnalysis;
     if (analysis == null) {
+      // Lazy quantifiers are excluded because OnePass returns leftmost-longest capture group
+      // boundaries, which differs from leftmost-first semantics for lazy groups. When hasLazy is
+      // true, neither canPrimary nor canSubmatch can use OnePass, so we can skip building OnePass.
       if (hasLazy || prog.numCaptures() > OnePass.MAX_CAPTURE_GROUPS) {
         analysis = OnePassAnalysis.DISABLED;
       } else {
