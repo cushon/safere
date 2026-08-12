@@ -881,9 +881,54 @@ public final class Matcher implements MatchResult {
     }
   }
 
+  private boolean prefixOrCharClassCannotMatch(int searchFrom) {
+    if (parentPattern.prefix() != null && !parentPattern.prefixFoldCase()) {
+      if (text != null) {
+        if (!text.startsWith(parentPattern.prefix(), searchFrom)) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(parentPattern.prefix().length());
+          }
+          return true;
+        }
+      } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
+        if (!utf8Scanner.startsWith(parentPattern.prefixUtf8(), searchFrom)) {
+          return true;
+        }
+      }
+    } else if (parentPattern.charClassPrefixAscii() != null) {
+      boolean[] cc = parentPattern.charClassPrefixAscii();
+      if (text != null) {
+        if (searchFrom >= text.length()) {
+          return true;
+        }
+        char c = text.charAt(searchFrom);
+        if (c >= 128 || !cc[c]) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(1);
+          }
+          return true;
+        }
+      } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
+        int ascii = utf8Scanner.asciiAt(searchFrom);
+        if (ascii < 0 || !cc[ascii]) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /** Core matches fallback logic, operates on the (possibly substituted) {@code text} field. */
   private boolean matchesCore() {
     capturesResolved = true;
+
+    if (prefixOrCharClassCannotMatch(0)) {
+      MatchStrategy strat =
+          parentPattern.prefix() != null ? MatchStrategy.LITERAL : MatchStrategy.CHARACTER_CLASS;
+      diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
+      diagnosticBoundary(strat);
+      return applyFailedMatchResult();
+    }
 
     RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
     MatchStrategy rejectionStrategy = null;
@@ -1062,6 +1107,14 @@ public final class Matcher implements MatchResult {
   /** Core lookingAt fallback logic, operates on the (possibly substituted) {@code text} field. */
   private boolean lookingAtCore() {
     capturesResolved = true;
+
+    if (prefixOrCharClassCannotMatch(0)) {
+      MatchStrategy strat =
+          parentPattern.prefix() != null ? MatchStrategy.LITERAL : MatchStrategy.CHARACTER_CLASS;
+      diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
+      diagnosticBoundary(strat);
+      return applyFailedMatchResult();
+    }
 
     Prog prog = parentPattern.prog();
     InputScanner scanner = activeScanner();
@@ -1473,8 +1526,14 @@ public final class Matcher implements MatchResult {
     // without MULTILINE, or \A), there can be no match starting after position 0 (or regionStart
     // when a region is active). Return false immediately to avoid the DFA matching at every
     // position because the compiler strips the anchor into prog.anchorStart().
-    if (prog.anchorStart() && searchFrom > 0) {
-      return applyFailedMatchResult();
+    if (prog.anchorStart()) {
+      if (searchFrom > 0 || prefixOrCharClassCannotMatch(searchFrom)) {
+        MatchStrategy strat =
+            parentPattern.prefix() != null ? MatchStrategy.LITERAL : MatchStrategy.CHARACTER_CLASS;
+        diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(strat);
+        return applyFailedMatchResult();
+      }
     }
 
     boolean hasAcceleratedSearchPath =
@@ -1527,7 +1586,7 @@ public final class Matcher implements MatchResult {
     // character-class, or line-anchor), skip ahead to candidate match positions.
     int effectiveStart = searchFrom;
     boolean literalPrefixCandidateStart = false;
-    if (options.startAcceleration()) {
+    if (options.startAcceleration() && !prog.anchorStart()) {
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         Utf8StartAccelerator accelerator = parentPattern.utf8StartAccelerator();
         if (accelerator != null) {

@@ -604,11 +604,25 @@ public final class Pattern implements Serializable {
         && matchDescriptor.keywordAlternation() != null) {
       return matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
     }
+    if (prog.anchorStart()) {
+      if (prefixUtf8 != null && !prefixFoldCase) {
+        if (!scanner.startsWith(prefixUtf8, 0)) {
+          return false;
+        }
+      } else if (charClassPrefixAscii != null) {
+        int ascii = scanner.asciiAt(0);
+        if (ascii < 0 || !charClassPrefixAscii[ascii]) {
+          return false;
+        }
+      }
+    }
     if (rejectPrefilter != null && rejectPrefilter.canReject(scanner, 0, enginePathOptions)) {
       return false;
     }
     int searchStart = 0;
-    if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
+    if (enginePathOptions.startAcceleration()
+        && utf8StartAccelerator != null
+        && !prog.anchorStart()) {
       searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
       if (searchStart < 0) {
         return false;
@@ -648,12 +662,30 @@ public final class Pattern implements Serializable {
       diagnostics.boundary(MatchStrategy.KEYWORD);
       return matched;
     }
+    if (prog.anchorStart()) {
+      if (prefixUtf8 != null && !prefixFoldCase) {
+        if (!scanner.startsWith(prefixUtf8, 0)) {
+          diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
+          diagnostics.boundary(MatchStrategy.LITERAL);
+          return false;
+        }
+      } else if (charClassPrefixAscii != null) {
+        int ascii = scanner.asciiAt(0);
+        if (ascii < 0 || !charClassPrefixAscii[ascii]) {
+          diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
+          diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
+          return false;
+        }
+      }
+    }
     if (rejectPrefilter != null
         && rejectPrefilter.canRejectWithDiagnostics(scanner, 0, enginePathOptions, diagnostics)) {
       return false;
     }
     int searchStart = 0;
-    if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
+    if (enginePathOptions.startAcceleration()
+        && utf8StartAccelerator != null
+        && !prog.anchorStart()) {
       MatchStrategy strategy = utf8StartAccelerator.strategy();
       if (strategy != null) {
         diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
@@ -2990,7 +3022,9 @@ public final class Pattern implements Serializable {
         startDescriptor != null ? startDescriptor.charClassPrefixAscii() : null;
     String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
     CharClassScanInfo requiredMatchClass =
-        extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
+        (prefix == null && ccPrefixAscii == null)
+            ? extractRequiredMatchClass(metadataAst, false)
+            : null;
     DisjointRequiredLiterals disjointRequiredLiterals =
         (prefix == null && requiredLiteral == null)
             ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))

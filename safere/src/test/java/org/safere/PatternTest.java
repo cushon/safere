@@ -1194,4 +1194,61 @@ class PatternTest {
           .isFalse();
     }
   }
+
+  @Nested
+  @DisplayName("start-anchored prefix and char class fast paths")
+  class StartAnchoredPrefixTests {
+
+    @Test
+    @DisplayName(
+        "start-anchored literal prefix rejects mismatched inputs in find, matches, lookingAt")
+    void startAnchoredLiteralPrefixRejectsMismatchedInputs() {
+      Pattern p = Pattern.compile("^https://.*");
+
+      assertThat(p.matcher("https://example.com").find()).isTrue();
+      assertThat(p.matcher("https://example.com").matches()).isTrue();
+      assertThat(p.matcher("https://example.com").lookingAt()).isTrue();
+
+      assertThat(p.matcher("http://example.com").find()).isFalse();
+      assertThat(p.matcher("http://example.com").matches()).isFalse();
+      assertThat(p.matcher("http://example.com").lookingAt()).isFalse();
+
+      assertThat(p.matcher("prefix https://example.com").find()).isFalse();
+
+      // Utf8Input
+      byte[] matchUtf8 = "https://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] noMatchUtf8 = "http://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] lateMatchUtf8 =
+          "prefix https://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+      assertThat(p.find(Utf8Input.trusted(matchUtf8))).isTrue();
+      assertThat(p.find(Utf8Input.trusted(noMatchUtf8))).isFalse();
+      assertThat(p.find(Utf8Input.trusted(lateMatchUtf8))).isFalse();
+    }
+
+    @Test
+    @DisplayName("start-anchored character class rejects mismatched first character")
+    void startAnchoredCharClassRejectsMismatchedFirstChar() {
+      Pattern p = Pattern.compile("^[0-9]+[a-z]+");
+
+      assertThat(p.matcher("123abc").find()).isTrue();
+      assertThat(p.matcher("123abc").matches()).isTrue();
+      assertThat(p.matcher("123abc").lookingAt()).isTrue();
+
+      assertThat(p.matcher("abc123").find()).isFalse();
+      assertThat(p.matcher("abc123").matches()).isFalse();
+      assertThat(p.matcher("abc123").lookingAt()).isFalse();
+
+      assertThat(p.matcher("").find()).isFalse();
+      assertThat(p.matcher("").matches()).isFalse();
+      assertThat(p.matcher("").lookingAt()).isFalse();
+
+      // Utf8Input
+      byte[] matchUtf8 = "123abc".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] noMatchUtf8 = "abc123".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+      assertThat(p.find(Utf8Input.trusted(matchUtf8))).isTrue();
+      assertThat(p.find(Utf8Input.trusted(noMatchUtf8))).isFalse();
+    }
+  }
 }
