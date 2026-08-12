@@ -139,14 +139,13 @@ configuration error.
 The activation property, supported scans, implementation, and tuning thresholds are experimental
 and may change incompatibly or be removed in any SafeRE release.
 
-The SafeRE artifact also contains internal JDK 22+ `MemorySegment` scanning kernels in its
-multi-release JAR layer. These kernels are groundwork for future matching paths and are not
-currently selected by `Matcher`; they do not change the command-line flags required by users.
-
 ## Development
 
 SafeRE's production artifacts are built with JDK 26 and `--release 21`. CI executes the
 same compiled artifacts on JDK 21 through 26 to verify runtime compatibility.
+
+See the [Developer Guide](DEVELOPMENT.md) for repository workflows and the multi-release JAR
+structure used by JDK-specific implementations.
 
 SafeRE uses google-java-format through Spotless. To format Java sources, run:
 
