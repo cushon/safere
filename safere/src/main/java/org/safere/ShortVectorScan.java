@@ -27,8 +27,7 @@ final class ShortVectorScan {
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
   private static final VectorSpecies<Byte> BYTE_SPECIES = SPECIES.withLanes(byte.class);
 
-  public static int indexOfCharClass(
-      char[] chars, int offset, int length, int[] ranges, int start) {
+  static int indexOfCharClass(char[] chars, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 4)) {
       return VectorScanProvider.UNSUPPORTED;
     }
@@ -53,8 +52,7 @@ final class ShortVectorScan {
     return -1;
   }
 
-  public static int indexOfCharClassUtf16(
-      byte[] bytes, int offset, int length, int[] ranges, int start) {
+  static int indexOfCharClassUtf16(byte[] bytes, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 4) || nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;
     }
@@ -83,8 +81,7 @@ final class ShortVectorScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCase(
-      char[] chars, int offset, int length, String prefix, int start) {
+  static int indexOfIgnoreCase(char[] chars, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
@@ -138,7 +135,7 @@ final class ShortVectorScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCaseUtf16(
+  static int indexOfIgnoreCaseUtf16(
       byte[] bytes, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {

@@ -26,11 +26,11 @@ final class SegmentShortVectorScan {
 
   private SegmentShortVectorScan() {}
 
-  public static int minimumInputLength() {
+  static int minimumInputLength() {
     return SPECIES.length();
   }
 
-  public static int indexOfCharClassUtf16(
+  static int indexOfCharClassUtf16(
       MemorySegment segment, long byteOffset, int charLength, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 4)) {
       return UNSUPPORTED;
@@ -85,7 +85,7 @@ final class SegmentShortVectorScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCaseUtf16(
+  static int indexOfIgnoreCaseUtf16(
       MemorySegment segment, long byteOffset, int charLength, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {

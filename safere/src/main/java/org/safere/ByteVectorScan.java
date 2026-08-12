@@ -19,8 +19,7 @@ import org.safere.internal.Swar;
 final class ByteVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
-  public static int indexOfAsciiClass(
-      byte[] bytes, int offset, int length, int[] ranges, int start) {
+  static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsAsciiRanges(ranges, 4)) {
       return VectorScanProvider.UNSUPPORTED;
     }

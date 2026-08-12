@@ -26,11 +26,11 @@ final class SegmentByteVectorScan {
 
   private SegmentByteVectorScan() {}
 
-  public static int minimumInputLength() {
+  static int minimumInputLength() {
     return SPECIES.length();
   }
 
-  public static int indexOfAsciiClass(
+  static int indexOfAsciiClass(
       MemorySegment segment, long offset, long length, int[] ranges, int start) {
     int numRanges = ranges.length / 2;
     if (length > Integer.MAX_VALUE || !Swar.supportsAsciiRanges(ranges, 4)) {
@@ -65,7 +65,7 @@ final class SegmentByteVectorScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCase(
+  static int indexOfIgnoreCase(
       MemorySegment segment, long offset, long length, String prefix, int start) {
     if (length > Integer.MAX_VALUE) {
       return UNSUPPORTED;

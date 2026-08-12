@@ -23,8 +23,7 @@ final class ShortSwarScan {
 
   private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, LITTLE_ENDIAN);
 
-  public static int indexOfCharClass(
-      char[] chars, int offset, int length, int[] ranges, int start) {
+  static int indexOfCharClass(char[] chars, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 2)) {
       return VectorScanProvider.UNSUPPORTED;
     }
@@ -85,8 +84,7 @@ final class ShortSwarScan {
     return -1;
   }
 
-  public static int indexOfCharClassUtf16(
-      byte[] bytes, int offset, int length, int[] ranges, int start) {
+  static int indexOfCharClassUtf16(byte[] bytes, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 2) || nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;
     }
@@ -156,8 +154,7 @@ final class ShortSwarScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCase(
-      char[] chars, int offset, int length, String prefix, int start) {
+  static int indexOfIgnoreCase(char[] chars, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
@@ -209,7 +206,7 @@ final class ShortSwarScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCaseUtf16(
+  static int indexOfIgnoreCaseUtf16(
       byte[] bytes, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {

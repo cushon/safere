@@ -20,7 +20,7 @@ final class SegmentShortSwarScan {
 
   private SegmentShortSwarScan() {}
 
-  public static int indexOfCharClassUtf16(
+  static int indexOfCharClassUtf16(
       MemorySegment segment, long byteOffset, int charLength, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 2)) {
       return Swar.UNSUPPORTED;
@@ -105,7 +105,7 @@ final class SegmentShortSwarScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCaseUtf16(
+  static int indexOfIgnoreCaseUtf16(
       MemorySegment segment, long byteOffset, int charLength, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {

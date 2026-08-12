@@ -15,7 +15,7 @@ final class SegmentByteSwarScan {
 
   private SegmentByteSwarScan() {}
 
-  public static int indexOfAsciiClass(
+  static int indexOfAsciiClass(
       MemorySegment segment, long offset, long length, int[] ranges, int start) {
     if (length > Integer.MAX_VALUE) {
       return Swar.UNSUPPORTED;
@@ -85,7 +85,7 @@ final class SegmentByteSwarScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCase(
+  static int indexOfIgnoreCase(
       MemorySegment segment, long offset, long length, String prefix, int start) {
     if (length > Integer.MAX_VALUE) {
       return Swar.UNSUPPORTED;

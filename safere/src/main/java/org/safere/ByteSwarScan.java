@@ -312,8 +312,7 @@ abstract class ByteSwarScan {
     return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, length);
   }
 
-  public static int indexOfAsciiClass(
-      byte[] bytes, int offset, int length, int[] ranges, int start) {
+  static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsAsciiRanges(ranges, 2)) {
       return VectorScanProvider.UNSUPPORTED;
     }
