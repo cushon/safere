@@ -1002,7 +1002,14 @@ public final class Pattern implements Serializable {
   Dfa forwardFirstMatchDfa() {
     Dfa dfa = cachedForwardFirstMatchDfa.get();
     if (dfa == null) {
-      dfa = new Dfa(flatDfaProg, MAX_DFA_STATES, forwardDfaSetup(), false);
+      dfa =
+          new Dfa(
+              flatDfaProg,
+              MAX_DFA_STATES,
+              forwardDfaSetup(),
+              false,
+              utf8StartAccelerator,
+              stringStartAccelerator);
       cachedForwardFirstMatchDfa.set(dfa);
     }
     return dfa;
@@ -1011,7 +1018,14 @@ public final class Pattern implements Serializable {
   Dfa forwardLongestMatchDfa() {
     Dfa dfa = cachedForwardLongestMatchDfa.get();
     if (dfa == null) {
-      dfa = new Dfa(flatDfaProg, MAX_DFA_STATES, forwardDfaSetup(), true);
+      dfa =
+          new Dfa(
+              flatDfaProg,
+              MAX_DFA_STATES,
+              forwardDfaSetup(),
+              true,
+              utf8StartAccelerator,
+              stringStartAccelerator);
       cachedForwardLongestMatchDfa.set(dfa);
     }
     return dfa;

@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
@@ -508,5 +509,73 @@ class DfaTest {
     assertThat(second.matched()).isTrue();
     assertThat(first.ambiguous()).isTrue();
     assertThat(second.ambiguous()).isTrue();
+  }
+
+  @Nested
+  @DisplayName("Self-Loop Escape Acceleration")
+  class SelfLoopEscapeAcceleration {
+    @Test
+    void quotedStringLongPayload() {
+      String filler = "x".repeat(5000);
+      String text = "prefix \"" + filler + "\" suffix";
+      Dfa.SearchResult result = search("\"[^\"]*\"", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(8 + 5000 + 1);
+    }
+
+    @Test
+    void headerLineTerminatorLongPayload() {
+      String filler = "a".repeat(10000);
+      String text = "header:" + filler + "\nrest";
+      Dfa.SearchResult result = search("header:[^\n]*\n", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(7 + 10000 + 1);
+    }
+
+    @Test
+    void htmlTagLongPayload() {
+      String filler = "content".repeat(1000);
+      String text = "before <div " + filler + "> after";
+      Dfa.SearchResult result = search("<[^>]*>", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(12 + 7000 + 1);
+    }
+
+    @Test
+    void multiEscapeBytePair() {
+      String filler = "data".repeat(1000);
+      String text = "prefix " + filler + ",suffix";
+      Dfa.SearchResult result = search("[^,\n]*,", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(7 + 4000 + 1);
+    }
+
+    @Test
+    void selfLoopNoEscapeFoundUntilEof() {
+      String filler = "x".repeat(5000);
+      String text = "start \"" + filler;
+      Dfa.SearchResult result = search("\"[^\"]*\"", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isFalse();
+    }
+
+    @Test
+    void selfLoopUtf8ScannerEquivalence() {
+      String filler = "x".repeat(2000);
+      String text = "start \"" + filler + "\" end";
+      byte[] bytes = text.getBytes(UTF_8);
+      Regexp re = Parser.parse("\"[^\"]*\"", FLAGS);
+      Prog prog = Compiler.compile(re);
+      Utf8InputScanner scanner = new Utf8InputScanner(bytes, 0, bytes.length);
+      Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+      Dfa.SearchResult result = dfa.doSearch(scanner, 0, false, false);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(7 + 2000 + 1);
+    }
   }
 }

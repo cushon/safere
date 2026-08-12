@@ -43,6 +43,19 @@ sealed interface StringStartAccelerator {
    */
   int findCandidate(String text, int fromIndex, boolean unixLines);
 
+  /**
+   * Minimum skip distance (in bytes or chars) required for this accelerator to be profitable over
+   * direct DFA execution.
+   */
+  default int minProfitableSkip() {
+    return 32;
+  }
+
+  /** Number of consecutive sub-threshold skips tolerated before defeat. */
+  default int strikeBudget() {
+    return 3;
+  }
+
   /** Returns the diagnostic strategy associated with this accelerator, or {@code null} if none. */
   MatchStrategy strategy();
 
@@ -67,6 +80,16 @@ sealed interface StringStartAccelerator {
 
     public boolean prefixFoldCase() {
       return prefixFoldCase;
+    }
+
+    @Override
+    public int minProfitableSkip() {
+      return 16;
+    }
+
+    @Override
+    public int strikeBudget() {
+      return 4;
     }
 
     @Override
@@ -106,6 +129,16 @@ sealed interface StringStartAccelerator {
 
     public boolean[] firstAscii() {
       return firstAscii;
+    }
+
+    @Override
+    public int minProfitableSkip() {
+      return 16;
+    }
+
+    @Override
+    public int strikeBudget() {
+      return 4;
     }
 
     @Override
@@ -199,6 +232,16 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
+    public int minProfitableSkip() {
+      return 24;
+    }
+
+    @Override
+    public int strikeBudget() {
+      return 3;
+    }
+
+    @Override
     public MatchStrategy strategy() {
       return MatchStrategy.CHARACTER_CLASS;
     }
@@ -236,6 +279,16 @@ sealed interface StringStartAccelerator {
 
     public StartAcceleration startAcceleration() {
       return startAcceleration;
+    }
+
+    @Override
+    public int minProfitableSkip() {
+      return 16;
+    }
+
+    @Override
+    public int strikeBudget() {
+      return 3;
     }
 
     @Override

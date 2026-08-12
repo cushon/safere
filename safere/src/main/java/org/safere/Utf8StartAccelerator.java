@@ -45,6 +45,19 @@ sealed interface Utf8StartAccelerator {
    */
   int findCandidate(Utf8InputScanner scanner, int fromIndex);
 
+  /**
+   * Minimum skip distance (in bytes) required for this accelerator to be profitable over direct DFA
+   * execution.
+   */
+  default int minProfitableSkip() {
+    return 32;
+  }
+
+  /** Number of consecutive sub-threshold skips tolerated before defeat. */
+  default int strikeBudget() {
+    return 3;
+  }
+
   /** Returns the diagnostic strategy associated with this accelerator, or {@code null} if none. */
   MatchStrategy strategy();
 
@@ -61,6 +74,16 @@ sealed interface Utf8StartAccelerator {
     static Literal create(String prefix) {
       byte[] utf8 = prefix.getBytes(StandardCharsets.UTF_8);
       return new Literal(utf8, Pattern.literalFailure(utf8), Pattern.literalShifts(utf8));
+    }
+
+    @Override
+    public int minProfitableSkip() {
+      return 16;
+    }
+
+    @Override
+    public int strikeBudget() {
+      return 4;
     }
 
     @Override
@@ -85,6 +108,16 @@ sealed interface Utf8StartAccelerator {
   @SuppressWarnings("ArrayRecordComponent")
   record FixedOffset(FixedOffsetLiteral fixedOffset, boolean[] charClassPrefixAscii)
       implements Utf8StartAccelerator {
+
+    @Override
+    public int minProfitableSkip() {
+      return 16;
+    }
+
+    @Override
+    public int strikeBudget() {
+      return 4;
+    }
 
     @Override
     public MatchStrategy strategy() {
@@ -148,6 +181,16 @@ sealed interface Utf8StartAccelerator {
   }
 
   record CharClass(CharClassScanInfo scanInfo) implements Utf8StartAccelerator {
+
+    @Override
+    public int minProfitableSkip() {
+      return 24;
+    }
+
+    @Override
+    public int strikeBudget() {
+      return 3;
+    }
 
     @Override
     public MatchStrategy strategy() {
