@@ -52,6 +52,22 @@ record AsciiBitmap(long bitmap0, long bitmap1) {
     return new AsciiBitmap(this.bitmap0 | other.bitmap0, this.bitmap1 | other.bitmap1);
   }
 
+  /** Returns a 128-element boolean lookup array for maximum scalar loop throughput. */
+  boolean[] toBooleanArray() {
+    boolean[] array = new boolean[128];
+    for (int i = 0; i < 64; i++) {
+      if ((bitmap0 & (1L << i)) != 0) {
+        array[i] = true;
+      }
+    }
+    for (int i = 0; i < 64; i++) {
+      if ((bitmap1 & (1L << i)) != 0) {
+        array[64 + i] = true;
+      }
+    }
+    return array;
+  }
+
   static final class Builder {
     private long b0;
     private long b1;
