@@ -449,7 +449,10 @@ public final class Pattern implements Serializable {
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
     RejectDescriptor rejectDescriptor =
         extractRejectDescriptor(
-            metadataAst, startDescriptor.prefix(), startDescriptor.charClassPrefixAscii());
+            metadataAst,
+            effectiveFlags,
+            startDescriptor.prefix(),
+            startDescriptor.charClassPrefixAscii());
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,
@@ -1213,6 +1216,12 @@ public final class Pattern implements Serializable {
   String[] requiredDisjointLiterals() {
     return rejectDescriptor.disjointRequiredLiterals() != null
         ? rejectDescriptor.disjointRequiredLiterals().literals()
+        : null;
+  }
+
+  String endAnchoredSuffix() {
+    return rejectDescriptor.endAnchoredSuffix() != null
+        ? rejectDescriptor.endAnchoredSuffix().suffix()
         : null;
   }
 
@@ -2998,9 +3007,12 @@ public final class Pattern implements Serializable {
     return buildCharClassScanInfo(cc);
   }
 
+  public record SuffixInfo(String suffix, boolean wasDollar) {}
+
   /** Extracts whole-input rejection metadata from the AST. */
   private static RejectDescriptor extractRejectDescriptor(
-      Regexp metadataAst, String prefix, boolean[] ccPrefixAscii) {
+      Regexp metadataAst, int flags, String prefix, boolean[] ccPrefixAscii) {
+    SuffixInfo endAnchoredSuffix = extractEndAnchoredSuffix(metadataAst, flags);
     String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
     CharClassScanInfo requiredMatchClass =
         extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
@@ -3008,10 +3020,57 @@ public final class Pattern implements Serializable {
         (prefix == null && requiredLiteral == null)
             ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
             : null;
-    if (requiredLiteral == null && requiredMatchClass == null && disjointRequiredLiterals == null) {
+    if (requiredLiteral == null
+        && requiredMatchClass == null
+        && disjointRequiredLiterals == null
+        && endAnchoredSuffix == null) {
       return null;
     }
-    return new RejectDescriptor(requiredLiteral, requiredMatchClass, disjointRequiredLiterals);
+    return new RejectDescriptor(
+        requiredLiteral, requiredMatchClass, disjointRequiredLiterals, endAnchoredSuffix);
+  }
+
+  /**
+   * Extracts a case-sensitive literal suffix from an end-anchored pattern (e.g. {@code
+   * .*\\.json$}).
+   *
+   * <p>Returns {@code null} if the pattern is not end-anchored, if the pattern is compiled with
+   * {@link #MULTILINE} and ends with {@code $}, or if no literal precedes the anchor.
+   */
+  private static SuffixInfo extractEndAnchoredSuffix(Regexp metadataAst, int flags) {
+    Regexp node = unwrapCaptures(metadataAst);
+    if (node == null || node.op != RegexpOp.CONCAT || node.nsub() < 2) {
+      return null;
+    }
+    List<Regexp> subs = node.subs;
+    Regexp last = unwrapCaptures(subs.get(subs.size() - 1));
+    if (last == null || last.op != RegexpOp.END_TEXT) {
+      return null;
+    }
+    if ((flags & MULTILINE) != 0 && (last.flags & ParseFlags.WAS_DOLLAR) != 0) {
+      return null;
+    }
+    boolean wasDollar = (last.flags & ParseFlags.WAS_DOLLAR) != 0;
+
+    StringBuilder suffix = new StringBuilder();
+    for (int i = subs.size() - 2; i >= 0; i--) {
+      Regexp sub = unwrapCaptures(subs.get(i));
+      if (sub == null) {
+        break;
+      }
+      if (sub.op == RegexpOp.LITERAL && (sub.flags & ParseFlags.FOLD_CASE) == 0) {
+        suffix.insert(0, Character.toString(sub.rune));
+      } else if (sub.op == RegexpOp.LITERAL_STRING
+          && (sub.flags & ParseFlags.FOLD_CASE) == 0
+          && sub.runes != null) {
+        for (int j = sub.runes.length - 1; j >= 0; j--) {
+          suffix.insert(0, Character.toString(sub.runes[j]));
+        }
+      } else {
+        break;
+      }
+    }
+    return suffix.isEmpty() ? null : new SuffixInfo(suffix.toString(), wasDollar);
   }
 
   /**

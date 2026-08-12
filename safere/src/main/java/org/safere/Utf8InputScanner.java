@@ -9,6 +9,7 @@ import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
 
 import java.lang.invoke.VarHandle;
+import java.util.Arrays;
 
 final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   private static final int REPLACEMENT_CHARACTER = 0xFFFD;
@@ -53,6 +54,48 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
 
   Utf8InputScanner slice(int start, int end) {
     return new Utf8InputScanner(bytes, offset + start, end - start);
+  }
+
+  boolean endsWith(byte[] suffix, boolean wasDollar) {
+    int suffixLen = suffix.length;
+    if (length >= suffixLen) {
+      int start = offset + length - suffixLen;
+      if (Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(suffixLen);
+        }
+        return true;
+      }
+    }
+    if (!wasDollar || length == 0) {
+      return false;
+    }
+    byte last = bytes[offset + length - 1];
+    if (last == '\n') {
+      int effectiveLen =
+          (length >= 2 && bytes[offset + length - 2] == '\r') ? length - 2 : length - 1;
+      if (effectiveLen >= suffixLen) {
+        int start = offset + effectiveLen - suffixLen;
+        if (Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(suffixLen);
+          }
+          return true;
+        }
+      }
+    } else if (last == '\r') {
+      int effectiveLen = length - 1;
+      if (effectiveLen >= suffixLen) {
+        int start = offset + effectiveLen - suffixLen;
+        if (Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(suffixLen);
+          }
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   @Override

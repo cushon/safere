@@ -351,6 +351,37 @@ class PatternInternalTest {
     assertThat(Pattern.compile(regex).rejectDescriptor().requiredLiteral()).isNull();
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "'.*\\.json$',                         .json",
+    "'.*report_2026\\.log$',               report_2026.log",
+    "'.*(foo)(bar)$',                      foobar",
+    "'[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$',  ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "'.*test\\z',                          test"
+  })
+  void endAnchoredLiteralSuffixIsRecorded(String regex, String expected) {
+    assertThat(Pattern.compile(regex).endAnchoredSuffix()).isEqualTo(expected);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {".*", ".*json", "(?m).*\\.json$", "(?i).*\\.json$"})
+  void unanchoredOrMultilineDollarDoNotRecordEndAnchoredSuffix(String regex) {
+    assertThat(Pattern.compile(regex).endAnchoredSuffix()).isNull();
+  }
+
+  @Test
+  void endAnchoredSuffixRejectsUtf8Input() {
+    Pattern p = Pattern.compile(".*\\.json$");
+    assertThat(
+            p.find(
+                Utf8Input.trusted("config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+        .isTrue();
+    assertThat(
+            p.find(
+                Utf8Input.trusted("config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+        .isFalse();
+  }
+
   @Test
   void disjointRequiredLiteralsAreRecordedForAlternations() {
     Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");

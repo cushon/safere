@@ -164,6 +164,51 @@ class RejectPrefilterTest {
     assertThat(prefilter.canReject(null, "I like grape juice", 0, disabled)).isFalse();
   }
 
+  @Test
+  void endAnchoredSuffixRejectPrefilterRejectsMismatchedSuffix() {
+    Pattern.SuffixInfo info = new Pattern.SuffixInfo(".json", true);
+    RejectDescriptor desc = new RejectDescriptor(null, null, null, info);
+    assertThat(desc.hasRejectionFilter()).isTrue();
+
+    RejectPrefilter prefilter = RejectPrefilter.create(desc);
+    assertThat(prefilter).isInstanceOf(RejectPrefilter.EndAnchoredSuffix.class);
+    assertThat(prefilter.strategy()).isEqualTo(MatchStrategy.LITERAL);
+
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    // String input
+    assertThat(prefilter.canReject(null, "config.json", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.json\n", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.json\r\n", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.yaml", 0, options)).isTrue();
+    assertThat(prefilter.canReject(null, "config.yaml\n", 0, options)).isTrue();
+
+    // UTF-8 input
+    assertThat(prefilter.canReject(utf8Scanner("config.json"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.json\n"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.json\r\n"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.yaml"), 0, options)).isTrue();
+    assertThat(prefilter.canReject(utf8Scanner("config.yaml\n"), 0, options)).isTrue();
+
+    // Diagnostics
+    DiagnosticAccumulator accumulator = new DiagnosticAccumulator();
+    Utf8InputScanner scanner = utf8Scanner("config.yaml");
+    boolean rejected = prefilter.canRejectWithDiagnostics(scanner, 0, options, accumulator);
+    assertThat(rejected).isTrue();
+
+    Pattern pattern = Pattern.compile(".*\\.json$");
+    OperationDiagnostics event =
+        accumulator.toEvent(
+            pattern.descriptor(),
+            MatchOperation.FIND,
+            MatchOutcome.NO_MATCH,
+            CaptureMode.NONE,
+            scanner.length());
+    assertThat(event.auxiliaryStrategies())
+        .contains(new StrategyParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER));
+    assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.LITERAL);
+  }
+
   private static Utf8InputScanner utf8Scanner(String text) {
     byte[] bytes = text.getBytes(UTF_8);
     return new Utf8InputScanner(bytes, 0, bytes.length);

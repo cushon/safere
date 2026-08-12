@@ -1130,4 +1130,69 @@ class PatternTest {
       assertThat(p.find(input)).isTrue();
     }
   }
+
+  @Nested
+  @DisplayName("end-anchored suffix reject prefilter")
+  class EndAnchoredSuffixTests {
+
+    @Test
+    @DisplayName("matches and find reject inputs not ending with suffix")
+    void endAnchoredSuffixRejectsMismatchedInputs() {
+      Pattern p = Pattern.compile(".*\\.json$");
+      assertThat(p.endAnchoredSuffix()).isEqualTo(".json");
+
+      assertThat(p.matcher("config.json").matches()).isTrue();
+      assertThat(p.matcher("config.json").find()).isTrue();
+
+      assertThat(p.matcher("config.yaml").matches()).isFalse();
+      assertThat(p.matcher("config.yaml").find()).isFalse();
+
+      assertThat(p.matcher(".json").matches()).isTrue();
+      assertThat(p.matcher(".jso").matches()).isFalse();
+
+      // Utf8Input
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isFalse();
+    }
+
+    @Test
+    @DisplayName("dollar anchor matches optional trailing newlines")
+    void dollarAnchorMatchesOptionalTrailingNewlines() {
+      Pattern p = Pattern.compile(".*\\.json$");
+
+      assertThat(p.matcher("config.json\n").find()).isTrue();
+      assertThat(p.matcher("config.json\r\n").find()).isTrue();
+      assertThat(p.matcher("config.json\r").find()).isTrue();
+      assertThat(p.matcher("config.yaml\n").find()).isFalse();
+
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.json\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.json\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.json\r".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.yaml\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isFalse();
+    }
+  }
 }

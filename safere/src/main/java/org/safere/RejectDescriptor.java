@@ -7,6 +7,7 @@ package org.safere;
 
 import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.DisjointRequiredLiterals;
+import org.safere.Pattern.SuffixInfo;
 
 /**
  * Metadata extracted from a regular expression AST describing mandatory content that any match must
@@ -15,15 +16,26 @@ import org.safere.Pattern.DisjointRequiredLiterals;
 record RejectDescriptor(
     String requiredLiteral,
     CharClassScanInfo requiredCharClass,
-    DisjointRequiredLiterals disjointRequiredLiterals) {
+    DisjointRequiredLiterals disjointRequiredLiterals,
+    SuffixInfo endAnchoredSuffix) {
 
   RejectDescriptor(String requiredLiteral, CharClassScanInfo requiredCharClass) {
-    this(requiredLiteral, requiredCharClass, null);
+    this(requiredLiteral, requiredCharClass, null, null);
   }
 
-  static final RejectDescriptor NONE = new RejectDescriptor(null, null, null);
+  RejectDescriptor(
+      String requiredLiteral,
+      CharClassScanInfo requiredCharClass,
+      DisjointRequiredLiterals disjointRequiredLiterals) {
+    this(requiredLiteral, requiredCharClass, disjointRequiredLiterals, null);
+  }
+
+  static final RejectDescriptor NONE = new RejectDescriptor(null, null, null, null);
 
   boolean hasRejectionFilter() {
-    return requiredLiteral != null || requiredCharClass != null || disjointRequiredLiterals != null;
+    return requiredLiteral != null
+        || requiredCharClass != null
+        || disjointRequiredLiterals != null
+        || endAnchoredSuffix != null;
   }
 }
