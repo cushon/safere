@@ -59,12 +59,23 @@ public final class Matcher implements MatchResult {
   private static final int MIN_REVERSE_FIRST_LEN = 1024;
 
   /**
-   * Maximum text length for the anchored OnePass fast path. For anchored patterns where the OnePass
-   * DFA built successfully, skip the DFA sandwich entirely and use OnePass as the primary engine.
-   * Matches C++ RE2's threshold (re2.cc line 838). For larger texts, the DFA's cached state
-   * transitions are more efficient.
+   * Returns the maximum input text length eligible for anchored OnePass execution based on whether
+   * inner capture extraction is required.
+   *
+   * <ul>
+   *   <li><b>No inner captures (&lt;= 256 bytes)</b>: For short strings, OnePass avoids the lazy
+   *       DFA initialization overhead (~50-80 ns). For larger texts without captures, Forward DFA's
+   *       direct transition table loop is ~3x faster in replacements and up to 32x faster in
+   *       matches.
+   *   <li><b>With inner captures (&lt;= 65536 bytes)</b>: OnePass extracts capture group boundaries
+   *       in a single linear pass, outperforming the multi-pass DFA + BitState/NFA submatch
+   *       extraction sandwich (2x-28x speedup) and avoiding the Java NFA heap allocation cliff at
+   *       &gt;= 16 KB.
+   * </ul>
    */
-  private static final int ONEPASS_ANCHORED_TEXT_LIMIT = 4096;
+  private static int onePassTextLimit(boolean requiresInnerCaptures) {
+    return requiresInnerCaptures ? 65536 : 256;
+  }
 
   /**
    * Maximum number of submatches (including group 0) for lazy fallback capture extraction.
@@ -2594,10 +2605,11 @@ public final class Matcher implements MatchResult {
         parentPattern.prog().anchorStart()
             && (parentPattern.prog().anchorEnd() || parentPattern.prog().dollarAnchorEnd());
 
+    boolean requiresCaptures = template.needsCaptures();
     if (!enginePathOptions().onePass()
         || !parentPattern.canOnePassFind()
         || !isFullAnchored
-        || text.length() > ONEPASS_ANCHORED_TEXT_LIMIT
+        || text.length() > onePassTextLimit(requiresCaptures)
         || regionActive
         || searchFrom != 0) {
       return null;
@@ -4409,9 +4421,11 @@ public final class Matcher implements MatchResult {
 
     // Anchored OnePass runner
     if (options.onePass()
-        && (parentPattern.canOnePassFind() || parentPattern.canOnePassPrimary())
-        && activeScanner().length() <= ONEPASS_ANCHORED_TEXT_LIMIT) {
-      return new OnePassAnchoredPreparedRunner(prog.numCaptures());
+        && (parentPattern.canOnePassFind() || parentPattern.canOnePassPrimary())) {
+      boolean requiresCaptures = parentPattern.prog().numCaptures() > 0;
+      if (activeScanner().length() <= onePassTextLimit(requiresCaptures)) {
+        return new OnePassAnchoredPreparedRunner(prog.numCaptures());
+      }
     }
 
     return FallbackPreparedRunner.INSTANCE;
