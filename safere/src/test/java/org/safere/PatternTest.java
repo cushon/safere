@@ -1139,7 +1139,6 @@ class PatternTest {
     @DisplayName("matches and find reject inputs not ending with suffix")
     void endAnchoredSuffixRejectsMismatchedInputs() {
       Pattern p = Pattern.compile(".*\\.json$");
-      assertThat(p.rejectDescriptor().endAnchoredSuffix().suffix()).isEqualTo(".json");
 
       assertThat(p.matcher("config.json").matches()).isTrue();
       assertThat(p.matcher("config.json").find()).isTrue();

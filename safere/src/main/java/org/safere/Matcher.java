@@ -1484,9 +1484,7 @@ public final class Matcher implements MatchResult {
                 && scanner.length() >= MIN_REVERSE_FIRST_LEN
                 && canUseReverseDfa());
     RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
-    if (!hasAcceleratedSearchPath
-        && rejectPrefilter != null
-        && (text != null || scanner instanceof Utf8InputScanner)) {
+    if (rejectPrefilter != null && (text != null || scanner instanceof Utf8InputScanner)) {
       MatchStrategy rejectionStrategy =
           rejectPrefilter instanceof RejectPrefilter.Composite composite
               ? composite.rejectionStrategy(scanner, text, searchFrom, options)
