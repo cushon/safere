@@ -221,6 +221,9 @@ public final class ShortVectorScan {
     if (high == low + 1) {
       return values.eq(low).or(values.eq(high));
     }
+    if (highBound <= 0x7FFF || lowBound >= 0x8000) {
+      return values.compare(GE, low).and(values.compare(LE, high));
+    }
     ShortVector biasedValues = values.lanewise(VectorOperators.XOR, Short.MIN_VALUE);
     short biasedLow = (short) (low ^ Short.MIN_VALUE);
     short biasedHigh = (short) (high ^ Short.MIN_VALUE);

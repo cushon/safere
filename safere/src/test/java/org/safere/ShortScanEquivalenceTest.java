@@ -218,6 +218,27 @@ class ShortScanEquivalenceTest {
   }
 
   @Test
+  @DisplayName("UTF-16 vector kernels compare ranges within each signed half directly")
+  void utf16RangesWithinSignedHalves() {
+    if (!isVectorApiAvailable()) {
+      return;
+    }
+    char[] chars = new char[64];
+    java.util.Arrays.fill(chars, '\uA000');
+    chars[10] = '\u7500';
+    chars[20] = '\u8500';
+    byte[] utf16Bytes = new String(chars).getBytes(UTF_16LE);
+
+    for (int[] ranges : new int[][] {{0x7000, 0x7FFF}, {0x8000, 0x9000}}) {
+      int expected = scalarIndexOfCharClass(chars, ranges, 0);
+      assertThat(ShortVectorScan.indexOfCharClass(chars, 0, chars.length, ranges, 0))
+          .isEqualTo(expected);
+      assertThat(ShortVectorScan.indexOfCharClassUtf16(utf16Bytes, 0, chars.length, ranges, 0))
+          .isEqualTo(expected);
+    }
+  }
+
+  @Test
   @DisplayName("Public array kernels handle empty prefixes and unsupported byte ranges")
   void publicKernelEdgeInputs() {
     char[] chars = "abc".toCharArray();

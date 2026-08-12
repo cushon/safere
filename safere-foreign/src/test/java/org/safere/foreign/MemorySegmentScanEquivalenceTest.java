@@ -293,6 +293,22 @@ class MemorySegmentScanEquivalenceTest {
   }
 
   @Test
+  @DisplayName("MemorySegment vector kernels compare ranges within each signed half directly")
+  void segmentUtf16RangesWithinSignedHalves() {
+    char[] chars = new char[64];
+    java.util.Arrays.fill(chars, '\uA000');
+    chars[10] = '\u7500';
+    chars[20] = '\u8500';
+    MemorySegment utf16 = MemorySegment.ofArray(new String(chars).getBytes(UTF_16LE));
+
+    for (int[] ranges : new int[][] {{0x7000, 0x7FFF}, {0x8000, 0x9000}}) {
+      int expected = scalarIndexOfCharClassUtf16(chars, ranges, 0);
+      assertThat(SegmentShortVectorScan.indexOfCharClassUtf16(utf16, 0, chars.length, ranges, 0))
+          .isEqualTo(expected);
+    }
+  }
+
+  @Test
   @DisplayName("Byte MemorySegment kernels reject unrepresentable result positions")
   void byteSegmentKernelsRejectUnrepresentableLength() {
     MemorySegment segment = MemorySegment.ofArray(new byte[] {'a'});
