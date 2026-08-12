@@ -6,7 +6,9 @@
 package org.safere;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Helper to traverse the {@link Regexp} AST at compile time and extract candidate literal strings
@@ -19,6 +21,19 @@ final class LiteralExtractor {
       List<String> literals, boolean isCaseInsensitive, boolean isPureLiteralAlternation) {
     Result {
       literals = List.copyOf(literals);
+    }
+
+    public int distinctFirstCodePoints() {
+      if (literals.isEmpty()) {
+        return 0;
+      }
+      Set<Integer> firstCodePoints = new HashSet<>();
+      for (String s : literals) {
+        if (!s.isEmpty()) {
+          firstCodePoints.add(s.codePointAt(0));
+        }
+      }
+      return firstCodePoints.size();
     }
   }
 

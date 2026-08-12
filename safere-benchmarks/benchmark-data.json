@@ -1967,6 +1967,114 @@
       "shared": true
     },
     {
+      "id": "realWorldRegex.unanchoredStateCodes.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "Shipping destination CA address verified successfully.",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.unanchoredStateCodes.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "the quick brown fox jumps over the lazy dog and explores various places around the globe",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.unanchoredLogKeywords.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "2026-08-12 12:00:00 [ERROR] Connection timed out while reading from database socket.",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.unanchoredLogKeywords.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "2026-08-12 12:00:00 [INFO] Request processed successfully in 42ms with status 200 OK.",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.unanchoredFruitKeywords.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "I would like to order a fresh banana shake with extra ice please.",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.unanchoredFruitKeywords.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "The standard delivery service includes regular packaging and standard shipping times.",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "realWorldRegex.recitation.match.{size}",
       "axes": {
         "size": [
@@ -3931,6 +4039,93 @@
       ],
       "inputs": [
         "realWorldRegex.emailDomain.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.unanchoredStateCodes.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)"
+      ],
+      "inputs": [
+        "realWorldRegex.unanchoredStateCodes.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.unanchoredLogKeywords.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "(?:ERROR|WARNING|CRITICAL|FATAL|EXCEPTION|TIMEOUT|FAILURE|ABORT|PANIC|SEGFAULT)"
+      ],
+      "inputs": [
+        "realWorldRegex.unanchoredLogKeywords.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.unanchoredFruitKeywords.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "(?:apple|banana|cherry|date|elderberry|fig|grape|honeydew|kiwi|lemon|mango|nectarine|orange|papaya|quince|raspberry|strawberry|tangerine|ugli|vanilla|watermelon)"
+      ],
+      "inputs": [
+        "realWorldRegex.unanchoredFruitKeywords.{matchLabel}.{size}"
       ],
       "resultConsumption": "boolean",
       "measurement": {

@@ -485,7 +485,9 @@ public final class Pattern implements Serializable {
     boolean isPureLiteralAlternation =
         literalResult != null && literalResult.isPureLiteralAlternation();
     AhoCorasickSearcher ahoCorasick =
-        (isPureLiteralAlternation && literalResult.literals().size() > 1)
+        (isPureLiteralAlternation
+                && literalResult.literals().size() > 1
+                && literalResult.distinctFirstCodePoints() > 1)
             ? new AhoCorasickSearcher(literalResult.literals(), literalResult.isCaseInsensitive())
             : null;
 
