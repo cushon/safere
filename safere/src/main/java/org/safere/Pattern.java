@@ -604,24 +604,8 @@ public final class Pattern implements Serializable {
         && matchDescriptor.keywordAlternation() != null) {
       return matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
     }
-    if (rejectPrefilter != null && prefixUtf8 == null && charClassPrefixAscii == null) {
-      boolean rejected;
-      if (rejectPrefilter instanceof RejectPrefilter.Literal literal) {
-        rejected =
-            enginePathOptions.literalFastPaths()
-                && scanner.indexOf(literal.utf8(), literal.failure(), literal.shifts(), 0) < 0;
-      } else if (rejectPrefilter instanceof RejectPrefilter.CharClass charClass) {
-        rejected =
-            enginePathOptions.charClassMatchFastPaths()
-                && scanner.indexOfCodePointClass(
-                        charClass.ranges(), charClass.bitmap0(), charClass.bitmap1(), 0)
-                    < 0;
-      } else {
-        rejected = rejectPrefilter.canReject(scanner, 0, enginePathOptions);
-      }
-      if (rejected) {
-        return false;
-      }
+    if (rejectPrefilter != null && rejectPrefilter.canReject(scanner, 0, enginePathOptions)) {
+      return false;
     }
     int searchStart = 0;
     if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
@@ -665,8 +649,6 @@ public final class Pattern implements Serializable {
       return matched;
     }
     if (rejectPrefilter != null
-        && prefixUtf8 == null
-        && charClassPrefixAscii == null
         && rejectPrefilter.canRejectWithDiagnostics(scanner, 0, enginePathOptions, diagnostics)) {
       return false;
     }
