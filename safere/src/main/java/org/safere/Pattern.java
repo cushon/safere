@@ -449,7 +449,10 @@ public final class Pattern implements Serializable {
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
     RejectDescriptor rejectDescriptor =
         extractRejectDescriptor(
-            metadataAst, startDescriptor.prefix(), startDescriptor.charClassPrefixAscii());
+            metadataAst,
+            startDescriptor.prefix(),
+            startDescriptor.charClassPrefixAscii(),
+            compiled.anchorStart());
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,
@@ -2996,12 +2999,12 @@ public final class Pattern implements Serializable {
 
   /** Extracts whole-input rejection metadata from the AST. */
   private static RejectDescriptor extractRejectDescriptor(
-      Regexp metadataAst, String prefix, AsciiBitmap ccPrefixAscii) {
+      Regexp metadataAst, String prefix, AsciiBitmap ccPrefixAscii, boolean anchorStart) {
     String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
     CharClassScanInfo requiredMatchClass =
         extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
     DisjointRequiredLiterals disjointRequiredLiterals =
-        (prefix == null && requiredLiteral == null)
+        (!anchorStart && prefix == null && requiredLiteral == null)
             ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
             : null;
     if (requiredLiteral == null && requiredMatchClass == null && disjointRequiredLiterals == null) {
