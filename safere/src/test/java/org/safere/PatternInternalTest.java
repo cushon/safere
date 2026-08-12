@@ -360,13 +360,14 @@ class PatternInternalTest {
     "'.*test\\z',                          test"
   })
   void endAnchoredLiteralSuffixIsRecorded(String regex, String expected) {
-    assertThat(Pattern.compile(regex).endAnchoredSuffix()).isEqualTo(expected);
+    assertThat(Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix().suffix())
+        .isEqualTo(expected);
   }
 
   @ParameterizedTest
   @ValueSource(strings = {".*", ".*json", "(?m).*\\.json$", "(?i).*\\.json$"})
   void unanchoredOrMultilineDollarDoNotRecordEndAnchoredSuffix(String regex) {
-    assertThat(Pattern.compile(regex).endAnchoredSuffix()).isNull();
+    assertThat(Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix()).isNull();
   }
 
   @Test

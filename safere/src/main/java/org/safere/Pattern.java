@@ -448,11 +448,7 @@ public final class Pattern implements Serializable {
     boolean startsWithGcb = startsWithGraphemeClusterBoundary(metadataAst);
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
     RejectDescriptor rejectDescriptor =
-        extractRejectDescriptor(
-            metadataAst,
-            effectiveFlags,
-            startDescriptor.prefix(),
-            startDescriptor.charClassPrefixAscii());
+        extractRejectDescriptor(metadataAst, effectiveFlags, startDescriptor);
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,
@@ -1216,12 +1212,6 @@ public final class Pattern implements Serializable {
   String[] requiredDisjointLiterals() {
     return rejectDescriptor.disjointRequiredLiterals() != null
         ? rejectDescriptor.disjointRequiredLiterals().literals()
-        : null;
-  }
-
-  String endAnchoredSuffix() {
-    return rejectDescriptor.endAnchoredSuffix() != null
-        ? rejectDescriptor.endAnchoredSuffix().suffix()
         : null;
   }
 
@@ -3011,8 +3001,11 @@ public final class Pattern implements Serializable {
 
   /** Extracts whole-input rejection metadata from the AST. */
   private static RejectDescriptor extractRejectDescriptor(
-      Regexp metadataAst, int flags, String prefix, boolean[] ccPrefixAscii) {
+      Regexp metadataAst, int flags, StartDescriptor startDescriptor) {
     SuffixInfo endAnchoredSuffix = extractEndAnchoredSuffix(metadataAst, flags);
+    String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
+    boolean[] ccPrefixAscii =
+        startDescriptor != null ? startDescriptor.charClassPrefixAscii() : null;
     String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
     CharClassScanInfo requiredMatchClass =
         extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
