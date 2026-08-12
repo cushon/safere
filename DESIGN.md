@@ -47,6 +47,28 @@ intentional maintenance changes: run the generator with the selected JDK,
 review and commit the generated output, update the recorded Unicode version,
 and run focused Unicode compatibility tests.
 
+## JDK-Version-Specific Implementations
+
+SafeRE is distributed as a multi-release JAR with a JDK 21 baseline. Classes
+that require newer JDK APIs are compiled into the corresponding
+`META-INF/versions/<N>` directory. For example, the JDK 22 layer contains
+internal `MemorySegment` scanning kernels. A JDK 21 runtime ignores that layer,
+while JDK 22 and later make those classes available automatically.
+
+Version-specific implementation classes are internal and must not extend the
+public API with types unavailable in the JDK 21 baseline. Shared interfaces and
+factory signatures therefore use only baseline types. When a version-specific
+implementation is connected to matching, prefer a binary-compatible factory or
+provider class in the baseline and versioned layers. The JVM then selects the
+appropriate factory through normal multi-release JAR lookup; baseline code
+does not need reflection or an explicit runtime-version check.
+
+Version-specific implementations that refer to optional modules must not be
+loaded eagerly. In particular, a factory should select a SWAR implementation
+without loading Vector API classes unless the experimental Vector provider is
+enabled. The JDK 22 `MemorySegment` kernels are currently groundwork and are
+not yet selected by `Matcher`.
+
 ### 1. Parse (`Parser`)
 
 A stack-based operator-precedence parser (ported from RE2's `parse.cc`)
