@@ -48,29 +48,6 @@ sealed interface StringStartAccelerator {
     return AcceleratorPolicy.DEFAULT;
   }
 
-  /** Minimum skip distance (in chars) required for this accelerator to be profitable. */
-  default int minProfitableSkip() {
-    return policy().minProfitableSkip();
-  }
-
-  /** Number of consecutive sub-threshold skips tolerated before declaring adaptive defeat. */
-  default int strikeBudget() {
-    return policy().strikeBudget();
-  }
-
-  /** Returns the diagnostic strategy associated with this accelerator, or {@code null} if none. */
-  default MatchStrategy strategy() {
-    return policy().strategy();
-  }
-
-  /**
-   * Returns whether this accelerator identifies an exact candidate match start that can be directly
-   * validated with a single anchored forward DFA pass.
-   */
-  default boolean isExactMatchCandidate() {
-    return policy().isExactMatchCandidate();
-  }
-
   final class Literal implements StringStartAccelerator {
     private final String prefix;
     private final boolean prefixFoldCase;

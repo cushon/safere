@@ -673,7 +673,7 @@ public final class Pattern implements Serializable {
     }
     int searchStart = 0;
     if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
-      MatchStrategy strategy = utf8StartAccelerator.strategy();
+      MatchStrategy strategy = utf8StartAccelerator.policy().strategy();
       if (strategy != null) {
         diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
