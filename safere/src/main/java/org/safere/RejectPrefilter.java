@@ -198,7 +198,7 @@ sealed interface RejectPrefilter
     @Override
     public boolean canReject(
         InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
-      if (!options.literalFastPaths() || text == null) {
+      if (!options.literalFastPaths() || text == null || searchFrom > 0) {
         return false;
       }
       for (String literal : literals) {

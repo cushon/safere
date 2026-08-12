@@ -3290,6 +3290,12 @@ public final class Pattern implements Serializable {
       return null;
     }
     if (node.op == RegexpOp.CONCAT && node.subs != null) {
+      if (!node.subs.isEmpty()) {
+        Regexp first = unwrapCaptures(node.subs.get(0));
+        if (first != null && (first.op == RegexpOp.BEGIN_TEXT || first.op == RegexpOp.BEGIN_LINE)) {
+          return null;
+        }
+      }
       for (Regexp sub : node.subs) {
         String[] disjoint = extractDisjointRequiredLiteralsFromAlternate(sub);
         if (disjoint != null) {
