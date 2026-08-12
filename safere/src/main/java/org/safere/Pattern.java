@@ -184,34 +184,15 @@ public final class Pattern implements Serializable {
    */
   private final transient CharClassScanInfo singleCharClassScanInfo;
 
-  /**
-   * Precomputed character class data for a mandatory character class. Non-null when matching can
-   * reject by scanning for an absent required code point before invoking the full engine cascade.
-   * This is intentionally a negative-only accelerator: if the class is present, normal matching
-   * still determines the result.
-   */
-  private final transient int[] requiredMatchClassRanges;
-
-  private final transient long requiredMatchClassBitmap0;
-  private final transient long requiredMatchClassBitmap1;
+  /** Whole-input rejection AST metadata for Tier 0 acceleration. */
+  private final transient RejectDescriptor rejectDescriptor;
 
   /**
-   * A case-sensitive literal substring that every match must contain. This is a negative-only
-   * accelerator: an absent literal rejects the search, while a present literal still goes through
-   * the normal engine to determine match boundaries and captures.
+   * Whole-input rejection filter for Tier 0 acceleration. Non-null when matching can quickly reject
+   * by verifying that mandatory literal content or character classes appear anywhere in the input
+   * before running automata.
    */
-  private final transient String requiredLiteral;
-
-  private final transient byte[] requiredLiteralUtf8;
-  private final transient int[] requiredLiteralFailure;
-  private final transient int[] requiredLiteralShifts;
-
-  /**
-   * A small disjoint set of case-sensitive literal substrings for alternation patterns where every
-   * branch requires at least one literal substring. If none of these literals are present in the
-   * input, the search is rejected immediately.
-   */
-  private final transient DisjointRequiredLiterals disjointRequiredLiterals;
+  private final transient RejectPrefilter rejectPrefilter;
 
   /**
    * Lazily computed OnePass analysis results. Holds the OnePass automaton (if eligible) and derived
@@ -317,11 +298,7 @@ public final class Pattern implements Serializable {
       long charClassMatchBitmap1,
       boolean charClassMatchAllowEmpty,
       CharClassScanInfo singleCharClass,
-      int[] requiredMatchClassRanges,
-      long requiredMatchClassBitmap0,
-      long requiredMatchClassBitmap1,
-      String requiredLiteral,
-      DisjointRequiredLiterals disjointRequiredLiterals,
+      RejectDescriptor rejectDescriptor,
       EnginePathOptions enginePathOptions) {
     this.patternId = nextPatternId();
     this.pattern = pattern;
@@ -382,19 +359,8 @@ public final class Pattern implements Serializable {
     this.charClassMatchBitmap1 = charClassMatchBitmap1;
     this.charClassMatchAllowEmpty = charClassMatchAllowEmpty;
     this.singleCharClassScanInfo = singleCharClass;
-    this.requiredMatchClassRanges = requiredMatchClassRanges;
-    this.requiredMatchClassBitmap0 = requiredMatchClassBitmap0;
-    this.requiredMatchClassBitmap1 = requiredMatchClassBitmap1;
-    this.requiredLiteral = requiredLiteral;
-    this.requiredLiteralUtf8 =
-        requiredLiteral == null
-            ? null
-            : requiredLiteral.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-    this.requiredLiteralFailure =
-        requiredLiteralUtf8 == null ? null : literalFailure(requiredLiteralUtf8);
-    this.requiredLiteralShifts =
-        requiredLiteralUtf8 == null ? null : literalShifts(requiredLiteralUtf8);
-    this.disjointRequiredLiterals = disjointRequiredLiterals;
+    this.rejectDescriptor = rejectDescriptor != null ? rejectDescriptor : RejectDescriptor.NONE;
+    this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
     onePassAnalysis();
@@ -506,16 +472,9 @@ public final class Pattern implements Serializable {
     // Detect "repeated character class" pattern for matches() fast path.
     CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
     CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
-    CharClassScanInfo requiredMatchClass =
-        extractRequiredMatchClass(
-            metadataAst,
-            startDescriptor.prefix() == null && startDescriptor.charClassPrefixAscii() == null);
-    String requiredLiteral =
-        startDescriptor.prefix() == null ? extractRequiredLiteral(metadataAst) : null;
-    DisjointRequiredLiterals disjointRequiredLiterals =
-        (startDescriptor.prefix() == null && requiredLiteral == null)
-            ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
-            : null;
+    RejectDescriptor rejectDescriptor =
+        extractRejectDescriptor(
+            metadataAst, startDescriptor.prefix(), startDescriptor.charClassPrefixAscii());
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,
@@ -537,11 +496,7 @@ public final class Pattern implements Serializable {
         ccMatch != null ? ccMatch.bitmap1 : 0,
         ccMatch != null && ccMatch.allowEmpty,
         singleCharClass,
-        requiredMatchClass != null ? requiredMatchClass.ranges : null,
-        requiredMatchClass != null ? requiredMatchClass.bitmap0 : 0,
-        requiredMatchClass != null ? requiredMatchClass.bitmap1 : 0,
-        requiredLiteral,
-        disjointRequiredLiterals,
+        rejectDescriptor,
         enginePathOptions);
   }
 
@@ -680,21 +635,24 @@ public final class Pattern implements Serializable {
     if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
       return keywordAlternation.find(scanner, 0) >= 0;
     }
-    if (enginePathOptions.literalFastPaths()
-        && requiredLiteralUtf8 != null
-        && prefixUtf8 == null
-        && scanner.indexOf(requiredLiteralUtf8, requiredLiteralFailure, requiredLiteralShifts, 0)
-            < 0) {
-      return false;
-    }
-    if (enginePathOptions.charClassMatchFastPaths()
-        && requiredMatchClassRanges != null
-        && prefixUtf8 == null
-        && charClassPrefixAscii == null
-        && scanner.indexOfCodePointClass(
-                requiredMatchClassRanges, requiredMatchClassBitmap0, requiredMatchClassBitmap1, 0)
-            < 0) {
-      return false;
+    if (rejectPrefilter != null && prefixUtf8 == null && charClassPrefixAscii == null) {
+      boolean rejected;
+      if (rejectPrefilter instanceof RejectPrefilter.Literal literal) {
+        rejected =
+            enginePathOptions.literalFastPaths()
+                && scanner.indexOf(literal.utf8(), literal.failure(), literal.shifts(), 0) < 0;
+      } else if (rejectPrefilter instanceof RejectPrefilter.CharClass charClass) {
+        rejected =
+            enginePathOptions.charClassMatchFastPaths()
+                && scanner.indexOfCodePointClass(
+                        charClass.ranges(), charClass.bitmap0(), charClass.bitmap1(), 0)
+                    < 0;
+      } else {
+        rejected = rejectPrefilter.canReject(scanner, 0, enginePathOptions);
+      }
+      if (rejected) {
+        return false;
+      }
     }
     int searchStart = 0;
     if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
@@ -736,24 +694,10 @@ public final class Pattern implements Serializable {
       diagnostics.boundary(MatchStrategy.KEYWORD);
       return matched;
     }
-    if (enginePathOptions.literalFastPaths()
-        && requiredLiteralUtf8 != null
-        && prefixUtf8 == null
-        && scanner.indexOf(requiredLiteralUtf8, requiredLiteralFailure, requiredLiteralShifts, 0)
-            < 0) {
-      diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
-      diagnostics.boundary(MatchStrategy.LITERAL);
-      return false;
-    }
-    if (enginePathOptions.charClassMatchFastPaths()
-        && requiredMatchClassRanges != null
+    if (rejectPrefilter != null
         && prefixUtf8 == null
         && charClassPrefixAscii == null
-        && scanner.indexOfCodePointClass(
-                requiredMatchClassRanges, requiredMatchClassBitmap0, requiredMatchClassBitmap1, 0)
-            < 0) {
-      diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
-      diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
+        && rejectPrefilter.canRejectWithDiagnostics(scanner, 0, enginePathOptions, diagnostics)) {
       return false;
     }
     int searchStart = 0;
@@ -1310,43 +1254,24 @@ public final class Pattern implements Serializable {
     return singleCharClassScanInfo;
   }
 
-  /** Returns precomputed ranges for a required character class, or {@code null}. */
-  int[] requiredMatchClassRanges() {
-    return requiredMatchClassRanges;
+  /** Returns AST metadata for whole-input rejection, or {@link RejectDescriptor#NONE}. */
+  RejectDescriptor rejectDescriptor() {
+    return rejectDescriptor;
   }
 
-  /** ASCII bitmap (code points 0–63) for the required-character-class fast path. */
-  long requiredMatchClassBitmap0() {
-    return requiredMatchClassBitmap0;
-  }
-
-  /** ASCII bitmap (code points 64–127) for the required-character-class fast path. */
-  long requiredMatchClassBitmap1() {
-    return requiredMatchClassBitmap1;
-  }
-
-  String requiredLiteral() {
-    return requiredLiteral;
-  }
-
-  byte[] requiredLiteralUtf8() {
-    return requiredLiteralUtf8;
-  }
-
-  int[] requiredLiteralFailure() {
-    return requiredLiteralFailure;
-  }
-
-  int[] requiredLiteralShifts() {
-    return requiredLiteralShifts;
+  /** Returns whole-input rejection prefilter, or {@code null}. */
+  RejectPrefilter rejectPrefilter() {
+    return rejectPrefilter;
   }
 
   DisjointRequiredLiterals disjointRequiredLiterals() {
-    return disjointRequiredLiterals;
+    return rejectDescriptor.disjointRequiredLiterals();
   }
 
   String[] requiredDisjointLiterals() {
-    return disjointRequiredLiterals != null ? disjointRequiredLiterals.literals() : null;
+    return rejectDescriptor.disjointRequiredLiterals() != null
+        ? rejectDescriptor.disjointRequiredLiterals().literals()
+        : null;
   }
 
   /**
@@ -3129,6 +3054,22 @@ public final class Pattern implements Serializable {
       return null;
     }
     return buildCharClassScanInfo(cc);
+  }
+
+  /** Extracts whole-input rejection metadata from the AST. */
+  private static RejectDescriptor extractRejectDescriptor(
+      Regexp metadataAst, String prefix, boolean[] ccPrefixAscii) {
+    String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
+    CharClassScanInfo requiredMatchClass =
+        extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
+    DisjointRequiredLiterals disjointRequiredLiterals =
+        (prefix == null && requiredLiteral == null)
+            ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
+            : null;
+    if (requiredLiteral == null && requiredMatchClass == null && disjointRequiredLiterals == null) {
+      return null;
+    }
+    return new RejectDescriptor(requiredLiteral, requiredMatchClass, disjointRequiredLiterals);
   }
 
   /**

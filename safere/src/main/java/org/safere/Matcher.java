@@ -21,7 +21,6 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import org.safere.Pattern.DisjointRequiredLiterals;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by
@@ -593,16 +592,6 @@ public final class Matcher implements MatchResult {
     return applyFailedMatchResult();
   }
 
-  private boolean containsRequiredMatchClass(int[] ranges) {
-    return containsRequiredMatchClass(ranges, 0);
-  }
-
-  private boolean containsRequiredMatchClass(int[] ranges, int fromIndex) {
-    long b0 = parentPattern.requiredMatchClassBitmap0();
-    long b1 = parentPattern.requiredMatchClassBitmap1();
-    return activeScanner().indexOfCodePointClass(ranges, b0, b1, fromIndex) >= 0;
-  }
-
   /**
    * Checks if the remaining input from {@code offset} is a prefix of the literal pattern but
    * shorter than it, meaning more input could potentially result in a match.
@@ -895,14 +884,38 @@ public final class Matcher implements MatchResult {
   private boolean matchesCore() {
     capturesResolved = true;
 
-    int[] requiredRanges = parentPattern.requiredMatchClassRanges();
-    if (enginePathOptions().charClassMatchFastPaths()
-        && requiredRanges != null
-        && text != null
-        && !containsRequiredMatchClass(requiredRanges)) {
-      diagnosticParticipation(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
-      diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
+    RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+    MatchStrategy rejectionStrategy = null;
+    if (rejectPrefilter != null && text != null) {
+      rejectionStrategy =
+          rejectPrefilter instanceof RejectPrefilter.Composite composite
+              ? composite.rejectionStrategy(activeScanner(), text, 0, enginePathOptions())
+              : rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())
+                  ? rejectPrefilter.strategy()
+                  : null;
+    }
+    if (rejectionStrategy != null) {
+      diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+      diagnosticBoundary(rejectionStrategy);
       return applyFailedMatchResult();
+    }
+    Pattern.DisjointRequiredLiterals disjoint = parentPattern.disjointRequiredLiterals();
+    if (enginePathOptions().literalFastPaths() && disjoint != null && text != null) {
+      boolean found = false;
+      for (String lit : disjoint.literals()) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(text.length());
+        }
+        if (text.indexOf(lit) >= 0) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(MatchStrategy.LITERAL);
+        return applyFailedMatchResult();
+      }
     }
 
     Prog prog = parentPattern.prog();
@@ -1469,24 +1482,24 @@ public final class Matcher implements MatchResult {
             || (prog.anchorEnd()
                 && scanner.length() >= MIN_REVERSE_FIRST_LEN
                 && canUseReverseDfa());
-    String requiredLiteral = parentPattern.requiredLiteral();
-    if (options.literalFastPaths()
-        && requiredLiteral != null
-        && !hasAcceleratedSearchPath
+    RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+    if (!hasAcceleratedSearchPath
+        && rejectPrefilter != null
         && (text != null || scanner instanceof Utf8InputScanner)) {
-      int idx =
-          scanner instanceof Utf8InputScanner utf8Scanner
-              ? utf8Scanner.indexOf(
-                  parentPattern.requiredLiteralUtf8(),
-                  parentPattern.requiredLiteralFailure(),
-                  parentPattern.requiredLiteralShifts(),
-                  searchFrom)
-              : indexOfRequiredLiteral(requiredLiteral);
-      if (idx < 0) {
+      MatchStrategy rejectionStrategy =
+          rejectPrefilter instanceof RejectPrefilter.Composite composite
+              ? composite.rejectionStrategy(scanner, text, searchFrom, options)
+              : rejectPrefilter.canReject(scanner, text, searchFrom, options)
+                  ? rejectPrefilter.strategy()
+                  : null;
+      if (rejectionStrategy != null) {
+        diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(rejectionStrategy);
         return applyFailedMatchResult();
       }
     }
-    DisjointRequiredLiterals disjointRequiredLiterals = parentPattern.disjointRequiredLiterals();
+    Pattern.DisjointRequiredLiterals disjointRequiredLiterals =
+        parentPattern.disjointRequiredLiterals();
     if (options.literalFastPaths()
         && disjointRequiredLiterals != null
         && !disjointRequiredLiteralsChecked
@@ -1496,7 +1509,10 @@ public final class Matcher implements MatchResult {
       disjointRequiredLiteralsChecked = true;
       boolean found = false;
       for (String lit : disjointRequiredLiterals.literals()) {
-        if (indexOfRequiredLiteral(lit) >= 0) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(Math.max(0, text.length() - searchFrom));
+        }
+        if (text.indexOf(lit, searchFrom) >= 0) {
           found = true;
           break;
         }
@@ -1508,15 +1524,6 @@ public final class Matcher implements MatchResult {
       }
     }
 
-    int[] requiredRanges = parentPattern.requiredMatchClassRanges();
-    if (options.charClassMatchFastPaths()
-        && requiredRanges != null
-        && !hasAcceleratedSearchPath
-        && !containsRequiredMatchClass(requiredRanges, searchFrom)) {
-      diagnosticParticipation(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
-      diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
-      return applyFailedMatchResult();
-    }
     // Prefix acceleration: if the pattern has a start accelerator (literal, fixed-offset,
     // character-class, or line-anchor), skip ahead to candidate match positions.
     int effectiveStart = searchFrom;
@@ -1924,13 +1931,6 @@ public final class Matcher implements MatchResult {
     } else {
       return applyDeferredMatchResult(result[0], result[1], prog.numCaptures(), true, false);
     }
-  }
-
-  private int indexOfRequiredLiteral(String requiredLiteral) {
-    if (WorkCounterConfig.ENABLED) {
-      WorkCounter.record(Math.max(0, text.length() - searchFrom));
-    }
-    return text.indexOf(requiredLiteral, searchFrom);
   }
 
   private boolean findUtf8KeywordAlternation(
