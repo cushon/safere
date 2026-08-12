@@ -1997,6 +1997,7 @@ public final class Pattern implements Serializable {
   static final class KeywordAlternation {
     final String[] keywords;
     final AsciiBitmap firstAscii;
+    final boolean[] firstAsciiTable;
     final int captureGroup;
     final boolean unicodeWordBoundary;
     final boolean greedyWholeInput;
@@ -2009,6 +2010,7 @@ public final class Pattern implements Serializable {
         boolean greedyWholeInput) {
       this.keywords = keywords;
       this.firstAscii = firstAscii;
+      this.firstAsciiTable = firstAscii.toBooleanArray();
       this.captureGroup = captureGroup;
       this.unicodeWordBoundary = unicodeWordBoundary;
       this.greedyWholeInput = greedyWholeInput;

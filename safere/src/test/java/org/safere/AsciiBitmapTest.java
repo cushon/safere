@@ -59,4 +59,16 @@ class AsciiBitmapTest {
     assertThat(alphaNum.contains('A')).isFalse();
     assertThat(alphaNum.contains('@')).isFalse();
   }
+
+  @Test
+  void toBooleanArrayMatchesContains() {
+    AsciiBitmap bitmap =
+        new AsciiBitmap.Builder().add('a').add('z').addRange('0', '9').add('E').build();
+    boolean[] array = bitmap.toBooleanArray();
+
+    assertThat(array).hasSize(128);
+    for (int cp = 0; cp < 128; cp++) {
+      assertThat(array[cp]).isEqualTo(bitmap.contains(cp));
+    }
+  }
 }

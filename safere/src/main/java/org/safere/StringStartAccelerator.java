@@ -189,9 +189,11 @@ sealed interface StringStartAccelerator {
 
   final class CharClass implements StringStartAccelerator {
     private final AsciiBitmap asciiMap;
+    private final boolean[] asciiTable;
 
     CharClass(AsciiBitmap asciiMap) {
       this.asciiMap = asciiMap;
+      this.asciiTable = asciiMap.toBooleanArray();
     }
 
     public AsciiBitmap asciiMap() {
@@ -210,16 +212,16 @@ sealed interface StringStartAccelerator {
 
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return indexOfCharClass(text, asciiMap, fromIndex);
+      return indexOfCharClass(text, asciiTable, fromIndex);
     }
 
-    private static int indexOfCharClass(String text, AsciiBitmap asciiMap, int fromIndex) {
+    private static int indexOfCharClass(String text, boolean[] asciiTable, int fromIndex) {
       for (int i = fromIndex; i < text.length(); i++) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
         char ch = text.charAt(i);
-        if (asciiMap.contains(ch)) {
+        if (ch < 128 && asciiTable[ch]) {
           return i;
         }
       }
