@@ -7,6 +7,7 @@ package org.safere;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,7 @@ final class AhoCorasickSearcher {
   }
 
   // Compressed transition table representation
+  private final int[] rootTransitions;
   private final int[] firstChild;
   private final int[] numChildren;
   private final char[] transitionChars;
@@ -126,6 +128,15 @@ final class AhoCorasickSearcher {
       }
     }
 
+    this.rootTransitions = new int[128];
+    Arrays.fill(this.rootTransitions, -1);
+    for (Map.Entry<Character, BuilderNode> entry : root.children.entrySet()) {
+      char c = entry.getKey();
+      if (c < 128) {
+        this.rootTransitions[c] = nodeIndices.get(entry.getValue());
+      }
+    }
+
     this.transitionChars = new char[charList.size()];
     for (int i = 0; i < charList.size(); i++) {
       this.transitionChars[i] = charList.get(i);
@@ -137,6 +148,9 @@ final class AhoCorasickSearcher {
   }
 
   private int nextState(int state, char c) {
+    if (state == 0) {
+      return (c < 128) ? rootTransitions[c] : -1;
+    }
     int start = firstChild[state];
     int count = numChildren[state];
     for (int i = 0; i < count; i++) {
@@ -158,12 +172,17 @@ final class AhoCorasickSearcher {
     if (caseInsensitive) {
       for (int i = start; i < len; i++) {
         char c = asciiLower(text.charAt(i));
-        int next = nextState(state, c);
-        while (next == -1 && state != 0) {
-          state = failureLinks[state];
-          next = nextState(state, c);
+        if (state == 0) {
+          int next = (c < 128) ? rootTransitions[c] : -1;
+          state = (next != -1) ? next : 0;
+        } else {
+          int next = nextState(state, c);
+          while (next == -1 && state != 0) {
+            state = failureLinks[state];
+            next = nextState(state, c);
+          }
+          state = (next != -1) ? next : 0;
         }
-        state = (next != -1) ? next : 0;
 
         if (matchIndices[state] != -1) {
           int patternIdx = matchIndices[state];
@@ -180,12 +199,17 @@ final class AhoCorasickSearcher {
     } else {
       for (int i = start; i < len; i++) {
         char c = text.charAt(i);
-        int next = nextState(state, c);
-        while (next == -1 && state != 0) {
-          state = failureLinks[state];
-          next = nextState(state, c);
+        if (state == 0) {
+          int next = (c < 128) ? rootTransitions[c] : -1;
+          state = (next != -1) ? next : 0;
+        } else {
+          int next = nextState(state, c);
+          while (next == -1 && state != 0) {
+            state = failureLinks[state];
+            next = nextState(state, c);
+          }
+          state = (next != -1) ? next : 0;
         }
-        state = (next != -1) ? next : 0;
 
         if (matchIndices[state] != -1) {
           int patternIdx = matchIndices[state];
