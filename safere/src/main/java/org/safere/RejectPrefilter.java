@@ -86,10 +86,18 @@ sealed interface RejectPrefilter
     }
     RejectPrefilter[] filters = new RejectPrefilter[count];
     int idx = 0;
-    if (suffixFilter != null) filters[idx++] = suffixFilter;
-    if (litFilter != null) filters[idx++] = litFilter;
-    if (ccFilter != null) filters[idx++] = ccFilter;
-    if (disjointFilter != null) filters[idx++] = disjointFilter;
+    if (suffixFilter != null) {
+      filters[idx++] = suffixFilter;
+    }
+    if (litFilter != null) {
+      filters[idx++] = litFilter;
+    }
+    if (ccFilter != null) {
+      filters[idx++] = ccFilter;
+    }
+    if (disjointFilter != null) {
+      filters[idx] = disjointFilter;
+    }
     return new Composite(filters);
   }
 
