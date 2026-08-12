@@ -43,27 +43,33 @@ sealed interface StringStartAccelerator {
    */
   int findCandidate(String text, int fromIndex, boolean unixLines);
 
-  /**
-   * Minimum skip distance (in bytes or chars) required for this accelerator to be profitable over
-   * direct DFA execution.
-   */
-  default int minProfitableSkip() {
-    return 32;
+  /** Returns the tuning and diagnostic policy for this accelerator. */
+  default AcceleratorPolicy policy() {
+    return AcceleratorPolicy.DEFAULT;
   }
 
-  /** Number of consecutive sub-threshold skips tolerated before defeat. */
+  /** Minimum skip distance (in chars) required for this accelerator to be profitable. */
+  default int minProfitableSkip() {
+    return policy().minProfitableSkip();
+  }
+
+  /** Number of consecutive sub-threshold skips tolerated before declaring adaptive defeat. */
   default int strikeBudget() {
-    return 3;
+    return policy().strikeBudget();
   }
 
   /** Returns the diagnostic strategy associated with this accelerator, or {@code null} if none. */
-  MatchStrategy strategy();
+  default MatchStrategy strategy() {
+    return policy().strategy();
+  }
 
   /**
    * Returns whether this accelerator identifies an exact candidate match start that can be directly
    * validated with a single anchored forward DFA pass.
    */
-  boolean isExactMatchCandidate();
+  default boolean isExactMatchCandidate() {
+    return policy().isExactMatchCandidate();
+  }
 
   final class Literal implements StringStartAccelerator {
     private final String prefix;
@@ -83,23 +89,8 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public int minProfitableSkip() {
-      return 16;
-    }
-
-    @Override
-    public int strikeBudget() {
-      return 4;
-    }
-
-    @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.LITERAL;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return true;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
     @Override
@@ -132,23 +123,8 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public int minProfitableSkip() {
-      return 16;
-    }
-
-    @Override
-    public int strikeBudget() {
-      return 4;
-    }
-
-    @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.LITERAL;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return true;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
     @Override
@@ -232,23 +208,8 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public int minProfitableSkip() {
-      return 24;
-    }
-
-    @Override
-    public int strikeBudget() {
-      return 3;
-    }
-
-    @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.CHARACTER_CLASS;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return false;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.CHAR_CLASS;
     }
 
     @Override
@@ -282,23 +243,8 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public int minProfitableSkip() {
-      return 16;
-    }
-
-    @Override
-    public int strikeBudget() {
-      return 3;
-    }
-
-    @Override
-    public MatchStrategy strategy() {
-      return null;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return false;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LINE_ANCHOR;
     }
 
     @Override

@@ -1364,21 +1364,23 @@ final class Dfa {
     }
 
     boolean canAccelerate = hasStartAcceleration && !anchored;
-    int minSkip = 32;
-    int maxStrikes = 3;
+    int minSkip = AcceleratorPolicy.DEFAULT.minProfitableSkip();
+    int maxStrikes = AcceleratorPolicy.DEFAULT.strikeBudget();
     boolean isExact = false;
     if (canAccelerate) {
-      if (stringStartAccelerator != null) {
-        minSkip = stringStartAccelerator.minProfitableSkip();
-        maxStrikes = stringStartAccelerator.strikeBudget();
-        isExact = stringStartAccelerator.isExactMatchCandidate();
-      } else if (utf8StartAccelerator != null) {
-        minSkip = utf8StartAccelerator.minProfitableSkip();
-        maxStrikes = utf8StartAccelerator.strikeBudget();
-        isExact = utf8StartAccelerator.isExactMatchCandidate();
-      }
+      AcceleratorPolicy policy =
+          stringStartAccelerator != null
+              ? stringStartAccelerator.policy()
+              : (utf8StartAccelerator != null
+                  ? utf8StartAccelerator.policy()
+                  : AcceleratorPolicy.DEFAULT);
+      minSkip = policy.minProfitableSkip();
+      maxStrikes = policy.strikeBudget();
+      isExact = policy.isExactMatchCandidate();
     }
 
+    // Adaptive defeat detection: track consecutive sub-threshold skips to avoid repeatedly paying
+    // accelerator setup and candidate check overhead on dense matching inputs.
     boolean accelerationDisabled = false;
     int consecutiveShortSkips = 0;
 
