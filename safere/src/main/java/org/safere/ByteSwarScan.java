@@ -15,7 +15,7 @@ import java.lang.invoke.VarHandle;
 import org.safere.internal.Swar;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 1-byte sequences. */
-public abstract class ByteSwarScan {
+abstract class ByteSwarScan {
 
   /**
    * Input sizes at which the SWAR candidate filter overtakes the skip loop. The filter always

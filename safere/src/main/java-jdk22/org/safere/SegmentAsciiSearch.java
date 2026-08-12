@@ -3,7 +3,7 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.foreign;
+package org.safere;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;

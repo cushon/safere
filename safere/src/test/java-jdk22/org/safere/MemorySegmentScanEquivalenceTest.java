@@ -3,7 +3,7 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.foreign;
+package org.safere;
 
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_16LE;
@@ -17,10 +17,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.safere.ByteSwarScan;
-import org.safere.ByteVectorScan;
-import org.safere.ShortSwarScan;
-import org.safere.ShortVectorScan;
 
 /**
  * Differential equivalence test comparing {@link MemorySegment} vector and SWAR scan kernels in

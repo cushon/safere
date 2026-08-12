@@ -19,7 +19,7 @@ import org.safere.internal.Ascii;
 import org.safere.internal.Swar;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 2-byte sequences (UTF-16 and char[]). */
-public final class ShortSwarScan {
+final class ShortSwarScan {
 
   private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, LITTLE_ENDIAN);
 

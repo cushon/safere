@@ -23,7 +23,7 @@ import org.safere.internal.Swar;
 /**
  * Stateless SIMD kernels using the incubating Vector API for 2-byte sequences (UTF-16 and char[]).
  */
-public final class ShortVectorScan {
+final class ShortVectorScan {
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
   private static final VectorSpecies<Byte> BYTE_SPECIES = SPECIES.withLanes(byte.class);
 
