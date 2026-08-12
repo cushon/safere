@@ -18,14 +18,27 @@ record StartDescriptor(
     boolean prefixFoldCase,
     FixedOffsetLiteral fixedOffsetLiteral,
     boolean[] charClassPrefixAscii,
-    StartAcceleration lineAnchor) {
+    StartAcceleration lineAnchor,
+    AhoCorasickSearcher ahoCorasick,
+    boolean isPureLiteralAlternation) {
 
-  static final StartDescriptor NONE = new StartDescriptor(null, false, null, null, null);
+  StartDescriptor(
+      String prefix,
+      boolean prefixFoldCase,
+      FixedOffsetLiteral fixedOffsetLiteral,
+      boolean[] charClassPrefixAscii,
+      StartAcceleration lineAnchor) {
+    this(prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefixAscii, lineAnchor, null, false);
+  }
+
+  static final StartDescriptor NONE =
+      new StartDescriptor(null, false, null, null, null, null, false);
 
   boolean hasStartAcceleration() {
     return prefix != null
         || fixedOffsetLiteral != null
         || charClassPrefixAscii != null
-        || lineAnchor != null;
+        || lineAnchor != null
+        || ahoCorasick != null;
   }
 }

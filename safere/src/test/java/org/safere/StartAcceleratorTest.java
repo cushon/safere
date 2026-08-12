@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.safere.Pattern.FixedOffsetLiteral;
 
@@ -90,6 +91,18 @@ class StartAcceleratorTest {
     assertThat(utf8Acc.strategy()).isEqualTo(MatchStrategy.CHARACTER_CLASS);
     assertThat(utf8Acc.isExactMatchCandidate()).isFalse();
     assertThat(utf8Acc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
+  }
+
+  @Test
+  void ahoCorasickAcceleratesMultiPrefixString() {
+    AhoCorasickSearcher searcher = new AhoCorasickSearcher(List.of("alpha", "beta"), false);
+    StartDescriptor desc = new StartDescriptor(null, false, null, null, null, searcher, true);
+
+    StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.AhoCorasick.class);
+    assertThat(strAcc.strategy()).isEqualTo(MatchStrategy.LITERAL);
+    assertThat(strAcc.isExactMatchCandidate()).isTrue();
+    assertThat(strAcc.findCandidate("...beta...", 0, false)).isEqualTo(3);
   }
 
   private static Utf8InputScanner utf8Scanner(String text) {

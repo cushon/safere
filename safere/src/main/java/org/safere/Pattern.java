@@ -480,14 +480,30 @@ public final class Pattern implements Serializable {
         (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
             ? extractStartAcceleration(metadataAst)
             : null;
+    LiteralExtractor.Result literalResult =
+        (prefix == null) ? LiteralExtractor.extract(metadataAst) : null;
+    boolean isPureLiteralAlternation =
+        literalResult != null && literalResult.isPureLiteralAlternation();
+    AhoCorasickSearcher ahoCorasick =
+        (isPureLiteralAlternation && literalResult.literals().size() > 1)
+            ? new AhoCorasickSearcher(literalResult.literals(), literalResult.isCaseInsensitive())
+            : null;
+
     if (prefix == null
         && fixedOffsetLiteral == null
         && ccPrefixAscii == null
-        && startAcceleration == null) {
+        && startAcceleration == null
+        && ahoCorasick == null) {
       return StartDescriptor.NONE;
     }
     return new StartDescriptor(
-        prefix, prefixFoldCase, fixedOffsetLiteral, ccPrefixAscii, startAcceleration);
+        prefix,
+        prefixFoldCase,
+        fixedOffsetLiteral,
+        ccPrefixAscii,
+        startAcceleration,
+        ahoCorasick,
+        isPureLiteralAlternation);
   }
 
   /**

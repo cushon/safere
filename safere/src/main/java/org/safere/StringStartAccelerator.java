@@ -25,6 +25,9 @@ sealed interface StringStartAccelerator {
     if (descriptor.prefix() != null) {
       return new Literal(descriptor.prefix(), descriptor.prefixFoldCase());
     }
+    if (descriptor.ahoCorasick() != null) {
+      return new AhoCorasick(descriptor.ahoCorasick(), descriptor.isPureLiteralAlternation());
+    }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
@@ -303,6 +306,31 @@ sealed interface StringStartAccelerator {
           || prev == '\u2028'
           || prev == '\u2029'
           || (prev == '\r' && text.charAt(pos) != '\n');
+    }
+  }
+
+  final class AhoCorasick implements StringStartAccelerator {
+    private final AhoCorasickSearcher searcher;
+    private final boolean isPureLiteralAlternation;
+
+    AhoCorasick(AhoCorasickSearcher searcher, boolean isPureLiteralAlternation) {
+      this.searcher = searcher;
+      this.isPureLiteralAlternation = isPureLiteralAlternation;
+    }
+
+    @Override
+    public MatchStrategy strategy() {
+      return MatchStrategy.LITERAL;
+    }
+
+    @Override
+    public boolean isExactMatchCandidate() {
+      return isPureLiteralAlternation;
+    }
+
+    @Override
+    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+      return searcher.findNext(text, fromIndex);
     }
   }
 }
