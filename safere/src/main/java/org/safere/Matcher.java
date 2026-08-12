@@ -1922,7 +1922,7 @@ public final class Matcher implements MatchResult {
         WorkCounter.record();
       }
       char ch = text.charAt(i);
-      if (keywordAlternation.firstAscii.contains(asciiLower(ch))
+      if (keywordAlternation.firstAscii.contains(ch)
           && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
@@ -1956,7 +1956,7 @@ public final class Matcher implements MatchResult {
         WorkCounter.record();
       }
       char ch = text.charAt(i);
-      if (keywordAlternation.firstAscii.contains(asciiLower(ch))
+      if (keywordAlternation.firstAscii.contains(ch)
           && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();

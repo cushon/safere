@@ -2043,9 +2043,7 @@ public final class Pattern implements Serializable {
         WorkCounter.record();
       }
       int first = scanner.asciiAt(position);
-      if (first < 0
-          || !firstAscii.contains(asciiLower(first))
-          || !isWordBoundaryAt(scanner, position)) {
+      if (first < 0 || !firstAscii.containsAscii(first) || !isWordBoundaryAt(scanner, position)) {
         return -1;
       }
       for (String keyword : keywords) {
@@ -2641,7 +2639,13 @@ public final class Pattern implements Serializable {
         return null;
       }
       keywords[i] = keyword;
-      firstAscii.add(keyword.charAt(0));
+      char c = keyword.charAt(0);
+      firstAscii.add(c);
+      if (c >= 'a' && c <= 'z') {
+        firstAscii.add(c - 32);
+      } else if (c >= 'A' && c <= 'Z') {
+        firstAscii.add(c + 32);
+      }
     }
 
     boolean beforeUnicodeWordBoundary = (before.flags & ParseFlags.UNICODE_CHAR_CLASS) != 0;

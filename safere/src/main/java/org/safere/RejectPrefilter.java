@@ -58,10 +58,30 @@ sealed interface RejectPrefilter
         descriptor.requiredCharClass() != null
             ? CharClass.create(descriptor.requiredCharClass())
             : null;
-    if (litFilter != null && ccFilter != null) {
-      return new Composite(new RejectPrefilter[] {litFilter, ccFilter});
+    RejectPrefilter disjointFilter =
+        descriptor.disjointRequiredLiterals() != null
+            ? DisjointLiterals.create(descriptor.disjointRequiredLiterals())
+            : null;
+    int count =
+        (litFilter != null ? 1 : 0) + (ccFilter != null ? 1 : 0) + (disjointFilter != null ? 1 : 0);
+    if (count == 0) {
+      return null;
     }
-    return litFilter != null ? litFilter : ccFilter;
+    if (count == 1) {
+      return litFilter != null ? litFilter : (ccFilter != null ? ccFilter : disjointFilter);
+    }
+    RejectPrefilter[] filters = new RejectPrefilter[count];
+    int idx = 0;
+    if (litFilter != null) {
+      filters[idx++] = litFilter;
+    }
+    if (ccFilter != null) {
+      filters[idx++] = ccFilter;
+    }
+    if (disjointFilter != null) {
+      filters[idx++] = disjointFilter;
+    }
+    return new Composite(filters);
   }
 
   @SuppressWarnings("ArrayRecordComponent")
