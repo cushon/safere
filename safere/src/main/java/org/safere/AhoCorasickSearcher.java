@@ -7,15 +7,14 @@ package org.safere;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 
 /**
- * A fast multi-string literal search engine using the Aho-Corasick algorithm. Designed to compile
- * transitions into flat primitive arrays for allocation-free matching.
+ * A fast multi-string literal search engine using the Aho-Corasick algorithm compiled into a
+ * flattened direct DFA transition table. Designed for allocation-free, single-indexed O(1) matching.
  */
 final class AhoCorasickSearcher {
 
@@ -25,28 +24,37 @@ final class AhoCorasickSearcher {
     int matchIndex = -1;
   }
 
-  // Compressed transition table representation
-  private final int[] rootTransitions;
-  private final int[] firstChild;
-  private final int[] numChildren;
-  private final char[] transitionChars;
-  private final int[] transitionStates;
+  // Pre-computed DFA transition table: [numStates * 128]
+  private final short[] transitions;
   private final int[] failureLinks;
   private final int[] matchIndices;
   private final int[] patternLengths;
   private final int maxPatternLength;
   private final boolean caseInsensitive;
+  private final boolean isAsciiOnly;
+  private final Map<Long, Short> nonAsciiTransitions;
 
   AhoCorasickSearcher(List<String> patterns, boolean caseInsensitive) {
     this.caseInsensitive = caseInsensitive;
     this.patternLengths = new int[patterns.size()];
     int maxLen = 0;
+    boolean allAscii = true;
     for (int i = 0; i < patterns.size(); i++) {
-      int length = patterns.get(i).length();
+      String p = patterns.get(i);
+      int length = p.length();
       this.patternLengths[i] = length;
       maxLen = Math.max(maxLen, length);
+      if (allAscii) {
+        for (int j = 0; j < length; j++) {
+          if (p.charAt(j) >= 128) {
+            allAscii = false;
+            break;
+          }
+        }
+      }
     }
     this.maxPatternLength = maxLen;
+    this.isAsciiOnly = allAscii;
 
     BuilderNode root = new BuilderNode();
 
@@ -89,7 +97,7 @@ final class AhoCorasickSearcher {
       }
     }
 
-    // 3. Compile the builder nodes into flat arrays
+    // 3. Assign sequential state IDs in BFS order (root is state 0)
     List<BuilderNode> nodeList = new ArrayList<>();
     Queue<BuilderNode> compileQueue = new ArrayDeque<>();
     nodeList.add(root);
@@ -107,58 +115,41 @@ final class AhoCorasickSearcher {
     }
 
     int numNodes = nodeList.size();
-    this.firstChild = new int[numNodes];
-    this.numChildren = new int[numNodes];
+    this.transitions = new short[numNodes * 128];
     this.failureLinks = new int[numNodes];
     this.matchIndices = new int[numNodes];
+    this.nonAsciiTransitions = allAscii ? null : new HashMap<>();
 
-    List<Character> charList = new ArrayList<>();
-    List<Integer> stateList = new ArrayList<>();
+    // 4. Precompute direct DFA transitions in BFS order
+    for (int state = 0; state < numNodes; state++) {
+      BuilderNode node = nodeList.get(state);
+      this.failureLinks[state] = nodeIndices.get(node.fail);
+      this.matchIndices[state] = node.matchIndex;
+      int baseOffset = state << 7;
 
-    for (int i = 0; i < numNodes; i++) {
-      BuilderNode node = nodeList.get(i);
-      this.failureLinks[i] = nodeIndices.get(node.fail);
-      this.matchIndices[i] = node.matchIndex;
-      this.firstChild[i] = charList.size();
-      this.numChildren[i] = node.children.size();
+      for (int c = 0; c < 128; c++) {
+        BuilderNode child = node.children.get((char) c);
+        if (child != null) {
+          transitions[baseOffset | c] = (short) (int) nodeIndices.get(child);
+        } else if (state == 0) {
+          transitions[baseOffset | c] = 0;
+        } else {
+          int failState = nodeIndices.get(node.fail);
+          // failState < state by BFS invariant, so failState transitions are already computed
+          transitions[baseOffset | c] = transitions[(failState << 7) | c];
+        }
+      }
 
-      for (Map.Entry<Character, BuilderNode> entry : node.children.entrySet()) {
-        charList.add(entry.getKey());
-        stateList.add(nodeIndices.get(entry.getValue()));
+      if (!allAscii) {
+        for (Map.Entry<Character, BuilderNode> entry : node.children.entrySet()) {
+          char c = entry.getKey();
+          if (c >= 128) {
+            nonAsciiTransitions.put(
+                ((long) state << 32) | c, (short) (int) nodeIndices.get(entry.getValue()));
+          }
+        }
       }
     }
-
-    this.rootTransitions = new int[128];
-    Arrays.fill(this.rootTransitions, -1);
-    for (Map.Entry<Character, BuilderNode> entry : root.children.entrySet()) {
-      char c = entry.getKey();
-      if (c < 128) {
-        this.rootTransitions[c] = nodeIndices.get(entry.getValue());
-      }
-    }
-
-    this.transitionChars = new char[charList.size()];
-    for (int i = 0; i < charList.size(); i++) {
-      this.transitionChars[i] = charList.get(i);
-    }
-    this.transitionStates = new int[stateList.size()];
-    for (int i = 0; i < stateList.size(); i++) {
-      this.transitionStates[i] = stateList.get(i);
-    }
-  }
-
-  private int nextState(int state, char c) {
-    if (state == 0) {
-      return (c < 128) ? rootTransitions[c] : -1;
-    }
-    int start = firstChild[state];
-    int count = numChildren[state];
-    for (int i = 0; i < count; i++) {
-      if (transitionChars[start + i] == c) {
-        return transitionStates[start + i];
-      }
-    }
-    return -1;
   }
 
   /**
@@ -169,50 +160,61 @@ final class AhoCorasickSearcher {
     int state = 0;
     int len = text.length();
     int bestStart = -1;
-    if (caseInsensitive) {
-      for (int i = start; i < len; i++) {
-        char c = asciiLower(text.charAt(i));
-        if (state == 0) {
-          int next = (c < 128) ? rootTransitions[c] : -1;
-          state = (next != -1) ? next : 0;
-        } else {
-          int next = nextState(state, c);
-          while (next == -1 && state != 0) {
-            state = failureLinks[state];
-            next = nextState(state, c);
-          }
-          state = (next != -1) ? next : 0;
-        }
 
-        if (matchIndices[state] != -1) {
+    if (isAsciiOnly) {
+      if (caseInsensitive) {
+        for (int i = start; i < len; i++) {
+          char c = asciiLower(text.charAt(i));
+          state = (c < 128) ? transitions[(state << 7) | c] : 0;
           int patternIdx = matchIndices[state];
-          int patternLen = patternLengths[patternIdx];
-          int matchStart = i - patternLen + 1;
-          if (bestStart < 0 || matchStart < bestStart) {
-            bestStart = matchStart;
+          if (patternIdx != -1) {
+            int patternLen = patternLengths[patternIdx];
+            int matchStart = i - patternLen + 1;
+            if (bestStart < 0 || matchStart < bestStart) {
+              bestStart = matchStart;
+            }
+          }
+          if (canReturnBestStart(bestStart, i)) {
+            return bestStart;
           }
         }
-        if (canReturnBestStart(bestStart, i)) {
-          return bestStart;
+      } else {
+        for (int i = start; i < len; i++) {
+          char c = text.charAt(i);
+          state = (c < 128) ? transitions[(state << 7) | c] : 0;
+          int patternIdx = matchIndices[state];
+          if (patternIdx != -1) {
+            int patternLen = patternLengths[patternIdx];
+            int matchStart = i - patternLen + 1;
+            if (bestStart < 0 || matchStart < bestStart) {
+              bestStart = matchStart;
+            }
+          }
+          if (canReturnBestStart(bestStart, i)) {
+            return bestStart;
+          }
         }
       }
     } else {
       for (int i = start; i < len; i++) {
-        char c = text.charAt(i);
-        if (state == 0) {
-          int next = (c < 128) ? rootTransitions[c] : -1;
-          state = (next != -1) ? next : 0;
+        char c = caseInsensitive ? asciiLower(text.charAt(i)) : text.charAt(i);
+        if (c < 128) {
+          state = transitions[(state << 7) | c];
         } else {
-          int next = nextState(state, c);
-          while (next == -1 && state != 0) {
-            state = failureLinks[state];
-            next = nextState(state, c);
+          Short next = nonAsciiTransitions.get(((long) state << 32) | c);
+          if (next != null) {
+            state = next;
+          } else {
+            int f = failureLinks[state];
+            while (f != 0 && (next = nonAsciiTransitions.get(((long) f << 32) | c)) == null) {
+              f = failureLinks[f];
+            }
+            state = (next != null) ? next : (f == 0 ? nonAsciiTransitions.getOrDefault((long) c, (short) 0) : 0);
           }
-          state = (next != -1) ? next : 0;
         }
 
-        if (matchIndices[state] != -1) {
-          int patternIdx = matchIndices[state];
+        int patternIdx = matchIndices[state];
+        if (patternIdx != -1) {
           int patternLen = patternLengths[patternIdx];
           int matchStart = i - patternLen + 1;
           if (bestStart < 0 || matchStart < bestStart) {
