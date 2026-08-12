@@ -1193,6 +1193,34 @@ class PatternTest {
                       "config.yaml\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
           .isFalse();
     }
+
+    @Test
+    @DisplayName("end-anchored character class rejects inputs not ending with class")
+    void endAnchoredCharClassRejectsMismatchedInputs() {
+      Pattern p = Pattern.compile(".*[0-9]$");
+
+      assertThat(p.matcher("item123").find()).isTrue();
+      assertThat(p.matcher("item123").matches()).isTrue();
+      assertThat(p.matcher("item123\n").find()).isTrue();
+
+      assertThat(p.matcher("item123abc").find()).isFalse();
+      assertThat(p.matcher("item123abc").matches()).isFalse();
+      assertThat(p.matcher("item123abc\n").find()).isFalse();
+
+      assertThat(p.matcher("").find()).isFalse();
+      assertThat(p.matcher("\n").find()).isFalse();
+
+      // Utf8Input
+      assertThat(
+              p.find(
+                  Utf8Input.trusted("item123".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "item123abc".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isFalse();
+    }
   }
 
   @Nested

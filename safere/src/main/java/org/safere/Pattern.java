@@ -3013,18 +3013,49 @@ public final class Pattern implements Serializable {
 
   public record SuffixInfo(String suffix, boolean wasDollar) {}
 
+  @SuppressWarnings("ArrayRecordComponent")
+  public record EndAnchoredCharClassInfo(boolean[] bitmap, boolean wasDollar) {}
+
+  private static int countAsciiBitmap(boolean[] bitmap) {
+    if (bitmap == null) {
+      return 0;
+    }
+    int count = 0;
+    for (boolean b : bitmap) {
+      if (b) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   /** Extracts whole-input rejection metadata from the AST. */
   private static RejectDescriptor extractRejectDescriptor(
       Regexp metadataAst, int flags, StartDescriptor startDescriptor) {
     SuffixInfo endAnchoredSuffix = extractEndAnchoredSuffix(metadataAst, flags);
+    EndAnchoredCharClassInfo endAnchoredCharClass =
+        endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
     String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
     boolean[] ccPrefixAscii =
         startDescriptor != null ? startDescriptor.charClassPrefixAscii() : null;
     String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
-    CharClassScanInfo requiredMatchClass =
-        (prefix == null && ccPrefixAscii == null)
-            ? extractRequiredMatchClass(metadataAst, false)
-            : null;
+    CharClassScanInfo requiredMatchClass = null;
+    if (prefix == null && endAnchoredCharClass == null) {
+      if (ccPrefixAscii == null) {
+        requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
+      } else {
+        CharClassScanInfo candidate = extractRequiredMatchClass(metadataAst, false);
+        if (candidate != null && candidate.ranges != null) {
+          int candidateRunes = 0;
+          for (int i = 0; i < candidate.ranges.length; i += 2) {
+            candidateRunes += (candidate.ranges[i + 1] - candidate.ranges[i] + 1);
+          }
+          if (candidateRunes < countAsciiBitmap(ccPrefixAscii)) {
+            requiredMatchClass = candidate;
+          }
+        }
+      }
+    }
     DisjointRequiredLiterals disjointRequiredLiterals =
         (prefix == null && requiredLiteral == null)
             ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
@@ -3032,11 +3063,16 @@ public final class Pattern implements Serializable {
     if (requiredLiteral == null
         && requiredMatchClass == null
         && disjointRequiredLiterals == null
-        && endAnchoredSuffix == null) {
+        && endAnchoredSuffix == null
+        && endAnchoredCharClass == null) {
       return null;
     }
     return new RejectDescriptor(
-        requiredLiteral, requiredMatchClass, disjointRequiredLiterals, endAnchoredSuffix);
+        requiredLiteral,
+        requiredMatchClass,
+        disjointRequiredLiterals,
+        endAnchoredSuffix,
+        endAnchoredCharClass);
   }
 
   /**
@@ -3080,6 +3116,46 @@ public final class Pattern implements Serializable {
       }
     }
     return suffix.isEmpty() ? null : new SuffixInfo(suffix.toString(), wasDollar);
+  }
+
+  /**
+   * Extracts an ASCII character class from an end-anchored pattern (e.g. {@code .*[0-9]$}).
+   *
+   * <p>Returns {@code null} if the pattern is not end-anchored, if the pattern is compiled with
+   * {@link #MULTILINE} and ends with {@code $}, or if the preceding node is not an ASCII character
+   * class.
+   */
+  private static EndAnchoredCharClassInfo extractEndAnchoredCharClass(
+      Regexp metadataAst, int flags) {
+    Regexp node = unwrapCaptures(metadataAst);
+    if (node == null || node.op != RegexpOp.CONCAT || node.nsub() < 2) {
+      return null;
+    }
+    List<Regexp> subs = node.subs;
+    Regexp last = unwrapCaptures(subs.get(subs.size() - 1));
+    if (last == null || last.op != RegexpOp.END_TEXT) {
+      return null;
+    }
+    if ((flags & MULTILINE) != 0 && (last.flags & ParseFlags.WAS_DOLLAR) != 0) {
+      return null;
+    }
+    boolean wasDollar = (last.flags & ParseFlags.WAS_DOLLAR) != 0;
+
+    Regexp sub = unwrapCaptures(subs.get(subs.size() - 2));
+    if (sub == null) {
+      return null;
+    }
+    while (sub.op == RegexpOp.PLUS || (sub.op == RegexpOp.REPEAT && sub.min >= 1)) {
+      sub = unwrapCaptures(sub.sub());
+      if (sub == null) {
+        return null;
+      }
+    }
+    boolean[] bitmap = new boolean[128];
+    if (sub.op == RegexpOp.CHAR_CLASS && addCharClassPrefixAscii(sub.charClass, bitmap)) {
+      return new EndAnchoredCharClassInfo(bitmap, wasDollar);
+    }
+    return null;
   }
 
   /**

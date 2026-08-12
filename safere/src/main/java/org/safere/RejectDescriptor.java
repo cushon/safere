@@ -7,6 +7,7 @@ package org.safere;
 
 import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.DisjointRequiredLiterals;
+import org.safere.Pattern.EndAnchoredCharClassInfo;
 import org.safere.Pattern.SuffixInfo;
 
 /**
@@ -17,25 +18,35 @@ record RejectDescriptor(
     String requiredLiteral,
     CharClassScanInfo requiredCharClass,
     DisjointRequiredLiterals disjointRequiredLiterals,
-    SuffixInfo endAnchoredSuffix) {
+    SuffixInfo endAnchoredSuffix,
+    EndAnchoredCharClassInfo endAnchoredCharClass) {
 
   RejectDescriptor(String requiredLiteral, CharClassScanInfo requiredCharClass) {
-    this(requiredLiteral, requiredCharClass, null, null);
+    this(requiredLiteral, requiredCharClass, null, null, null);
   }
 
   RejectDescriptor(
       String requiredLiteral,
       CharClassScanInfo requiredCharClass,
       DisjointRequiredLiterals disjointRequiredLiterals) {
-    this(requiredLiteral, requiredCharClass, disjointRequiredLiterals, null);
+    this(requiredLiteral, requiredCharClass, disjointRequiredLiterals, null, null);
   }
 
-  static final RejectDescriptor NONE = new RejectDescriptor(null, null, null, null);
+  RejectDescriptor(
+      String requiredLiteral,
+      CharClassScanInfo requiredCharClass,
+      DisjointRequiredLiterals disjointRequiredLiterals,
+      SuffixInfo endAnchoredSuffix) {
+    this(requiredLiteral, requiredCharClass, disjointRequiredLiterals, endAnchoredSuffix, null);
+  }
+
+  static final RejectDescriptor NONE = new RejectDescriptor(null, null, null, null, null);
 
   boolean hasRejectionFilter() {
     return requiredLiteral != null
         || requiredCharClass != null
         || disjointRequiredLiterals != null
-        || endAnchoredSuffix != null;
+        || endAnchoredSuffix != null
+        || endAnchoredCharClass != null;
   }
 }
