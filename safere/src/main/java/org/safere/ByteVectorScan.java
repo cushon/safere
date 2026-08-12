@@ -16,7 +16,7 @@ import org.safere.internal.Swar;
 /**
  * Stateless SIMD kernels using the incubating Vector API for 1-byte sequences (UTF-8 and Latin-1).
  */
-public final class ByteVectorScan {
+final class ByteVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
   public static int indexOfAsciiClass(

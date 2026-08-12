@@ -3,7 +3,7 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.foreign;
+package org.safere;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -11,7 +11,7 @@ import org.safere.internal.Ascii;
 import org.safere.internal.Swar;
 
 /** Stateless 2-byte UTF-16 64-bit SWAR scanning kernels over {@link MemorySegment}. */
-public final class SegmentShortSwarScan {
+final class SegmentShortSwarScan {
 
   private static final ValueLayout.OfLong UTF16_LONG =
       ValueLayout.JAVA_LONG_UNALIGNED.withOrder(java.nio.ByteOrder.LITTLE_ENDIAN);

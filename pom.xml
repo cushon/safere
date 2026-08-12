@@ -118,15 +118,6 @@
 
   <profiles>
     <profile>
-      <id>foreign-memory</id>
-      <activation>
-        <jdk>[22,)</jdk>
-      </activation>
-      <modules>
-        <module>safere-foreign</module>
-      </modules>
-    </profile>
-    <profile>
       <id>release</id>
       <build>
         <plugins>

@@ -158,6 +158,12 @@ jobs:
           -Dtest.parallelism=4
           --batch-mode --no-transfer-progress
 
+      - name: Run JDK 22+ foreign-memory kernel tests
+        if: matrix.java != '21'
+        run: >
+          mvn jacoco:prepare-agent surefire:test@test-jdk22-foreign-memory -pl safere
+          --batch-mode --no-transfer-progress
+
       - name: Run public API crosscheck with Vector enabled
         run: >
           mvn surefire:test

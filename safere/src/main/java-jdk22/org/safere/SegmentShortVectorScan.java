@@ -3,7 +3,7 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.foreign;
+package org.safere;
 
 import static org.safere.internal.Ascii.toLowerCase;
 import static org.safere.internal.Ascii.toUpperCase;
@@ -18,7 +18,7 @@ import jdk.incubator.vector.VectorSpecies;
 import org.safere.internal.Swar;
 
 /** Stateless 2-byte UTF-16 SIMD scanning kernels over {@link MemorySegment}. */
-public final class SegmentShortVectorScan {
+final class SegmentShortVectorScan {
 
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
   private static final ValueLayout.OfShort UTF16_SHORT =
