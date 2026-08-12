@@ -198,6 +198,27 @@ class PatternInternalTest {
   }
 
   @Test
+  void deeplyNestedFixedOffsetWidthExtractionIsStackSafe() {
+    Pattern p = Pattern.compile(nestedFixedOffsetPattern(2_000));
+
+    assertThat(p.fixedOffsetLiteral()).isNotNull();
+  }
+
+  @Test
+  void largeCapturedLiteralConcatenationRecordsMaximalSuffix() {
+    StringBuilder regex = new StringBuilder("[ab]");
+    for (int i = 0; i < 2_000; i++) {
+      regex.append("(x)");
+    }
+
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile(regex.toString()).fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).hasSize(2_000);
+    assertThat(fixed.minOffset()).isEqualTo(1);
+  }
+
+  @Test
   void caseInsensitiveAsciiLiteralUsesLiteralMatchMetadata() {
     Pattern p = Pattern.compile("(?i)i");
 
@@ -242,9 +263,40 @@ class PatternInternalTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"\\d+/x", "[αβ]/x", "[ab](?i:x)", "literal-prefix"})
+  @ValueSource(strings = {"\\d+/x", "[ab](?i:x)", "literal-prefix"})
   void variableWidthUnicodeAndOrdinaryPrefixesDoNotRecordFixedOffsetLiterals(String regex) {
     assertThat(Pattern.compile(regex).fixedOffsetLiteral()).isNull();
+  }
+
+  @Test
+  void unicodeClassOffsetsAreRecordedAsNonDiscreteCodePointRanges() {
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile("[αβ]/x").fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.minOffset()).isEqualTo(1);
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).isNull();
+  }
+
+  @Test
+  void discreteMultiOffsetLiteralsAreRecorded() {
+    Pattern.FixedOffsetLiteral fixed =
+        Pattern.compile("(^|[a-z])(#!customTag)").fixedOffsetLiteral();
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).isEqualTo("#!customTag");
+    assertThat(fixed.minOffset()).isZero();
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).containsExactly(0, 1);
+  }
+
+  @Test
+  void boundedRangeOffsetLiteralsAreRecorded() {
+    Pattern.FixedOffsetLiteral fixed =
+        Pattern.compile("\\s{0,8}renderElement\\(").fixedOffsetLiteral();
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).isEqualTo("renderElement(");
+    assertThat(fixed.minOffset()).isEqualTo(0);
+    assertThat(fixed.maxOffset()).isEqualTo(8);
   }
 
   @ParameterizedTest
@@ -297,6 +349,74 @@ class PatternInternalTest {
       })
   void optionalCaseInsensitiveAndAlreadyPrefixedLiteralsAreNotRecorded(String regex) {
     assertThat(Pattern.compile(regex).requiredLiteral()).isNull();
+  }
+
+  @Test
+  void disjointRequiredLiteralsAreRecordedForAlternations() {
+    Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");
+    assertThat(p.requiredDisjointLiterals()).containsExactly("apple", "banana", "cherry");
+    assertThat(p.requiredLiteral()).isNull();
+
+    Pattern p2 = Pattern.compile("(foo.*|bar.*|baz.*)");
+    assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "bar", "baz");
+
+    Pattern p3 = Pattern.compile("(?:\\bfirstToken\\b|\\bsecondToken\\b)");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("firstToken", "secondToken");
+  }
+
+  @Test
+  void disjointRequiredLiteralsSubsumptionMinimization() {
+    // pineapple contains apple, so pineapple is pruned and apple + banana are required.
+    Pattern p1 = Pattern.compile(".*(?:apple|pineapple|banana).*");
+    assertThat(p1.requiredDisjointLiterals()).containsExactly("apple", "banana");
+
+    // prefix_foo contains foo, bar_baz contains baz
+    Pattern p2 = Pattern.compile(".*(?:prefix_foo|foo|bar_baz|baz).*");
+    assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "baz");
+
+    // https contains http, ftp is distinct
+    Pattern p3 = Pattern.compile(".*(?:http|https|ftp).*");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("http", "ftp");
+
+    // A lone surrogate is not a code-point substring of a supplementary character.
+    Pattern p4 = Pattern.compile("(?:a\uD83D|za\uD83D\uDE00|banana)");
+    assertThat(p4.requiredDisjointLiterals())
+        .containsExactly("a\uD83D", "za\uD83D\uDE00", "banana");
+  }
+
+  @Test
+  void tooManyRawDisjointLiteralsAreRejectedBeforeMinimization() {
+    StringBuilder regex = new StringBuilder("(?:banana");
+    for (int i = 0; i < 16; i++) {
+      regex.append('|').append("x".repeat(i)).append("apple");
+    }
+    regex.append(')');
+
+    assertThat(Pattern.compile(regex.toString()).requiredDisjointLiterals()).isNull();
+  }
+
+  @Test
+  void disjointRequiredLiteralCountIsBoundedByMeasuredCrossover() {
+    assertThat(Pattern.compile("(?:apple|banana|cherry|orange)\\d").requiredDisjointLiterals())
+        .containsExactly("apple", "banana", "cherry", "orange");
+    assertThat(
+            Pattern.compile("(?:apple|banana|cherry|orange|papaya)\\d").requiredDisjointLiterals())
+        .isNull();
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        ".*(?:apple|banana)?.*",
+        ".*(?:apple|.*).*",
+        ".*(?:apple|a).*",
+        "(?i).*(?:apple|banana).*"
+      })
+  void invalidOrNullableAlternationsDoNotRecordDisjointLiterals(String regex) {
+    Pattern p = Pattern.compile(regex);
+    if (p.prefix() == null && p.requiredLiteral() == null) {
+      assertThat(p.requiredDisjointLiterals()).isNull();
+    }
   }
 
   @Test
@@ -398,6 +518,19 @@ class PatternInternalTest {
     for (int i = 0; i < depth; i++) {
       regex.append(")x");
     }
+    return regex.toString();
+  }
+
+  private static String nestedFixedOffsetPattern(int depth) {
+    StringBuilder regex = new StringBuilder(depth * 3 + 6);
+    for (int i = 0; i < depth; i++) {
+      regex.append('(');
+    }
+    regex.append("[ab]");
+    for (int i = 0; i < depth; i++) {
+      regex.append(")x");
+    }
+    regex.append("ZZ");
     return regex.toString();
   }
 

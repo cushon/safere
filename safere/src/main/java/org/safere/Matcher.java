@@ -21,6 +21,7 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import org.safere.Pattern.DisjointRequiredLiterals;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by
@@ -97,6 +98,7 @@ public final class Matcher implements MatchResult {
   private int regionEnd;
   private boolean fullTextRegionContext;
   private boolean findExhaustedAfterTerminalEmptyMatch;
+  private boolean disjointRequiredLiteralsChecked;
   private int modCount;
   private DiagnosticOperation diagnosticOperation;
   private boolean diagnosticCaptureSearch;
@@ -419,6 +421,7 @@ public final class Matcher implements MatchResult {
     resetReplacementState();
     clearCurrentResult();
     eagerFallbackCaptures = false;
+    disjointRequiredLiteralsChecked = false;
   }
 
   private PreparedMatchRunner preparedMatchRunner;
@@ -430,10 +433,12 @@ public final class Matcher implements MatchResult {
     resetSearchStateForRegionStart();
     resetReplacementState();
     clearCurrentResult();
+    disjointRequiredLiteralsChecked = false;
   }
 
   private void invalidatePatternCaches() {
     preparedMatchRunner = null;
+    disjointRequiredLiteralsChecked = false;
     cachedForwardFirstMatchDfa = null;
     cachedForwardLongestMatchDfa = null;
     cachedReverseDfa = null;
@@ -1481,6 +1486,27 @@ public final class Matcher implements MatchResult {
         return applyFailedMatchResult();
       }
     }
+    DisjointRequiredLiterals disjointRequiredLiterals = parentPattern.disjointRequiredLiterals();
+    if (options.literalFastPaths()
+        && disjointRequiredLiterals != null
+        && !disjointRequiredLiteralsChecked
+        && !hasAcceleratedSearchPath
+        && !prog.anchorStart()
+        && text != null) {
+      disjointRequiredLiteralsChecked = true;
+      boolean found = false;
+      for (String lit : disjointRequiredLiterals.literals()) {
+        if (indexOfRequiredLiteral(lit) >= 0) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(MatchStrategy.LITERAL);
+        return applyFailedMatchResult();
+      }
+    }
 
     int[] requiredRanges = parentPattern.requiredMatchClassRanges();
     if (options.charClassMatchFastPaths()
@@ -1969,11 +1995,14 @@ public final class Matcher implements MatchResult {
 
   private int nextFixedOffsetCandidate(
       InputScanner scanner, Pattern.FixedOffsetLiteral fixedOffsetLiteral, int fromIndex) {
-    if (fixedOffsetLiteral.offset() > scanner.length() - fromIndex) {
+    int minOffset = fixedOffsetLiteral.minOffset();
+    if (minOffset > scanner.length() - fromIndex) {
       return -1;
     }
-    int literalFrom = fromIndex + fixedOffsetLiteral.offset();
+    int literalFrom = fromIndex + minOffset;
     boolean[] firstAscii = parentPattern.charClassPrefixAscii();
+    int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
+
     while (literalFrom <= scanner.length()) {
       int literalStart;
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
@@ -1996,12 +2025,29 @@ public final class Matcher implements MatchResult {
       if (literalStart < 0) {
         return -1;
       }
-      int candidateStart = literalStart - fixedOffsetLiteral.offset();
-      int first = scanner.asciiAt(candidateStart);
-      if (firstAscii == null || (first >= 0 && first < firstAscii.length && firstAscii[first])) {
-        return candidateStart;
+      if (discreteOffsets != null && discreteOffsets.length == 1 && firstAscii != null) {
+        boolean matchFound = false;
+        int earliestValid = -1;
+        for (int offset : discreteOffsets) {
+          int candidateStart = literalStart - offset;
+          if (candidateStart >= fromIndex) {
+            int first = scanner.asciiAt(candidateStart);
+            if (first >= 0 && first < firstAscii.length && firstAscii[first]) {
+              matchFound = true;
+              if (earliestValid < 0 || candidateStart < earliestValid) {
+                earliestValid = candidateStart;
+              }
+            }
+          }
+        }
+        if (matchFound) {
+          return earliestValid;
+        }
+        literalFrom = literalStart + 1;
+        continue;
       }
-      literalFrom = literalStart + 1;
+      return Math.max(
+          fromIndex, scanner.retreatByCodePoints(literalStart, fixedOffsetLiteral.maxOffset()));
     }
     return -1;
   }
