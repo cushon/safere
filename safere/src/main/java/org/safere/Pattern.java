@@ -140,13 +140,11 @@ public final class Pattern implements Serializable {
   private final transient Map<String, Integer> namedGroups;
   private final transient String prefix;
   private final transient boolean prefixFoldCase;
-  private final transient String literalMatch;
+  private final transient MatchDescriptor matchDescriptor;
   private final transient byte[] literalMatchUtf8;
   private final transient int[] literalMatchFailure;
   private final transient int[] literalMatchShifts;
   private final transient byte[] prefixUtf8;
-  private final transient int[] prefixUtf8Failure;
-  private final transient int[] prefixUtf8Shifts;
   private final transient boolean hasLazy;
   private final transient boolean hasAlternation;
   private final transient boolean hasNullableAlternation;
@@ -154,66 +152,23 @@ public final class Pattern implements Serializable {
   private final transient boolean startsWithGraphemeClusterBoundary;
   private final transient boolean hasInternalGraphemeClusterBoundary;
   private final transient boolean[] charClassPrefixAscii;
-  private final transient CharClassScanInfo charClassPrefixScanInfo;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
-  private final transient StartAcceleration startAcceleration;
-  private final transient KeywordAlternation keywordAlternation;
+  private final transient Utf8StartAccelerator utf8StartAccelerator;
+  private final transient StringStartAccelerator stringStartAccelerator;
   private final transient EnginePathOptions enginePathOptions;
   private final long patternId;
   private transient volatile PatternAnalysis patternAnalysis;
   private transient volatile PatternDescriptor patternDescriptor;
 
-  /**
-   * Precomputed character class data for the "repeated character class" fast path in {@code
-   * matches()}. Non-null when the pattern is structurally {@code [class]+}, {@code [class]*},
-   * {@code [class]{n,}}, or similar — a single character class quantified to cover the entire
-   * string. Stored as a flat {@code [lo0, hi0, lo1, hi1, ...]} array of inclusive Unicode code
-   * point ranges plus precomputed ASCII bitmaps for O(1) lookup.
-   *
-   * <p>When non-null, {@code matches()} can bypass the full engine cascade and use a tight
-   * character-scanning loop instead.
-   */
-  private final transient int[] charClassMatchRanges;
-
-  private final transient long charClassMatchBitmap0;
-  private final transient long charClassMatchBitmap1;
-  private final transient boolean charClassMatchAllowEmpty;
+  /** Whole-input rejection AST metadata for Tier 0 acceleration. */
+  private final transient RejectDescriptor rejectDescriptor;
 
   /**
-   * Precomputed character class data for a pattern that is exactly one character class, such as
-   * {@code \p{javaLetter}}. Non-null when {@code find()} can scan directly for one matching code
-   * point and produce group 0 without invoking the engine cascade.
+   * Whole-input rejection filter for Tier 0 acceleration. Non-null when matching can quickly reject
+   * by verifying that mandatory literal content or character classes appear anywhere in the input
+   * before running automata.
    */
-  private final transient CharClassScanInfo singleCharClassScanInfo;
-
-  /**
-   * Precomputed character class data for a mandatory character class. Non-null when matching can
-   * reject by scanning for an absent required code point before invoking the full engine cascade.
-   * This is intentionally a negative-only accelerator: if the class is present, normal matching
-   * still determines the result.
-   */
-  private final transient int[] requiredMatchClassRanges;
-
-  private final transient long requiredMatchClassBitmap0;
-  private final transient long requiredMatchClassBitmap1;
-
-  /**
-   * A case-sensitive literal substring that every match must contain. This is a negative-only
-   * accelerator: an absent literal rejects the search, while a present literal still goes through
-   * the normal engine to determine match boundaries and captures.
-   */
-  private final transient String requiredLiteral;
-
-  private final transient byte[] requiredLiteralUtf8;
-  private final transient int[] requiredLiteralFailure;
-  private final transient int[] requiredLiteralShifts;
-
-  /**
-   * A small disjoint set of case-sensitive literal substrings for alternation patterns where every
-   * branch requires at least one literal substring. If none of these literals are present in the
-   * input, the search is rejected immediately.
-   */
-  private final transient DisjointRequiredLiterals disjointRequiredLiterals;
+  private final transient RejectPrefilter rejectPrefilter;
 
   /**
    * Lazily computed OnePass analysis results. Holds the OnePass automaton (if eligible) and derived
@@ -305,29 +260,15 @@ public final class Pattern implements Serializable {
       Prog prog,
       Regexp ast,
       Map<String, Integer> namedGroups,
-      String prefix,
-      boolean prefixFoldCase,
-      String literalMatch,
+      StartDescriptor startDescriptor,
+      MatchDescriptor matchDescriptor,
       boolean hasLazy,
       boolean hasAlternation,
       boolean hasNullableAlternation,
       boolean canMatchEmpty,
       boolean startsWithGraphemeClusterBoundary,
       boolean hasInternalGraphemeClusterBoundary,
-      boolean[] charClassPrefixAscii,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      StartAcceleration startAcceleration,
-      KeywordAlternation keywordAlternation,
-      int[] charClassMatchRanges,
-      long charClassMatchBitmap0,
-      long charClassMatchBitmap1,
-      boolean charClassMatchAllowEmpty,
-      CharClassScanInfo singleCharClass,
-      int[] requiredMatchClassRanges,
-      long requiredMatchClassBitmap0,
-      long requiredMatchClassBitmap1,
-      String requiredLiteral,
-      DisjointRequiredLiterals disjointRequiredLiterals,
+      RejectDescriptor rejectDescriptor,
       EnginePathOptions enginePathOptions) {
     this.patternId = nextPatternId();
     this.pattern = pattern;
@@ -356,15 +297,14 @@ public final class Pattern implements Serializable {
 
     this.ast = ast;
     this.namedGroups = namedGroups;
-    this.prefix = prefix;
-    this.prefixFoldCase = prefixFoldCase;
+    this.prefix = startDescriptor.prefix();
+    this.prefixFoldCase = startDescriptor.prefixFoldCase();
     this.prefixUtf8 =
-        prefix == null || prefix.isEmpty()
+        startDescriptor.prefix() == null || startDescriptor.prefix().isEmpty()
             ? null
-            : prefix.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-    this.prefixUtf8Failure = prefixUtf8 == null ? null : literalFailure(prefixUtf8);
-    this.prefixUtf8Shifts = prefixUtf8 == null ? null : literalShifts(prefixUtf8);
-    this.literalMatch = literalMatch;
+            : startDescriptor.prefix().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    this.matchDescriptor = matchDescriptor != null ? matchDescriptor : MatchDescriptor.NONE;
+    String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
         literalMatch == null
             ? null
@@ -377,30 +317,15 @@ public final class Pattern implements Serializable {
     this.canMatchEmpty = canMatchEmpty;
     this.startsWithGraphemeClusterBoundary = startsWithGraphemeClusterBoundary;
     this.hasInternalGraphemeClusterBoundary = hasInternalGraphemeClusterBoundary;
-    this.charClassPrefixAscii = charClassPrefixAscii;
-    this.charClassPrefixScanInfo = buildAsciiClassScanInfo(charClassPrefixAscii);
-    this.fixedOffsetLiteral = fixedOffsetLiteral;
-    this.startAcceleration = startAcceleration;
-    this.keywordAlternation = keywordAlternation;
+    this.charClassPrefixAscii = startDescriptor.charClassPrefixAscii();
+    this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
+    this.utf8StartAccelerator =
+        Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
+    this.stringStartAccelerator =
+        StringStartAccelerator.create(startDescriptor, prog.hasWordBoundary());
     this.enginePathOptions = enginePathOptions;
-    this.charClassMatchRanges = charClassMatchRanges;
-    this.charClassMatchBitmap0 = charClassMatchBitmap0;
-    this.charClassMatchBitmap1 = charClassMatchBitmap1;
-    this.charClassMatchAllowEmpty = charClassMatchAllowEmpty;
-    this.singleCharClassScanInfo = singleCharClass;
-    this.requiredMatchClassRanges = requiredMatchClassRanges;
-    this.requiredMatchClassBitmap0 = requiredMatchClassBitmap0;
-    this.requiredMatchClassBitmap1 = requiredMatchClassBitmap1;
-    this.requiredLiteral = requiredLiteral;
-    this.requiredLiteralUtf8 =
-        requiredLiteral == null
-            ? null
-            : requiredLiteral.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-    this.requiredLiteralFailure =
-        requiredLiteralUtf8 == null ? null : literalFailure(requiredLiteralUtf8);
-    this.requiredLiteralShifts =
-        requiredLiteralUtf8 == null ? null : literalShifts(requiredLiteralUtf8);
-    this.disjointRequiredLiterals = disjointRequiredLiterals;
+    this.rejectDescriptor = rejectDescriptor != null ? rejectDescriptor : RejectDescriptor.NONE;
+    this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
     onePassAnalysis();
@@ -413,6 +338,20 @@ public final class Pattern implements Serializable {
     if (SafeReMatchDiagnostics.isEnabled(listener)) {
       listener.onPatternCompiled(new PatternCompiledEvent(descriptor()));
     }
+  }
+
+  private static MatchDescriptor extractMatchDescriptor(Regexp metadataAst, int flags) {
+    String literalMatch = extractLiteralMatch(metadataAst);
+    CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
+    KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
+    CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
+    if (literalMatch == null
+        && singleCharClass == null
+        && keywordAlternation == null
+        && ccMatch == null) {
+      return MatchDescriptor.NONE;
+    }
+    return new MatchDescriptor(literalMatch, singleCharClass, keywordAlternation, ccMatch);
   }
 
   private static long nextPatternId() {
@@ -500,35 +439,17 @@ public final class Pattern implements Serializable {
       throw new PatternSyntaxException("pattern too large to simplify", regex, -1);
     }
     Map<String, Integer> named = extractNamedGroups(re);
-    PrefixResult prefixResult = extractPrefix(metadataAst);
-    String prefix = prefixResult.prefix();
-    boolean prefixFoldCase = prefixResult.foldCase();
-    String literalMatch = extractLiteralMatch(metadataAst);
+    StartDescriptor startDescriptor = extractStartDescriptor(metadataAst);
+    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, flags);
     boolean hasLazy = hasLazyQuantifiers(re);
     boolean hasAlt = hasAlternation(re);
     boolean canMatchEmpty = canMatchEmpty(re);
     boolean hasNullableAlt = hasAlt && hasNullableAlternation(re);
     boolean startsWithGcb = startsWithGraphemeClusterBoundary(metadataAst);
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
-    FixedOffsetLiteral fixedOffsetLiteral =
-        prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
-    // Extract character-class prefix for acceleration when no literal prefix exists.
-    boolean[] ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
-    StartAcceleration startAcceleration =
-        (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
-            ? extractStartAcceleration(metadataAst)
-            : null;
-    KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
-    // Detect "repeated character class" pattern for matches() fast path.
-    CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
-    CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
-    CharClassScanInfo requiredMatchClass =
-        extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
-    String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
-    DisjointRequiredLiterals disjointRequiredLiterals =
-        (prefix == null && requiredLiteral == null)
-            ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
-            : null;
+    RejectDescriptor rejectDescriptor =
+        extractRejectDescriptor(
+            metadataAst, startDescriptor.prefix(), startDescriptor.charClassPrefixAscii());
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,
@@ -536,30 +457,37 @@ public final class Pattern implements Serializable {
         compiled,
         re,
         named,
-        prefix,
-        prefixFoldCase,
-        literalMatch,
+        startDescriptor,
+        matchDescriptor,
         hasLazy,
         hasAlt,
         hasNullableAlt,
         canMatchEmpty,
         startsWithGcb,
         hasInternalGcb,
-        ccPrefixAscii,
-        fixedOffsetLiteral,
-        startAcceleration,
-        keywordAlternation,
-        ccMatch != null ? ccMatch.ranges : null,
-        ccMatch != null ? ccMatch.bitmap0 : 0,
-        ccMatch != null ? ccMatch.bitmap1 : 0,
-        ccMatch != null && ccMatch.allowEmpty,
-        singleCharClass,
-        requiredMatchClass != null ? requiredMatchClass.ranges : null,
-        requiredMatchClass != null ? requiredMatchClass.bitmap0 : 0,
-        requiredMatchClass != null ? requiredMatchClass.bitmap1 : 0,
-        requiredLiteral,
-        disjointRequiredLiterals,
+        rejectDescriptor,
         enginePathOptions);
+  }
+
+  private static StartDescriptor extractStartDescriptor(Regexp metadataAst) {
+    PrefixResult prefixResult = extractPrefix(metadataAst);
+    String prefix = prefixResult.prefix();
+    boolean prefixFoldCase = prefixResult.foldCase();
+    FixedOffsetLiteral fixedOffsetLiteral =
+        prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
+    boolean[] ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
+    StartAcceleration startAcceleration =
+        (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
+            ? extractStartAcceleration(metadataAst)
+            : null;
+    if (prefix == null
+        && fixedOffsetLiteral == null
+        && ccPrefixAscii == null
+        && startAcceleration == null) {
+      return StartDescriptor.NONE;
+    }
+    return new StartDescriptor(
+        prefix, prefixFoldCase, fixedOffsetLiteral, ccPrefixAscii, startAcceleration);
   }
 
   /**
@@ -673,43 +601,32 @@ public final class Pattern implements Serializable {
     if (literalMatchUtf8 != null && !prefixFoldCase) {
       return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
     }
-    if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
-      return keywordAlternation.find(scanner, 0) >= 0;
+    if (enginePathOptions.keywordAlternationFastPath()
+        && matchDescriptor.keywordAlternation() != null) {
+      return matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
     }
-    if (enginePathOptions.literalFastPaths()
-        && requiredLiteralUtf8 != null
-        && prefixUtf8 == null
-        && scanner.indexOf(requiredLiteralUtf8, requiredLiteralFailure, requiredLiteralShifts, 0)
-            < 0) {
-      return false;
-    }
-    if (enginePathOptions.charClassMatchFastPaths()
-        && requiredMatchClassRanges != null
-        && prefixUtf8 == null
-        && charClassPrefixAscii == null
-        && scanner.indexOfCodePointClass(
-                requiredMatchClassRanges, requiredMatchClassBitmap0, requiredMatchClassBitmap1, 0)
-            < 0) {
-      return false;
+    if (rejectPrefilter != null && prefixUtf8 == null && charClassPrefixAscii == null) {
+      boolean rejected;
+      if (rejectPrefilter instanceof RejectPrefilter.Literal literal) {
+        rejected =
+            enginePathOptions.literalFastPaths()
+                && scanner.indexOf(literal.utf8(), literal.failure(), literal.shifts(), 0) < 0;
+      } else if (rejectPrefilter instanceof RejectPrefilter.CharClass charClass) {
+        rejected =
+            enginePathOptions.charClassMatchFastPaths()
+                && scanner.indexOfCodePointClass(
+                        charClass.ranges(), charClass.bitmap0(), charClass.bitmap1(), 0)
+                    < 0;
+      } else {
+        rejected = rejectPrefilter.canReject(scanner, 0, enginePathOptions);
+      }
+      if (rejected) {
+        return false;
+      }
     }
     int searchStart = 0;
-    if (prefixUtf8 != null && !prefixFoldCase) {
-      searchStart = scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts);
-      if (searchStart < 0) {
-        return false;
-      }
-    } else if (enginePathOptions.startAcceleration() && fixedOffsetLiteral != null) {
-      searchStart = nextFixedOffsetCandidate(scanner, 0);
-      if (searchStart < 0) {
-        return false;
-      }
-    } else if (!prog.hasWordBoundary() && charClassPrefixScanInfo != null) {
-      searchStart =
-          scanner.indexOfCodePointClass(
-              charClassPrefixScanInfo.ranges,
-              charClassPrefixScanInfo.bitmap0,
-              charClassPrefixScanInfo.bitmap1,
-              0);
+    if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
+      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
       if (searchStart < 0) {
         return false;
       }
@@ -742,56 +659,29 @@ public final class Pattern implements Serializable {
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }
-    if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
-      boolean matched = keywordAlternation.find(scanner, 0) >= 0;
+    if (enginePathOptions.keywordAlternationFastPath()
+        && matchDescriptor.keywordAlternation() != null) {
+      boolean matched = matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
       diagnostics.boundary(MatchStrategy.KEYWORD);
       return matched;
     }
-    if (enginePathOptions.literalFastPaths()
-        && requiredLiteralUtf8 != null
-        && prefixUtf8 == null
-        && scanner.indexOf(requiredLiteralUtf8, requiredLiteralFailure, requiredLiteralShifts, 0)
-            < 0) {
-      diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
-      diagnostics.boundary(MatchStrategy.LITERAL);
-      return false;
-    }
-    if (enginePathOptions.charClassMatchFastPaths()
-        && requiredMatchClassRanges != null
+    if (rejectPrefilter != null
         && prefixUtf8 == null
         && charClassPrefixAscii == null
-        && scanner.indexOfCodePointClass(
-                requiredMatchClassRanges, requiredMatchClassBitmap0, requiredMatchClassBitmap1, 0)
-            < 0) {
-      diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
-      diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
+        && rejectPrefilter.canRejectWithDiagnostics(scanner, 0, enginePathOptions, diagnostics)) {
       return false;
     }
     int searchStart = 0;
-    if (prefixUtf8 != null && !prefixFoldCase) {
-      diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.START_ACCELERATION);
-      searchStart = scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts);
-      if (searchStart < 0) {
-        diagnostics.boundary(MatchStrategy.LITERAL);
-        return false;
+    if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
+      MatchStrategy strategy = utf8StartAccelerator.strategy();
+      if (strategy != null) {
+        diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
-    } else if (enginePathOptions.startAcceleration() && fixedOffsetLiteral != null) {
-      diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.START_ACCELERATION);
-      searchStart = nextFixedOffsetCandidate(scanner, 0);
+      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
       if (searchStart < 0) {
-        diagnostics.boundary(MatchStrategy.LITERAL);
-        return false;
-      }
-    } else if (!prog.hasWordBoundary() && charClassPrefixScanInfo != null) {
-      diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.START_ACCELERATION);
-      searchStart =
-          scanner.indexOfCodePointClass(
-              charClassPrefixScanInfo.ranges,
-              charClassPrefixScanInfo.bitmap0,
-              charClassPrefixScanInfo.bitmap1,
-              0);
-      if (searchStart < 0) {
-        diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
+        if (strategy != null) {
+          diagnostics.boundary(strategy);
+        }
         return false;
       }
     }
@@ -823,46 +713,7 @@ public final class Pattern implements Serializable {
     return matched;
   }
 
-  private int nextFixedOffsetCandidate(Utf8InputScanner scanner, int searchFrom) {
-    int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
-    int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
-    while (literalFrom <= scanner.length()) {
-      int literalStart =
-          scanner.indexOf(
-              fixedOffsetLiteral.utf8(),
-              fixedOffsetLiteral.failure(),
-              fixedOffsetLiteral.shifts(),
-              literalFrom);
-      if (literalStart < 0) {
-        return -1;
-      }
-      if (discreteOffsets != null && discreteOffsets.length == 1 && charClassPrefixAscii != null) {
-        int earliestValid = -1;
-        for (int offset : discreteOffsets) {
-          int candidateStart = literalStart - offset;
-          if (candidateStart >= searchFrom) {
-            int first = scanner.asciiAt(candidateStart);
-            if (first >= 0
-                && first < charClassPrefixAscii.length
-                && charClassPrefixAscii[first]
-                && (earliestValid < 0 || candidateStart < earliestValid)) {
-              earliestValid = candidateStart;
-            }
-          }
-        }
-        if (earliestValid >= 0) {
-          return earliestValid;
-        }
-        literalFrom = literalStart + 1;
-        continue;
-      }
-      return Math.max(
-          searchFrom, scanner.retreatByCodePoints(literalStart, fixedOffsetLiteral.maxOffset()));
-    }
-    return -1;
-  }
-
-  private static int[] literalFailure(byte[] literal) {
+  static int[] literalFailure(byte[] literal) {
     int[] failure = new int[literal.length];
     int matched = 0;
     for (int index = 1; index < literal.length; index++) {
@@ -877,7 +728,7 @@ public final class Pattern implements Serializable {
     return failure;
   }
 
-  private static int[] literalShifts(byte[] literal) {
+  static int[] literalShifts(byte[] literal) {
     if (literal.length < 2) {
       return null;
     }
@@ -1321,96 +1172,48 @@ public final class Pattern implements Serializable {
     return charClassPrefixAscii;
   }
 
-  /** Returns preclassified UTF-8 scan data for the character-class prefix, or {@code null}. */
-  CharClassScanInfo charClassPrefixScanInfo() {
-    return charClassPrefixScanInfo;
-  }
-
   /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
   FixedOffsetLiteral fixedOffsetLiteral() {
     return fixedOffsetLiteral;
   }
 
-  /** Returns conservative start-position acceleration data, or {@code null} if unavailable. */
-  StartAcceleration startAcceleration() {
-    return startAcceleration;
+  /** Returns the compiled UTF-8 start-position accelerator strategy, or {@code null}. */
+  Utf8StartAccelerator utf8StartAccelerator() {
+    return utf8StartAccelerator;
+  }
+
+  /** Returns the compiled String start-position accelerator strategy, or {@code null}. */
+  StringStartAccelerator stringStartAccelerator() {
+    return stringStartAccelerator;
+  }
+
+  MatchDescriptor matchDescriptor() {
+    return matchDescriptor;
   }
 
   /** Returns case-insensitive keyword-alternation fast-path data, or {@code null}. */
   KeywordAlternation keywordAlternation() {
-    return keywordAlternation;
+    return matchDescriptor.keywordAlternation();
   }
 
-  /**
-   * Returns the precomputed ranges for the character-class-match fast path, or {@code null} if the
-   * pattern is not a simple repeated character class. When non-null, {@code matches()} can use a
-   * tight scanning loop instead of the full engine cascade.
-   */
-  int[] charClassMatchRanges() {
-    return charClassMatchRanges;
+  /** Returns AST metadata for whole-input rejection, or {@link RejectDescriptor#NONE}. */
+  RejectDescriptor rejectDescriptor() {
+    return rejectDescriptor;
   }
 
-  /** ASCII bitmap (code points 0–63) for the character-class-match fast path. */
-  long charClassMatchBitmap0() {
-    return charClassMatchBitmap0;
-  }
-
-  /** ASCII bitmap (code points 64–127) for the character-class-match fast path. */
-  long charClassMatchBitmap1() {
-    return charClassMatchBitmap1;
-  }
-
-  /**
-   * Whether the character-class-match fast path allows empty input (from {@code *} or {@code ?}).
-   */
-  boolean charClassMatchAllowEmpty() {
-    return charClassMatchAllowEmpty;
-  }
-
-  /**
-   * Returns precomputed scan info when the pattern is exactly one character class, or {@code null}.
-   */
-  CharClassScanInfo singleCharClassScanInfo() {
-    return singleCharClassScanInfo;
-  }
-
-  /** Returns precomputed ranges for a required character class, or {@code null}. */
-  int[] requiredMatchClassRanges() {
-    return requiredMatchClassRanges;
-  }
-
-  /** ASCII bitmap (code points 0–63) for the required-character-class fast path. */
-  long requiredMatchClassBitmap0() {
-    return requiredMatchClassBitmap0;
-  }
-
-  /** ASCII bitmap (code points 64–127) for the required-character-class fast path. */
-  long requiredMatchClassBitmap1() {
-    return requiredMatchClassBitmap1;
-  }
-
-  String requiredLiteral() {
-    return requiredLiteral;
-  }
-
-  byte[] requiredLiteralUtf8() {
-    return requiredLiteralUtf8;
-  }
-
-  int[] requiredLiteralFailure() {
-    return requiredLiteralFailure;
-  }
-
-  int[] requiredLiteralShifts() {
-    return requiredLiteralShifts;
+  /** Returns whole-input rejection prefilter, or {@code null}. */
+  RejectPrefilter rejectPrefilter() {
+    return rejectPrefilter;
   }
 
   DisjointRequiredLiterals disjointRequiredLiterals() {
-    return disjointRequiredLiterals;
+    return rejectDescriptor.disjointRequiredLiterals();
   }
 
   String[] requiredDisjointLiterals() {
-    return disjointRequiredLiterals != null ? disjointRequiredLiterals.literals() : null;
+    return rejectDescriptor.disjointRequiredLiterals() != null
+        ? rejectDescriptor.disjointRequiredLiterals().literals()
+        : null;
   }
 
   /**
@@ -1489,7 +1292,7 @@ public final class Pattern implements Serializable {
    * lowercase version.
    */
   String literalMatch() {
-    return literalMatch;
+    return matchDescriptor.literalMatch();
   }
 
   byte[] literalMatchUtf8() {
@@ -1508,17 +1311,9 @@ public final class Pattern implements Serializable {
     return prefixUtf8;
   }
 
-  int[] prefixUtf8Failure() {
-    return prefixUtf8Failure;
-  }
-
-  int[] prefixUtf8Shifts() {
-    return prefixUtf8Shifts;
-  }
-
   /** Returns {@code true} if this pattern is a simple literal with no metacharacters. */
   boolean isLiteral() {
-    return literalMatch != null;
+    return literalMatch() != null;
   }
 
   boolean startsWithGraphemeClusterBoundary() {
@@ -1586,7 +1381,7 @@ public final class Pattern implements Serializable {
     EnumSet<PatternCapability> capabilities = EnumSet.noneOf(PatternCapability.class);
     EnumSet<PatternLimitation> limitations = EnumSet.noneOf(PatternLimitation.class);
 
-    if (literalMatch != null) {
+    if (literalMatch() != null) {
       features.add(PatternFeature.LITERAL);
       capabilities.add(PatternCapability.LITERAL_MATCH);
     }
@@ -1630,10 +1425,10 @@ public final class Pattern implements Serializable {
     }
     addAstAnalysisFeatures(features);
 
-    if (charClassMatchRanges != null || singleCharClassScanInfo != null) {
+    if (matchDescriptor.charClassMatch() != null || matchDescriptor.singleCharClass() != null) {
       capabilities.add(PatternCapability.CHARACTER_CLASS_MATCH);
     }
-    if (keywordAlternation != null) {
+    if (matchDescriptor.keywordAlternation() != null) {
       capabilities.add(PatternCapability.KEYWORD_MATCH);
     }
     if (canOnePassPrimary()) {
@@ -3050,7 +2845,7 @@ public final class Pattern implements Serializable {
   /** Holds precomputed data for the character-class-match fast path. */
   // TODO(#98): Replace int[] with Guava ImmutableIntArray to get proper value semantics.
   @SuppressWarnings("ArrayRecordComponent")
-  private record CharClassMatchInfo(int[] ranges, long bitmap0, long bitmap1, boolean allowEmpty) {}
+  record CharClassMatchInfo(int[] ranges, long bitmap0, long bitmap1, boolean allowEmpty) {}
 
   /** Holds precomputed data for scanning one character class. */
   static final class CharClassScanInfo {
@@ -3201,6 +2996,22 @@ public final class Pattern implements Serializable {
       return null;
     }
     return buildCharClassScanInfo(cc);
+  }
+
+  /** Extracts whole-input rejection metadata from the AST. */
+  private static RejectDescriptor extractRejectDescriptor(
+      Regexp metadataAst, String prefix, boolean[] ccPrefixAscii) {
+    String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
+    CharClassScanInfo requiredMatchClass =
+        extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
+    DisjointRequiredLiterals disjointRequiredLiterals =
+        (prefix == null && requiredLiteral == null)
+            ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
+            : null;
+    if (requiredLiteral == null && requiredMatchClass == null && disjointRequiredLiterals == null) {
+      return null;
+    }
+    return new RejectDescriptor(requiredLiteral, requiredMatchClass, disjointRequiredLiterals);
   }
 
   /**
