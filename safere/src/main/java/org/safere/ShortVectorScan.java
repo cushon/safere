@@ -9,6 +9,8 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
+import static org.safere.internal.Ascii.regionMatchesIgnoreCase;
+import static org.safere.internal.Ascii.regionMatchesIgnoreCaseUtf16;
 import static org.safere.internal.Ascii.toLowerCase;
 import static org.safere.internal.Ascii.toUpperCase;
 
@@ -118,7 +120,7 @@ final class ShortVectorScan {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit;
           if (candidatePos + prefixLen <= length
-              && regionMatchesAsciiIgnoreCase(chars, offset + candidatePos, prefix, prefixLen)) {
+              && regionMatchesIgnoreCase(chars, offset + candidatePos, prefix, prefixLen)) {
             return candidatePos;
           }
           activeLanes &= activeLanes - 1;
@@ -128,7 +130,7 @@ final class ShortVectorScan {
 
     int limitScalar = length - prefixLen;
     for (; pos <= limitScalar; pos++) {
-      if (regionMatchesAsciiIgnoreCase(chars, offset + pos, prefix, prefixLen)) {
+      if (regionMatchesIgnoreCase(chars, offset + pos, prefix, prefixLen)) {
         return pos;
       }
     }
@@ -177,7 +179,7 @@ final class ShortVectorScan {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit;
           if (candidatePos + prefixLen <= length
-              && regionMatchesAsciiIgnoreCaseUtf16(
+              && regionMatchesIgnoreCaseUtf16(
                   bytes, offset + (candidatePos << 1), prefix, prefixLen)) {
             return candidatePos;
           }
@@ -188,7 +190,7 @@ final class ShortVectorScan {
 
     int limitScalar = length - prefixLen;
     for (; pos <= limitScalar; pos++) {
-      if (regionMatchesAsciiIgnoreCaseUtf16(bytes, offset + (pos << 1), prefix, prefixLen)) {
+      if (regionMatchesIgnoreCaseUtf16(bytes, offset + (pos << 1), prefix, prefixLen)) {
         return pos;
       }
     }
@@ -234,33 +236,6 @@ final class ShortVectorScan {
       }
     }
     return false;
-  }
-
-  private static boolean regionMatchesAsciiIgnoreCase(
-      char[] chars, int offset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
-      char c = chars[offset + i];
-      char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private static boolean regionMatchesAsciiIgnoreCaseUtf16(
-      byte[] bytes, int byteOffset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
-      char c =
-          (char)
-              ((bytes[byteOffset + (i << 1)] & 0xFF)
-                  | ((bytes[byteOffset + (i << 1) + 1] & 0xFF) << 8));
-      char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
-        return false;
-      }
-    }
-    return true;
   }
 
   private ShortVectorScan() {}

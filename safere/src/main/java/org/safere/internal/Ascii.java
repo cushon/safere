@@ -97,4 +97,30 @@ public final class Ascii {
     }
     return -1;
   }
+
+  /** Returns whether a character sequence matches a pattern prefix ignoring ASCII case. */
+  public static boolean regionMatchesIgnoreCase(
+      char[] chars, int offset, String prefix, int prefixLen) {
+    for (int i = 0; i < prefixLen; i++) {
+      if (!equalsIgnoreCase(chars[offset + i], prefix.charAt(i))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Returns whether little-endian UTF-16 bytes match a pattern prefix ignoring ASCII case. */
+  public static boolean regionMatchesIgnoreCaseUtf16(
+      byte[] bytes, int byteOffset, String prefix, int prefixLen) {
+    for (int i = 0; i < prefixLen; i++) {
+      char c =
+          (char)
+              ((bytes[byteOffset + (i << 1)] & 0xFF)
+                  | ((bytes[byteOffset + (i << 1) + 1] & 0xFF) << 8));
+      if (!equalsIgnoreCase(c, prefix.charAt(i))) {
+        return false;
+      }
+    }
+    return true;
+  }
 }

@@ -220,11 +220,7 @@ abstract class ByteSwarScan {
   static long exactAsciiRangeMask(long word, int low, int high) {
     long values = word & ~BYTE_HIGH_BITS;
     long ascii = ~word & BYTE_HIGH_BITS;
-    return exactAsciiRangeMask(values, ascii, low * BYTE_ONES, high * BYTE_ONES);
-  }
-
-  static long exactAsciiRangeMask(long values, long ascii, long repeatedLow, long repeatedHigh) {
-    return Swar.exactAsciiRangeMask(values, ascii, repeatedLow, repeatedHigh);
+    return Swar.exactAsciiRangeMask(values, ascii, low * BYTE_ONES, high * BYTE_ONES);
   }
 
   static int indexOfMultipleByteRanges(
@@ -249,8 +245,8 @@ abstract class ByteSwarScan {
       long word = (long) LONG_VIEW.get(bytes, offset + position);
       long values = word & ~BYTE_HIGH_BITS;
       long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
+      long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low1, high1);
       if (matches != 0) {
         return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, position + Long.BYTES);
       }
@@ -273,9 +269,9 @@ abstract class ByteSwarScan {
       long word = (long) LONG_VIEW.get(bytes, offset + position);
       long values = word & ~BYTE_HIGH_BITS;
       long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
-      matches |= exactAsciiRangeMask(values, ascii, low2, high2);
+      long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low1, high1);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low2, high2);
       if (matches != 0) {
         return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, position + Long.BYTES);
       }
@@ -300,10 +296,10 @@ abstract class ByteSwarScan {
       long word = (long) LONG_VIEW.get(bytes, offset + position);
       long values = word & ~BYTE_HIGH_BITS;
       long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
-      matches |= exactAsciiRangeMask(values, ascii, low2, high2);
-      matches |= exactAsciiRangeMask(values, ascii, low3, high3);
+      long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low1, high1);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low2, high2);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low3, high3);
       if (matches != 0) {
         return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, position + Long.BYTES);
       }
@@ -331,7 +327,7 @@ abstract class ByteSwarScan {
         long word = (long) LONG_VIEW.get(bytes, offset + pos);
         long values = word & ~BYTE_HIGH_BITS;
         long ascii = ~word & BYTE_HIGH_BITS;
-        long matches = exactAsciiRangeMask(values, ascii, low0, high0);
+        long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
 
         if (matches != 0) {
           int limit = pos + Long.BYTES;
@@ -350,8 +346,8 @@ abstract class ByteSwarScan {
         long values = word & ~BYTE_HIGH_BITS;
         long ascii = ~word & BYTE_HIGH_BITS;
         long matches =
-            exactAsciiRangeMask(values, ascii, low0, high0)
-                | exactAsciiRangeMask(values, ascii, low1, high1);
+            Swar.exactAsciiRangeMask(values, ascii, low0, high0)
+                | Swar.exactAsciiRangeMask(values, ascii, low1, high1);
 
         if (matches != 0) {
           int limit = pos + Long.BYTES;

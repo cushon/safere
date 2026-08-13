@@ -9,10 +9,13 @@ import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.LITTLE_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
+import static org.safere.internal.Ascii.regionMatchesIgnoreCase;
+import static org.safere.internal.Ascii.regionMatchesIgnoreCaseUtf16;
 import static org.safere.internal.Ascii.toLowerCase;
 import static org.safere.internal.Ascii.toUpperCase;
 import static org.safere.internal.Swar.SHORT_HIGH_BITS;
 import static org.safere.internal.Swar.SHORT_ONES;
+import static org.safere.internal.Swar.exactShortRangeMask;
 
 import java.lang.invoke.VarHandle;
 import org.safere.internal.Ascii;
@@ -189,7 +192,7 @@ final class ShortSwarScan {
         int limit = pos + 4;
         for (int i = pos; i < limit; i++) {
           if (i + prefixLen <= length
-              && regionMatchesAsciiIgnoreCase(chars, offset + i, prefix, prefixLen)) {
+              && regionMatchesIgnoreCase(chars, offset + i, prefix, prefixLen)) {
             return i;
           }
         }
@@ -199,7 +202,7 @@ final class ShortSwarScan {
 
     int scalarLimit = length - prefixLen;
     for (; pos <= scalarLimit; pos++) {
-      if (regionMatchesAsciiIgnoreCase(chars, offset + pos, prefix, prefixLen)) {
+      if (regionMatchesIgnoreCase(chars, offset + pos, prefix, prefixLen)) {
         return pos;
       }
     }
@@ -245,7 +248,7 @@ final class ShortSwarScan {
         int limit = pos + 4;
         for (int i = pos; i < limit; i++) {
           if (i + prefixLen <= length
-              && regionMatchesAsciiIgnoreCaseUtf16(bytes, offset + (i << 1), prefix, prefixLen)) {
+              && regionMatchesIgnoreCaseUtf16(bytes, offset + (i << 1), prefix, prefixLen)) {
             return i;
           }
         }
@@ -255,15 +258,11 @@ final class ShortSwarScan {
 
     int scalarLimit = length - prefixLen;
     for (; pos <= scalarLimit; pos++) {
-      if (regionMatchesAsciiIgnoreCaseUtf16(bytes, offset + (pos << 1), prefix, prefixLen)) {
+      if (regionMatchesIgnoreCaseUtf16(bytes, offset + (pos << 1), prefix, prefixLen)) {
         return pos;
       }
     }
     return -1;
-  }
-
-  static long exactShortRangeMask(long word, long repeatedLow, long repeatedHigh) {
-    return Swar.exactShortRangeMask(word, repeatedLow, repeatedHigh);
   }
 
   private static boolean requiresScalarRangeComparison(int[] ranges) {
@@ -307,33 +306,6 @@ final class ShortSwarScan {
         | ((chars[offset + 1] & 0xFFFFL) << 16)
         | ((chars[offset + 2] & 0xFFFFL) << 32)
         | ((chars[offset + 3] & 0xFFFFL) << 48);
-  }
-
-  private static boolean regionMatchesAsciiIgnoreCase(
-      char[] chars, int offset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
-      char c = chars[offset + i];
-      char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private static boolean regionMatchesAsciiIgnoreCaseUtf16(
-      byte[] bytes, int byteOffset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
-      char c =
-          (char)
-              ((bytes[byteOffset + (i << 1)] & 0xFF)
-                  | ((bytes[byteOffset + (i << 1) + 1] & 0xFF) << 8));
-      char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
-        return false;
-      }
-    }
-    return true;
   }
 
   private ShortSwarScan() {}
