@@ -116,6 +116,7 @@
                         <exclude name="InputScannerTest.java"/>
                         <exclude name="MatcherDeferredCaptureStateTest.java"/>
                         <exclude name="MatcherTransitionInventoryTest.java"/>
+                        <exclude name="MatchDescriptorTest.java"/>
                         <exclude name="NfaTest.java"/>
                         <exclude name="OnePassTest.java"/>
                         <exclude name="ParseFlagsTest.java"/>
@@ -125,10 +126,12 @@
                         <exclude name="ProgTest.java"/>
                         <exclude name="RegexpOpTest.java"/>
                         <exclude name="RegexpTest.java"/>
+                        <exclude name="RejectPrefilterTest.java"/>
                         <exclude name="SafeReDiagnosticsTest.java"/>
                         <exclude name="SearchScalingRegressionTest.java"/>
                         <exclude name="ShortScanEquivalenceTest.java"/>
                         <exclude name="SimplifierTest.java"/>
+                        <exclude name="StartAcceleratorTest.java"/>
                         <exclude name="UnicodeJdkConsistencyTest.java"/>
                         <exclude name="UnicodeTablesTest.java"/>
                         <exclude name="Utf8AllocationScalingTest.java"/>
