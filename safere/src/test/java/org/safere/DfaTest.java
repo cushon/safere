@@ -564,6 +564,21 @@ class DfaTest {
     }
 
     @Test
+    void selfLoopStopsAtNonAsciiTransitions() {
+      assertNonAsciiEscapeMatches("é");
+      assertNonAsciiEscapeMatches("😀");
+    }
+
+    @Test
+    void startAccelerationUsesOnlyTheActiveInputSubstrate() {
+      Pattern pattern = Pattern.compile("(?m)^foo");
+      Dfa dfa = pattern.forwardFirstMatchDfa();
+
+      assertThat(dfa.hasStartAcceleration(new StringInputScanner("foo"))).isTrue();
+      assertThat(dfa.hasStartAcceleration(new Utf8InputScanner("foo".getBytes(UTF_8)))).isFalse();
+    }
+
+    @Test
     void selfLoopUtf8ScannerEquivalence() {
       String filler = "x".repeat(2000);
       String text = "start \"" + filler + "\" end";
@@ -577,10 +592,31 @@ class DfaTest {
       assertThat(result.matched()).isTrue();
       assertThat(result.pos()).isEqualTo(7 + 2000 + 1);
     }
+
+    private static void assertNonAsciiEscapeMatches(String escape) {
+      String pattern = "A[\\x00-\\x21\\x23-\\x7F]*" + escape;
+      String text = "A" + "x".repeat(1000) + escape;
+      Pattern compiledPattern = Pattern.compile(pattern);
+      assertThat(compiledPattern.matcher(text).find()).isTrue();
+      assertThat(compiledPattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+
+      Dfa.SearchResult stringResult = search(pattern, text);
+      assertThat(stringResult).isNotNull();
+      assertThat(stringResult.matched()).isTrue();
+
+      byte[] bytes = text.getBytes(UTF_8);
+      Regexp re = Parser.parse(pattern, FLAGS);
+      Prog prog = Compiler.compile(re);
+      Dfa.SearchResult utf8Result =
+          new Dfa(prog, 1000, Dfa.buildSetup(prog), false)
+              .doSearch(new Utf8InputScanner(bytes, 0, bytes.length), 0, false, false);
+      assertThat(utf8Result).isNotNull();
+      assertThat(utf8Result.matched()).isTrue();
+    }
   }
 
   @Test
-  void issue711_multilineAnchorAlternationWithFalseCandidate() {
+  void multilineAnchorAlternationRejectsFalseUtf8Candidate() {
     String regex = "(b|(?m:^a))cd[0-9]";
     String input = "x".repeat(100) + "0cb\r1bacd19c1__19x y_";
     EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
@@ -596,7 +632,7 @@ class DfaTest {
   }
 
   @Test
-  void issue711_multilineAnchorStringScannerEquivalence() {
+  void multilineAnchorAlternationRejectsFalseStringCandidate() {
     String regex = "(b|(?m:^a))cd[0-9]";
     String input = "x".repeat(100) + "0cb\r1bacd19c1__19x y_";
     EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();

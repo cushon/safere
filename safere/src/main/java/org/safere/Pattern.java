@@ -1059,8 +1059,8 @@ public final class Pattern implements Serializable {
               MAX_DFA_STATES,
               forwardDfaSetup(),
               false,
-              utf8StartAccelerator,
-              stringStartAccelerator);
+              enginePathOptions.startAcceleration() ? utf8StartAccelerator : null,
+              enginePathOptions.startAcceleration() ? stringStartAccelerator : null);
       cachedForwardFirstMatchDfa.set(dfa);
     }
     return dfa;
@@ -1075,8 +1075,8 @@ public final class Pattern implements Serializable {
               MAX_DFA_STATES,
               forwardDfaSetup(),
               true,
-              utf8StartAccelerator,
-              stringStartAccelerator);
+              enginePathOptions.startAcceleration() ? utf8StartAccelerator : null,
+              enginePathOptions.startAcceleration() ? stringStartAccelerator : null);
       cachedForwardLongestMatchDfa.set(dfa);
     }
     return dfa;

@@ -745,6 +745,9 @@ final class Dfa {
           escapes[escapeCount] = ch;
         }
         escapeCount++;
+        if (escapeCount == 4) {
+          return null;
+        }
         continue;
       }
       int[] frontier = expand(seeds, seedCount, 0);
@@ -753,6 +756,29 @@ final class Dfa {
           escapes[escapeCount] = ch;
         }
         escapeCount++;
+        if (escapeCount == 4) {
+          return null;
+        }
+      }
+    }
+
+    // The scanner skips directly to an ASCII escape and therefore also skips over non-ASCII code
+    // points. Prove that every non-ASCII equivalence class remains in this state before enabling
+    // the accelerator. The DFA boundaries make one representative per interval sufficient.
+    for (int i = 0; i + 1 < boundaries.length; i++) {
+      int ch = Math.max(128, boundaries[i]);
+      if (ch >= boundaries[i + 1]) {
+        continue;
+      }
+      int seedCount = 0;
+      for (int id : insts) {
+        Inst ip = prog.inst(id);
+        if (instMatches(ip, ch)) {
+          seeds[seedCount++] = ip.out;
+        }
+      }
+      if (seedCount == 0 || !Arrays.equals(expand(seeds, seedCount, 0), insts)) {
+        return null;
       }
     }
 
@@ -764,6 +790,26 @@ final class Dfa {
       } else {
         return new StateAccelerator.AsciiTripleEscape(escapes[0], escapes[1], escapes[2]);
       }
+    }
+    return null;
+  }
+
+  /** Returns whether this DFA was constructed with start-position acceleration enabled. */
+  boolean hasStartAcceleration() {
+    return hasStartAcceleration;
+  }
+
+  /** Returns whether this DFA can accelerate start positions for the supplied input substrate. */
+  boolean hasStartAcceleration(InputScanner text) {
+    return startAccelerationPolicy(text) != null;
+  }
+
+  private AcceleratorPolicy startAccelerationPolicy(InputScanner text) {
+    if (text instanceof Utf8InputScanner) {
+      return utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
+    }
+    if (text instanceof StringInputScanner) {
+      return stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
     }
     return null;
   }
@@ -1363,20 +1409,15 @@ final class Dfa {
       return new SearchResult(matched, matchEnd);
     }
 
-    boolean canAccelerate = hasStartAcceleration && !anchored;
+    AcceleratorPolicy activePolicy = startAccelerationPolicy(text);
+    boolean canAccelerate = activePolicy != null && !anchored;
     int minSkip = AcceleratorPolicy.DEFAULT.minProfitableSkip();
     int maxStrikes = AcceleratorPolicy.DEFAULT.strikeBudget();
     boolean isExact = false;
     if (canAccelerate) {
-      AcceleratorPolicy policy =
-          stringStartAccelerator != null
-              ? stringStartAccelerator.policy()
-              : (utf8StartAccelerator != null
-                  ? utf8StartAccelerator.policy()
-                  : AcceleratorPolicy.DEFAULT);
-      minSkip = policy.minProfitableSkip();
-      maxStrikes = policy.strikeBudget();
-      isExact = policy.isExactMatchCandidate();
+      minSkip = activePolicy.minProfitableSkip();
+      maxStrikes = activePolicy.strikeBudget();
+      isExact = activePolicy.isExactMatchCandidate();
     }
 
     // Adaptive defeat detection: track consecutive sub-threshold skips to avoid repeatedly paying
@@ -1413,6 +1454,9 @@ final class Dfa {
           s = startState(text, pos, anchored, false);
           if (s == null) {
             return null;
+          }
+          if (s == deadState) {
+            return new SearchResult(matched, matchEnd);
           }
         } else if (!isExact) {
           if (++consecutiveShortSkips >= maxStrikes) {
@@ -1533,6 +1577,9 @@ final class Dfa {
           s = startState(text, pos, anchored, false);
           if (s == null) {
             return null;
+          }
+          if (s == deadState) {
+            return new SearchResult(matched, matchEnd);
           }
         } else if (!isExact) {
           if (++consecutiveShortSkips >= maxStrikes) {
