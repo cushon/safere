@@ -145,6 +145,8 @@ public final class Pattern implements Serializable {
   private final transient int[] literalMatchFailure;
   private final transient int[] literalMatchShifts;
   private final transient byte[] prefixUtf8;
+  private final transient String anchoredPrefix;
+  private final transient byte[] anchoredPrefixUtf8;
   private final transient boolean hasLazy;
   private final transient boolean hasAlternation;
   private final transient boolean hasNullableAlternation;
@@ -152,6 +154,7 @@ public final class Pattern implements Serializable {
   private final transient boolean startsWithGraphemeClusterBoundary;
   private final transient boolean hasInternalGraphemeClusterBoundary;
   private final transient AsciiBitmap charClassPrefixAscii;
+  private final transient AsciiBitmap anchoredCharClassPrefixAscii;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
@@ -303,6 +306,11 @@ public final class Pattern implements Serializable {
         startDescriptor.prefix() == null || startDescriptor.prefix().isEmpty()
             ? null
             : startDescriptor.prefix().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    this.anchoredPrefix = startDescriptor.anchoredPrefix();
+    this.anchoredPrefixUtf8 =
+        anchoredPrefix == null || anchoredPrefix.isEmpty()
+            ? null
+            : anchoredPrefix.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     this.matchDescriptor = matchDescriptor != null ? matchDescriptor : MatchDescriptor.NONE;
     String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
@@ -318,6 +326,7 @@ public final class Pattern implements Serializable {
     this.startsWithGraphemeClusterBoundary = startsWithGraphemeClusterBoundary;
     this.hasInternalGraphemeClusterBoundary = hasInternalGraphemeClusterBoundary;
     this.charClassPrefixAscii = startDescriptor.charClassPrefixAscii();
+    this.anchoredCharClassPrefixAscii = startDescriptor.anchoredCharClassPrefixAscii();
     this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
     this.utf8StartAccelerator =
         Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
@@ -479,14 +488,32 @@ public final class Pattern implements Serializable {
         (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
             ? extractStartAcceleration(metadataAst)
             : null;
+    Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
+    PrefixResult anchoredPrefixResult = extractPrefixFromCandidate(anchoredCandidate);
+    String anchoredPrefix =
+        anchoredPrefixResult.prefix() != null && !anchoredPrefixResult.foldCase()
+            ? anchoredPrefixResult.prefix()
+            : null;
+    AsciiBitmap anchoredCharClassPrefixAscii =
+        anchoredPrefix == null && anchoredCandidate != null
+            ? extractCharClassPrefixAscii(anchoredCandidate)
+            : null;
     if (prefix == null
         && fixedOffsetLiteral == null
         && ccPrefixAscii == null
-        && startAcceleration == null) {
+        && startAcceleration == null
+        && anchoredPrefix == null
+        && anchoredCharClassPrefixAscii == null) {
       return StartDescriptor.NONE;
     }
     return new StartDescriptor(
-        prefix, prefixFoldCase, fixedOffsetLiteral, ccPrefixAscii, startAcceleration);
+        prefix,
+        prefixFoldCase,
+        fixedOffsetLiteral,
+        ccPrefixAscii,
+        startAcceleration,
+        anchoredPrefix,
+        anchoredCharClassPrefixAscii);
   }
 
   /**
@@ -605,13 +632,16 @@ public final class Pattern implements Serializable {
       return matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
     }
     if (prog.anchorStart()) {
-      if (prefixUtf8 != null && !prefixFoldCase) {
-        if (!scanner.startsWith(prefixUtf8, 0)) {
+      if (anchoredPrefixUtf8 != null) {
+        if (!scanner.startsWith(anchoredPrefixUtf8, 0)) {
           return false;
         }
-      } else if (charClassPrefixAscii != null) {
+      } else if (anchoredCharClassPrefixAscii != null) {
+        if (scanner.length() == 0) {
+          return false;
+        }
         int ascii = scanner.asciiAt(0);
-        if (!charClassPrefixAscii.contains(ascii)) {
+        if (!anchoredCharClassPrefixAscii.contains(ascii)) {
           return false;
         }
       }
@@ -663,15 +693,20 @@ public final class Pattern implements Serializable {
       return matched;
     }
     if (prog.anchorStart()) {
-      if (prefixUtf8 != null && !prefixFoldCase) {
-        if (!scanner.startsWith(prefixUtf8, 0)) {
+      if (anchoredPrefixUtf8 != null) {
+        if (!scanner.startsWith(anchoredPrefixUtf8, 0)) {
           diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.LITERAL);
           return false;
         }
-      } else if (charClassPrefixAscii != null) {
+      } else if (anchoredCharClassPrefixAscii != null) {
+        if (scanner.length() == 0) {
+          diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
+          diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
+          return false;
+        }
         int ascii = scanner.asciiAt(0);
-        if (!charClassPrefixAscii.contains(ascii)) {
+        if (!anchoredCharClassPrefixAscii.contains(ascii)) {
           diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
           return false;
@@ -1183,6 +1218,18 @@ public final class Pattern implements Serializable {
    */
   AsciiBitmap charClassPrefixAscii() {
     return charClassPrefixAscii;
+  }
+
+  String anchoredPrefix() {
+    return anchoredPrefix;
+  }
+
+  byte[] anchoredPrefixUtf8() {
+    return anchoredPrefixUtf8;
+  }
+
+  AsciiBitmap anchoredCharClassPrefixAscii() {
+    return anchoredCharClassPrefixAscii;
   }
 
   /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
@@ -2421,7 +2468,10 @@ public final class Pattern implements Serializable {
    * String#indexOf} before running the full engine.
    */
   private static PrefixResult extractPrefix(Regexp re) {
-    Regexp node = firstPrefixCandidate(re);
+    return extractPrefixFromCandidate(firstPrefixCandidate(re));
+  }
+
+  private static PrefixResult extractPrefixFromCandidate(Regexp node) {
     if (node == null) {
       return new PrefixResult(null, false);
     }
@@ -2460,6 +2510,38 @@ public final class Pattern implements Serializable {
           stack.push(node.subs.get(i));
         }
       } else {
+        return node;
+      }
+    }
+    return null;
+  }
+
+  private static Regexp firstPrefixCandidateAfterTextAnchor(Regexp re) {
+    Deque<Regexp> stack = new ArrayDeque<>();
+    stack.push(re);
+    boolean sawTextAnchor = false;
+    while (!stack.isEmpty()) {
+      Regexp node = unwrapCaptures(stack.pop());
+      if (node == null) {
+        continue;
+      }
+      if (node.op == RegexpOp.CONCAT) {
+        for (int i = node.subs.size() - 1; i >= 0; i--) {
+          stack.push(node.subs.get(i));
+        }
+        continue;
+      }
+      if (!sawTextAnchor) {
+        if (isLeadingZeroWidth(node)) {
+          continue;
+        }
+        if (node.op != RegexpOp.BEGIN_TEXT) {
+          return null;
+        }
+        sawTextAnchor = true;
+        continue;
+      }
+      if (!isLeadingZeroWidth(node)) {
         return node;
       }
     }
@@ -2997,12 +3079,12 @@ public final class Pattern implements Serializable {
     return buildCharClassScanInfo(cc);
   }
 
-  public record SuffixInfo(String suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
-    public SuffixInfo(String suffix, boolean wasDollar) {
+  record SuffixInfo(String suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
+    SuffixInfo(String suffix, boolean wasDollar) {
       this(suffix, wasDollar, false, false);
     }
 
-    public SuffixInfo(String suffix, boolean wasDollar, boolean unixLines) {
+    SuffixInfo(String suffix, boolean wasDollar, boolean unixLines) {
       this(suffix, wasDollar, unixLines, false);
     }
   }
@@ -3082,7 +3164,8 @@ public final class Pattern implements Serializable {
     boolean wasDollar = (last.flags & ParseFlags.WAS_DOLLAR) != 0;
     boolean foldCase = false;
 
-    StringBuilder suffix = new StringBuilder();
+    Deque<String> suffixParts = new ArrayDeque<>();
+    int suffixLength = 0;
     for (int i = subs.size() - 2; i >= 0; i--) {
       Regexp sub = unwrapCaptures(subs.get(i));
       if (sub == null) {
@@ -3093,24 +3176,28 @@ public final class Pattern implements Serializable {
         if (subFold && sub.rune > 0x7F) {
           break;
         }
-        suffix.insert(0, Character.toString(sub.rune));
+        String part = Character.toString(sub.rune);
+        suffixParts.addFirst(part);
+        suffixLength += part.length();
         foldCase |= subFold;
       } else if (sub.op == RegexpOp.LITERAL_STRING && sub.runes != null) {
         if (subFold && !isAllAscii(sub.runes)) {
           break;
         }
-        for (int j = sub.runes.length - 1; j >= 0; j--) {
-          suffix.insert(0, Character.toString(sub.runes[j]));
-        }
+        String part = new String(sub.runes, 0, sub.runes.length);
+        suffixParts.addFirst(part);
+        suffixLength += part.length();
         foldCase |= subFold;
       } else {
         break;
       }
     }
-    boolean unixLines = (flags & UNIX_LINES) != 0;
-    return suffix.isEmpty()
-        ? null
-        : new SuffixInfo(suffix.toString(), wasDollar, unixLines, foldCase);
+    if (suffixParts.isEmpty()) {
+      return null;
+    }
+    StringBuilder suffix = new StringBuilder(suffixLength);
+    suffixParts.forEach(suffix::append);
+    return new SuffixInfo(suffix.toString(), wasDollar, (flags & UNIX_LINES) != 0, foldCase);
   }
 
   private static boolean isAllAscii(int[] runes) {

@@ -909,6 +909,49 @@ public final class Matcher implements MatchResult {
           return true;
         }
       } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
+        if (searchFrom >= utf8Scanner.length()) {
+          return true;
+        }
+        int ascii = utf8Scanner.asciiAt(searchFrom);
+        if (!cc.contains(ascii)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private boolean anchoredPrefixOrCharClassCannotMatch(int searchFrom) {
+    if (parentPattern.anchoredPrefix() != null) {
+      if (text != null) {
+        if (!text.startsWith(parentPattern.anchoredPrefix(), searchFrom)) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(parentPattern.anchoredPrefix().length());
+          }
+          return true;
+        }
+      } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
+        if (!utf8Scanner.startsWith(parentPattern.anchoredPrefixUtf8(), searchFrom)) {
+          return true;
+        }
+      }
+    } else if (parentPattern.anchoredCharClassPrefixAscii() != null) {
+      AsciiBitmap cc = parentPattern.anchoredCharClassPrefixAscii();
+      if (text != null) {
+        if (searchFrom >= text.length()) {
+          return true;
+        }
+        char c = text.charAt(searchFrom);
+        if (!cc.contains(c)) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(1);
+          }
+          return true;
+        }
+      } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
+        if (searchFrom >= utf8Scanner.length()) {
+          return true;
+        }
         int ascii = utf8Scanner.asciiAt(searchFrom);
         if (!cc.contains(ascii)) {
           return true;
@@ -922,9 +965,11 @@ public final class Matcher implements MatchResult {
   private boolean matchesCore() {
     capturesResolved = true;
 
-    if (prefixOrCharClassCannotMatch(0)) {
+    if (prefixOrCharClassCannotMatch(0) || anchoredPrefixOrCharClassCannotMatch(0)) {
       MatchStrategy strat =
-          parentPattern.prefix() != null ? MatchStrategy.LITERAL : MatchStrategy.CHARACTER_CLASS;
+          parentPattern.prefix() != null || parentPattern.anchoredPrefix() != null
+              ? MatchStrategy.LITERAL
+              : MatchStrategy.CHARACTER_CLASS;
       diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
       diagnosticBoundary(strat);
       return applyFailedMatchResult();
@@ -1108,9 +1153,11 @@ public final class Matcher implements MatchResult {
   private boolean lookingAtCore() {
     capturesResolved = true;
 
-    if (prefixOrCharClassCannotMatch(0)) {
+    if (prefixOrCharClassCannotMatch(0) || anchoredPrefixOrCharClassCannotMatch(0)) {
       MatchStrategy strat =
-          parentPattern.prefix() != null ? MatchStrategy.LITERAL : MatchStrategy.CHARACTER_CLASS;
+          parentPattern.prefix() != null || parentPattern.anchoredPrefix() != null
+              ? MatchStrategy.LITERAL
+              : MatchStrategy.CHARACTER_CLASS;
       diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
       diagnosticBoundary(strat);
       return applyFailedMatchResult();
@@ -1527,9 +1574,14 @@ public final class Matcher implements MatchResult {
     // when a region is active). Return false immediately to avoid the DFA matching at every
     // position because the compiler strips the anchor into prog.anchorStart().
     if (prog.anchorStart()) {
-      if (searchFrom > 0 || prefixOrCharClassCannotMatch(searchFrom)) {
+      if (searchFrom > 0) {
+        return applyFailedMatchResult();
+      }
+      if (anchoredPrefixOrCharClassCannotMatch(searchFrom)) {
         MatchStrategy strat =
-            parentPattern.prefix() != null ? MatchStrategy.LITERAL : MatchStrategy.CHARACTER_CLASS;
+            parentPattern.anchoredPrefix() != null
+                ? MatchStrategy.LITERAL
+                : MatchStrategy.CHARACTER_CLASS;
         diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
         diagnosticBoundary(strat);
         return applyFailedMatchResult();

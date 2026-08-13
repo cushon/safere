@@ -70,17 +70,11 @@ sealed interface RejectPrefilter
         descriptor.requiredCharClass() != null
             ? CharClass.create(descriptor.requiredCharClass())
             : null;
-    RejectPrefilter disjointFilter =
-        descriptor.disjointRequiredLiterals() != null
-            ? DisjointLiterals.create(descriptor.disjointRequiredLiterals())
-            : null;
-
     int count = 0;
     if (suffixFilter != null) count++;
     if (endCcFilter != null) count++;
     if (litFilter != null) count++;
     if (ccFilter != null) count++;
-    if (disjointFilter != null) count++;
 
     if (count == 0) {
       return null;
@@ -90,7 +84,7 @@ sealed interface RejectPrefilter
       if (endCcFilter != null) return endCcFilter;
       if (litFilter != null) return litFilter;
       if (ccFilter != null) return ccFilter;
-      return disjointFilter;
+      return null;
     }
     RejectPrefilter[] filters = new RejectPrefilter[count];
     int idx = 0;
@@ -105,9 +99,6 @@ sealed interface RejectPrefilter
     }
     if (ccFilter != null) {
       filters[idx++] = ccFilter;
-    }
-    if (disjointFilter != null) {
-      filters[idx] = disjointFilter;
     }
     return new Composite(filters);
   }

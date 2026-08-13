@@ -86,9 +86,9 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     if (!wasDollar || length == 0) {
       return false;
     }
-    int trailingTerminator = trailingLineTerminatorStart(unixLines, length);
-    if (trailingTerminator >= suffixLen) {
-      int start = offset + trailingTerminator - suffixLen;
+    int effectiveLen = trailingLineTerminatorStart(unixLines, length);
+    if (effectiveLen >= suffixLen) {
+      int start = offset + effectiveLen - suffixLen;
       if (foldCase
           ? equalsFoldCase(bytes, start, suffix, 0, suffixLen)
           : Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {

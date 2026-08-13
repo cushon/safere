@@ -86,6 +86,19 @@ class SearchScalingRegressionTest {
         .isLessThan(100);
   }
 
+  @Test
+  void disjointRequiredLiteralCandidateIsScannedOnlyOnce() {
+    Pattern pattern = Pattern.compile(".*(?:apple|banana|cherry).*");
+    String input = "x".repeat(32_768) + "cherry";
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isTrue());
+
+    assertThat(work)
+        .as("a positive disjoint-literal candidate should not repeat every full-input scan")
+        .isLessThan(input.length() * 5L);
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);

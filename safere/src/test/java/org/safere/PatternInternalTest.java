@@ -64,6 +64,18 @@ class PatternInternalTest {
   }
 
   @Test
+  void textStartAnchorsPreservePrefixAccelerators() {
+    assertThat(Pattern.compile("^https://.*").anchoredPrefix()).isEqualTo("https://");
+    assertThat(Pattern.compile("\\Ahttps://.*").anchoredPrefix()).isEqualTo("https://");
+
+    AsciiBitmap prefix = Pattern.compile("^[0-9]+").anchoredCharClassPrefixAscii();
+    assertThat(prefix).isNotNull();
+    assertThat(prefix.contains('0')).isTrue();
+    assertThat(prefix.contains('9')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
+  }
+
+  @Test
   void asciiPrefixScanInfoHandlesMissingAndEmptyClasses() {
     assertThat(Pattern.buildAsciiClassScanInfo(null)).isNull();
     assertThat(Pattern.buildAsciiClassScanInfo(AsciiBitmap.EMPTY)).isNull();

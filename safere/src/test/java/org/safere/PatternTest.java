@@ -1261,6 +1261,43 @@ class PatternTest {
       }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029"})
+    @DisplayName("end anchors recognize every final line terminator")
+    void endAnchorsRecognizeEveryFinalLineTerminator(String terminator) {
+      String input = "config.json" + terminator;
+      Utf8Input utf8 = Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+      for (String anchor : List.of("$", "\\Z")) {
+        Pattern suffix = Pattern.compile(".*\\.json" + anchor);
+        Pattern characterClass = Pattern.compile(".*[0-9]" + anchor);
+
+        assertThat(suffix.matcher(input).find()).isTrue();
+        assertThat(suffix.find(utf8)).isTrue();
+        assertThat(characterClass.matcher("item3" + terminator).find()).isTrue();
+        assertThat(
+                characterClass.find(
+                    Utf8Input.trusted(
+                        ("item3" + terminator).getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isTrue();
+      }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\r", "\r\n", "\u0085", "\u2028", "\u2029"})
+    @DisplayName("UNIX_LINES restricts final line terminators to newline")
+    void unixLinesRestrictsFinalLineTerminatorsToNewline(String terminator) {
+      String input = "config.json" + terminator;
+      Utf8Input utf8 = Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+      for (String anchor : List.of("$", "\\Z")) {
+        Pattern suffix = Pattern.compile(".*\\.json" + anchor, Pattern.UNIX_LINES);
+
+        assertThat(suffix.matcher(input).find()).isFalse();
+        assertThat(suffix.find(utf8)).isFalse();
+      }
+    }
+
     @Test
     @DisplayName("end-anchored character class rejects inputs not ending with class")
     void endAnchoredCharClassRejectsMismatchedInputs() {
@@ -1321,6 +1358,18 @@ class PatternTest {
   @Nested
   @DisplayName("start-anchored prefix and char class fast paths")
   class StartAnchoredPrefixTests {
+
+    @Test
+    @DisplayName("start-anchored character class rejects empty UTF-8 input safely")
+    void startAnchoredCharacterClassRejectsEmptyUtf8InputSafely() {
+      Pattern pattern = Pattern.compile("^[0-9]+");
+      Utf8Input empty = Utf8Input.trusted(new byte[0]);
+
+      assertThat(pattern.find(empty)).isFalse();
+      assertThat(pattern.matcher(empty).find()).isFalse();
+      assertThat(pattern.matcher(empty).matches()).isFalse();
+      assertThat(pattern.matcher(empty).lookingAt()).isFalse();
+    }
 
     @Test
     @DisplayName(

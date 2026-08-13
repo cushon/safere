@@ -166,7 +166,7 @@ class RejectPrefilterTest {
 
   @Test
   void endAnchoredSuffixRejectPrefilterRejectsMismatchedSuffix() {
-    Pattern.SuffixInfo info = new Pattern.SuffixInfo(".json", true);
+    Pattern.SuffixInfo info = new Pattern.SuffixInfo(".json", true, false);
     RejectDescriptor desc = new RejectDescriptor(null, null, null, info);
     assertThat(desc.hasRejectionFilter()).isTrue();
 

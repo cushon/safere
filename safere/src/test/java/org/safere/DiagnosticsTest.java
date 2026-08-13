@@ -609,6 +609,18 @@ class DiagnosticsTest {
   }
 
   @Test
+  void exhaustedStartAnchorDoesNotReportPrefilterParticipation() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile("^a");
+    Matcher matcher = pattern.matcher("za").region(1, 2).useAnchoringBounds(true);
+
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.find()).isFalse();
+
+    assertThat(operationsFor(pattern).get(1).auxiliaryStrategies()).isEmpty();
+  }
+
+  @Test
   void listenerCanAggregateStrategiesWithLongAdders() {
     Pattern pattern = Pattern.compile("abc");
     Map<MatchStrategy, LongAdder> counts = new ConcurrentHashMap<>();
