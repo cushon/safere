@@ -21,6 +21,7 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import org.safere.internal.Ascii;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by
@@ -1967,7 +1968,7 @@ public final class Matcher implements MatchResult {
       }
       char ch = text.charAt(i);
       if (ch < 128
-          && keywordAlternation.firstAscii[asciiLower(ch)]
+          && keywordAlternation.firstAscii[Ascii.toLowerCase(ch)]
           && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
@@ -2002,7 +2003,7 @@ public final class Matcher implements MatchResult {
       }
       char ch = text.charAt(i);
       if (ch < 128
-          && keywordAlternation.firstAscii[asciiLower(ch)]
+          && keywordAlternation.firstAscii[Ascii.toLowerCase(ch)]
           && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
@@ -2038,10 +2039,6 @@ public final class Matcher implements MatchResult {
     return unicodeWordBoundary ? Nfa.isUnicodeWordChar(cp) : Nfa.isWordChar(cp);
   }
 
-  private static int asciiLower(int ch) {
-    return ('A' <= ch && ch <= 'Z') ? ch + ('a' - 'A') : ch;
-  }
-
   /** ASCII case-insensitive indexOf for Java's default CASE_INSENSITIVE semantics. */
   static int indexOfIgnoreCase(String text, String prefix, int fromIndex) {
     int prefixLen = prefix.length();
@@ -2070,7 +2067,8 @@ public final class Matcher implements MatchResult {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }
-      if (asciiLower(text.charAt(textOffset + i)) != asciiLower(prefix.charAt(prefixOffset + i))) {
+      if (Ascii.toLowerCase(text.charAt(textOffset + i))
+          != Ascii.toLowerCase(prefix.charAt(prefixOffset + i))) {
         return false;
       }
     }

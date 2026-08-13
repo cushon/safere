@@ -9,6 +9,7 @@ import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
 
 import java.lang.invoke.VarHandle;
+import org.safere.internal.Ascii;
 
 final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   private static final int REPLACEMENT_CHARACTER = 0xFFFD;
@@ -263,6 +264,65 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         matched++;
         if (matched == literal.length) {
           return position - literal.length + 1;
+        }
+      }
+    }
+    return -1;
+  }
+
+  int indexOfIgnoreCase(String prefix, int[] failure, int start) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return start;
+    }
+    if (!WorkCounterConfig.ENABLED) {
+      if (prefixLen == 1) {
+        char first = prefix.charAt(0);
+        if (first <= 127) {
+          int low = Ascii.toLowerCase(first);
+          int high = Ascii.toUpperCase(first);
+          if (low == high) {
+            return indexOfByte((byte) low, start);
+          }
+          if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
+            int position = start;
+            int scalarLimit = Math.min(length, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
+            for (; position < scalarLimit; position++) {
+              int b = bytes[offset + position] & 0xFF;
+              if (b == low || b == high) {
+                return position;
+              }
+            }
+            int[] ranges = new int[] {high, high, low, low};
+            int result = scanProvider.indexOfAsciiClass(bytes, offset, length, ranges, position);
+            if (result != VectorScanProvider.UNSUPPORTED) {
+              return result;
+            }
+          }
+          return ByteSwarScan.indexOfBytePair(
+              bytes, offset, length, (byte) low, (byte) high, start);
+        }
+      }
+    }
+    return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
+  }
+
+  static int indexOfLinearIgnoreCase(
+      byte[] bytes, int offset, int length, String prefix, int[] failure, int start) {
+    int prefixLen = prefix.length();
+    int matched = 0;
+    for (int position = start; position < length; position++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      int current = Ascii.toLowerCase(bytes[offset + position] & 0xFF);
+      while (matched > 0 && current != Ascii.toLowerCase(prefix.charAt(matched))) {
+        matched = failure[matched - 1];
+      }
+      if (current == Ascii.toLowerCase(prefix.charAt(matched))) {
+        matched++;
+        if (matched == prefixLen) {
+          return position - prefixLen + 1;
         }
       }
     }

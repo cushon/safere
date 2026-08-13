@@ -44,7 +44,7 @@ class StartAcceleratorTest {
   }
 
   @Test
-  void caseInsensitiveLiteralAcceleratesStringOnly() {
+  void caseInsensitiveLiteralAcceleratesStringAndUtf8() {
     StartDescriptor desc = new StartDescriptor("needle", true, null, null, null);
     assertThat(desc.hasStartAcceleration()).isTrue();
 
@@ -52,8 +52,24 @@ class StartAcceleratorTest {
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.Literal.class);
     assertThat(strAcc.findCandidate("haystack with NEEDLE here", 0, false)).isEqualTo(14);
 
-    // Utf8 accelerator does not support case-insensitive literal prefix directly
-    assertThat(Utf8StartAccelerator.create(desc, false)).isNull();
+    Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
+    assertThat(utf8Acc.strategy()).isEqualTo(MatchStrategy.LITERAL);
+    assertThat(utf8Acc.isExactMatchCandidate()).isTrue();
+    assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with NEEDLE here"), 0)).isEqualTo(14);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with nEeDlE here"), 0)).isEqualTo(14);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with needle here"), 15)).isEqualTo(-1);
+
+    // Single character case-insensitive prefix
+    StartDescriptor singleDesc = new StartDescriptor("a", true, null, null, null);
+    Utf8StartAccelerator singleUtf8 = Utf8StartAccelerator.create(singleDesc, false);
+    assertThat(singleUtf8).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
+    assertThat(singleUtf8.findCandidate(utf8Scanner("xxxA"), 0)).isEqualTo(3);
+    assertThat(singleUtf8.findCandidate(utf8Scanner("xxxa"), 0)).isEqualTo(3);
+
+    // Non-ASCII case-insensitive prefix falls back (null)
+    StartDescriptor nonAsciiDesc = new StartDescriptor("café", true, null, null, null);
+    assertThat(Utf8StartAccelerator.create(nonAsciiDesc, false)).isNull();
   }
 
   @Test
@@ -90,6 +106,49 @@ class StartAcceleratorTest {
     assertThat(utf8Acc.strategy()).isEqualTo(MatchStrategy.CHARACTER_CLASS);
     assertThat(utf8Acc.isExactMatchCandidate()).isFalse();
     assertThat(utf8Acc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
+  }
+
+  @Test
+  void compiledPatternAcceleratorsInSync() {
+    String[] testPatterns = {
+      "(?i)needle.*", "(?i)a.*", "(?i)HTTP://.*", "needle.*", "[a-z].*", "[0-9].*", "ab+c.*"
+    };
+
+    String[] testInputs = {
+      "prefix with NEEDLE in middle",
+      "prefix with needle in middle",
+      "prefix with nEeDlE in middle",
+      "prefix with no match",
+      "HTTP://EXAMPLE.COM",
+      "http://example.com",
+      "123 numbers",
+      "letters abc"
+    };
+
+    for (String patStr : testPatterns) {
+      Pattern pattern = Pattern.compile(patStr);
+      StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+      Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+
+      if (strAcc != null) {
+        assertThat(utf8Acc)
+            .as(
+                "Utf8StartAccelerator should match StringStartAccelerator presence for pattern: %s",
+                patStr)
+            .isNotNull();
+        assertThat(utf8Acc.strategy())
+            .as("Strategies should match for pattern: %s", patStr)
+            .isEqualTo(strAcc.strategy());
+
+        for (String input : testInputs) {
+          int strCandidate = strAcc.findCandidate(input, 0, false);
+          int utf8Candidate = utf8Acc.findCandidate(utf8Scanner(input), 0);
+          assertThat(utf8Candidate)
+              .as("Candidate indices should match for pattern '%s' on input '%s'", patStr, input)
+              .isEqualTo(strCandidate);
+        }
+      }
+    }
   }
 
   private static Utf8InputScanner utf8Scanner(String text) {

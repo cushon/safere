@@ -10,6 +10,7 @@ import static java.nio.ByteOrder.nativeOrder;
 import static java.util.Objects.requireNonNull;
 
 import java.lang.invoke.VarHandle;
+import org.safere.internal.Ascii;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 1-byte sequences. */
 abstract class ByteSwarScan {
@@ -47,6 +48,10 @@ abstract class ByteSwarScan {
   }
 
   final int indexOfByte(byte target, int start) {
+    return indexOfByte(bytes, offset, length, target, start);
+  }
+
+  static int indexOfByte(byte[] bytes, int offset, int length, byte target, int start) {
     int position = start;
     int wordEnd = length - Long.BYTES;
     long repeatedTarget = (target & 0xFFL) * BYTE_ONES;
@@ -68,6 +73,28 @@ abstract class ByteSwarScan {
       position++;
     }
     return -1;
+  }
+
+  static int indexOfIgnoreCase(byte[] bytes, int offset, int length, String prefix, int start) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return -2;
+      }
+    }
+    if (prefixLen > 1) {
+      return -2;
+    }
+    char first = prefix.charAt(0);
+    byte low = (byte) Ascii.toLowerCase(first);
+    byte high = (byte) Ascii.toUpperCase(first);
+    if (low == high) {
+      return indexOfByte(bytes, offset, length, low, start);
+    }
+    return indexOfBytePair(bytes, offset, length, low, high, start);
   }
 
   static int indexOfBytePair(

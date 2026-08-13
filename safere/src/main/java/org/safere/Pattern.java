@@ -31,6 +31,7 @@ import java.util.function.Predicate;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import org.safere.internal.Ascii;
 
 /**
  * A compiled regular expression backed by a linear-time NFA engine. This class provides a drop-in
@@ -2043,7 +2044,9 @@ public final class Pattern implements Serializable {
         WorkCounter.record();
       }
       int first = scanner.asciiAt(position);
-      if (first < 0 || !firstAscii[asciiLower(first)] || !isWordBoundaryAt(scanner, position)) {
+      if (first < 0
+          || !firstAscii[Ascii.toLowerCase(first)]
+          || !isWordBoundaryAt(scanner, position)) {
         return -1;
       }
       for (String keyword : keywords) {
@@ -2071,7 +2074,7 @@ public final class Pattern implements Serializable {
         InputScanner scanner, int position, String keyword) {
       for (int index = 0; index < keyword.length(); index++) {
         int input = scanner.asciiAt(position + index);
-        if (input < 0 || asciiLower(input) != keyword.charAt(index)) {
+        if (input < 0 || Ascii.toLowerCase(input) != keyword.charAt(index)) {
           return false;
         }
       }
@@ -2723,7 +2726,7 @@ public final class Pattern implements Serializable {
         if ((node.flags & ParseFlags.FOLD_CASE) == 0) {
           yield false;
         }
-        sb.append((char) asciiLower(cp));
+        sb.append((char) Ascii.toLowerCase(cp));
         yield true;
       }
       case LITERAL_STRING -> {
@@ -2737,7 +2740,7 @@ public final class Pattern implements Serializable {
           if (cp < 0 || cp >= 128 || !isAsciiLiteralKeywordChar(cp)) {
             yield false;
           }
-          sb.append((char) asciiLower(cp));
+          sb.append((char) Ascii.toLowerCase(cp));
         }
         yield true;
       }
@@ -2758,10 +2761,6 @@ public final class Pattern implements Serializable {
         || ('a' <= cp && cp <= 'z')
         || ('0' <= cp && cp <= '9')
         || cp == '_';
-  }
-
-  private static int asciiLower(int cp) {
-    return ('A' <= cp && cp <= 'Z') ? cp + ('a' - 'A') : cp;
   }
 
   private static int asciiFoldedLiteralChar(CharClass cc) {
