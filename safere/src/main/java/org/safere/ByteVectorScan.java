@@ -60,7 +60,7 @@ final class ByteVectorScan {
     if (low == high) {
       return values.eq(low);
     }
-    if (high == low + 1) {
+    if (highBound == lowBound + 1) {
       return values.eq(low).or(values.eq(high));
     }
     return values.compare(GE, low).and(values.compare(LE, high));

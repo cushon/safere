@@ -215,7 +215,7 @@ final class ShortVectorScan {
     if (low == high) {
       return values.eq(low);
     }
-    if (high == low + 1) {
+    if (highBound == lowBound + 1) {
       return values.eq(low).or(values.eq(high));
     }
     if (highBound <= 0x7FFF || lowBound >= 0x8000) {

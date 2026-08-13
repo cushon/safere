@@ -5,22 +5,14 @@
 
 package org.safere;
 
-import org.safere.internal.Ascii;
+import org.safere.internal.Swar;
 
 /** Internal provider for experimental Vector API scan operations. */
 interface VectorScanProvider {
-  int UNSUPPORTED = -2;
+  int UNSUPPORTED = Swar.UNSUPPORTED;
 
   int minimumInputLength();
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
-
-  static char asciiLower(char ch) {
-    return Ascii.toLowerCase(ch);
-  }
-
-  static char asciiUpper(char ch) {
-    return Ascii.toUpperCase(ch);
-  }
 }

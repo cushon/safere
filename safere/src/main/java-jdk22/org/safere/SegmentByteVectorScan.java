@@ -143,9 +143,15 @@ final class SegmentByteVectorScan {
     return result;
   }
 
-  private static VectorMask<Byte> matches(ByteVector values, int low, int high) {
-    return values
-        .compare(VectorOperators.GE, (byte) low)
-        .and(values.compare(VectorOperators.LE, (byte) high));
+  private static VectorMask<Byte> matches(ByteVector values, int lowBound, int highBound) {
+    byte low = (byte) lowBound;
+    byte high = (byte) highBound;
+    if (low == high) {
+      return values.eq(low);
+    }
+    if (highBound == lowBound + 1) {
+      return values.eq(low).or(values.eq(high));
+    }
+    return values.compare(VectorOperators.GE, low).and(values.compare(VectorOperators.LE, high));
   }
 }

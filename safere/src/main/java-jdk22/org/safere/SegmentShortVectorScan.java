@@ -49,18 +49,7 @@ final class SegmentShortVectorScan {
 
       int firstTrue = mask.firstTrue();
       if (firstTrue < vectorLen) {
-        int matchPos = pos + firstTrue;
-        char matchedChar =
-            (char) (segment.get(UTF16_SHORT, byteOffset + ((long) matchPos << 1)) & 0xFFFF);
-        if (Character.isLowSurrogate(matchedChar) && matchPos > 0) {
-          char prevChar =
-              (char) (segment.get(UTF16_SHORT, byteOffset + ((long) (matchPos - 1) << 1)) & 0xFFFF);
-          if (Character.isHighSurrogate(prevChar)) {
-            pos = matchPos + 1;
-            continue;
-          }
-        }
-        return matchPos;
+        return pos + firstTrue;
       }
       pos += vectorLen;
     }
@@ -70,13 +59,6 @@ final class SegmentShortVectorScan {
       int c = segment.get(UTF16_SHORT, byteOffset + ((long) i << 1)) & 0xFFFF;
       for (int r = 0; r < numRanges; r++) {
         if (c >= (ranges[r * 2] & 0xFFFF) && c <= (ranges[r * 2 + 1] & 0xFFFF)) {
-          if (Character.isLowSurrogate((char) c) && i > 0) {
-            char prev =
-                (char) (segment.get(UTF16_SHORT, byteOffset + ((long) (i - 1) << 1)) & 0xFFFF);
-            if (Character.isHighSurrogate(prev)) {
-              continue;
-            }
-          }
           return i;
         }
       }

@@ -47,13 +47,6 @@ final class SegmentShortSwarScan {
           for (int i = pos; i < limit; i++) {
             char ch = (char) (segment.get(UTF16_SHORT, byteOffset + ((long) i << 1)) & 0xFFFF);
             if (ch >= ranges[0] && ch <= ranges[1]) {
-              if (Character.isLowSurrogate(ch) && i > 0) {
-                char prev =
-                    (char) (segment.get(UTF16_SHORT, byteOffset + ((long) (i - 1) << 1)) & 0xFFFF);
-                if (Character.isHighSurrogate(prev)) {
-                  continue;
-                }
-              }
               return i;
             }
           }
@@ -71,13 +64,6 @@ final class SegmentShortSwarScan {
           for (int i = pos; i < limit; i++) {
             char ch = (char) (segment.get(UTF16_SHORT, byteOffset + ((long) i << 1)) & 0xFFFF);
             if ((ch >= ranges[0] && ch <= ranges[1]) || (ch >= ranges[2] && ch <= ranges[3])) {
-              if (Character.isLowSurrogate(ch) && i > 0) {
-                char prev =
-                    (char) (segment.get(UTF16_SHORT, byteOffset + ((long) (i - 1) << 1)) & 0xFFFF);
-                if (Character.isHighSurrogate(prev)) {
-                  continue;
-                }
-              }
               return i;
             }
           }
@@ -91,13 +77,6 @@ final class SegmentShortSwarScan {
       char ch = (char) (segment.get(UTF16_SHORT, byteOffset + ((long) i << 1)) & 0xFFFF);
       for (int r = 0; r < numRanges; r++) {
         if (ch >= ranges[r * 2] && ch <= ranges[r * 2 + 1]) {
-          if (Character.isLowSurrogate(ch) && i > 0) {
-            char prev =
-                (char) (segment.get(UTF16_SHORT, byteOffset + ((long) (i - 1) << 1)) & 0xFFFF);
-            if (Character.isHighSurrogate(prev)) {
-              continue;
-            }
-          }
           return i;
         }
       }
