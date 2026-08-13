@@ -6,6 +6,7 @@
 package org.safere;
 
 import java.util.Arrays;
+import org.safere.internal.Ascii;
 
 /** Utilities for regex case-folded literal and range expansion. */
 final class UnicodeCaseFolding {
@@ -14,13 +15,7 @@ final class UnicodeCaseFolding {
   private UnicodeCaseFolding() {}
 
   static int asciiFoldRune(int r) {
-    if ('A' <= r && r <= 'Z') {
-      return r + ('a' - 'A');
-    }
-    if ('a' <= r && r <= 'z') {
-      return r;
-    }
-    return r;
+    return Ascii.toLowerCase(r);
   }
 
   static void addAsciiFoldedRange(CharClassBuilder ccb, int lo, int hi) {
@@ -28,12 +23,12 @@ final class UnicodeCaseFolding {
     int upperLo = Math.max(lo, 'A');
     int upperHi = Math.min(hi, 'Z');
     if (upperLo <= upperHi) {
-      ccb.addRange(upperLo + ('a' - 'A'), upperHi + ('a' - 'A'));
+      ccb.addRange(Ascii.toLowerCase(upperLo), Ascii.toLowerCase(upperHi));
     }
     int lowerLo = Math.max(lo, 'a');
     int lowerHi = Math.min(hi, 'z');
     if (lowerLo <= lowerHi) {
-      ccb.addRange(lowerLo - ('a' - 'A'), lowerHi - ('a' - 'A'));
+      ccb.addRange(Ascii.toUpperCase(lowerLo), Ascii.toUpperCase(lowerHi));
     }
   }
 

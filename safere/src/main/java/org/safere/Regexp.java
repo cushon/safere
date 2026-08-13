@@ -10,6 +10,7 @@ package org.safere;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import org.safere.internal.Ascii;
 
 /**
  * A node in the regular expression abstract syntax tree (AST). Each node has a {@link RegexpOp}
@@ -491,8 +492,8 @@ final class Regexp {
     if (r != 0 && r < 0x80 && "(){}[]*+?|.^$\\".indexOf((char) r) >= 0) {
       sb.append('\\');
       sb.appendCodePoint(r);
-    } else if (foldCase && 'a' <= r && r <= 'z') {
-      int upper = r - ('a' - 'A');
+    } else if (foldCase && Ascii.isLower(r)) {
+      int upper = Ascii.toUpperCase(r);
       sb.append('[');
       sb.append((char) upper);
       sb.append((char) r);

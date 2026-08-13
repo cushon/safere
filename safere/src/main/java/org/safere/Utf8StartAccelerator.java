@@ -95,7 +95,22 @@ sealed interface Utf8StartAccelerator {
           return null;
         }
       }
-      return new CaseInsensitiveLiteral(prefix, Ascii.ignoreCaseFailure(prefix));
+      return new CaseInsensitiveLiteral(prefix, ignoreCaseFailure(prefix));
+    }
+
+    private static int[] ignoreCaseFailure(String pattern) {
+      int[] failure = new int[pattern.length()];
+      int matched = 0;
+      for (int i = 1; i < pattern.length(); i++) {
+        while (matched > 0 && !Ascii.equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
+          matched = failure[matched - 1];
+        }
+        if (Ascii.equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
+          matched++;
+        }
+        failure[i] = matched;
+      }
+      return failure;
     }
 
     @Override

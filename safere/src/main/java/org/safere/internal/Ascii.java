@@ -35,65 +35,56 @@ public final class Ascii {
     return a == b || toLowerCase(a) == toLowerCase(b);
   }
 
-  /** Builds the KMP failure function for an ASCII case-insensitive pattern. */
-  public static int[] ignoreCaseFailure(String pattern) {
-    int[] failure = new int[pattern.length()];
-    int matched = 0;
-    for (int i = 1; i < pattern.length(); i++) {
-      while (matched > 0 && !equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
-        matched = failure[matched - 1];
-      }
-      if (equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
-        matched++;
-      }
-      failure[i] = matched;
-    }
-    return failure;
+  /** Returns true if the code point is an ASCII uppercase letter. */
+  public static boolean isUpper(int r) {
+    return r >= 'A' && r <= 'Z';
   }
 
-  /** Finds an ASCII prefix in UTF-16 code units in linear time. */
-  public static int indexOfIgnoreCase(
-      char[] input, int offset, int length, String pattern, int start) {
-    if (pattern.isEmpty()) {
-      return Math.min(Math.max(0, start), length);
-    }
-    int[] failure = ignoreCaseFailure(pattern);
-    int matched = 0;
-    for (int i = Math.max(0, start); i < length; i++) {
-      char ch = input[offset + i];
-      while (matched > 0 && !equalsIgnoreCase(ch, pattern.charAt(matched))) {
-        matched = failure[matched - 1];
-      }
-      if (equalsIgnoreCase(ch, pattern.charAt(matched))) {
-        matched++;
-        if (matched == pattern.length()) {
-          return i - pattern.length() + 1;
-        }
-      }
-    }
-    return -1;
+  /** Returns true if the code point is an ASCII lowercase letter. */
+  public static boolean isLower(int r) {
+    return r >= 'a' && r <= 'z';
   }
 
-  /** Finds an ASCII prefix in little-endian UTF-16 bytes in linear time. */
-  public static int indexOfIgnoreCaseUtf16(
-      byte[] input, int offset, int length, String pattern, int start) {
-    if (pattern.isEmpty()) {
-      return Math.min(Math.max(0, start), length);
+  /** Returns true if the code point is an ASCII letter. */
+  public static boolean isAlpha(int r) {
+    return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
+  }
+
+  /** Returns true if the code point is an ASCII digit. */
+  public static boolean isDigit(int r) {
+    return r >= '0' && r <= '9';
+  }
+
+  /** Returns true if the code point is an ASCII letter or digit. */
+  public static boolean isAlnum(int r) {
+    return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
+  }
+
+  /** Returns true if the code point is an ASCII word character (letter, digit, or underscore). */
+  public static boolean isWordChar(int r) {
+    return isAlnum(r) || r == '_';
+  }
+
+  /** Returns true if the code point is an ASCII hex digit. */
+  public static boolean isHexDigit(int r) {
+    return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f');
+  }
+
+  /**
+   * Returns the value of a hex digit, or -1 if not a hex digit.
+   *
+   * @param r a code point
+   * @return 0-15 for valid hex digits, -1 otherwise
+   */
+  public static int unhex(int r) {
+    if (r >= '0' && r <= '9') {
+      return r - '0';
     }
-    int[] failure = ignoreCaseFailure(pattern);
-    int matched = 0;
-    for (int i = Math.max(0, start); i < length; i++) {
-      int byteIndex = offset + (i << 1);
-      char ch = (char) ((input[byteIndex] & 0xFF) | ((input[byteIndex + 1] & 0xFF) << 8));
-      while (matched > 0 && !equalsIgnoreCase(ch, pattern.charAt(matched))) {
-        matched = failure[matched - 1];
-      }
-      if (equalsIgnoreCase(ch, pattern.charAt(matched))) {
-        matched++;
-        if (matched == pattern.length()) {
-          return i - pattern.length() + 1;
-        }
-      }
+    if (r >= 'A' && r <= 'F') {
+      return r - 'A' + 10;
+    }
+    if (r >= 'a' && r <= 'f') {
+      return r - 'a' + 10;
     }
     return -1;
   }

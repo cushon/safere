@@ -2757,10 +2757,7 @@ public final class Pattern implements Serializable {
   }
 
   private static boolean isAsciiLiteralKeywordChar(int cp) {
-    return ('A' <= cp && cp <= 'Z')
-        || ('a' <= cp && cp <= 'z')
-        || ('0' <= cp && cp <= '9')
-        || cp == '_';
+    return Ascii.isWordChar(cp);
   }
 
   private static int asciiFoldedLiteralChar(CharClass cc) {
@@ -2768,7 +2765,7 @@ public final class Pattern implements Serializable {
       return -1;
     }
     for (int cp = 'a'; cp <= 'z'; cp++) {
-      if (cc.contains(cp) && cc.contains(cp - ('a' - 'A'))) {
+      if (cc.contains(cp) && cc.contains(Ascii.toUpperCase(cp))) {
         return cp;
       }
     }

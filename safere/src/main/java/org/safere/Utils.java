@@ -7,6 +7,8 @@
 
 package org.safere;
 
+import org.safere.internal.Ascii;
+
 /** Utility methods for Unicode code point handling and character classification. */
 final class Utils {
 
@@ -37,53 +39,37 @@ final class Utils {
 
   /** Returns true if the code point is an ASCII letter or digit. */
   public static boolean isAlnum(int r) {
-    return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
+    return Ascii.isAlnum(r);
   }
 
   /** Returns true if the code point is an ASCII letter. */
   public static boolean isAlpha(int r) {
-    return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
+    return Ascii.isAlpha(r);
   }
 
   /** Returns true if the code point is an ASCII digit. */
   public static boolean isDigit(int r) {
-    return r >= '0' && r <= '9';
+    return Ascii.isDigit(r);
   }
 
   /** Returns true if the code point is an ASCII hex digit. */
   public static boolean isHexDigit(int r) {
-    return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f');
+    return Ascii.isHexDigit(r);
   }
 
   /** Returns true if the code point is an ASCII word character (letter, digit, or underscore). */
   public static boolean isWordChar(int r) {
-    return isAlnum(r) || r == '_';
+    return Ascii.isWordChar(r);
   }
 
   /** Returns true if the code point is an ASCII uppercase letter. */
   public static boolean isUpper(int r) {
-    return r >= 'A' && r <= 'Z';
+    return Ascii.isUpper(r);
   }
 
   /** Returns true if the code point is an ASCII lowercase letter. */
   public static boolean isLower(int r) {
-    return r >= 'a' && r <= 'z';
-  }
-
-  /** Converts an ASCII uppercase letter to lowercase. Returns the code point unchanged if not. */
-  public static int toLower(int r) {
-    if (isUpper(r)) {
-      return r + ('a' - 'A');
-    }
-    return r;
-  }
-
-  /** Converts an ASCII lowercase letter to uppercase. Returns the code point unchanged if not. */
-  public static int toUpper(int r) {
-    if (isLower(r)) {
-      return r - ('a' - 'A');
-    }
-    return r;
+    return Ascii.isLower(r);
   }
 
   /**
@@ -93,16 +79,7 @@ final class Utils {
    * @return 0-15 for valid hex digits, -1 otherwise
    */
   public static int unhex(int r) {
-    if (r >= '0' && r <= '9') {
-      return r - '0';
-    }
-    if (r >= 'A' && r <= 'F') {
-      return r - 'A' + 10;
-    }
-    if (r >= 'a' && r <= 'f') {
-      return r - 'a' + 10;
-    }
-    return -1;
+    return Ascii.unhex(r);
   }
 
   /**
