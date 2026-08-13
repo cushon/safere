@@ -9,17 +9,17 @@ import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.LITTLE_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
-import static org.safere.internal.Ascii.regionMatchesIgnoreCase;
-import static org.safere.internal.Ascii.regionMatchesIgnoreCaseUtf16;
 import static org.safere.internal.Ascii.toLowerCase;
 import static org.safere.internal.Ascii.toUpperCase;
 import static org.safere.internal.Swar.SHORT_HIGH_BITS;
 import static org.safere.internal.Swar.SHORT_ONES;
 import static org.safere.internal.Swar.exactShortRangeMask;
+import static org.safere.internal.Utf16.regionMatchesIgnoreCase;
+import static org.safere.internal.Utf16.regionMatchesIgnoreCaseUtf16;
 
 import java.lang.invoke.VarHandle;
-import org.safere.internal.Ascii;
 import org.safere.internal.Swar;
+import org.safere.internal.Utf16;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 2-byte sequences (UTF-16 and char[]). */
 final class ShortSwarScan {
@@ -168,7 +168,7 @@ final class ShortSwarScan {
       }
     }
     if (prefixLen > 1) {
-      return Ascii.indexOfIgnoreCase(chars, offset, length, prefix, start);
+      return Utf16.indexOfIgnoreCase(chars, offset, length, prefix, start);
     }
 
     int pos = Math.max(0, start);
@@ -221,7 +221,7 @@ final class ShortSwarScan {
       }
     }
     if (prefixLen > 1) {
-      return Ascii.indexOfIgnoreCaseUtf16(bytes, offset, length, prefix, start);
+      return Utf16.indexOfIgnoreCaseUtf16(bytes, offset, length, prefix, start);
     }
     if (nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;

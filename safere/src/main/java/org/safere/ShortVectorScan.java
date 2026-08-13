@@ -9,18 +9,18 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
-import static org.safere.internal.Ascii.regionMatchesIgnoreCase;
-import static org.safere.internal.Ascii.regionMatchesIgnoreCaseUtf16;
 import static org.safere.internal.Ascii.toLowerCase;
 import static org.safere.internal.Ascii.toUpperCase;
+import static org.safere.internal.Utf16.regionMatchesIgnoreCase;
+import static org.safere.internal.Utf16.regionMatchesIgnoreCaseUtf16;
 
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.ShortVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
-import org.safere.internal.Ascii;
 import org.safere.internal.Swar;
+import org.safere.internal.Utf16;
 
 /**
  * Stateless SIMD kernels using the incubating Vector API for 2-byte sequences (UTF-16 and char[]).
@@ -94,7 +94,7 @@ final class ShortVectorScan {
       }
     }
     if (prefixLen > 1) {
-      return Ascii.indexOfIgnoreCase(chars, offset, length, prefix, start);
+      return Utf16.indexOfIgnoreCase(chars, offset, length, prefix, start);
     }
 
     int pos = Math.max(0, start);
@@ -149,7 +149,7 @@ final class ShortVectorScan {
       }
     }
     if (prefixLen > 1) {
-      return Ascii.indexOfIgnoreCaseUtf16(bytes, offset, length, prefix, start);
+      return Utf16.indexOfIgnoreCaseUtf16(bytes, offset, length, prefix, start);
     }
     if (nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;
