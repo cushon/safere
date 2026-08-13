@@ -1160,7 +1160,9 @@ class PatternTest {
                   Utf8Input.trusted(
                       "config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
           .isFalse();
-    }    @Test
+    }
+
+    @Test
     @DisplayName("dollar and \\Z anchors match all supported trailing line terminators")
     void dollarAndZAnchorsMatchAllTrailingLineTerminators() {
       for (String regex : List.of(".*\\.json$", ".*\\.json\\Z")) {
@@ -1172,8 +1174,7 @@ class PatternTest {
           assertThat(p.matcher(input).matches()).isFalse();
           assertThat(
                   p.find(
-                      Utf8Input.trusted(
-                          input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+                      Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
               .isTrue();
         }
         assertThat(p.matcher("config.yaml\u0085").find()).isFalse();
@@ -1204,9 +1205,7 @@ class PatternTest {
         assertThat(p.matcher(input).find()).isFalse();
         assertThat(p.matcher(input).matches()).isFalse();
         assertThat(
-                p.find(
-                    Utf8Input.trusted(
-                        input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+                p.find(Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
             .isFalse();
       }
     }
@@ -1230,9 +1229,7 @@ class PatternTest {
         assertThat(p.matcher(input).find()).isFalse();
         assertThat(p.matcher(input).matches()).isFalse();
         assertThat(
-                p.find(
-                    Utf8Input.trusted(
-                        input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+                p.find(Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
             .isFalse();
       }
     }
@@ -1253,8 +1250,7 @@ class PatternTest {
           assertThat(p.matcher(input).matches()).isFalse();
           assertThat(
                   p.find(
-                      Utf8Input.trusted(
-                          input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+                      Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
               .isTrue();
         }
 
@@ -1270,8 +1266,7 @@ class PatternTest {
         // Utf8Input
         assertThat(
                 p.find(
-                    Utf8Input.trusted(
-                        "item123".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+                    Utf8Input.trusted("item123".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
             .isTrue();
         assertThat(
                 p.find(
