@@ -1163,6 +1163,33 @@ class PatternTest {
     }
 
     @Test
+    @DisplayName("case-insensitive end-anchored suffix rejects mismatched inputs")
+    void caseInsensitiveEndAnchoredSuffixRejectsMismatchedInputs() {
+      for (String regex : List.of("(?i).*\\.json$", ".*(?i:\\.json)$", "(?i).*\\.json\\z")) {
+        Pattern p = Pattern.compile(regex);
+
+        assertThat(p.matcher("config.json").matches()).isTrue();
+        assertThat(p.matcher("config.JSON").matches()).isTrue();
+        assertThat(p.matcher("config.JsOn").find()).isTrue();
+
+        assertThat(p.matcher("config.yaml").matches()).isFalse();
+        assertThat(p.matcher("config.YAML").find()).isFalse();
+
+        // Utf8Input
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "config.JSON".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isTrue();
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "config.YAML".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
+    }
+
+    @Test
     @DisplayName("dollar and \\Z anchors match all supported trailing line terminators")
     void dollarAndZAnchorsMatchAllTrailingLineTerminators() {
       for (String regex : List.of(".*\\.json$", ".*\\.json\\Z")) {

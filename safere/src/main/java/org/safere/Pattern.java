@@ -2997,9 +2997,13 @@ public final class Pattern implements Serializable {
     return buildCharClassScanInfo(cc);
   }
 
-  public record SuffixInfo(String suffix, boolean wasDollar, boolean unixLines) {
+  public record SuffixInfo(String suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
     public SuffixInfo(String suffix, boolean wasDollar) {
-      this(suffix, wasDollar, false);
+      this(suffix, wasDollar, false, false);
+    }
+
+    public SuffixInfo(String suffix, boolean wasDollar, boolean unixLines) {
+      this(suffix, wasDollar, unixLines, false);
     }
   }
 
@@ -3056,8 +3060,8 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Extracts a case-sensitive literal suffix from an end-anchored pattern (e.g. {@code
-   * .*\\.json$}).
+   * Extracts a literal suffix from an end-anchored pattern (e.g. {@code .*\\.json$} or {@code
+   * (?i).*\\.json$}).
    *
    * <p>Returns {@code null} if the pattern is not end-anchored, if the pattern is compiled with
    * {@link #MULTILINE} and ends with {@code $}, or if no literal precedes the anchor.
@@ -3076,6 +3080,7 @@ public final class Pattern implements Serializable {
       return null;
     }
     boolean wasDollar = (last.flags & ParseFlags.WAS_DOLLAR) != 0;
+    boolean foldCase = false;
 
     StringBuilder suffix = new StringBuilder();
     for (int i = subs.size() - 2; i >= 0; i--) {
@@ -3083,20 +3088,38 @@ public final class Pattern implements Serializable {
       if (sub == null) {
         break;
       }
-      if (sub.op == RegexpOp.LITERAL && (sub.flags & ParseFlags.FOLD_CASE) == 0) {
+      boolean subFold = (sub.flags & ParseFlags.FOLD_CASE) != 0;
+      if (sub.op == RegexpOp.LITERAL) {
+        if (subFold && sub.rune > 0x7F) {
+          break;
+        }
         suffix.insert(0, Character.toString(sub.rune));
-      } else if (sub.op == RegexpOp.LITERAL_STRING
-          && (sub.flags & ParseFlags.FOLD_CASE) == 0
-          && sub.runes != null) {
+        foldCase |= subFold;
+      } else if (sub.op == RegexpOp.LITERAL_STRING && sub.runes != null) {
+        if (subFold && !isAllAscii(sub.runes)) {
+          break;
+        }
         for (int j = sub.runes.length - 1; j >= 0; j--) {
           suffix.insert(0, Character.toString(sub.runes[j]));
         }
+        foldCase |= subFold;
       } else {
         break;
       }
     }
     boolean unixLines = (flags & UNIX_LINES) != 0;
-    return suffix.isEmpty() ? null : new SuffixInfo(suffix.toString(), wasDollar, unixLines);
+    return suffix.isEmpty()
+        ? null
+        : new SuffixInfo(suffix.toString(), wasDollar, unixLines, foldCase);
+  }
+
+  private static boolean isAllAscii(int[] runes) {
+    for (int r : runes) {
+      if (r > 0x7F) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**

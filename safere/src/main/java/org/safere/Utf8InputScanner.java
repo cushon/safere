@@ -70,11 +70,13 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return false;
   }
 
-  boolean endsWith(byte[] suffix, boolean wasDollar, boolean unixLines) {
+  boolean endsWith(byte[] suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
     int suffixLen = suffix.length;
     if (length >= suffixLen) {
       int start = offset + length - suffixLen;
-      if (Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
+      if (foldCase
+          ? equalsFoldCase(bytes, start, suffix, 0, suffixLen)
+          : Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(suffixLen);
         }
@@ -87,7 +89,9 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     int trailingTerminator = trailingLineTerminatorStart(unixLines, length);
     if (trailingTerminator >= suffixLen) {
       int start = offset + trailingTerminator - suffixLen;
-      if (Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
+      if (foldCase
+          ? equalsFoldCase(bytes, start, suffix, 0, suffixLen)
+          : Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(suffixLen);
         }
@@ -95,6 +99,22 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       }
     }
     return false;
+  }
+
+  private static boolean equalsFoldCase(
+      byte[] input, int inputStart, byte[] suffix, int suffixStart, int len) {
+    for (int i = 0; i < len; i++) {
+      byte b1 = input[inputStart + i];
+      byte b2 = suffix[suffixStart + i];
+      if (b1 != b2) {
+        int c1 = b1 >= 'A' && b1 <= 'Z' ? b1 + ('a' - 'A') : b1;
+        int c2 = b2 >= 'A' && b2 <= 'Z' ? b2 + ('a' - 'A') : b2;
+        if (c1 != c2) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   @Override

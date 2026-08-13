@@ -231,6 +231,35 @@ class RejectPrefilterTest {
   }
 
   @Test
+  void endAnchoredCaseInsensitiveSuffixRejectPrefilterRejectsMismatchedSuffix() {
+    Pattern.SuffixInfo info = new Pattern.SuffixInfo(".json", true, false, true);
+    RejectDescriptor desc = new RejectDescriptor(null, null, null, info);
+    assertThat(desc.hasRejectionFilter()).isTrue();
+
+    RejectPrefilter prefilter = RejectPrefilter.create(desc);
+    assertThat(prefilter).isInstanceOf(RejectPrefilter.EndAnchoredSuffix.class);
+    assertThat(prefilter.strategy()).isEqualTo(MatchStrategy.LITERAL);
+
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    // String input
+    assertThat(prefilter.canReject(null, "config.json", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.JSON", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.JsOn\n", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.JSON\r\n", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.yaml", 0, options)).isTrue();
+    assertThat(prefilter.canReject(null, "config.YAML\n", 0, options)).isTrue();
+
+    // UTF-8 input
+    assertThat(prefilter.canReject(utf8Scanner("config.json"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.JSON"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.JsOn\n"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.JSON\r\n"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.yaml"), 0, options)).isTrue();
+    assertThat(prefilter.canReject(utf8Scanner("config.YAML\n"), 0, options)).isTrue();
+  }
+
+  @Test
   void endAnchoredCharClassRejectPrefilterRejectsMismatchedInputs() {
     AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
     builder.addRange('0', '9');

@@ -353,19 +353,22 @@ class PatternInternalTest {
 
   @ParameterizedTest
   @CsvSource({
-    "'.*\\.json$',                         .json",
-    "'.*report_2026\\.log$',               report_2026.log",
-    "'.*(foo)(bar)$',                      foobar",
-    "'[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$',  ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "'.*test\\z',                          test"
+    "'.*\\.json$',                         .json,                        false",
+    "'(?i).*\\.json$',                     .json,                        true",
+    "'.*report_2026\\.log$',               report_2026.log,              false",
+    "'.*(foo)(bar)$',                      foobar,                       false",
+    "'[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$',  ABCDEFGHIJKLMNOPQRSTUVWXYZ,   false",
+    "'.*test\\z',                          test,                         false",
+    "'.*(?i:test)\\z',                     test,                         true"
   })
-  void endAnchoredLiteralSuffixIsRecorded(String regex, String expected) {
-    assertThat(Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix().suffix())
-        .isEqualTo(expected);
+  void endAnchoredLiteralSuffixIsRecorded(String regex, String expected, boolean foldCase) {
+    Pattern.SuffixInfo info = Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix();
+    assertThat(info.suffix()).isEqualTo(expected);
+    assertThat(info.foldCase()).isEqualTo(foldCase);
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {".*", ".*json", "(?m).*\\.json$", "(?i).*\\.json$"})
+  @ValueSource(strings = {".*", ".*json", "(?m).*\\.json$"})
   void unanchoredOrMultilineDollarDoNotRecordEndAnchoredSuffix(String regex) {
     assertThat(Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix()).isNull();
   }

@@ -224,7 +224,8 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record EndAnchoredSuffix(String suffix, byte[] suffixUtf8, boolean wasDollar, boolean unixLines)
+  record EndAnchoredSuffix(
+      String suffix, byte[] suffixUtf8, boolean wasDollar, boolean unixLines, boolean foldCase)
       implements RejectPrefilter {
 
     static EndAnchoredSuffix create(SuffixInfo info) {
@@ -232,7 +233,8 @@ sealed interface RejectPrefilter
         return null;
       }
       byte[] utf8 = info.suffix().getBytes(StandardCharsets.UTF_8);
-      return new EndAnchoredSuffix(info.suffix(), utf8, info.wasDollar(), info.unixLines());
+      return new EndAnchoredSuffix(
+          info.suffix(), utf8, info.wasDollar(), info.unixLines(), info.foldCase());
     }
 
     @Override
@@ -242,10 +244,10 @@ sealed interface RejectPrefilter
         return false;
       }
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
-        return !utf8Scanner.endsWith(suffixUtf8, wasDollar, unixLines);
+        return !utf8Scanner.endsWith(suffixUtf8, wasDollar, unixLines, foldCase);
       }
       if (text != null) {
-        return !endsWith(text, suffix, wasDollar, unixLines);
+        return !endsWith(text, suffix, wasDollar, unixLines, foldCase);
       }
       return false;
     }
@@ -255,7 +257,7 @@ sealed interface RejectPrefilter
       if (!options.literalFastPaths()) {
         return false;
       }
-      return !scanner.endsWith(suffixUtf8, wasDollar, unixLines);
+      return !scanner.endsWith(suffixUtf8, wasDollar, unixLines, foldCase);
     }
 
     @Override
@@ -264,9 +266,13 @@ sealed interface RejectPrefilter
     }
 
     private static boolean endsWith(
-        String text, String suffix, boolean wasDollar, boolean unixLines) {
+        String text, String suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
       int suffixLen = suffix.length();
-      if (text.endsWith(suffix)) {
+      int textLen = text.length();
+      if (textLen >= suffixLen
+          && (foldCase
+              ? text.regionMatches(true, textLen - suffixLen, suffix, 0, suffixLen)
+              : text.endsWith(suffix))) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(suffixLen);
         }
@@ -275,9 +281,11 @@ sealed interface RejectPrefilter
       if (!wasDollar || text.isEmpty()) {
         return false;
       }
-      int trailingStart =
-          StringInputScanner.trailingLineTerminatorStart(text, unixLines, text.length());
-      if (trailingStart >= suffixLen && text.startsWith(suffix, trailingStart - suffixLen)) {
+      int trailingStart = StringInputScanner.trailingLineTerminatorStart(text, unixLines, textLen);
+      if (trailingStart >= suffixLen
+          && (foldCase
+              ? text.regionMatches(true, trailingStart - suffixLen, suffix, 0, suffixLen)
+              : text.startsWith(suffix, trailingStart - suffixLen))) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(suffixLen);
         }
