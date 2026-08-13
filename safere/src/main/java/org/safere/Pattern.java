@@ -2997,9 +2997,17 @@ public final class Pattern implements Serializable {
     return buildCharClassScanInfo(cc);
   }
 
-  public record SuffixInfo(String suffix, boolean wasDollar) {}
+  public record SuffixInfo(String suffix, boolean wasDollar, boolean unixLines) {
+    public SuffixInfo(String suffix, boolean wasDollar) {
+      this(suffix, wasDollar, false);
+    }
+  }
 
-  record EndAnchoredCharClassInfo(AsciiBitmap bitmap, boolean wasDollar) {}
+  record EndAnchoredCharClassInfo(AsciiBitmap bitmap, boolean wasDollar, boolean unixLines) {
+    EndAnchoredCharClassInfo(AsciiBitmap bitmap, boolean wasDollar) {
+      this(bitmap, wasDollar, false);
+    }
+  }
 
   /** Extracts whole-input rejection metadata from the AST. */
   private static RejectDescriptor extractRejectDescriptor(
@@ -3087,7 +3095,8 @@ public final class Pattern implements Serializable {
         break;
       }
     }
-    return suffix.isEmpty() ? null : new SuffixInfo(suffix.toString(), wasDollar);
+    boolean unixLines = (flags & UNIX_LINES) != 0;
+    return suffix.isEmpty() ? null : new SuffixInfo(suffix.toString(), wasDollar, unixLines);
   }
 
   /**
@@ -3125,7 +3134,8 @@ public final class Pattern implements Serializable {
     }
     AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
     if (sub.op == RegexpOp.CHAR_CLASS && addCharClassPrefixAscii(sub.charClass, builder)) {
-      return new EndAnchoredCharClassInfo(builder.build(), wasDollar);
+      boolean unixLines = (flags & UNIX_LINES) != 0;
+      return new EndAnchoredCharClassInfo(builder.build(), wasDollar, unixLines);
     }
     return null;
   }

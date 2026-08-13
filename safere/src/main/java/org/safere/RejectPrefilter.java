@@ -224,7 +224,7 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record EndAnchoredSuffix(String suffix, byte[] suffixUtf8, boolean wasDollar)
+  record EndAnchoredSuffix(String suffix, byte[] suffixUtf8, boolean wasDollar, boolean unixLines)
       implements RejectPrefilter {
 
     static EndAnchoredSuffix create(SuffixInfo info) {
@@ -232,7 +232,7 @@ sealed interface RejectPrefilter
         return null;
       }
       byte[] utf8 = info.suffix().getBytes(StandardCharsets.UTF_8);
-      return new EndAnchoredSuffix(info.suffix(), utf8, info.wasDollar());
+      return new EndAnchoredSuffix(info.suffix(), utf8, info.wasDollar(), info.unixLines());
     }
 
     @Override
@@ -242,10 +242,10 @@ sealed interface RejectPrefilter
         return false;
       }
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
-        return !utf8Scanner.endsWith(suffixUtf8, wasDollar);
+        return !utf8Scanner.endsWith(suffixUtf8, wasDollar, unixLines);
       }
       if (text != null) {
-        return !endsWith(text, suffix, wasDollar);
+        return !endsWith(text, suffix, wasDollar, unixLines);
       }
       return false;
     }
@@ -255,7 +255,7 @@ sealed interface RejectPrefilter
       if (!options.literalFastPaths()) {
         return false;
       }
-      return !scanner.endsWith(suffixUtf8, wasDollar);
+      return !scanner.endsWith(suffixUtf8, wasDollar, unixLines);
     }
 
     @Override
@@ -263,7 +263,8 @@ sealed interface RejectPrefilter
       return MatchStrategy.LITERAL;
     }
 
-    private static boolean endsWith(String text, String suffix, boolean wasDollar) {
+    private static boolean endsWith(
+        String text, String suffix, boolean wasDollar, boolean unixLines) {
       int suffixLen = suffix.length();
       if (text.endsWith(suffix)) {
         if (WorkCounterConfig.ENABLED) {
@@ -274,37 +275,25 @@ sealed interface RejectPrefilter
       if (!wasDollar || text.isEmpty()) {
         return false;
       }
-      char last = text.charAt(text.length() - 1);
-      if (last == '\n') {
-        int effectiveLen =
-            (text.length() >= 2 && text.charAt(text.length() - 2) == '\r')
-                ? text.length() - 2
-                : text.length() - 1;
-        if (effectiveLen >= suffixLen && text.startsWith(suffix, effectiveLen - suffixLen)) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(suffixLen);
-          }
-          return true;
+      int trailingStart =
+          StringInputScanner.trailingLineTerminatorStart(text, unixLines, text.length());
+      if (trailingStart >= suffixLen && text.startsWith(suffix, trailingStart - suffixLen)) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(suffixLen);
         }
-      } else if (last == '\r') {
-        int effectiveLen = text.length() - 1;
-        if (effectiveLen >= suffixLen && text.startsWith(suffix, effectiveLen - suffixLen)) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(suffixLen);
-          }
-          return true;
-        }
+        return true;
       }
       return false;
     }
   }
 
-  record EndAnchoredCharClass(AsciiBitmap bitmap, boolean wasDollar) implements RejectPrefilter {
+  record EndAnchoredCharClass(AsciiBitmap bitmap, boolean wasDollar, boolean unixLines)
+      implements RejectPrefilter {
     static EndAnchoredCharClass create(EndAnchoredCharClassInfo info) {
       if (info == null || info.bitmap() == null) {
         return null;
       }
-      return new EndAnchoredCharClass(info.bitmap(), info.wasDollar());
+      return new EndAnchoredCharClass(info.bitmap(), info.wasDollar(), info.unixLines());
     }
 
     @Override
@@ -341,7 +330,7 @@ sealed interface RejectPrefilter
       if (!wasDollar) {
         return true;
       }
-      int prevPos = scanner.trailingLineTerminatorStart(false, len);
+      int prevPos = scanner.trailingLineTerminatorStart(unixLines, len);
       if (prevPos > 0) {
         int prevAscii = scanner.asciiAt(prevPos - 1);
         if (bitmap.contains(prevAscii)) {
@@ -369,27 +358,14 @@ sealed interface RejectPrefilter
       if (!wasDollar) {
         return true;
       }
-      if (last == '\n') {
-        int effectiveLen = (len >= 2 && text.charAt(len - 2) == '\r') ? len - 2 : len - 1;
-        if (effectiveLen > 0) {
-          char prev = text.charAt(effectiveLen - 1);
-          if (bitmap.contains(prev)) {
-            if (WorkCounterConfig.ENABLED) {
-              WorkCounter.record(1);
-            }
-            return false;
+      int prevPos = StringInputScanner.trailingLineTerminatorStart(text, unixLines, len);
+      if (prevPos > 0) {
+        char prev = text.charAt(prevPos - 1);
+        if (bitmap.contains(prev)) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(1);
           }
-        }
-      } else if (last == '\r') {
-        int effectiveLen = len - 1;
-        if (effectiveLen > 0) {
-          char prev = text.charAt(effectiveLen - 1);
-          if (bitmap.contains(prev)) {
-            if (WorkCounterConfig.ENABLED) {
-              WorkCounter.record(1);
-            }
-            return false;
-          }
+          return false;
         }
       }
       return true;

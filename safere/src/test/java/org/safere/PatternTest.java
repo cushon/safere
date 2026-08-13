@@ -1160,66 +1160,139 @@ class PatternTest {
                   Utf8Input.trusted(
                       "config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
           .isFalse();
+    }    @Test
+    @DisplayName("dollar and \\Z anchors match all supported trailing line terminators")
+    void dollarAndZAnchorsMatchAllTrailingLineTerminators() {
+      for (String regex : List.of(".*\\.json$", ".*\\.json\\Z")) {
+        Pattern p = Pattern.compile(regex);
+        String[] terminators = {"\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029"};
+        for (String term : terminators) {
+          String input = "config.json" + term;
+          assertThat(p.matcher(input).find()).isTrue();
+          assertThat(p.matcher(input).matches()).isFalse();
+          assertThat(
+                  p.find(
+                      Utf8Input.trusted(
+                          input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+              .isTrue();
+        }
+        assertThat(p.matcher("config.yaml\u0085").find()).isFalse();
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "config.yaml\u0085".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
     }
 
     @Test
-    @DisplayName("dollar anchor matches optional trailing newlines")
-    void dollarAnchorMatchesOptionalTrailingNewlines() {
-      Pattern p = Pattern.compile(".*\\.json$");
+    @DisplayName("strict \\z anchor does not match before trailing line terminators")
+    void strictEndAnchorDoesNotMatchTrailingLineTerminators() {
+      Pattern p = Pattern.compile(".*\\.json\\z");
+
+      assertThat(p.matcher("config.json").find()).isTrue();
+      assertThat(p.matcher("config.json").matches()).isTrue();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+
+      String[] terminators = {"\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029"};
+      for (String term : terminators) {
+        String input = "config.json" + term;
+        assertThat(p.matcher(input).find()).isFalse();
+        assertThat(p.matcher(input).matches()).isFalse();
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
+    }
+
+    @Test
+    @DisplayName("UNIX_LINES mode only allows trailing newline for dollar anchor")
+    void unixLinesModeOnlyAllowsTrailingNewline() {
+      Pattern p = Pattern.compile(".*\\.json$", Pattern.UNIX_LINES);
 
       assertThat(p.matcher("config.json\n").find()).isTrue();
-      assertThat(p.matcher("config.json\r\n").find()).isTrue();
-      assertThat(p.matcher("config.json\r").find()).isTrue();
-      assertThat(p.matcher("config.yaml\n").find()).isFalse();
-
+      assertThat(p.matcher("config.json\n").matches()).isFalse();
       assertThat(
               p.find(
                   Utf8Input.trusted(
                       "config.json\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
           .isTrue();
-      assertThat(
-              p.find(
-                  Utf8Input.trusted(
-                      "config.json\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isTrue();
-      assertThat(
-              p.find(
-                  Utf8Input.trusted(
-                      "config.json\r".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isTrue();
-      assertThat(
-              p.find(
-                  Utf8Input.trusted(
-                      "config.yaml\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isFalse();
+
+      String[] nonUnixTerminators = {"\r", "\r\n", "\u0085", "\u2028", "\u2029"};
+      for (String term : nonUnixTerminators) {
+        String input = "config.json" + term;
+        assertThat(p.matcher(input).find()).isFalse();
+        assertThat(p.matcher(input).matches()).isFalse();
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
     }
 
     @Test
     @DisplayName("end-anchored character class rejects inputs not ending with class")
     void endAnchoredCharClassRejectsMismatchedInputs() {
-      Pattern p = Pattern.compile(".*[0-9]$");
+      for (String regex : List.of(".*[0-9]$", ".*[0-9]\\Z")) {
+        Pattern p = Pattern.compile(regex);
 
-      assertThat(p.matcher("item123").find()).isTrue();
-      assertThat(p.matcher("item123").matches()).isTrue();
-      assertThat(p.matcher("item123\n").find()).isTrue();
+        assertThat(p.matcher("item123").find()).isTrue();
+        assertThat(p.matcher("item123").matches()).isTrue();
 
-      assertThat(p.matcher("item123abc").find()).isFalse();
-      assertThat(p.matcher("item123abc").matches()).isFalse();
-      assertThat(p.matcher("item123abc\n").find()).isFalse();
+        String[] terminators = {"\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029"};
+        for (String term : terminators) {
+          String input = "item123" + term;
+          assertThat(p.matcher(input).find()).isTrue();
+          assertThat(p.matcher(input).matches()).isFalse();
+          assertThat(
+                  p.find(
+                      Utf8Input.trusted(
+                          input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+              .isTrue();
+        }
 
-      assertThat(p.matcher("").find()).isFalse();
-      assertThat(p.matcher("\n").find()).isFalse();
+        assertThat(p.matcher("item123abc").find()).isFalse();
+        assertThat(p.matcher("item123abc").matches()).isFalse();
+        assertThat(p.matcher("item123abc\n").find()).isFalse();
+        assertThat(p.matcher("item123abc\u0085").find()).isFalse();
 
-      // Utf8Input
-      assertThat(
-              p.find(
-                  Utf8Input.trusted("item123".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isTrue();
-      assertThat(
-              p.find(
-                  Utf8Input.trusted(
-                      "item123abc".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isFalse();
+        assertThat(p.matcher("").find()).isFalse();
+        assertThat(p.matcher("\n").find()).isFalse();
+        assertThat(p.matcher("\u0085").find()).isFalse();
+
+        // Utf8Input
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "item123".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isTrue();
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "item123abc".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
+    }
+
+    @Test
+    @DisplayName("end-anchored character class with strict \\z and UNIX_LINES")
+    void endAnchoredCharClassStrictAndUnixLines() {
+      Pattern strict = Pattern.compile(".*[0-9]\\z");
+      assertThat(strict.matcher("item123").find()).isTrue();
+      assertThat(strict.matcher("item123\n").find()).isFalse();
+      assertThat(strict.matcher("item123\u0085").find()).isFalse();
+
+      Pattern unix = Pattern.compile(".*[0-9]$", Pattern.UNIX_LINES);
+      assertThat(unix.matcher("item123\n").find()).isTrue();
+      assertThat(unix.matcher("item123\r").find()).isFalse();
+      assertThat(unix.matcher("item123\u0085").find()).isFalse();
     }
   }
 

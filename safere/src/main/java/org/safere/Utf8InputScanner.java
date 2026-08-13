@@ -70,7 +70,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return false;
   }
 
-  boolean endsWith(byte[] suffix, boolean wasDollar) {
+  boolean endsWith(byte[] suffix, boolean wasDollar, boolean unixLines) {
     int suffixLen = suffix.length;
     if (length >= suffixLen) {
       int start = offset + length - suffixLen;
@@ -84,29 +84,14 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     if (!wasDollar || length == 0) {
       return false;
     }
-    byte last = bytes[offset + length - 1];
-    if (last == '\n') {
-      int effectiveLen =
-          (length >= 2 && bytes[offset + length - 2] == '\r') ? length - 2 : length - 1;
-      if (effectiveLen >= suffixLen) {
-        int start = offset + effectiveLen - suffixLen;
-        if (Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(suffixLen);
-          }
-          return true;
+    int trailingTerminator = trailingLineTerminatorStart(unixLines, length);
+    if (trailingTerminator >= suffixLen) {
+      int start = offset + trailingTerminator - suffixLen;
+      if (Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(suffixLen);
         }
-      }
-    } else if (last == '\r') {
-      int effectiveLen = length - 1;
-      if (effectiveLen >= suffixLen) {
-        int start = offset + effectiveLen - suffixLen;
-        if (Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(suffixLen);
-          }
-          return true;
-        }
+        return true;
       }
     }
     return false;

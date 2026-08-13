@@ -180,15 +180,36 @@ class RejectPrefilterTest {
     assertThat(prefilter.canReject(null, "config.json", 0, options)).isFalse();
     assertThat(prefilter.canReject(null, "config.json\n", 0, options)).isFalse();
     assertThat(prefilter.canReject(null, "config.json\r\n", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.json\r", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.json\u0085", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.json\u2028", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "config.json\u2029", 0, options)).isFalse();
     assertThat(prefilter.canReject(null, "config.yaml", 0, options)).isTrue();
     assertThat(prefilter.canReject(null, "config.yaml\n", 0, options)).isTrue();
+    assertThat(prefilter.canReject(null, "config.yaml\u0085", 0, options)).isTrue();
 
     // UTF-8 input
     assertThat(prefilter.canReject(utf8Scanner("config.json"), 0, options)).isFalse();
     assertThat(prefilter.canReject(utf8Scanner("config.json\n"), 0, options)).isFalse();
     assertThat(prefilter.canReject(utf8Scanner("config.json\r\n"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.json\r"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.json\u0085"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.json\u2028"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("config.json\u2029"), 0, options)).isFalse();
     assertThat(prefilter.canReject(utf8Scanner("config.yaml"), 0, options)).isTrue();
     assertThat(prefilter.canReject(utf8Scanner("config.yaml\n"), 0, options)).isTrue();
+    assertThat(prefilter.canReject(utf8Scanner("config.yaml\u0085"), 0, options)).isTrue();
+
+    // UNIX_LINES suffix prefilter
+    Pattern.SuffixInfo unixInfo = new Pattern.SuffixInfo(".json", true, true);
+    RejectPrefilter unixPrefilter =
+        RejectPrefilter.create(new RejectDescriptor(null, null, null, unixInfo));
+    assertThat(unixPrefilter.canReject(null, "config.json\n", 0, options)).isFalse();
+    assertThat(unixPrefilter.canReject(null, "config.json\r", 0, options)).isTrue();
+    assertThat(unixPrefilter.canReject(null, "config.json\u0085", 0, options)).isTrue();
+    assertThat(unixPrefilter.canReject(utf8Scanner("config.json\n"), 0, options)).isFalse();
+    assertThat(unixPrefilter.canReject(utf8Scanner("config.json\r"), 0, options)).isTrue();
+    assertThat(unixPrefilter.canReject(utf8Scanner("config.json\u0085"), 0, options)).isTrue();
 
     // Diagnostics
     DiagnosticAccumulator accumulator = new DiagnosticAccumulator();
@@ -207,6 +228,56 @@ class RejectPrefilterTest {
     assertThat(event.auxiliaryStrategies())
         .contains(new StrategyParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER));
     assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.LITERAL);
+  }
+
+  @Test
+  void endAnchoredCharClassRejectPrefilterRejectsMismatchedInputs() {
+    AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
+    builder.addRange('0', '9');
+    Pattern.EndAnchoredCharClassInfo info =
+        new Pattern.EndAnchoredCharClassInfo(builder.build(), true, false);
+    RejectDescriptor desc = new RejectDescriptor(null, null, null, null, info);
+    assertThat(desc.hasRejectionFilter()).isTrue();
+
+    RejectPrefilter prefilter = RejectPrefilter.create(desc);
+    assertThat(prefilter).isInstanceOf(RejectPrefilter.EndAnchoredCharClass.class);
+    assertThat(prefilter.strategy()).isEqualTo(MatchStrategy.CHARACTER_CLASS);
+
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    // String input
+    assertThat(prefilter.canReject(null, "item123", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "item123\n", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "item123\r\n", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "item123\r", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "item123\u0085", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "item123\u2028", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "item123\u2029", 0, options)).isFalse();
+    assertThat(prefilter.canReject(null, "item123abc", 0, options)).isTrue();
+    assertThat(prefilter.canReject(null, "item123abc\u0085", 0, options)).isTrue();
+
+    // UTF-8 input
+    assertThat(prefilter.canReject(utf8Scanner("item123"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("item123\n"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("item123\r\n"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("item123\r"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("item123\u0085"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("item123\u2028"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("item123\u2029"), 0, options)).isFalse();
+    assertThat(prefilter.canReject(utf8Scanner("item123abc"), 0, options)).isTrue();
+    assertThat(prefilter.canReject(utf8Scanner("item123abc\u0085"), 0, options)).isTrue();
+
+    // UNIX_LINES char class prefilter
+    Pattern.EndAnchoredCharClassInfo unixInfo =
+        new Pattern.EndAnchoredCharClassInfo(builder.build(), true, true);
+    RejectPrefilter unixPrefilter =
+        RejectPrefilter.create(new RejectDescriptor(null, null, null, null, unixInfo));
+    assertThat(unixPrefilter.canReject(null, "item123\n", 0, options)).isFalse();
+    assertThat(unixPrefilter.canReject(null, "item123\r", 0, options)).isTrue();
+    assertThat(unixPrefilter.canReject(null, "item123\u0085", 0, options)).isTrue();
+    assertThat(unixPrefilter.canReject(utf8Scanner("item123\n"), 0, options)).isFalse();
+    assertThat(unixPrefilter.canReject(utf8Scanner("item123\r"), 0, options)).isTrue();
+    assertThat(unixPrefilter.canReject(utf8Scanner("item123\u0085"), 0, options)).isTrue();
   }
 
   private static Utf8InputScanner utf8Scanner(String text) {
