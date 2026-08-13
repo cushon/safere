@@ -5,11 +5,9 @@
 
 package org.safere;
 
-import org.safere.internal.Swar;
-
 /** Internal provider for experimental Vector API scan operations. */
 interface VectorScanProvider {
-  int UNSUPPORTED = Swar.UNSUPPORTED;
+  int UNSUPPORTED = -2;
 
   int minimumInputLength();
 

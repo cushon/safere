@@ -8,8 +8,6 @@ package org.safere.internal;
 /** Shared 64-bit SWAR (SIMD within a register) broadword constants and arithmetic operations. */
 public final class Swar {
 
-  public static final int UNSUPPORTED = -2;
-
   public static final long BYTE_ONES = 0x0101_0101_0101_0101L;
   public static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
