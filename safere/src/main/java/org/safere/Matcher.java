@@ -1923,7 +1923,7 @@ public final class Matcher implements MatchResult {
       }
       char ch = text.charAt(i);
       if (ch < 128
-          && keywordAlternation.firstAsciiTable[ch]
+          && keywordAlternation.firstAsciiTable[asciiLower(ch)]
           && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
@@ -1958,7 +1958,7 @@ public final class Matcher implements MatchResult {
       }
       char ch = text.charAt(i);
       if (ch < 128
-          && keywordAlternation.firstAsciiTable[ch]
+          && keywordAlternation.firstAsciiTable[asciiLower(ch)]
           && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
