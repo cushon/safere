@@ -29,47 +29,32 @@ mvn -pl safere package -Prelease -DskipTests -q
 
 ## JDK-Specific Implementations
 
-SafeRE is distributed as one multi-release JAR (MR-JAR). It does not publish a separate artifact
-for implementations that require newer JDK APIs.
+SafeRE is designed to be distributed as a multi-release JAR (MR-JAR) when necessary for post-JDK-21 APIs, while compiling baseline sources with `--release 21`.
 
-The source and binary layouts correspond as follows:
+The source and binary layouts follow standard MR-JAR conventions:
 
 ```text
 safere/src/main/java/                         safere-<version>.jar
   module-info.java                              module-info.class
   org/safere/...                                org/safere/...
 
-safere/src/main/java-jdk22/                     META-INF/versions/22/
-  org/safere/SegmentByteSwarScan.java             org/safere/SegmentByteSwarScan.class
-  org/safere/SegmentByteVectorScan.java           org/safere/SegmentByteVectorScan.class
-  org/safere/SegmentShortSwarScan.java            org/safere/SegmentShortSwarScan.class
-  org/safere/SegmentShortVectorScan.java          org/safere/SegmentShortVectorScan.class
+safere/src/main/java-jdk<version>/            META-INF/versions/<version>/
+  org/safere/...                                org/safere/...
 ```
 
-The JDK 21 sources compile into the root of the JAR. When Maven runs on JDK 22 or later, the
-`jdk22-foreign-memory` profile compiles `src/main/java-jdk22` with `--release 22` and
-`multiReleaseOutput`, which writes its classes beneath `META-INF/versions/22`. The manifest marks
-the artifact with `Multi-Release: true`.
+The JDK 21 sources compile into the root of the JAR. When versioned directories are introduced (e.g., when the Vector API graduates from `jdk.incubator.vector` to a preview feature in `java.base`), the versioned profile compiles `src/main/java-jdk<version>` with `multiReleaseOutput`, which writes its classes beneath `META-INF/versions/<version>`. The manifest marks the artifact with `Multi-Release: true`.
 
-At runtime, JDK 21 ignores the versioned directory. JDK 22 and later use eligible entries from the
-versioned directory automatically. No application-level Java-version check is necessary.
-
-The versioned source tree is also included under `META-INF/versions/22` in the published source
-JAR. Do not configure it as a normal Maven source root: doing so would mix JDK 22 APIs into the
-baseline JDK 21 compilation.
+At runtime, baseline JDKs ignore the versioned directory, while newer JDKs use eligible entries from `META-INF/versions/<version>` automatically.
 
 ### Public API boundary
 
 Version-specific classes are implementation details. Keep them package-private unless a separate
 public API has been intentionally designed. In particular:
 
-- do not expose `MemorySegment` or another post-JDK-21 type from the baseline API;
+- do not expose post-JDK-21 types from the baseline API;
 - do not export `org.safere.internal` from `module-info.java`;
 - do not make an internal kernel public merely to call it from a separate module or test;
 - keep interfaces shared between baseline and versioned code expressible using JDK 21 types.
-
-The current JDK 22 MemorySegment kernels are compiled and tested groundwork. `Matcher` does not
-select them yet, and their presence does not change SafeRE's user-facing JVM flags.
 
 ### Connecting a versioned implementation
 
