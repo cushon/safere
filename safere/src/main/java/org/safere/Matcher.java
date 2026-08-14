@@ -21,7 +21,6 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import org.safere.internal.Ascii;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by

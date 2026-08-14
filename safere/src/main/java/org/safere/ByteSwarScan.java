@@ -10,7 +10,6 @@ import static java.nio.ByteOrder.nativeOrder;
 import static java.util.Objects.requireNonNull;
 
 import java.lang.invoke.VarHandle;
-import org.safere.internal.Ascii;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 1-byte sequences. */
 abstract class ByteSwarScan {

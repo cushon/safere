@@ -11,7 +11,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
-import org.safere.internal.Ascii;
 
 /**
  * Compiles a {@link Regexp} AST into a {@link Prog} (bytecode program) via Thompson NFA

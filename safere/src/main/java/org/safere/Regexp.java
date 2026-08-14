@@ -10,7 +10,6 @@ package org.safere;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import org.safere.internal.Ascii;
 
 /**
  * A node in the regular expression abstract syntax tree (AST). Each node has a {@link RegexpOp}

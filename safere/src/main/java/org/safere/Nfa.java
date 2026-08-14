@@ -12,7 +12,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.safere.internal.Ascii;
 
 /**
  * Pike VM NFA execution engine. Simulates all possible NFA threads in lockstep, tracking submatch

@@ -3,7 +3,7 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.internal;
+package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

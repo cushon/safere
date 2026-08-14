@@ -6,7 +6,6 @@
 package org.safere;
 
 import java.util.Arrays;
-import org.safere.internal.Ascii;
 
 /** Utilities for regex case-folded literal and range expansion. */
 final class UnicodeCaseFolding {

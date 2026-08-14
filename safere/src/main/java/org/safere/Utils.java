@@ -7,8 +7,6 @@
 
 package org.safere;
 
-import org.safere.internal.Ascii;
-
 /** Utility methods for Unicode code point handling and character classification. */
 final class Utils {
 

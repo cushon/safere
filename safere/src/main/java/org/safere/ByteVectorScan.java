@@ -11,7 +11,6 @@ import static jdk.incubator.vector.VectorOperators.LE;
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorSpecies;
-import org.safere.internal.Ascii;
 
 /**
  * Stateless SIMD kernels using the incubating Vector API for 1-byte sequences (UTF-8 and Latin-1).

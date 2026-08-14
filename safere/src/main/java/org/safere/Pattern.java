@@ -31,7 +31,6 @@ import java.util.function.Predicate;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import org.safere.internal.Ascii;
 
 /**
  * A compiled regular expression backed by a linear-time NFA engine. This class provides a drop-in

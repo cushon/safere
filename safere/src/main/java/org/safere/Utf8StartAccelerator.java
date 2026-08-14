@@ -8,7 +8,6 @@ package org.safere;
 import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
-import org.safere.internal.Ascii;
 
 /**
  * Encapsulates pre-computed start acceleration search strategies for finding candidate match

@@ -9,7 +9,6 @@ import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
 
 import java.lang.invoke.VarHandle;
-import org.safere.internal.Ascii;
 
 final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   private static final int REPLACEMENT_CHARACTER = 0xFFFD;
