@@ -75,5 +75,70 @@ final class ByteVectorScan {
     return false;
   }
 
+  static int indexOfIgnoreCase(byte[] bytes, int offset, int length, String prefix, int start) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    char first = prefix.charAt(0);
+    byte low = (byte) org.safere.internal.Ascii.toLowerCase(first);
+    byte high = (byte) org.safere.internal.Ascii.toUpperCase(first);
+    ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
+    ByteVector highVec = ByteVector.broadcast(SPECIES, high);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
+      VectorMask<Byte> matchMask =
+          inputVec
+              .compare(jdk.incubator.vector.VectorOperators.EQ, lowVec)
+              .or(inputVec.compare(jdk.incubator.vector.VectorOperators.EQ, highVec));
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = pos + bit;
+          if (candidatePos + prefixLen <= length
+              && regionMatchesAsciiIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
+            return candidatePos;
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int limitScalar = length - prefixLen;
+    for (; pos <= limitScalar; pos++) {
+      if (regionMatchesAsciiIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  private static boolean regionMatchesAsciiIgnoreCase(
+      byte[] bytes, int offset, String prefix, int prefixLen) {
+    for (int i = 0; i < prefixLen; i++) {
+      int b = bytes[offset + i] & 0xFF;
+      int p = prefix.charAt(i);
+      if (b != p
+          && org.safere.internal.Ascii.toLowerCase((char) b)
+              != org.safere.internal.Ascii.toLowerCase((char) p)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private ByteVectorScan() {}
 }

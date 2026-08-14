@@ -49,6 +49,13 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
+    VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
+    if (provider != null) {
+      int vectorIndex = provider.indexOfCharClass(text, scanInfo, start);
+      if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
+        return vectorIndex;
+      }
+    }
     int position = Math.max(0, start);
     int[] ranges = scanInfo.ranges;
     long bitmap0 = scanInfo.bitmap0;
@@ -68,6 +75,13 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
+    VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
+    if (provider != null) {
+      int vectorIndex = provider.indexOfCodePointClass(text, ranges, bitmap0, bitmap1, start);
+      if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
+        return vectorIndex;
+      }
+    }
     int position = Math.max(0, start);
     while (position < text.length()) {
       if (WorkCounterConfig.ENABLED) {

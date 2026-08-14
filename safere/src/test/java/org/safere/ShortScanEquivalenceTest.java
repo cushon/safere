@@ -268,6 +268,23 @@ class ShortScanEquivalenceTest {
         .containsExactly(0, 1, 2, 3, 4, 0);
   }
 
+  @Test
+  @DisplayName("StringSupport reflects coder and array when java.base is accessible")
+  void stringSupportAccess() {
+    if (StringSupport.hasAccess()) {
+      String latin1 = "hello world";
+      String utf16 = "hello \u0410\u0411\u0412 world";
+
+      assertThat(StringSupport.isLatin1(latin1)).isTrue();
+      assertThat(StringSupport.coder(latin1)).isZero();
+      assertThat(StringSupport.value(latin1)).hasSize(latin1.length());
+
+      assertThat(StringSupport.isLatin1(utf16)).isFalse();
+      assertThat(StringSupport.coder(utf16)).isEqualTo((byte) 1);
+      assertThat(StringSupport.value(utf16)).hasSize(utf16.length() * 2);
+    }
+  }
+
   private static int scalarIndexOfAsciiClass(byte[] input, int[] ranges, int start) {
     for (int i = start; i < input.length; i++) {
       int b = input[i] & 0xFF;

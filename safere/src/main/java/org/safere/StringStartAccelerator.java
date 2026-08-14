@@ -82,6 +82,13 @@ sealed interface StringStartAccelerator {
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
       if (prefixFoldCase) {
+        VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
+        if (provider != null) {
+          int vectorIndex = provider.indexOfIgnoreCase(text, prefix, fromIndex);
+          if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
+            return vectorIndex;
+          }
+        }
         return Matcher.indexOfIgnoreCase(text, prefix, fromIndex);
       }
       if (WorkCounterConfig.ENABLED) {
