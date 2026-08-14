@@ -45,14 +45,10 @@ sealed interface Utf8StartAccelerator {
    */
   int findCandidate(Utf8InputScanner scanner, int fromIndex);
 
-  /** Returns the diagnostic strategy associated with this accelerator, or {@code null} if none. */
-  MatchStrategy strategy();
-
-  /**
-   * Returns whether this accelerator identifies an exact candidate match start that can be directly
-   * validated with a single anchored forward DFA pass.
-   */
-  boolean isExactMatchCandidate();
+  /** Returns the tuning and diagnostic policy for this accelerator. */
+  default AcceleratorPolicy policy() {
+    return AcceleratorPolicy.DEFAULT;
+  }
 
   @SuppressWarnings("ArrayRecordComponent")
   record Literal(byte[] prefixUtf8, int[] prefixUtf8Failure, int[] prefixUtf8Shifts)
@@ -64,13 +60,8 @@ sealed interface Utf8StartAccelerator {
     }
 
     @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.LITERAL;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return true;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
     @Override
@@ -86,13 +77,8 @@ sealed interface Utf8StartAccelerator {
       implements Utf8StartAccelerator {
 
     @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.LITERAL;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return true;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
     @Override
@@ -147,13 +133,8 @@ sealed interface Utf8StartAccelerator {
   record CharClass(CharClassScanInfo scanInfo) implements Utf8StartAccelerator {
 
     @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.CHARACTER_CLASS;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return false;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.CHAR_CLASS;
     }
 
     @Override

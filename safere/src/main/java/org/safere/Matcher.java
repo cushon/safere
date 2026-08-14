@@ -1489,7 +1489,8 @@ public final class Matcher implements MatchResult {
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         Utf8StartAccelerator accelerator = parentPattern.utf8StartAccelerator();
         if (accelerator != null) {
-          MatchStrategy strategy = accelerator.strategy();
+          AcceleratorPolicy policy = accelerator.policy();
+          MatchStrategy strategy = policy.strategy();
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
@@ -1501,12 +1502,13 @@ public final class Matcher implements MatchResult {
             return applyFailedMatchResult();
           }
           effectiveStart = idx;
-          literalPrefixCandidateStart = accelerator.isExactMatchCandidate();
+          literalPrefixCandidateStart = policy.isExactMatchCandidate();
         }
       } else if (text != null) {
         StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
         if (accelerator != null) {
-          MatchStrategy strategy = accelerator.strategy();
+          AcceleratorPolicy policy = accelerator.policy();
+          MatchStrategy strategy = policy.strategy();
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
@@ -1518,7 +1520,7 @@ public final class Matcher implements MatchResult {
             return applyFailedMatchResult();
           }
           effectiveStart = idx;
-          literalPrefixCandidateStart = accelerator.isExactMatchCandidate();
+          literalPrefixCandidateStart = policy.isExactMatchCandidate();
         }
       }
     }

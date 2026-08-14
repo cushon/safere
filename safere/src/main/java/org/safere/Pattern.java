@@ -678,7 +678,7 @@ public final class Pattern implements Serializable {
     }
     int searchStart = 0;
     if (enginePathOptions.startAcceleration() && utf8StartAccelerator != null) {
-      MatchStrategy strategy = utf8StartAccelerator.strategy();
+      MatchStrategy strategy = utf8StartAccelerator.policy().strategy();
       if (strategy != null) {
         diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
@@ -1007,7 +1007,14 @@ public final class Pattern implements Serializable {
   Dfa forwardFirstMatchDfa() {
     Dfa dfa = cachedForwardFirstMatchDfa.get();
     if (dfa == null) {
-      dfa = new Dfa(flatDfaProg, MAX_DFA_STATES, forwardDfaSetup(), false);
+      dfa =
+          new Dfa(
+              flatDfaProg,
+              MAX_DFA_STATES,
+              forwardDfaSetup(),
+              false,
+              utf8StartAccelerator,
+              stringStartAccelerator);
       cachedForwardFirstMatchDfa.set(dfa);
     }
     return dfa;
@@ -1016,7 +1023,14 @@ public final class Pattern implements Serializable {
   Dfa forwardLongestMatchDfa() {
     Dfa dfa = cachedForwardLongestMatchDfa.get();
     if (dfa == null) {
-      dfa = new Dfa(flatDfaProg, MAX_DFA_STATES, forwardDfaSetup(), true);
+      dfa =
+          new Dfa(
+              flatDfaProg,
+              MAX_DFA_STATES,
+              forwardDfaSetup(),
+              true,
+              utf8StartAccelerator,
+              stringStartAccelerator);
       cachedForwardLongestMatchDfa.set(dfa);
     }
     return dfa;

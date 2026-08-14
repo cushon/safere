@@ -104,6 +104,42 @@ abstract class ByteSwarScan {
     return -1;
   }
 
+  static int indexOfByteTriple(
+      byte[] bytes, int offset, int length, byte first, byte second, byte third, int start) {
+    int position = start;
+    int wordEnd = length - Long.BYTES;
+    long repeatedFirst = (first & 0xFFL) * BYTE_ONES;
+    long repeatedSecond = (second & 0xFFL) * BYTE_ONES;
+    long repeatedThird = (third & 0xFFL) * BYTE_ONES;
+    while (position <= wordEnd) {
+      long word = (long) LONG_VIEW.get(bytes, offset + position);
+      long firstDifference = word ^ repeatedFirst;
+      long secondDifference = word ^ repeatedSecond;
+      long thirdDifference = word ^ repeatedThird;
+      if (((((firstDifference - BYTE_ONES) & ~firstDifference)
+                  | ((secondDifference - BYTE_ONES) & ~secondDifference)
+                  | ((thirdDifference - BYTE_ONES) & ~thirdDifference))
+              & BYTE_HIGH_BITS)
+          != 0) {
+        for (int index = 0; index < Long.BYTES; index++) {
+          byte value = bytes[offset + position + index];
+          if (value == first || value == second || value == third) {
+            return position + index;
+          }
+        }
+      }
+      position += Long.BYTES;
+    }
+    while (position < length) {
+      byte value = bytes[offset + position];
+      if (value == first || value == second || value == third) {
+        return position;
+      }
+      position++;
+    }
+    return -1;
+  }
+
   /**
    * Searches for a byte in the inclusive ASCII range {@code [low, high]}.
    *

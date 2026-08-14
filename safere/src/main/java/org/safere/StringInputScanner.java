@@ -22,6 +22,58 @@ final class StringInputScanner implements InputScanner {
   }
 
   @Override
+  public int indexOfAscii(int ascii, int fromIndex, int limit) {
+    int idx = text.indexOf(ascii, fromIndex);
+    return (idx >= 0 && idx < limit) ? idx : -1;
+  }
+
+  @Override
+  public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
+    if (StringSupport.hasAccess() && StringSupport.isLatin1(text)) {
+      int start = Math.max(0, fromIndex);
+      int scanLen = Math.min(limit, text.length());
+      if (start >= scanLen) {
+        return -1;
+      }
+      int res =
+          ByteSwarScan.indexOfBytePair(
+              StringSupport.value(text), 0, scanLen, (byte) c1, (byte) c2, start);
+      return (res >= 0 && res < limit) ? res : -1;
+    }
+    int end = Math.min(limit, text.length());
+    for (int i = Math.max(0, fromIndex); i < end; i++) {
+      char ch = text.charAt(i);
+      if (ch == c1 || ch == c2) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  @Override
+  public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
+    if (StringSupport.hasAccess() && StringSupport.isLatin1(text)) {
+      int start = Math.max(0, fromIndex);
+      int scanLen = Math.min(limit, text.length());
+      if (start >= scanLen) {
+        return -1;
+      }
+      int res =
+          ByteSwarScan.indexOfByteTriple(
+              StringSupport.value(text), 0, scanLen, (byte) c1, (byte) c2, (byte) c3, start);
+      return (res >= 0 && res < limit) ? res : -1;
+    }
+    int end = Math.min(limit, text.length());
+    for (int i = Math.max(0, fromIndex); i < end; i++) {
+      char ch = text.charAt(i);
+      if (ch == c1 || ch == c2 || ch == c3) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  @Override
   public int asciiAt(int pos) {
     char c = text.charAt(pos);
     return c < 0x80 ? c : -1;
