@@ -348,6 +348,7 @@ class DiagnosticsTest {
 
     assertThat(matcher.find()).isTrue();
     matcher.usePattern(replacement);
+    matcher.reset("remainder");
     assertThat(matcher.find()).isFalse();
 
     assertThat(operationsFor(replacement))

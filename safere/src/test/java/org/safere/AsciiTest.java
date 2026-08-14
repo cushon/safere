@@ -117,4 +117,12 @@ class AsciiTest {
     assertThat(Ascii.unhex('f')).isEqualTo(15);
     assertThat(Ascii.unhex('G')).isEqualTo(-1);
   }
+
+  @Test
+  void ignoreCaseFailure() {
+    assertThat(Ascii.ignoreCaseFailure("")).isEmpty();
+    assertThat(Ascii.ignoreCaseFailure("a")).containsExactly(0);
+    assertThat(Ascii.ignoreCaseFailure("aA")).containsExactly(0, 1);
+    assertThat(Ascii.ignoreCaseFailure("abAb")).containsExactly(0, 0, 1, 2);
+  }
 }

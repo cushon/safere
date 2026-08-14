@@ -90,9 +90,7 @@ class StartAcceleratorTest {
 
   @Test
   void charClassPrefixAcceleratesStringAndUtf8() {
-    boolean[] ascii = new boolean[128];
-    ascii['a'] = true;
-    ascii['b'] = true;
+    AsciiBitmap ascii = new AsciiBitmap.Builder().add('a').add('b').build();
     StartDescriptor desc = new StartDescriptor(null, false, null, ascii, null);
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);

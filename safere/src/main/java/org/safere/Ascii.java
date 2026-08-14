@@ -88,4 +88,20 @@ final class Ascii {
     }
     return -1;
   }
+
+  /** Builds the KMP failure function for an ASCII case-insensitive pattern. */
+  static int[] ignoreCaseFailure(String pattern) {
+    int[] failure = new int[pattern.length()];
+    int matched = 0;
+    for (int i = 1; i < pattern.length(); i++) {
+      while (matched > 0 && !equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
+        matched = failure[matched - 1];
+      }
+      if (equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
+        matched++;
+      }
+      failure[i] = matched;
+    }
+    return failure;
+  }
 }

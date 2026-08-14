@@ -94,22 +94,7 @@ sealed interface Utf8StartAccelerator {
           return null;
         }
       }
-      return new CaseInsensitiveLiteral(prefix, ignoreCaseFailure(prefix));
-    }
-
-    private static int[] ignoreCaseFailure(String pattern) {
-      int[] failure = new int[pattern.length()];
-      int matched = 0;
-      for (int i = 1; i < pattern.length(); i++) {
-        while (matched > 0 && !Ascii.equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
-          matched = failure[matched - 1];
-        }
-        if (Ascii.equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
-          matched++;
-        }
-        failure[i] = matched;
-      }
-      return failure;
+      return new CaseInsensitiveLiteral(prefix, Ascii.ignoreCaseFailure(prefix));
     }
 
     @Override
@@ -128,8 +113,7 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  @SuppressWarnings("ArrayRecordComponent")
-  record FixedOffset(FixedOffsetLiteral fixedOffset, boolean[] charClassPrefixAscii)
+  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap charClassPrefixAscii)
       implements Utf8StartAccelerator {
 
     @Override
@@ -150,7 +134,7 @@ sealed interface Utf8StartAccelerator {
     private static int nextFixedOffsetCandidate(
         Utf8InputScanner scanner,
         FixedOffsetLiteral fixedOffsetLiteral,
-        boolean[] charClassPrefixAscii,
+        AsciiBitmap charClassPrefixAscii,
         int searchFrom) {
       int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
       int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
@@ -172,9 +156,7 @@ sealed interface Utf8StartAccelerator {
             int candidateStart = literalStart - offset;
             if (candidateStart >= searchFrom) {
               int first = scanner.asciiAt(candidateStart);
-              if (first >= 0
-                  && first < charClassPrefixAscii.length
-                  && charClassPrefixAscii[first]
+              if (charClassPrefixAscii.contains(first)
                   && (earliestValid < 0 || candidateStart < earliestValid)) {
                 earliestValid = candidateStart;
               }
