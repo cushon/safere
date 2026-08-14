@@ -98,7 +98,7 @@ sealed interface RejectPrefilter
       filters[idx++] = litFilter;
     }
     if (ccFilter != null) {
-      filters[idx++] = ccFilter;
+      filters[idx] = ccFilter;
     }
     return new Composite(filters);
   }
