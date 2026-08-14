@@ -107,7 +107,7 @@ sealed interface RejectPrefilter
       filters[idx++] = ccFilter;
     }
     if (disjointFilter != null) {
-      filters[idx++] = disjointFilter;
+      filters[idx] = disjointFilter;
     }
     return new Composite(filters);
   }
