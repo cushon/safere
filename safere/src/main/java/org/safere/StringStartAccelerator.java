@@ -183,10 +183,12 @@ sealed interface StringStartAccelerator {
   final class CharClass implements StringStartAccelerator {
     private final AsciiBitmap asciiMap;
     private final boolean[] asciiTable;
+    private final int[] ranges;
 
     CharClass(AsciiBitmap asciiMap) {
       this.asciiMap = asciiMap;
       this.asciiTable = asciiMap.toBooleanArray();
+      this.ranges = asciiMap.toRanges();
     }
 
     public AsciiBitmap asciiMap() {
@@ -200,6 +202,13 @@ sealed interface StringStartAccelerator {
 
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
+      VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
+      if (provider != null) {
+        int idx = provider.indexOfAsciiClass(text, ranges, fromIndex);
+        if (idx != VectorScanProvider.UNSUPPORTED) {
+          return idx;
+        }
+      }
       return indexOfCharClass(text, asciiTable, fromIndex);
     }
 

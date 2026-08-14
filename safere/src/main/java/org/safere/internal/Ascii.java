@@ -63,4 +63,17 @@ public final class Ascii {
     }
     return true;
   }
+
+  /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
+  public static boolean regionMatchesIgnoreCase(
+      String text, int offset, String prefix, int prefixLen) {
+    for (int i = 0; i < prefixLen; i++) {
+      char c = text.charAt(offset + i);
+      char p = prefix.charAt(i);
+      if (c != p && toLowerCase(c) != toLowerCase(p)) {
+        return false;
+      }
+    }
+    return true;
+  }
 }

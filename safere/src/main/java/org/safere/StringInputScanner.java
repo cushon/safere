@@ -29,16 +29,11 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
-    if (StringSupport.hasAccess() && StringSupport.isLatin1(text)) {
-      int start = Math.max(0, fromIndex);
-      int scanLen = Math.min(limit, text.length());
-      if (start >= scanLen) {
-        return -1;
+    if (VectorScanProviders.providerForLength(limit - fromIndex) != null) {
+      int idx = ByteVectorScan.indexOfAsciiPair(text, c1, c2, fromIndex, limit);
+      if (idx != -1 || fromIndex >= limit) {
+        return idx;
       }
-      int res =
-          ByteSwarScan.indexOfBytePair(
-              StringSupport.value(text), 0, scanLen, (byte) c1, (byte) c2, start);
-      return (res >= 0 && res < limit) ? res : -1;
     }
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
@@ -52,16 +47,11 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
-    if (StringSupport.hasAccess() && StringSupport.isLatin1(text)) {
-      int start = Math.max(0, fromIndex);
-      int scanLen = Math.min(limit, text.length());
-      if (start >= scanLen) {
-        return -1;
+    if (VectorScanProviders.providerForLength(limit - fromIndex) != null) {
+      int idx = ByteVectorScan.indexOfAsciiTriple(text, c1, c2, c3, fromIndex, limit);
+      if (idx != -1 || fromIndex >= limit) {
+        return idx;
       }
-      int res =
-          ByteSwarScan.indexOfByteTriple(
-              StringSupport.value(text), 0, scanLen, (byte) c1, (byte) c2, (byte) c3, start);
-      return (res >= 0 && res < limit) ? res : -1;
     }
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {

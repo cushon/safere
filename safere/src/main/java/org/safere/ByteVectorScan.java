@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static jdk.incubator.vector.VectorOperators.EQ;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
@@ -121,6 +122,143 @@ final class ByteVectorScan {
     int limitScalar = length - prefixLen;
     for (; pos <= limitScalar; pos++) {
       if (regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiClass(String text, int[] ranges, int start) {
+    if (!Swar.supportsAsciiRanges(ranges, 4) || !StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    int length = text.length();
+    int position = Math.max(0, start);
+    int limit = position + SPECIES.loopBound(length - position);
+    for (; position < limit; position += SPECIES.length()) {
+      ByteVector values = StringSupport.byteVectorFromString(SPECIES, text, position);
+      VectorMask<Byte> matches = matches(values, ranges);
+      if (matches.anyTrue()) {
+        return position + matches.firstTrue();
+      }
+    }
+    for (; position < length; position++) {
+      char c = text.charAt(position);
+      if (c < 128 && matches((byte) c, ranges)) {
+        return position;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfIgnoreCase(String text, String prefix, int start) {
+    if (!StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    int prefixLen = prefix.length();
+    int length = text.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    char first = prefix.charAt(0);
+    byte low = (byte) toLowerCase(first);
+    byte high = (byte) toUpperCase(first);
+    ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
+    ByteVector highVec = ByteVector.broadcast(SPECIES, high);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = StringSupport.byteVectorFromString(SPECIES, text, pos);
+      VectorMask<Byte> matchMask = inputVec.compare(EQ, lowVec).or(inputVec.compare(EQ, highVec));
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = pos + bit;
+          if (candidatePos + prefixLen <= length
+              && regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)) {
+            return candidatePos;
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int limitScalar = length - prefixLen;
+    for (; pos <= limitScalar; pos++) {
+      if (regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiPair(String text, int c1, int c2, int fromIndex, int limit) {
+    if (!StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return -1;
+    }
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ByteVector v1 = ByteVector.broadcast(SPECIES, (byte) c1);
+    ByteVector v2 = ByteVector.broadcast(SPECIES, (byte) c2);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ByteVector inputVec = StringSupport.byteVectorFromString(SPECIES, text, pos);
+      VectorMask<Byte> matchMask = inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == c1 || c == c2) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiTriple(String text, int c1, int c2, int c3, int fromIndex, int limit) {
+    if (!StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return -1;
+    }
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ByteVector v1 = ByteVector.broadcast(SPECIES, (byte) c1);
+    ByteVector v2 = ByteVector.broadcast(SPECIES, (byte) c2);
+    ByteVector v3 = ByteVector.broadcast(SPECIES, (byte) c3);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ByteVector inputVec = StringSupport.byteVectorFromString(SPECIES, text, pos);
+      VectorMask<Byte> matchMask =
+          inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2)).or(inputVec.compare(EQ, v3));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == c1 || c == c2 || c == c3) {
         return pos;
       }
     }

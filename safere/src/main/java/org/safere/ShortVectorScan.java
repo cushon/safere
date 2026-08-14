@@ -7,6 +7,7 @@ package org.safere;
 
 import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
+import static java.nio.charset.StandardCharsets.UTF_16;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
 import static org.safere.internal.Ascii.toLowerCase;
@@ -19,6 +20,7 @@ import jdk.incubator.vector.ShortVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.safere.internal.Ascii;
 import org.safere.internal.Swar;
 import org.safere.internal.Utf16;
 
@@ -78,6 +80,87 @@ final class ShortVectorScan {
                   | ((bytes[offset + (position << 1) + 1] & 0xFF) << 8));
       if (matches(ch, ranges)) {
         return position;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfCharClassUtf16(String text, int[] ranges, int start) {
+    if (!Swar.supportsBmpCodeUnitRanges(ranges, 4) || !StringSupport.compatibleWith(text, UTF_16)) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    int length = text.length();
+    int position = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    for (; position <= limit; position += vectorLen) {
+      ShortVector values = StringSupport.shortVectorFromString(SPECIES, text, position);
+      VectorMask<Short> matches = matches(values, ranges);
+      if (matches.anyTrue()) {
+        return position + matches.firstTrue();
+      }
+    }
+
+    for (; position < length; position++) {
+      char ch = text.charAt(position);
+      if (matches(ch, ranges)) {
+        return position;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfIgnoreCaseUtf16(String text, String prefix, int start) {
+    int prefixLen = prefix.length();
+    int length = text.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+    if (prefixLen > 1 || !StringSupport.compatibleWith(text, UTF_16)) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    char first = prefix.charAt(0);
+    short low = (short) toLowerCase(first);
+    short high = (short) toUpperCase(first);
+    ShortVector lowVec = ShortVector.broadcast(SPECIES, low);
+    ShortVector highVec = ShortVector.broadcast(SPECIES, high);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ShortVector inputVec = StringSupport.shortVectorFromString(SPECIES, text, pos);
+      VectorMask<Short> matchMask =
+          inputVec
+              .compare(VectorOperators.EQ, lowVec)
+              .or(inputVec.compare(VectorOperators.EQ, highVec));
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = pos + bit;
+          if (candidatePos + prefixLen <= length
+              && Ascii.regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)) {
+            return candidatePos;
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int limitScalar = length - prefixLen;
+    for (; pos <= limitScalar; pos++) {
+      if (Ascii.regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
+        return pos;
       }
     }
     return -1;

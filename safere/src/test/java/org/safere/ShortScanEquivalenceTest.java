@@ -5,6 +5,8 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static java.nio.charset.StandardCharsets.UTF_16;
 import static java.nio.charset.StandardCharsets.UTF_16LE;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -275,13 +277,10 @@ class ShortScanEquivalenceTest {
       String latin1 = "hello world";
       String utf16 = "hello \u0410\u0411\u0412 world";
 
-      assertThat(StringSupport.isLatin1(latin1)).isTrue();
-      assertThat(StringSupport.coder(latin1)).isZero();
-      assertThat(StringSupport.value(latin1)).hasSize(latin1.length());
-
-      assertThat(StringSupport.isLatin1(utf16)).isFalse();
-      assertThat(StringSupport.coder(utf16)).isEqualTo((byte) 1);
-      assertThat(StringSupport.value(utf16)).hasSize(utf16.length() * 2);
+      assertThat(StringSupport.compatibleWith(latin1, ISO_8859_1)).isTrue();
+      assertThat(StringSupport.compatibleWith(latin1, UTF_16)).isFalse();
+      assertThat(StringSupport.compatibleWith(utf16, ISO_8859_1)).isFalse();
+      assertThat(StringSupport.compatibleWith(utf16, UTF_16)).isTrue();
     }
   }
 

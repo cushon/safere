@@ -15,6 +15,9 @@ interface VectorScanProvider {
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  int indexOfAsciiClass(String text, int[] ranges, int start);
+
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start);
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */

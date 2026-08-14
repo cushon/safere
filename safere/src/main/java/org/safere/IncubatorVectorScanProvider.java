@@ -5,6 +5,8 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+
 import java.util.Arrays;
 
 /** Experimental scan operations implemented with the incubating Vector API. */
@@ -22,25 +24,32 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   }
 
   @Override
+  public int indexOfAsciiClass(String text, int[] ranges, int start) {
+    if (!StringSupport.hasAccess()) {
+      return UNSUPPORTED;
+    }
+    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return ByteVectorScan.indexOfAsciiClass(text, ranges, start);
+    }
+    return ShortVectorScan.indexOfCharClassUtf16(text, ranges, start);
+  }
+
+  @Override
   public int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start) {
     if (!StringSupport.hasAccess()) {
       return UNSUPPORTED;
     }
-    byte[] value = StringSupport.value(text);
-    byte coder = StringSupport.coder(text);
-    int length = text.length();
-
-    if (coder == 0) {
+    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
       if (scanInfo.isAscii) {
-        return ByteVectorScan.indexOfAsciiClass(value, 0, length, scanInfo.ranges, start);
+        return ByteVectorScan.indexOfAsciiClass(text, scanInfo.ranges, start);
       }
       int[] clamped = clampRangesForLatin1(scanInfo.ranges);
       if (clamped != null) {
-        return ByteVectorScan.indexOfAsciiClass(value, 0, length, clamped, start);
+        return ByteVectorScan.indexOfAsciiClass(text, clamped, start);
       }
       return UNSUPPORTED;
     }
-    return ShortVectorScan.indexOfCharClassUtf16(value, 0, length, scanInfo.ranges, start);
+    return ShortVectorScan.indexOfCharClassUtf16(text, scanInfo.ranges, start);
   }
 
   @Override
@@ -49,18 +58,14 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
     if (!StringSupport.hasAccess()) {
       return UNSUPPORTED;
     }
-    byte[] value = StringSupport.value(text);
-    byte coder = StringSupport.coder(text);
-    int length = text.length();
-
-    if (coder == 0) {
+    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
       int[] clamped = clampRangesForLatin1(ranges);
       if (clamped == null) {
         return -1;
       }
-      return ByteVectorScan.indexOfAsciiClass(value, 0, length, clamped, start);
+      return ByteVectorScan.indexOfAsciiClass(text, clamped, start);
     }
-    return ShortVectorScan.indexOfCharClassUtf16(value, 0, length, ranges, start);
+    return ShortVectorScan.indexOfCharClassUtf16(text, ranges, start);
   }
 
   @Override
@@ -68,14 +73,10 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
     if (!StringSupport.hasAccess()) {
       return UNSUPPORTED;
     }
-    byte[] value = StringSupport.value(text);
-    byte coder = StringSupport.coder(text);
-    int length = text.length();
-
-    if (coder == 0) {
-      return ByteVectorScan.indexOfIgnoreCase(value, 0, length, prefix, start);
+    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return ByteVectorScan.indexOfIgnoreCase(text, prefix, start);
     }
-    return ShortVectorScan.indexOfIgnoreCaseUtf16(value, 0, length, prefix, start);
+    return ShortVectorScan.indexOfIgnoreCaseUtf16(text, prefix, start);
   }
 
   private static int[] clampRangesForLatin1(int[] ranges) {
