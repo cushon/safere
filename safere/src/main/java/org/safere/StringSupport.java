@@ -16,7 +16,6 @@ import java.lang.invoke.VarHandle;
 import java.nio.charset.Charset;
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.ShortVector;
-import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorSpecies;
 
 /**
@@ -70,11 +69,6 @@ final class StringSupport {
   public static ByteVector byteVectorFromString(
       VectorSpecies<Byte> species, String str, int offset) {
     return ByteVector.fromArray(species, value(str), offset);
-  }
-
-  public static ByteVector byteVectorFromString(
-      VectorSpecies<Byte> species, String str, int offset, VectorMask<Byte> mask) {
-    return ByteVector.fromArray(species, value(str), offset, mask);
   }
 
   public static ShortVector shortVectorFromString(
