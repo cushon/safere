@@ -12,12 +12,11 @@ import org.safere.Pattern.StartAcceleration;
  * Immutable descriptor capturing pre-computed start-position metadata extracted from a regular
  * expression AST.
  */
-@SuppressWarnings("ArrayRecordComponent")
 record StartDescriptor(
     String prefix,
     boolean prefixFoldCase,
     FixedOffsetLiteral fixedOffsetLiteral,
-    boolean[] charClassPrefixAscii,
+    AsciiBitmap charClassPrefixAscii,
     StartAcceleration lineAnchor) {
 
   static final StartDescriptor NONE = new StartDescriptor(null, false, null, null, null);

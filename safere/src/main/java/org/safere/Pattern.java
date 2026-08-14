@@ -151,7 +151,7 @@ public final class Pattern implements Serializable {
   private final transient boolean canMatchEmpty;
   private final transient boolean startsWithGraphemeClusterBoundary;
   private final transient boolean hasInternalGraphemeClusterBoundary;
-  private final transient boolean[] charClassPrefixAscii;
+  private final transient AsciiBitmap charClassPrefixAscii;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
@@ -239,7 +239,9 @@ public final class Pattern implements Serializable {
 
   /** Holder for lazily computed OnePass analysis results. */
   private record OnePassAnalysis(
-      OnePass onePass, boolean canPrimary, boolean canFind, boolean canSubmatch) {}
+      OnePass onePass, boolean canPrimary, boolean canFind, boolean canSubmatch) {
+    static final OnePassAnalysis DISABLED = new OnePassAnalysis(null, false, false, false);
+  }
 
   /** Precomputed metadata for a small disjoint set of required literal substrings. */
   // The array is owned by the immutable compiled Pattern and is never exposed publicly.
@@ -449,7 +451,10 @@ public final class Pattern implements Serializable {
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
     RejectDescriptor rejectDescriptor =
         extractRejectDescriptor(
-            metadataAst, startDescriptor.prefix(), startDescriptor.charClassPrefixAscii());
+            metadataAst,
+            startDescriptor.prefix(),
+            startDescriptor.charClassPrefixAscii(),
+            compiled.anchorStart());
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,
@@ -475,7 +480,7 @@ public final class Pattern implements Serializable {
     boolean prefixFoldCase = prefixResult.foldCase();
     FixedOffsetLiteral fixedOffsetLiteral =
         prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
-    boolean[] ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
+    AsciiBitmap ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
     StartAcceleration startAcceleration =
         (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
             ? extractStartAcceleration(metadataAst)
@@ -1040,26 +1045,30 @@ public final class Pattern implements Serializable {
   private OnePassAnalysis onePassAnalysis() {
     OnePassAnalysis analysis = onePassAnalysis;
     if (analysis == null) {
-      OnePass op = OnePass.build(prog);
-      // OnePass can be used as the primary matching engine (bypassing DFA entirely) when the
-      // pattern is non-nullable and has no lazy quantifiers. Nullable patterns (e.g., a*|c.)
-      // must be excluded because OnePass returns leftmost-longest semantics, which disagrees
-      // with JDK's leftmost-first (biased) semantics for nullable alternations.
-      boolean canPrimary =
-          op != null
-              && op.search("", false, 0) == null
-              && !hasLazy
-              && !hasNullableAlternation
-              && !prog.hasGraphemeSemantics();
-      // canFind is canPrimary restricted to anchored patterns (legacy flag).
-      boolean canFind = canPrimary && prog.anchorStart();
-      // OnePass can be used for the sandwich submatch extraction step (anchored, endMatch=true)
-      // when captures need to be extracted from a known match range. Nullable patterns are safe
-      // here because match bounds are already known. Lazy quantifiers are excluded because
-      // OnePass returns leftmost-longest capture group boundaries, which differs from
-      // leftmost-first semantics for lazy groups.
-      boolean canSubmatch = op != null && !hasLazy;
-      analysis = new OnePassAnalysis(op, canPrimary, canFind, canSubmatch);
+      // Lazy quantifiers are excluded because OnePass returns leftmost-longest capture group
+      // boundaries, which differs from leftmost-first semantics for lazy groups. When hasLazy is
+      // true, neither canPrimary nor canSubmatch can use OnePass, so we can skip building OnePass.
+      if (hasLazy || prog.numCaptures() > OnePass.MAX_CAPTURE_GROUPS) {
+        analysis = OnePassAnalysis.DISABLED;
+      } else {
+        OnePass op = OnePass.build(prog);
+        // OnePass can be used as the primary matching engine (bypassing DFA entirely) when the
+        // pattern is non-nullable and has no lazy quantifiers. Nullable patterns (e.g., a*|c.)
+        // must be excluded because OnePass returns leftmost-longest semantics, which disagrees
+        // with JDK's leftmost-first (biased) semantics for nullable alternations.
+        boolean canPrimary =
+            op != null
+                && op.search("", false, 0) == null
+                && !hasNullableAlternation
+                && !prog.hasGraphemeSemantics();
+        // canFind is canPrimary restricted to anchored patterns (legacy flag).
+        boolean canFind = canPrimary && prog.anchorStart();
+        // OnePass can be used for the sandwich submatch extraction step (anchored, endMatch=true)
+        // when captures need to be extracted from a known match range. Nullable patterns are safe
+        // here because match bounds are already known.
+        boolean canSubmatch = op != null;
+        analysis = new OnePassAnalysis(op, canPrimary, canFind, canSubmatch);
+      }
       onePassAnalysis = analysis;
     }
     return analysis;
@@ -1168,7 +1177,7 @@ public final class Pattern implements Serializable {
    * the pattern has no character-class prefix. Used for prefix acceleration in {@link
    * Matcher#doFind()} when no literal prefix exists.
    */
-  boolean[] charClassPrefixAscii() {
+  AsciiBitmap charClassPrefixAscii() {
     return charClassPrefixAscii;
   }
 
@@ -1924,9 +1933,9 @@ public final class Pattern implements Serializable {
   static final class StartAcceleration {
     final boolean requireLineStart;
     final boolean allowLineStart;
-    final boolean[] asciiStart;
+    final AsciiBitmap asciiStart;
 
-    StartAcceleration(boolean requireLineStart, boolean allowLineStart, boolean[] asciiStart) {
+    StartAcceleration(boolean requireLineStart, boolean allowLineStart, AsciiBitmap asciiStart) {
       this.requireLineStart = requireLineStart;
       this.allowLineStart = allowLineStart;
       this.asciiStart = asciiStart;
@@ -1996,19 +2005,21 @@ public final class Pattern implements Serializable {
   /** Fast-path data for {@code (?i)\b(keyword|...)\b} and its greedy whole-input form. */
   static final class KeywordAlternation {
     final String[] keywords;
-    final boolean[] firstAscii;
+    final AsciiBitmap firstAscii;
+    final boolean[] firstAsciiTable;
     final int captureGroup;
     final boolean unicodeWordBoundary;
     final boolean greedyWholeInput;
 
     KeywordAlternation(
         String[] keywords,
-        boolean[] firstAscii,
+        AsciiBitmap firstAscii,
         int captureGroup,
         boolean unicodeWordBoundary,
         boolean greedyWholeInput) {
       this.keywords = keywords;
       this.firstAscii = firstAscii;
+      this.firstAsciiTable = firstAscii.toBooleanArray();
       this.captureGroup = captureGroup;
       this.unicodeWordBoundary = unicodeWordBoundary;
       this.greedyWholeInput = greedyWholeInput;
@@ -2043,7 +2054,9 @@ public final class Pattern implements Serializable {
         WorkCounter.record();
       }
       int first = scanner.asciiAt(position);
-      if (first < 0 || !firstAscii[asciiLower(first)] || !isWordBoundaryAt(scanner, position)) {
+      if (first < 0
+          || !firstAscii.containsAscii(asciiLower(first))
+          || !isWordBoundaryAt(scanner, position)) {
         return -1;
       }
       for (String keyword : keywords) {
@@ -2474,8 +2487,8 @@ public final class Pattern implements Serializable {
    *
    * @return a {@code boolean[128]} ASCII bitmap, or {@code null} if no suitable prefix exists
    */
-  private static boolean[] extractCharClassPrefixAscii(Regexp re) {
-    boolean[] bitmap = new boolean[128];
+  private static AsciiBitmap extractCharClassPrefixAscii(Regexp re) {
+    AsciiBitmap.Builder bitmap = new AsciiBitmap.Builder();
     Deque<Regexp> work = new ArrayDeque<>();
     work.add(re);
 
@@ -2530,25 +2543,25 @@ public final class Pattern implements Serializable {
       }
     }
 
-    return bitmap;
+    return bitmap.build();
   }
 
-  private static boolean addLiteralPrefixAscii(int r, int flags, boolean[] bitmap) {
+  private static boolean addLiteralPrefixAscii(int r, int flags, AsciiBitmap.Builder bitmap) {
     if (r >= 128) {
       return false;
     }
-    bitmap[r] = true;
+    bitmap.add(r);
     if ((flags & ParseFlags.FOLD_CASE) != 0) {
       if (r >= 'a' && r <= 'z') {
-        bitmap[r - 32] = true;
+        bitmap.add(r - 32);
       } else if (r >= 'A' && r <= 'Z') {
-        bitmap[r + 32] = true;
+        bitmap.add(r + 32);
       }
     }
     return true;
   }
 
-  private static boolean addCharClassPrefixAscii(CharClass cc, boolean[] bitmap) {
+  private static boolean addCharClassPrefixAscii(CharClass cc, AsciiBitmap.Builder bitmap) {
     if (cc == null || cc.isEmpty()) {
       return false;
     }
@@ -2558,9 +2571,7 @@ public final class Pattern implements Serializable {
       }
     }
     for (int i = 0; i < cc.numRanges(); i++) {
-      for (int cp = cc.lo(i); cp <= cc.hi(i); cp++) {
-        bitmap[cp] = true;
-      }
+      bitmap.addRange(cc.lo(i), cc.hi(i));
     }
     return true;
   }
@@ -2574,7 +2585,7 @@ public final class Pattern implements Serializable {
     if (node.op == RegexpOp.CONCAT && node.nsub() > 0) {
       Regexp first = unwrapCaptures(node.subs.get(0));
       if (first != null && first.op == RegexpOp.BEGIN_LINE) {
-        boolean[] requiredStart = null;
+        AsciiBitmap requiredStart = null;
         if (node.nsub() > 1) {
           requiredStart = requiredFirstAscii(node.subs.get(1));
         }
@@ -2634,14 +2645,14 @@ public final class Pattern implements Serializable {
     }
 
     String[] keywords = new String[middle.subs.size()];
-    boolean[] firstAscii = new boolean[128];
+    AsciiBitmap.Builder firstAscii = new AsciiBitmap.Builder();
     for (int i = 0; i < middle.subs.size(); i++) {
       String keyword = extractAsciiCaseInsensitiveLiteral(middle.subs.get(i));
       if (keyword == null || keyword.isEmpty()) {
         return null;
       }
       keywords[i] = keyword;
-      firstAscii[keyword.charAt(0)] = true;
+      firstAscii.add(keyword.charAt(0));
     }
 
     boolean beforeUnicodeWordBoundary = (before.flags & ParseFlags.UNICODE_CHAR_CLASS) != 0;
@@ -2650,7 +2661,7 @@ public final class Pattern implements Serializable {
       return null;
     }
     return new KeywordAlternation(
-        keywords, firstAscii, captureGroup, beforeUnicodeWordBoundary, greedyWholeInput);
+        keywords, firstAscii.build(), captureGroup, beforeUnicodeWordBoundary, greedyWholeInput);
   }
 
   private static boolean isGreedyAnyCharStar(Regexp re) {
@@ -2795,7 +2806,7 @@ public final class Pattern implements Serializable {
     return node;
   }
 
-  private static boolean[] requiredFirstAscii(Regexp re) {
+  private static AsciiBitmap requiredFirstAscii(Regexp re) {
     Regexp node = firstMeaningfulNode(re);
     if (node == null) {
       return null;
@@ -2807,20 +2818,20 @@ public final class Pattern implements Serializable {
       return null;
     }
 
-    boolean[] bitmap = new boolean[128];
+    AsciiBitmap.Builder bitmap = new AsciiBitmap.Builder();
     if (node.op == RegexpOp.LITERAL) {
       if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.rune >= 128) {
         return null;
       }
-      bitmap[node.rune] = true;
-      return bitmap;
+      bitmap.add(node.rune);
+      return bitmap.build();
     }
     if (node.op == RegexpOp.LITERAL_STRING && node.runes != null && node.runes.length > 0) {
       if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.runes[0] >= 128) {
         return null;
       }
-      bitmap[node.runes[0]] = true;
-      return bitmap;
+      bitmap.add(node.runes[0]);
+      return bitmap.build();
     }
     if (node.op == RegexpOp.CHAR_CLASS && node.charClass != null) {
       CharClass cc = node.charClass;
@@ -2833,11 +2844,9 @@ public final class Pattern implements Serializable {
         }
       }
       for (int i = 0; i < cc.numRanges(); i++) {
-        for (int cp = cc.lo(i); cp <= cc.hi(i); cp++) {
-          bitmap[cp] = true;
-        }
+        bitmap.addRange(cc.lo(i), cc.hi(i));
       }
-      return bitmap;
+      return bitmap.build();
     }
     return null;
   }
@@ -2862,41 +2871,33 @@ public final class Pattern implements Serializable {
     }
   }
 
-  static CharClassScanInfo buildAsciiClassScanInfo(boolean[] asciiClass) {
-    if (asciiClass == null) {
+  static CharClassScanInfo buildAsciiClassScanInfo(AsciiBitmap asciiClass) {
+    if (asciiClass == null || asciiClass.isEmpty()) {
       return null;
     }
-    int[] ranges = new int[asciiClass.length * 2];
+    int[] ranges = new int[128 * 2];
     int rangeCount = 0;
-    long bitmap0 = 0;
-    long bitmap1 = 0;
     int value = 0;
-    while (value < asciiClass.length) {
-      if (!asciiClass[value]) {
+    while (value < 128) {
+      if (!asciiClass.containsAscii(value)) {
         value++;
         continue;
       }
       int low = value;
-      while (value + 1 < asciiClass.length && asciiClass[value + 1]) {
+      while (value + 1 < 128 && asciiClass.containsAscii(value + 1)) {
         value++;
       }
       int high = value;
       ranges[rangeCount * 2] = low;
       ranges[rangeCount * 2 + 1] = high;
       rangeCount++;
-      for (int member = low; member <= high; member++) {
-        if (member < Long.SIZE) {
-          bitmap0 |= 1L << member;
-        } else {
-          bitmap1 |= 1L << (member - Long.SIZE);
-        }
-      }
       value++;
     }
     if (rangeCount == 0) {
       return null;
     }
-    return new CharClassScanInfo(Arrays.copyOf(ranges, rangeCount * 2), bitmap0, bitmap1, true);
+    return new CharClassScanInfo(
+        Arrays.copyOf(ranges, rangeCount * 2), asciiClass.bitmap0(), asciiClass.bitmap1(), true);
   }
 
   /**
@@ -3000,12 +3001,12 @@ public final class Pattern implements Serializable {
 
   /** Extracts whole-input rejection metadata from the AST. */
   private static RejectDescriptor extractRejectDescriptor(
-      Regexp metadataAst, String prefix, boolean[] ccPrefixAscii) {
+      Regexp metadataAst, String prefix, AsciiBitmap ccPrefixAscii, boolean anchorStart) {
     String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
     CharClassScanInfo requiredMatchClass =
         extractRequiredMatchClass(metadataAst, prefix == null && ccPrefixAscii == null);
     DisjointRequiredLiterals disjointRequiredLiterals =
-        (prefix == null && requiredLiteral == null)
+        (!anchorStart && prefix == null && requiredLiteral == null)
             ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
             : null;
     if (requiredLiteral == null && requiredMatchClass == null && disjointRequiredLiterals == null) {
