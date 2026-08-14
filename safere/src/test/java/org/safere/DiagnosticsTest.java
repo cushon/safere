@@ -159,6 +159,16 @@ class DiagnosticsTest {
   }
 
   @Test
+  void compositeRejectPrefilterReportsTheChildThatRejected() {
+    Pattern.setDiagnostics(diagnostics);
+
+    for (MatchOperation operation : List.of(MatchOperation.FIND, MatchOperation.MATCHES)) {
+      assertCompositeRejection(operation, "needle", MatchStrategy.CHARACTER_CLASS);
+      assertCompositeRejection(operation, "x", MatchStrategy.LITERAL);
+    }
+  }
+
+  @Test
   void ordinaryReplacementLoopSuppressesNestedFindEvents() {
     Pattern.setDiagnostics(diagnostics);
     EnginePathOptions exactOnly =
@@ -327,6 +337,28 @@ class DiagnosticsTest {
                           StrategyDisposition.BYPASSED,
                           StrategyReason.EXACT_NULLABLE_LOOP_SEMANTICS_REQUIRED));
             });
+  }
+
+  @Test
+  void usePatternRunsDisjointLiteralPrefilterForReplacementPattern() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern first = Pattern.compile("(?:banana\\d|apple\\d)");
+    Pattern replacement = Pattern.compile("(?:cherry\\d|pear\\d)");
+    Matcher matcher = first.matcher("apple0 remainder");
+
+    assertThat(matcher.find()).isTrue();
+    matcher.usePattern(replacement);
+    matcher.reset("remainder");
+    assertThat(matcher.find()).isFalse();
+
+    assertThat(operationsFor(replacement))
+        .singleElement()
+        .satisfies(
+            event ->
+                assertThat(event.auxiliaryStrategies())
+                    .contains(
+                        new StrategyParticipation(
+                            MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER)));
   }
 
   @Test
@@ -603,6 +635,30 @@ class DiagnosticsTest {
     return diagnostics.operations.stream()
         .filter(event -> event.pattern().patternId() == patternId)
         .toList();
+  }
+
+  private void assertCompositeRejection(
+      MatchOperation operation, String input, MatchStrategy expectedStrategy) {
+    Pattern pattern = Pattern.compile(".*x.*needle.*");
+    Matcher matcher = pattern.matcher(input);
+
+    boolean matched =
+        switch (operation) {
+          case FIND -> matcher.find();
+          case MATCHES -> matcher.matches();
+          default -> throw new AssertionError("unsupported operation: " + operation);
+        };
+
+    assertThat(matched).isFalse();
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(
+            event -> {
+              assertThat(event.boundaryStrategy()).isEqualTo(expectedStrategy);
+              assertThat(event.auxiliaryStrategies())
+                  .containsExactly(
+                      new StrategyParticipation(expectedStrategy, StrategyRole.REJECT_PREFILTER));
+            });
   }
 
   private static final class RecordingDiagnostics extends SafeReMatchDiagnostics {

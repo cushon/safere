@@ -10,8 +10,8 @@ import static jdk.incubator.vector.VectorOperators.LE;
 
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
-import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
+import org.safere.internal.Swar;
 
 /**
  * Stateless SIMD kernels using the incubating Vector API for 1-byte sequences (UTF-8 and Latin-1).
@@ -19,9 +19,8 @@ import jdk.incubator.vector.VectorSpecies;
 final class ByteVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
-  public static int indexOfAsciiClass(
-      byte[] bytes, int offset, int length, int[] ranges, int start) {
-    if (ranges.length < 2 || ranges.length > 8 || (ranges.length & 1) != 0) {
+  static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
+    if (!Swar.supportsAsciiRanges(ranges, 4)) {
       return VectorScanProvider.UNSUPPORTED;
     }
     int position = Math.max(0, start);
@@ -61,7 +60,7 @@ final class ByteVectorScan {
     if (low == high) {
       return values.eq(low);
     }
-    if (high == low + 1) {
+    if (highBound == lowBound + 1) {
       return values.eq(low).or(values.eq(high));
     }
     return values.compare(GE, low).and(values.compare(LE, high));
@@ -76,10 +75,11 @@ final class ByteVectorScan {
     return false;
   }
 
-  public static int indexOfIgnoreCase(
-      byte[] bytes, int offset, int length, String prefix, int start) {
+  static int indexOfIgnoreCase(byte[] bytes, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
-    // Check if the prefix has any non-ASCII characters. We only optimize ASCII prefixes.
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
     for (int i = 0; i < prefixLen; i++) {
       if (prefix.charAt(i) > 127) {
         return VectorScanProvider.UNSUPPORTED;
@@ -91,8 +91,8 @@ final class ByteVectorScan {
     int limit = length - vectorLen;
 
     char first = prefix.charAt(0);
-    byte low = (byte) VectorScanProvider.asciiLower(first);
-    byte high = (byte) VectorScanProvider.asciiUpper(first);
+    byte low = (byte) org.safere.internal.Ascii.toLowerCase(first);
+    byte high = (byte) org.safere.internal.Ascii.toUpperCase(first);
     ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
     ByteVector highVec = ByteVector.broadcast(SPECIES, high);
 
@@ -100,8 +100,8 @@ final class ByteVectorScan {
       ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
       VectorMask<Byte> matchMask =
           inputVec
-              .compare(VectorOperators.EQ, lowVec)
-              .or(inputVec.compare(VectorOperators.EQ, highVec));
+              .compare(jdk.incubator.vector.VectorOperators.EQ, lowVec)
+              .or(inputVec.compare(jdk.incubator.vector.VectorOperators.EQ, highVec));
 
       if (matchMask.anyTrue()) {
         long activeLanes = matchMask.toLong();
@@ -123,7 +123,6 @@ final class ByteVectorScan {
         return pos;
       }
     }
-
     return -1;
   }
 
@@ -133,7 +132,8 @@ final class ByteVectorScan {
       int b = bytes[offset + i] & 0xFF;
       int p = prefix.charAt(i);
       if (b != p
-          && VectorScanProvider.asciiLower((char) b) != VectorScanProvider.asciiLower((char) p)) {
+          && org.safere.internal.Ascii.toLowerCase((char) b)
+              != org.safere.internal.Ascii.toLowerCase((char) p)) {
         return false;
       }
     }

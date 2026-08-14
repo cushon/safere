@@ -27,6 +27,8 @@ final class Utf8InputFuzzer {
     assertLiteralSearchMatchesString("XXXXXX", "..XXXXXX");
     assertBoundarySensitiveRegionCaptures();
     assertKeywordAlternationMatchesString(data);
+    assertFixedOffsetAccelerationMatchesString(data);
+    assertMultiOffsetLiteralOccurrencesMatchString(data);
     String repeatedLiteral =
         String.valueOf((char) data.consumeInt('A', 'Z')).repeat(data.consumeInt(2, 32));
     String suffix = new String(data.consumeBytes(data.consumeInt(0, 64)), StandardCharsets.UTF_8);
@@ -146,6 +148,52 @@ final class Utf8InputFuzzer {
             || utf8Matcher.start(1) != utf8Offset(input, stringMatcher.start(1))
             || utf8Matcher.end(1) != utf8Offset(input, stringMatcher.end(1)))) {
       throw new AssertionError("UTF-8 keyword alternation bounds differ from String search");
+    }
+  }
+
+  private static void assertFixedOffsetAccelerationMatchesString(FuzzedDataProvider data) {
+    String leadingClass = data.pickValue(List.of("[aé]", "[a-ÿ]", "[a😀]", "[^x]"));
+    String leadingMember =
+        switch (leadingClass) {
+          case "[a😀]" -> "😀";
+          default -> "é";
+        };
+    String literal = data.pickValue(List.of("bc", "tag", "literal"));
+    String input =
+        data.pickValue(List.of("", "x", "😀")) + leadingMember + literal + " a" + literal;
+    Pattern pattern = Pattern.compile(leadingClass + literal);
+    org.safere.Matcher stringMatcher = pattern.matcher(input);
+    byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+    Utf8Input utf8Input = Utf8Input.validated(bytes);
+    Utf8Matcher utf8Matcher = pattern.matcher(utf8Input);
+
+    boolean stringFound = stringMatcher.find();
+    if (utf8Matcher.find() != stringFound || pattern.find(utf8Input) != stringFound) {
+      throw new AssertionError("UTF-8 fixed-offset search result differs from String search");
+    }
+    if (stringFound
+        && (utf8Matcher.start() != utf8Offset(input, stringMatcher.start())
+            || utf8Matcher.end() != utf8Offset(input, stringMatcher.end())
+            || !Objects.equals(stringMatcher.group(), decodeGroup(bytes, utf8Matcher)))) {
+      throw new AssertionError("UTF-8 fixed-offset search bounds differ from String search");
+    }
+  }
+
+  private static void assertMultiOffsetLiteralOccurrencesMatchString(FuzzedDataProvider data) {
+    int longWidth = data.consumeInt(6, 16);
+    String literal = data.pickValue(List.of("z", "tag"));
+    String regex = "(aq|b[a-z]{" + longWidth + "})" + literal;
+    String body = "xax" + literal + "x".repeat(longWidth - literal.length() - 3);
+    String input = "b" + body + literal;
+    Pattern pattern = Pattern.compile(regex);
+    org.safere.Matcher stringMatcher = pattern.matcher(input);
+    byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+    Utf8Input utf8Input = Utf8Input.validated(bytes);
+    Utf8Matcher utf8Matcher = pattern.matcher(utf8Input);
+
+    boolean stringFound = stringMatcher.find();
+    if (utf8Matcher.find() != stringFound || pattern.find(utf8Input) != stringFound) {
+      throw new AssertionError("UTF-8 multi-offset search result differs from String search");
     }
   }
 

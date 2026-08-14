@@ -2,7 +2,9 @@ package org.safere.re2ffm;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -57,5 +59,110 @@ public final class RE2FfmTest {
     // Split around surrogate
     String[] parts = p.split(text);
     assertArrayEquals(new String[] {"hello ", " world"}, parts);
+  }
+
+  @Test
+  public void testReplaceAll() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(\\w+)");
+    assertEquals("X X", p.matcher("hello world").replaceAll("X"));
+    assertEquals("[hello] [world]", p.matcher("hello world").replaceAll("[$1]"));
+  }
+
+  @Test
+  public void testReplaceFirst() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(\\w+)");
+    assertEquals("X world", p.matcher("hello world").replaceFirst("X"));
+    assertEquals("[hello] world", p.matcher("hello world").replaceFirst("[$1]"));
+  }
+
+  @Test
+  public void testReplaceAllMultiDigitGroup() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)");
+    assertEquals("xjy", p.matcher("xabcdefghijy").replaceAll("$10"));
+  }
+
+  @Test
+  public void testReplaceFirstMultiDigitGroup() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)");
+    assertEquals("xjy", p.matcher("xabcdefghijy").replaceFirst("$10"));
+  }
+
+  @Test
+  public void testReplaceAllStateDiscrepancy() {
+    RE2FfmPattern p = RE2FfmPattern.compile("a");
+    RE2FfmMatcher m = p.matcher("aba");
+    assertTrue(m.find());
+    assertEquals("a", m.group());
+
+    assertEquals("xbx", m.replaceAll("x"));
+
+    try {
+      m.group();
+      fail("Expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      // Expected
+    }
+
+    assertFalse(m.find());
+  }
+
+  @Test
+  public void testReplaceAllStateDiscrepancyJavaFallback() {
+    RE2FfmPattern p = RE2FfmPattern.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)");
+    RE2FfmMatcher m = p.matcher("xabcdefghijy");
+    assertTrue(m.find());
+    assertEquals("abcdefghij", m.group());
+
+    assertEquals("xxy", m.replaceAll("x"));
+
+    try {
+      m.group();
+      fail("Expected IllegalStateException");
+    } catch (IllegalStateException expected) {
+      // Expected
+    }
+
+    assertFalse(m.find());
+  }
+
+  @Test
+  public void testReplacementReferencesMatchJdk() {
+    String regex = "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)";
+    String input = "abcdefghij-abcdefghij";
+    String[] replacements = {"$10", "$11", "$101", "$00", "$01", "$09", "\\$1", "\\\\$1"};
+    RE2FfmPattern actualPattern = RE2FfmPattern.compile(regex);
+    java.util.regex.Pattern expectedPattern = java.util.regex.Pattern.compile(regex);
+
+    for (String replacement : replacements) {
+      assertEquals(
+          replacement,
+          expectedPattern.matcher(input).replaceFirst(replacement),
+          actualPattern.matcher(input).replaceFirst(replacement));
+      assertEquals(
+          replacement,
+          expectedPattern.matcher(input).replaceAll(replacement),
+          actualPattern.matcher(input).replaceAll(replacement));
+    }
+  }
+
+  @Test
+  public void testZeroWidthUnicodeReplacementMatchesJdk() {
+    String regex = "()()()()()()()()()()";
+    String input = "é";
+    RE2FfmPattern actualPattern = RE2FfmPattern.compile(regex);
+    java.util.regex.Pattern expectedPattern = java.util.regex.Pattern.compile(regex);
+
+    assertEquals(
+        expectedPattern.matcher(input).replaceAll("x"),
+        actualPattern.matcher(input).replaceAll("x"));
+  }
+
+  @Test
+  public void testReplaceAllExhaustsTerminalEmptyMatch() {
+    RE2FfmMatcher matcher = RE2FfmPattern.compile("$").matcher("text");
+
+    assertEquals("textx", matcher.replaceAll("x"));
+
+    assertFalse(matcher.find());
   }
 }

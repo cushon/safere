@@ -40,6 +40,14 @@ public final class RE2FfmMatcher {
     reset(input);
   }
 
+  RE2FfmMatcher(RE2FfmPattern pattern, String input, byte[] inputUtf8) {
+    this.pattern = pattern;
+    this.inputString = input;
+    this.inputUtf8 = inputUtf8;
+    this.matchByteOffsets = new int[2 * (pattern.numGroups() + 1)];
+    buildCharToByteMap(inputString, inputUtf8);
+  }
+
   /**
    * Resets this matcher with a new input string.
    *
@@ -100,6 +108,10 @@ public final class RE2FfmMatcher {
    * @return true if a match was found
    */
   public boolean find() {
+    if (searchBytePos > inputUtf8.length) {
+      matched = false;
+      return false;
+    }
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment textSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, inputUtf8);
       MemorySegment matchesSeg = arena.allocate(ValueLayout.JAVA_INT, matchByteOffsets.length);
@@ -115,9 +127,9 @@ public final class RE2FfmMatcher {
         MemorySegment.copy(
             matchesSeg, ValueLayout.JAVA_INT, 0, matchByteOffsets, 0, matchByteOffsets.length);
         // Advance past this match for the next find() call.
-        // If the match was empty, advance by one byte to avoid infinite loop.
+        // If the match was empty, advance by one code point to avoid infinite loop.
         if (matchByteOffsets[1] == matchByteOffsets[0]) {
-          searchBytePos = matchByteOffsets[1] + 1;
+          searchBytePos = nextCodePointByteOffset(matchByteOffsets[1]);
         } else {
           searchBytePos = matchByteOffsets[1];
         }
@@ -211,40 +223,16 @@ public final class RE2FfmMatcher {
    * @return the result string
    */
   public String replaceAll(String replacement) {
-    // Convert Java-style $N backreferences to RE2-style \N.
-    String re2Rewrite = convertReplacement(replacement);
-    byte[] rewriteUtf8 = re2Rewrite.getBytes(StandardCharsets.UTF_8);
-
-    // Start with a buffer 2x the input size.
-    int outCap = Math.max(inputUtf8.length * 2, 256);
-    while (true) {
-      try (Arena arena = Arena.ofConfined()) {
-        MemorySegment textSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, inputUtf8);
-        MemorySegment rewriteSeg = arena.allocateFrom(ValueLayout.JAVA_BYTE, rewriteUtf8);
-        MemorySegment outBuf = arena.allocate(outCap);
-        MemorySegment outLenSeg = arena.allocate(ValueLayout.JAVA_INT);
-
-        int result =
-            Re2Shim.replaceAll(
-                pattern.nativeHandle(),
-                textSeg,
-                inputUtf8.length,
-                rewriteSeg,
-                rewriteUtf8.length,
-                outBuf,
-                outCap,
-                outLenSeg);
-
-        if (result >= 0) {
-          int outLen = outLenSeg.get(ValueLayout.JAVA_INT, 0);
-          byte[] resultBytes = outBuf.asSlice(0, outLen).toArray(ValueLayout.JAVA_BYTE);
-          return new String(resultBytes, StandardCharsets.UTF_8);
-        }
-        // Buffer too small; grow and retry.
-        int needed = outLenSeg.get(ValueLayout.JAVA_INT, 0);
-        outCap = needed + needed / 2;
-      }
+    String rewrite = translateToRE2Rewrite(replacement);
+    if (rewrite != null) {
+      byte[] rewriteBytes = rewrite.getBytes(StandardCharsets.UTF_8);
+      String result =
+          Re2Shim.replaceAll(pattern.nativeHandle(), inputUtf8, inputString, rewriteBytes).result();
+      this.matched = false;
+      this.searchBytePos = inputUtf8.length + 1;
+      return result;
     }
+    return replaceAllJava(replacement);
   }
 
   /**
@@ -258,15 +246,13 @@ public final class RE2FfmMatcher {
     if (!find()) {
       return inputString;
     }
-    String re2Rewrite = convertReplacement(replacement);
-
     StringBuilder sb = new StringBuilder();
     // Append text before the match.
     int matchStartChar = start();
     sb.append(inputString, 0, matchStartChar);
 
     // Build the replacement from the rewrite template.
-    appendRewrite(sb, re2Rewrite);
+    appendReplacement(sb, replacement);
 
     // Append text after the match.
     int matchEndChar = end();
@@ -277,25 +263,82 @@ public final class RE2FfmMatcher {
 
   // --- Private helpers ---
 
-  /** Convert Java $N backreferences to RE2 \N. */
-  private static String convertReplacement(String replacement) {
-    StringBuilder sb = new StringBuilder(replacement.length());
+  /** Expands Java-style numeric group references and escapes against the current match. */
+  private void appendReplacement(StringBuilder sb, String replacement) {
+    int maxGroup = pattern.numGroups();
     for (int i = 0; i < replacement.length(); i++) {
       char c = replacement.charAt(i);
-      if (c == '$'
-          && i + 1 < replacement.length()
-          && Character.isDigit(replacement.charAt(i + 1))) {
-        sb.append('\\');
-        i++;
-        // Copy all consecutive digits.
-        while (i < replacement.length() && Character.isDigit(replacement.charAt(i))) {
-          sb.append(replacement.charAt(i));
+      if (c == '\\') {
+        if (++i >= replacement.length()) {
+          throw new IllegalArgumentException("character to be escaped is missing");
+        }
+        sb.append(replacement.charAt(i));
+      } else if (c == '$') {
+        if (++i >= replacement.length() || !Character.isDigit(replacement.charAt(i))) {
+          throw new IllegalArgumentException("Illegal group reference");
+        }
+        int groupNum = replacement.charAt(i) - '0';
+        if (groupNum > maxGroup) {
+          throw new IndexOutOfBoundsException("No group " + groupNum);
+        }
+        while (i + 1 < replacement.length() && Character.isDigit(replacement.charAt(i + 1))) {
+          int candidate = groupNum * 10 + (replacement.charAt(i + 1) - '0');
+          if (candidate > maxGroup) {
+            break;
+          }
+          groupNum = candidate;
           i++;
         }
-        i--; // Back up for the outer loop increment.
-      } else if (c == '\\') {
-        // Escape backslashes for RE2.
-        sb.append("\\\\");
+        String group = group(groupNum);
+        if (group != null) {
+          sb.append(group);
+        }
+      } else {
+        sb.append(c);
+      }
+    }
+  }
+
+  private String translateToRE2Rewrite(String replacement) {
+    int numGroups = pattern.numGroups();
+    if (numGroups > 9) {
+      return null;
+    }
+    if (replacement.indexOf('{') >= 0) {
+      return null;
+    }
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < replacement.length(); i++) {
+      char c = replacement.charAt(i);
+      if (c == '\\') {
+        if (++i >= replacement.length()) {
+          return null;
+        }
+        char next = replacement.charAt(i);
+        if (next == '$') {
+          sb.append('$');
+        } else if (next == '\\') {
+          sb.append("\\\\");
+        } else {
+          sb.append(next);
+        }
+      } else if (c == '$') {
+        if (++i >= replacement.length()) {
+          return null;
+        }
+        char next = replacement.charAt(i);
+        if (next >= '0' && next <= '9') {
+          if (i + 1 < replacement.length() && Character.isDigit(replacement.charAt(i + 1))) {
+            return null;
+          }
+          int groupIndex = next - '0';
+          if (groupIndex > numGroups) {
+            return null;
+          }
+          sb.append('\\').append(next);
+        } else {
+          return null;
+        }
       } else {
         sb.append(c);
       }
@@ -303,35 +346,27 @@ public final class RE2FfmMatcher {
     return sb.toString();
   }
 
-  /** Expand RE2-style \N backreferences in the rewrite string against the current match. */
-  private void appendRewrite(StringBuilder sb, String rewrite) {
-    for (int i = 0; i < rewrite.length(); i++) {
-      char c = rewrite.charAt(i);
-      if (c == '\\' && i + 1 < rewrite.length()) {
-        char next = rewrite.charAt(i + 1);
-        if (Character.isDigit(next)) {
-          // Parse group number.
-          int groupNum = 0;
-          i++;
-          while (i < rewrite.length() && Character.isDigit(rewrite.charAt(i))) {
-            groupNum = groupNum * 10 + (rewrite.charAt(i) - '0');
-            i++;
-          }
-          i--; // Back up for the outer loop increment.
-          String g = group(groupNum);
-          if (g != null) {
-            sb.append(g);
-          }
-        } else if (next == '\\') {
-          sb.append('\\');
-          i++;
-        } else {
-          sb.append(c);
-        }
-      } else {
-        sb.append(c);
-      }
+  private String replaceAllJava(String replacement) {
+    reset();
+    StringBuilder sb = new StringBuilder();
+    int lastAppend = 0;
+    while (find()) {
+      int matchStartChar = start();
+      sb.append(inputString, lastAppend, matchStartChar);
+      appendReplacement(sb, replacement);
+      lastAppend = end();
     }
+    sb.append(inputString, lastAppend, inputString.length());
+    return sb.toString();
+  }
+
+  private int nextCodePointByteOffset(int byteOffset) {
+    if (byteOffset >= inputUtf8.length) {
+      return inputUtf8.length + 1;
+    }
+    int charOffset = byteOffsetToCharOffset(byteOffset);
+    int nextCharOffset = charOffset + Character.charCount(inputString.codePointAt(charOffset));
+    return charOffsetToByteOffset(nextCharOffset);
   }
 
   private void buildCharToByteMap(String s, byte[] bytes) {

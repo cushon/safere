@@ -16,10 +16,6 @@ final class VectorScanProviders {
     return SELECTED != null && length >= SELECTED.minimumInputLength() ? SELECTED : null;
   }
 
-  static VectorScanProvider get() {
-    return SELECTED;
-  }
-
   private static VectorScanProvider loadSelected() {
     String requested = System.getProperty(PROVIDER_PROPERTY, "").trim();
     if (requested.isEmpty() || requested.equals("swar")) {

@@ -55,11 +55,6 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.5.6</version>
-        <configuration>
-          <argLine>
-            --add-modules jdk.incubator.vector
-          </argLine>
-        </configuration>
       </plugin>
     </plugins>
   </build>
@@ -107,6 +102,7 @@
                              annotated with @DisabledForCrosscheck in the original source. -->
                         <exclude name="AnchorOptTest.java"/>
                         <exclude name="AnchoredDfaCachingTest.java"/>
+                        <exclude name="AsciiBitmapTest.java"/>
                         <exclude name="BitStateTest.java"/>
                         <exclude name="CharClassTest.java"/>
                         <exclude name="CompilerTest.java"/>
@@ -121,6 +117,7 @@
                         <exclude name="InputScannerTest.java"/>
                         <exclude name="MatcherDeferredCaptureStateTest.java"/>
                         <exclude name="MatcherTransitionInventoryTest.java"/>
+                        <exclude name="MatchDescriptorTest.java"/>
                         <exclude name="NfaTest.java"/>
                         <exclude name="OnePassTest.java"/>
                         <exclude name="ParseFlagsTest.java"/>
@@ -130,9 +127,12 @@
                         <exclude name="ProgTest.java"/>
                         <exclude name="RegexpOpTest.java"/>
                         <exclude name="RegexpTest.java"/>
+                        <exclude name="RejectPrefilterTest.java"/>
                         <exclude name="SafeReDiagnosticsTest.java"/>
                         <exclude name="SearchScalingRegressionTest.java"/>
+                        <exclude name="ShortScanEquivalenceTest.java"/>
                         <exclude name="SimplifierTest.java"/>
+                        <exclude name="StartAcceleratorTest.java"/>
                         <exclude name="UnicodeJdkConsistencyTest.java"/>
                         <exclude name="UnicodeTablesTest.java"/>
                         <exclude name="Utf8AllocationScalingTest.java"/>
@@ -180,9 +180,6 @@
             <artifactId>maven-surefire-plugin</artifactId>
             <version>3.5.6</version>
             <configuration>
-              <argLine>
-                --add-modules jdk.incubator.vector
-              </argLine>
               <systemPropertyVariables>
                 <org.safere.crosscheck.generatedTests>true</org.safere.crosscheck.generatedTests>
               </systemPropertyVariables>

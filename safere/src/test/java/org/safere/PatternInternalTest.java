@@ -57,16 +57,16 @@ class PatternInternalTest {
   void transparentGroupsPreserveCharacterClassAccelerators() {
     Pattern p = Pattern.compile("(?:[A-Z]+)");
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['A']).isTrue();
-    assertThat(p.charClassMatchRanges()).isNotNull();
+    assertThat(prefix.contains('A')).isTrue();
+    assertThat(p.matchDescriptor().charClassMatch()).isNotNull();
   }
 
   @Test
   void asciiPrefixScanInfoHandlesMissingAndEmptyClasses() {
     assertThat(Pattern.buildAsciiClassScanInfo(null)).isNull();
-    assertThat(Pattern.buildAsciiClassScanInfo(new boolean[128])).isNull();
+    assertThat(Pattern.buildAsciiClassScanInfo(AsciiBitmap.EMPTY)).isNull();
   }
 
   @Test
@@ -146,48 +146,48 @@ class PatternInternalTest {
   @Test
   void alternatePrefixAcceleration() {
     Pattern p = Pattern.compile("(?:cat|dog|bird)s?");
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['c']).isTrue();
-    assertThat(prefix['d']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['a']).isFalse();
+    assertThat(prefix.contains('c')).isTrue();
+    assertThat(prefix.contains('d')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
   }
 
   @Test
   void alternatePrefixCaseInsensitiveAcceleration() {
     Pattern p = Pattern.compile("(?i)(?:cat|dog|bird)s?");
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['c']).isTrue();
-    assertThat(prefix['C']).isTrue();
-    assertThat(prefix['d']).isTrue();
-    assertThat(prefix['D']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['B']).isTrue();
-    assertThat(prefix['a']).isFalse();
+    assertThat(prefix.contains('c')).isTrue();
+    assertThat(prefix.contains('C')).isTrue();
+    assertThat(prefix.contains('d')).isTrue();
+    assertThat(prefix.contains('D')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('B')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
   }
 
   @Test
   void deeplyNestedRequiredQuantifierPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedRequiredPlusPattern(1_000, "[ab]"));
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['a']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['c']).isFalse();
+    assertThat(prefix.contains('a')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('c')).isFalse();
   }
 
   @Test
   void deeplyNestedAlternationPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedAlternationPattern(1_000));
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['a']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['c']).isFalse();
+    assertThat(prefix.contains('a')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('c')).isFalse();
   }
 
   @Test
@@ -195,6 +195,27 @@ class PatternInternalTest {
     Pattern p = Pattern.compile(nestedPrefixConcatPattern(1_000));
 
     assertThat(p.prefix()).isEqualTo("foo");
+  }
+
+  @Test
+  void deeplyNestedFixedOffsetWidthExtractionIsStackSafe() {
+    Pattern p = Pattern.compile(nestedFixedOffsetPattern(2_000));
+
+    assertThat(p.fixedOffsetLiteral()).isNotNull();
+  }
+
+  @Test
+  void largeCapturedLiteralConcatenationRecordsMaximalSuffix() {
+    StringBuilder regex = new StringBuilder("[ab]");
+    for (int i = 0; i < 2_000; i++) {
+      regex.append("(x)");
+    }
+
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile(regex.toString()).fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).hasSize(2_000);
+    assertThat(fixed.minOffset()).isEqualTo(1);
   }
 
   @Test
@@ -210,7 +231,7 @@ class PatternInternalTest {
   void dotStarAroundWhitespaceRecordsRequiredWhitespaceClass() {
     Pattern p = Pattern.compile(".*\\s+.*");
 
-    assertThat(p.requiredMatchClassRanges()).isNotNull();
+    assertThat(p.rejectDescriptor().requiredCharClass()).isNotNull();
   }
 
   @ParameterizedTest
@@ -242,9 +263,40 @@ class PatternInternalTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"\\d+/x", "[αβ]/x", "[ab](?i:x)", "literal-prefix"})
+  @ValueSource(strings = {"\\d+/x", "[ab](?i:x)", "literal-prefix"})
   void variableWidthUnicodeAndOrdinaryPrefixesDoNotRecordFixedOffsetLiterals(String regex) {
     assertThat(Pattern.compile(regex).fixedOffsetLiteral()).isNull();
+  }
+
+  @Test
+  void unicodeClassOffsetsAreRecordedAsNonDiscreteCodePointRanges() {
+    Pattern.FixedOffsetLiteral fixed = Pattern.compile("[αβ]/x").fixedOffsetLiteral();
+
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.minOffset()).isEqualTo(1);
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).isNull();
+  }
+
+  @Test
+  void discreteMultiOffsetLiteralsAreRecorded() {
+    Pattern.FixedOffsetLiteral fixed =
+        Pattern.compile("(^|[a-z])(#!customTag)").fixedOffsetLiteral();
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).isEqualTo("#!customTag");
+    assertThat(fixed.minOffset()).isZero();
+    assertThat(fixed.maxOffset()).isEqualTo(1);
+    assertThat(fixed.discreteOffsets()).containsExactly(0, 1);
+  }
+
+  @Test
+  void boundedRangeOffsetLiteralsAreRecorded() {
+    Pattern.FixedOffsetLiteral fixed =
+        Pattern.compile("\\s{0,8}renderElement\\(").fixedOffsetLiteral();
+    assertThat(fixed).isNotNull();
+    assertThat(fixed.literal()).isEqualTo("renderElement(");
+    assertThat(fixed.minOffset()).isEqualTo(0);
+    assertThat(fixed.maxOffset()).isEqualTo(8);
   }
 
   @ParameterizedTest
@@ -259,7 +311,7 @@ class PatternInternalTest {
       String regex, String members, String nonMembers) {
     Pattern p = Pattern.compile(regex);
 
-    assertThat(p.requiredMatchClassRanges()).isNotNull();
+    assertThat(p.rejectDescriptor().requiredCharClass()).isNotNull();
     members
         .codePoints()
         .forEach(codePoint -> assertThat(requiredClassContains(p, codePoint)).isTrue());
@@ -271,7 +323,7 @@ class PatternInternalTest {
   @ParameterizedTest
   @ValueSource(strings = {".*(x|).*", ".*(?:x|y)?.*", ".*(?:x|y){0,3}.*", ".*(?:x|y|.*).*"})
   void nullableAlternativesDoNotRecordRequiredCharacterClasses(String regex) {
-    assertThat(Pattern.compile(regex).requiredMatchClassRanges()).isNull();
+    assertThat(Pattern.compile(regex).rejectDescriptor().requiredCharClass()).isNull();
   }
 
   @ParameterizedTest
@@ -283,7 +335,7 @@ class PatternInternalTest {
     "'.*前置.*かなり長い必要語.*', かなり長い必要語"
   })
   void mandatoryCaseSensitiveLiteralsAreRecorded(String regex, String expected) {
-    assertThat(Pattern.compile(regex).requiredLiteral()).isEqualTo(expected);
+    assertThat(Pattern.compile(regex).rejectDescriptor().requiredLiteral()).isEqualTo(expected);
   }
 
   @ParameterizedTest
@@ -296,46 +348,113 @@ class PatternInternalTest {
         "needle.*"
       })
   void optionalCaseInsensitiveAndAlreadyPrefixedLiteralsAreNotRecorded(String regex) {
-    assertThat(Pattern.compile(regex).requiredLiteral()).isNull();
+    assertThat(Pattern.compile(regex).rejectDescriptor().requiredLiteral()).isNull();
+  }
+
+  @Test
+  void disjointRequiredLiteralsAreRecordedForAlternations() {
+    Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");
+    assertThat(p.requiredDisjointLiterals()).containsExactly("apple", "banana", "cherry");
+    assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
+
+    Pattern p2 = Pattern.compile("(foo.*|bar.*|baz.*)");
+    assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "bar", "baz");
+
+    Pattern p3 = Pattern.compile("(?:\\bfirstToken\\b|\\bsecondToken\\b)");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("firstToken", "secondToken");
+  }
+
+  @Test
+  void disjointRequiredLiteralsSubsumptionMinimization() {
+    // pineapple contains apple, so pineapple is pruned and apple + banana are required.
+    Pattern p1 = Pattern.compile(".*(?:apple|pineapple|banana).*");
+    assertThat(p1.requiredDisjointLiterals()).containsExactly("apple", "banana");
+
+    // prefix_foo contains foo, bar_baz contains baz
+    Pattern p2 = Pattern.compile(".*(?:prefix_foo|foo|bar_baz|baz).*");
+    assertThat(p2.requiredDisjointLiterals()).containsExactly("foo", "baz");
+
+    // https contains http, ftp is distinct
+    Pattern p3 = Pattern.compile(".*(?:http|https|ftp).*");
+    assertThat(p3.requiredDisjointLiterals()).containsExactly("http", "ftp");
+
+    // A lone surrogate is not a code-point substring of a supplementary character.
+    Pattern p4 = Pattern.compile("(?:a\uD83D|za\uD83D\uDE00|banana)");
+    assertThat(p4.requiredDisjointLiterals())
+        .containsExactly("a\uD83D", "za\uD83D\uDE00", "banana");
+  }
+
+  @Test
+  void tooManyRawDisjointLiteralsAreRejectedBeforeMinimization() {
+    StringBuilder regex = new StringBuilder("(?:banana");
+    for (int i = 0; i < 16; i++) {
+      regex.append('|').append("x".repeat(i)).append("apple");
+    }
+    regex.append(')');
+
+    assertThat(Pattern.compile(regex.toString()).requiredDisjointLiterals()).isNull();
+  }
+
+  @Test
+  void disjointRequiredLiteralCountIsBoundedByMeasuredCrossover() {
+    assertThat(Pattern.compile("(?:apple|banana|cherry|orange)\\d").requiredDisjointLiterals())
+        .containsExactly("apple", "banana", "cherry", "orange");
+    assertThat(
+            Pattern.compile("(?:apple|banana|cherry|orange|papaya)\\d").requiredDisjointLiterals())
+        .isNull();
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        ".*(?:apple|banana)?.*",
+        ".*(?:apple|.*).*",
+        ".*(?:apple|a).*",
+        "(?i).*(?:apple|banana).*"
+      })
+  void invalidOrNullableAlternationsDoNotRecordDisjointLiterals(String regex) {
+    Pattern p = Pattern.compile(regex);
+    if (p.prefix() == null && p.rejectDescriptor().requiredLiteral() == null) {
+      assertThat(p.requiredDisjointLiterals()).isNull();
+    }
   }
 
   @Test
   void boundaryPrefixedLiteralRecordsRequiredClass() {
     Pattern p = Pattern.compile("\\b{g}z");
 
-    assertThat(p.requiredMatchClassRanges()).isNotNull();
+    assertThat(p.rejectDescriptor().requiredCharClass()).isNotNull();
   }
 
   @Test
   void pureNullablePatternsDoNotRecordRequiredCharacterClasses() {
     Pattern p = Pattern.compile(".*");
 
-    assertThat(p.requiredMatchClassRanges()).isNull();
+    assertThat(p.rejectDescriptor().requiredCharClass()).isNull();
   }
 
   private static boolean requiredClassContains(Pattern pattern, int codePoint) {
-    return InputScanner.classContains(
-        pattern.requiredMatchClassRanges(),
-        pattern.requiredMatchClassBitmap0(),
-        pattern.requiredMatchClassBitmap1(),
-        codePoint);
+    Pattern.CharClassScanInfo info = pattern.rejectDescriptor().requiredCharClass();
+    return info != null
+        && InputScanner.classContains(info.ranges, info.bitmap0, info.bitmap1, codePoint);
   }
 
   private static Pattern.CharClassScanInfo assertAsciiScanInfo(
       int[] members, int[] expectedRanges) {
-    boolean[] asciiClass = new boolean[128];
+    AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
     for (int member : members) {
-      asciiClass[member] = true;
+      builder.add(member);
     }
+    AsciiBitmap asciiClass = builder.build();
 
     Pattern.CharClassScanInfo info = Pattern.buildAsciiClassScanInfo(asciiClass);
 
     assertThat(info).isNotNull();
     assertThat(info.ranges).containsExactly(expectedRanges);
-    for (int codePoint = 0; codePoint < asciiClass.length; codePoint++) {
+    for (int codePoint = 0; codePoint < 128; codePoint++) {
       assertThat(InputScanner.classContains(info.ranges, info.bitmap0, info.bitmap1, codePoint))
           .as("ASCII member %s", codePoint)
-          .isEqualTo(asciiClass[codePoint]);
+          .isEqualTo(asciiClass.containsAscii(codePoint));
     }
     return info;
   }
@@ -398,6 +517,19 @@ class PatternInternalTest {
     for (int i = 0; i < depth; i++) {
       regex.append(")x");
     }
+    return regex.toString();
+  }
+
+  private static String nestedFixedOffsetPattern(int depth) {
+    StringBuilder regex = new StringBuilder(depth * 3 + 6);
+    for (int i = 0; i < depth; i++) {
+      regex.append('(');
+    }
+    regex.append("[ab]");
+    for (int i = 0; i < depth; i++) {
+      regex.append(")x");
+    }
+    regex.append("ZZ");
     return regex.toString();
   }
 

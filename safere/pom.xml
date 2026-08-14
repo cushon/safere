@@ -125,10 +125,6 @@ final class WorkCounterConfig {
             </goals>
             <configuration>
               <compilerArgs combine.self="override">
-                <arg>--add-modules</arg>
-                <arg>jdk.incubator.vector</arg>
-                <arg>--add-reads</arg>
-                <arg>org.safere=jdk.incubator.vector</arg>
                 <arg>-Xlint</arg>
                 <arg>-Xlint:-incubating</arg>
                 <arg>-Werror</arg>
@@ -189,6 +185,7 @@ final class WorkCounterConfig {
           <archive>
             <manifestEntries>
               <Automatic-Module-Name>org.safere</Automatic-Module-Name>
+              <Multi-Release>true</Multi-Release>
             </manifestEntries>
           </archive>
         </configuration>
@@ -299,7 +296,6 @@ final class WorkCounterConfig {
             <configuration>
               <argLine>
                 @{argLine} --add-modules=jdk.incubator.vector
-                --add-opens java.base/java.lang=ALL-UNNAMED
                 -Dorg.safere.experimental.vectorScanProvider=vector
               </argLine>
               <classesDirectory>

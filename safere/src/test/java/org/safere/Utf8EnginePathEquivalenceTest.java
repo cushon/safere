@@ -89,7 +89,32 @@ class Utf8EnginePathEquivalenceTest {
             EnginePathOptions.builder()
                 .charClassMatchFastPaths(false)
                 .startAcceleration(false)
-                .build()));
+                .build()),
+        Arguments.of(
+            "mixed ASCII and non-ASCII class does not use byte-offset acceleration",
+            "[aé]bc",
+            "xébc abc",
+            EnginePathOptions.builder().startAcceleration(false).build()),
+        Arguments.of(
+            "non-ASCII range does not use byte-offset acceleration",
+            "[a-ÿ]bc",
+            "xébc abc",
+            EnginePathOptions.builder().startAcceleration(false).build()),
+        Arguments.of(
+            "supplementary class does not use byte-offset acceleration",
+            "[a😀]bc",
+            "x😀bc abc",
+            EnginePathOptions.builder().startAcceleration(false).build()),
+        Arguments.of(
+            "negated class does not use byte-offset acceleration",
+            "[^x]bc",
+            "xébc abc",
+            EnginePathOptions.builder().startAcceleration(false).build()),
+        Arguments.of(
+            "multi-offset acceleration preserves earlier starts from later literals",
+            "(aq|b[a-z]{9})z",
+            "bxxaxzxxxxz",
+            EnginePathOptions.builder().startAcceleration(false).build()));
   }
 
   @Test
@@ -104,6 +129,27 @@ class Utf8EnginePathEquivalenceTest {
     assertThat(trace(canonical, input))
         .extracting(match -> match.groups().getFirst().start())
         .containsExactly(0, 4, 6, 7);
+  }
+
+  @Test
+  @DisplayName("UTF-8 convenience find supports discrete and non-ASCII fixed offsets")
+  void utf8ConvenienceFindSupportsGeneralizedFixedOffsets() {
+    for (String regex :
+        List.of("(^|a)bc", "(^|[^#])(#!customTag)", "[aé]bc", "[a😀]bc", "(aq|b[a-z]{9})z")) {
+      String input =
+          switch (regex) {
+            case "(^|a)bc" -> "abc";
+            case "(^|[^#])(#!customTag)" -> "é#!customTag";
+            case "[aé]bc" -> "ébc";
+            case "[a😀]bc" -> "😀bc";
+            case "(aq|b[a-z]{9})z" -> "bxxaxzxxxxz";
+            default -> throw new AssertionError(regex);
+          };
+      Pattern pattern = Pattern.compile(regex);
+      Utf8Input utf8Input = Utf8Input.validated(input.getBytes(UTF_8));
+
+      assertThat(pattern.find(utf8Input)).as("/%s/ on %s", regex, input).isTrue();
+    }
   }
 
   @Test

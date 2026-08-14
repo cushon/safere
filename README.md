@@ -144,6 +144,9 @@ and may change incompatibly or be removed in any SafeRE release.
 SafeRE's production artifacts are built with JDK 26 and `--release 21`. CI executes the
 same compiled artifacts on JDK 21 through 26 to verify runtime compatibility.
 
+See the [Developer Guide](DEVELOPMENT.md) for repository workflows and the multi-release JAR
+structure used by JDK-specific implementations.
+
 SafeRE uses google-java-format through Spotless. To format Java sources, run:
 
 ```bash
