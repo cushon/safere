@@ -5,12 +5,7 @@
 
 package org.safere;
 
-import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeSet;
 
 /**
  * One-pass NFA execution engine. For patterns where the NFA is deterministic (at most one possible
@@ -202,68 +197,109 @@ final class OnePass {
     }
 
     // State table. States are identified by instruction IDs.
-    // nodeMap: instruction ID -> state index.
-    Map<Integer, Integer> nodeMap = new HashMap<>();
+    // nodeMap: instruction ID -> state index (-1 if unallocated).
+    int[] nodeMap = new int[prog.size()];
+    Arrays.fill(nodeMap, -1);
     BuildTables tables = new BuildTables(numClasses, maxStates);
 
-    // BFS: process each state (instruction ID).
-    Deque<Integer> worklist = new ArrayDeque<>();
+    // BFS worklist of instruction IDs.
+    int[] worklist = new int[maxStates];
+    int workHead = 0;
+    int workTail = 0;
+
     int startInst = prog.start();
-    nodeMap.put(startInst, tables.addState());
-    worklist.add(startInst);
+    nodeMap[startInst] = tables.addState();
+    worklist[workTail++] = startInst;
 
-    while (!worklist.isEmpty()) {
-      int instId = worklist.poll();
-      int stateIndex = nodeMap.get(instId);
+    // Scratch buffers for BFS and epsilon closure traversal.
+    int[] visitedEpoch = new int[prog.size()];
+    int currentEpoch = 0;
 
-      // Compute epsilon closure from instId.
-      // Each entry is a frontier instruction (CHAR_RANGE or MATCH) plus accumulated conditions.
-      boolean[] visited = new boolean[prog.size()];
-      Deque<int[]> stack = new ArrayDeque<>();
-      // stack entries: [instId, capMask, emptyFlags]
-      stack.push(new int[] {instId, 0, 0});
+    // Stack entries: triplets of (instId, capMask, emptyFlags).
+    int[] stack = new int[prog.size() * 3];
 
-      int[] nextStates = new int[numClasses];
+    int[] nextStates = new int[numClasses];
+    int[] capMasks = new int[numClasses];
+    int[] emptyFlagsList = new int[numClasses];
+
+    while (workHead < workTail) {
+      int instId = worklist[workHead++];
+      int stateIndex = nodeMap[instId];
+
+      currentEpoch++;
+      int stackTop = 0;
+      stack[stackTop++] = instId;
+      stack[stackTop++] = 0; // capMask
+      stack[stackTop++] = 0; // emptyFlags
+
       Arrays.fill(nextStates, -1);
-      int[] capMasks = new int[numClasses];
-      int[] emptyFlagsList = new int[numClasses];
       boolean matched = false;
 
-      while (!stack.isEmpty()) {
-        int[] entry = stack.pop();
-        int id = entry[0];
-        int capMask = entry[1];
-        int emptyFlags = entry[2];
+      while (stackTop > 0) {
+        int emptyFlags = stack[--stackTop];
+        int capMask = stack[--stackTop];
+        int id = stack[--stackTop];
 
         if (id == 0 || id >= prog.size()) {
           continue;
         }
-        if (visited[id]) {
+        if (visitedEpoch[id] == currentEpoch) {
           // Same instruction reachable via two epsilon paths -> not one-pass.
           return null;
         }
-        visited[id] = true;
+        visitedEpoch[id] = currentEpoch;
 
         Inst ip = prog.inst(id);
         switch (ip.op) {
           case FAIL -> {}
           case ALT, ALT_MATCH -> {
-            stack.push(new int[] {ip.out, capMask, emptyFlags});
-            stack.push(new int[] {ip.out1, capMask, emptyFlags});
+            if (stackTop + 6 > stack.length) {
+              stack = Arrays.copyOf(stack, stack.length * 2);
+            }
+            stack[stackTop++] = ip.out;
+            stack[stackTop++] = capMask;
+            stack[stackTop++] = emptyFlags;
+            stack[stackTop++] = ip.out1;
+            stack[stackTop++] = capMask;
+            stack[stackTop++] = emptyFlags;
           }
-          case NOP -> stack.push(new int[] {ip.out, capMask, emptyFlags});
+          case NOP -> {
+            if (stackTop + 3 > stack.length) {
+              stack = Arrays.copyOf(stack, stack.length * 2);
+            }
+            stack[stackTop++] = ip.out;
+            stack[stackTop++] = capMask;
+            stack[stackTop++] = emptyFlags;
+          }
           case PROGRESS_CHECK -> {
-            stack.push(new int[] {ip.out, capMask, emptyFlags});
-            stack.push(new int[] {ip.out1, capMask, emptyFlags});
+            if (stackTop + 6 > stack.length) {
+              stack = Arrays.copyOf(stack, stack.length * 2);
+            }
+            stack[stackTop++] = ip.out;
+            stack[stackTop++] = capMask;
+            stack[stackTop++] = emptyFlags;
+            stack[stackTop++] = ip.out1;
+            stack[stackTop++] = capMask;
+            stack[stackTop++] = emptyFlags;
           }
           case CAPTURE -> {
+            if (stackTop + 3 > stack.length) {
+              stack = Arrays.copyOf(stack, stack.length * 2);
+            }
             int reg = ip.arg;
             int newCapMask = (reg < MAX_CAP_REGS) ? (capMask | (1 << reg)) : capMask;
-            stack.push(new int[] {ip.out, newCapMask, emptyFlags});
+            stack[stackTop++] = ip.out;
+            stack[stackTop++] = newCapMask;
+            stack[stackTop++] = emptyFlags;
           }
           case EMPTY_WIDTH -> {
+            if (stackTop + 3 > stack.length) {
+              stack = Arrays.copyOf(stack, stack.length * 2);
+            }
             int newEmpty = emptyFlags | ip.arg;
-            stack.push(new int[] {ip.out, capMask, newEmpty});
+            stack[stackTop++] = ip.out;
+            stack[stackTop++] = capMask;
+            stack[stackTop++] = newEmpty;
           }
           case CHAR_RANGE -> {
             // For each equivalence class this CHAR_RANGE covers, set transition.
@@ -279,16 +315,14 @@ final class OnePass {
               }
 
               // Get or create state for ip.out.
-              int nextState;
-              if (nodeMap.containsKey(ip.out)) {
-                nextState = nodeMap.get(ip.out);
-              } else {
+              int nextState = nodeMap[ip.out];
+              if (nextState == -1) {
                 if (tables.stateCount() >= maxStates) {
                   return null; // too many states
                 }
                 nextState = tables.addState();
-                nodeMap.put(ip.out, nextState);
-                worklist.add(ip.out);
+                nodeMap[ip.out] = nextState;
+                worklist[workTail++] = ip.out;
               }
 
               if (nextStates[cls] != -1
@@ -318,16 +352,14 @@ final class OnePass {
                   continue;
                 }
 
-                int nextState;
-                if (nodeMap.containsKey(ip.out)) {
-                  nextState = nodeMap.get(ip.out);
-                } else {
+                int nextState = nodeMap[ip.out];
+                if (nextState == -1) {
                   if (tables.stateCount() >= maxStates) {
                     return null;
                   }
                   nextState = tables.addState();
-                  nodeMap.put(ip.out, nextState);
-                  worklist.add(ip.out);
+                  nodeMap[ip.out] = nextState;
+                  worklist[workTail++] = ip.out;
                 }
 
                 if (nextStates[cls] != -1
@@ -458,26 +490,43 @@ final class OnePass {
 
   /** Builds sorted code point boundaries from all CHAR_RANGE and CHAR_CLASS instructions. */
   private static int[] buildBoundaries(Prog prog) {
-    TreeSet<Integer> bounds = new TreeSet<>();
-    bounds.add(0);
-    bounds.add(Utils.MAX_RUNE + 1);
+    int maxBounds = 2;
     for (int i = 0; i < prog.size(); i++) {
       Inst inst = prog.inst(i);
       if (inst.op == InstOp.CHAR_RANGE) {
-        bounds.add(inst.lo);
+        maxBounds += 2;
+      } else if (inst.op == InstOp.CHAR_CLASS) {
+        maxBounds += inst.ranges.length;
+      }
+    }
+    int[] raw = new int[maxBounds];
+    int count = 0;
+    raw[count++] = 0;
+    raw[count++] = Utils.MAX_RUNE + 1;
+    for (int i = 0; i < prog.size(); i++) {
+      Inst inst = prog.inst(i);
+      if (inst.op == InstOp.CHAR_RANGE) {
+        raw[count++] = inst.lo;
         if (inst.hi < Utils.MAX_RUNE) {
-          bounds.add(inst.hi + 1);
+          raw[count++] = inst.hi + 1;
         }
       } else if (inst.op == InstOp.CHAR_CLASS) {
         for (int j = 0; j < inst.ranges.length; j += 2) {
-          bounds.add(inst.ranges[j]);
+          raw[count++] = inst.ranges[j];
           if (inst.ranges[j + 1] < Utils.MAX_RUNE) {
-            bounds.add(inst.ranges[j + 1] + 1);
+            raw[count++] = inst.ranges[j + 1] + 1;
           }
         }
       }
     }
-    return bounds.stream().mapToInt(Integer::intValue).toArray();
+    Arrays.sort(raw, 0, count);
+    int unique = 0;
+    for (int i = 0; i < count; i++) {
+      if (unique == 0 || raw[i] != raw[unique - 1]) {
+        raw[unique++] = raw[i];
+      }
+    }
+    return Arrays.copyOf(raw, unique);
   }
 
   // -------------------------------------------------------------------------
