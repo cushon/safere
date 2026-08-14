@@ -501,7 +501,7 @@ class PatternInternalTest {
     for (int codePoint = 0; codePoint < 128; codePoint++) {
       assertThat(InputScanner.classContains(info.ranges, info.bitmap0, info.bitmap1, codePoint))
           .as("ASCII member %s", codePoint)
-          .isEqualTo(asciiClass.contains(codePoint));
+          .isEqualTo(asciiClass.containsAscii(codePoint));
     }
     return info;
   }

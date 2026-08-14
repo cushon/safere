@@ -97,7 +97,6 @@ public final class Matcher implements MatchResult {
   private int regionEnd;
   private boolean fullTextRegionContext;
   private boolean findExhaustedAfterTerminalEmptyMatch;
-  private boolean disjointRequiredLiteralsChecked;
   private int modCount;
   private DiagnosticOperation diagnosticOperation;
   private boolean diagnosticCaptureSearch;
@@ -420,7 +419,6 @@ public final class Matcher implements MatchResult {
     resetReplacementState();
     clearCurrentResult();
     eagerFallbackCaptures = false;
-    disjointRequiredLiteralsChecked = false;
   }
 
   private PreparedMatchRunner preparedMatchRunner;
@@ -432,12 +430,10 @@ public final class Matcher implements MatchResult {
     resetSearchStateForRegionStart();
     resetReplacementState();
     clearCurrentResult();
-    disjointRequiredLiteralsChecked = false;
   }
 
   private void invalidatePatternCaches() {
     preparedMatchRunner = null;
-    disjointRequiredLiteralsChecked = false;
     cachedForwardFirstMatchDfa = null;
     cachedForwardLongestMatchDfa = null;
     cachedReverseDfa = null;
@@ -576,7 +572,7 @@ public final class Matcher implements MatchResult {
    * directly and returns the first matching code point as group 0.
    */
   private boolean singleCharClassFindFastPath(Pattern.CharClassScanInfo scanInfo, int fromIndex) {
-    if (scanInfo.isAscii && text != null) {
+    if (scanInfo.isAscii) {
       int idx = activeScanner().indexOfCharClass(scanInfo, fromIndex);
       if (idx >= 0) {
         return applyFullMatchResult(new int[] {idx, idx + 1});
@@ -587,8 +583,11 @@ public final class Matcher implements MatchResult {
         activeScanner()
             .indexOfCodePointClass(scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex);
     if (idx >= 0) {
-      int cp = text.codePointAt(idx);
-      return applyFullMatchResult(new int[] {idx, idx + Character.charCount(cp)});
+      int end =
+          text != null
+              ? idx + Character.charCount(text.codePointAt(idx))
+              : InputScanner.position(activeScanner().decodeForward(idx));
+      return applyFullMatchResult(new int[] {idx, end});
     }
     return applyFailedMatchResult();
   }
@@ -989,24 +988,6 @@ public final class Matcher implements MatchResult {
       diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
       diagnosticBoundary(rejectionStrategy);
       return applyFailedMatchResult();
-    }
-    Pattern.DisjointRequiredLiterals disjoint = parentPattern.disjointRequiredLiterals();
-    if (enginePathOptions().literalFastPaths() && disjoint != null && text != null) {
-      boolean found = false;
-      for (String lit : disjoint.literals()) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(text.length());
-        }
-        if (text.indexOf(lit) >= 0) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
-        diagnosticBoundary(MatchStrategy.LITERAL);
-        return applyFailedMatchResult();
-      }
     }
 
     Prog prog = parentPattern.prog();
@@ -1588,12 +1569,6 @@ public final class Matcher implements MatchResult {
       }
     }
 
-    boolean hasAcceleratedSearchPath =
-        (parentPattern.prefix() != null)
-            || (options.startAcceleration() && parentPattern.fixedOffsetLiteral() != null)
-            || (prog.anchorEnd()
-                && scanner.length() >= MIN_REVERSE_FIRST_LEN
-                && canUseReverseDfa());
     RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
     if (rejectPrefilter != null && (text != null || scanner instanceof Utf8InputScanner)) {
       MatchStrategy rejectionStrategy =
@@ -1605,31 +1580,6 @@ public final class Matcher implements MatchResult {
       if (rejectionStrategy != null) {
         diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
         diagnosticBoundary(rejectionStrategy);
-        return applyFailedMatchResult();
-      }
-    }
-    Pattern.DisjointRequiredLiterals disjointRequiredLiterals =
-        parentPattern.disjointRequiredLiterals();
-    if (options.literalFastPaths()
-        && disjointRequiredLiterals != null
-        && !disjointRequiredLiteralsChecked
-        && !hasAcceleratedSearchPath
-        && !prog.anchorStart()
-        && text != null) {
-      disjointRequiredLiteralsChecked = true;
-      boolean found = false;
-      for (String lit : disjointRequiredLiterals.literals()) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(Math.max(0, text.length() - searchFrom));
-        }
-        if (text.indexOf(lit, searchFrom) >= 0) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
-        diagnosticBoundary(MatchStrategy.LITERAL);
         return applyFailedMatchResult();
       }
     }
@@ -2076,7 +2026,7 @@ public final class Matcher implements MatchResult {
       }
       char ch = text.charAt(i);
       if (ch < 128
-          && keywordAlternation.firstAscii[asciiLower(ch)]
+          && keywordAlternation.firstAsciiTable[asciiLower(ch)]
           && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
@@ -2111,7 +2061,7 @@ public final class Matcher implements MatchResult {
       }
       char ch = text.charAt(i);
       if (ch < 128
-          && keywordAlternation.firstAscii[asciiLower(ch)]
+          && keywordAlternation.firstAsciiTable[asciiLower(ch)]
           && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
@@ -4499,9 +4449,7 @@ public final class Matcher implements MatchResult {
     // Single char class runner
     Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
     Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
-    if (options.charClassMatchFastPaths()
-        && (singleCharClass != null || charClassMatch != null)
-        && text != null) {
+    if (options.charClassMatchFastPaths() && (singleCharClass != null || charClassMatch != null)) {
       return new SingleCharClassPreparedRunner(singleCharClass, charClassMatch, prog.anchorStart());
     }
 
