@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+@DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
 class AsciiTest {
 
   @Test
