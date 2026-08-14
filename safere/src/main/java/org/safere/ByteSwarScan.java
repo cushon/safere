@@ -8,11 +8,10 @@ package org.safere;
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
 import static java.util.Objects.requireNonNull;
-import static org.safere.internal.Swar.BYTE_HIGH_BITS;
-import static org.safere.internal.Swar.BYTE_ONES;
+import static org.safere.Swar.BYTE_HIGH_BITS;
+import static org.safere.Swar.BYTE_ONES;
 
 import java.lang.invoke.VarHandle;
-import org.safere.internal.Swar;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 1-byte sequences. */
 abstract class ByteSwarScan {

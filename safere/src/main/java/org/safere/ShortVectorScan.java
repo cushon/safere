@@ -9,18 +9,16 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
-import static org.safere.internal.Ascii.toLowerCase;
-import static org.safere.internal.Ascii.toUpperCase;
-import static org.safere.internal.Utf16.regionMatchesIgnoreCase;
-import static org.safere.internal.Utf16.regionMatchesIgnoreCaseUtf16;
+import static org.safere.Ascii.toLowerCase;
+import static org.safere.Ascii.toUpperCase;
+import static org.safere.Utf16.regionMatchesIgnoreCase;
+import static org.safere.Utf16.regionMatchesIgnoreCaseUtf16;
 
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.ShortVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
-import org.safere.internal.Swar;
-import org.safere.internal.Utf16;
 
 /**
  * Stateless SIMD kernels using the incubating Vector API for 2-byte sequences (UTF-16 and char[]).

@@ -9,17 +9,15 @@ import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.LITTLE_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
-import static org.safere.internal.Ascii.toLowerCase;
-import static org.safere.internal.Ascii.toUpperCase;
-import static org.safere.internal.Swar.SHORT_HIGH_BITS;
-import static org.safere.internal.Swar.SHORT_ONES;
-import static org.safere.internal.Swar.exactShortRangeMask;
-import static org.safere.internal.Utf16.regionMatchesIgnoreCase;
-import static org.safere.internal.Utf16.regionMatchesIgnoreCaseUtf16;
+import static org.safere.Ascii.toLowerCase;
+import static org.safere.Ascii.toUpperCase;
+import static org.safere.Swar.SHORT_HIGH_BITS;
+import static org.safere.Swar.SHORT_ONES;
+import static org.safere.Swar.exactShortRangeMask;
+import static org.safere.Utf16.regionMatchesIgnoreCase;
+import static org.safere.Utf16.regionMatchesIgnoreCaseUtf16;
 
 import java.lang.invoke.VarHandle;
-import org.safere.internal.Swar;
-import org.safere.internal.Utf16;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 2-byte sequences (UTF-16 and char[]). */
 final class ShortSwarScan {
