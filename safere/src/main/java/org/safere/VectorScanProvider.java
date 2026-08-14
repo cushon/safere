@@ -14,16 +14,12 @@ interface VectorScanProvider {
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 
-  default int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start) {
-    return UNSUPPORTED;
-  }
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start);
 
-  default int indexOfCodePointClass(
-      String text, int[] ranges, long bitmap0, long bitmap1, int start) {
-    return UNSUPPORTED;
-  }
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  int indexOfCodePointClass(String text, int[] ranges, long bitmap0, long bitmap1, int start);
 
-  default int indexOfIgnoreCase(String text, String prefix, int start) {
-    return UNSUPPORTED;
-  }
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  int indexOfIgnoreCase(String text, String prefix, int start);
 }
