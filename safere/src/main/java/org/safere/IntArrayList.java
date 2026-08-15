@@ -10,8 +10,7 @@ package org.safere;
 import java.util.Arrays;
 
 /**
- * A resizable array of primitive {@code int} values to avoid boxing and object allocation
- * overhead.
+ * A resizable array of primitive {@code int} values to avoid boxing and object allocation overhead.
  */
 final class IntArrayList {
 

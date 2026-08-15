@@ -1213,16 +1213,14 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns true if this pattern can participate in reverse DFA matching (e.g. unanchored find
-   * or end-anchored reverse-first rejection).
+   * Returns true if this pattern can participate in reverse DFA matching (e.g. unanchored find or
+   * end-anchored reverse-first rejection).
    */
   boolean canUseReverseDfa() {
     return !prog.anchorStart() && !matchDescriptor.hasFindFastPath();
   }
 
-  /**
-   * Returns true if this pattern can participate in OnePass matching or capture extraction.
-   */
+  /** Returns true if this pattern can participate in OnePass matching or capture extraction. */
   boolean canUseOnePass() {
     return !hasLazy && !matchDescriptor.hasFindFastPath();
   }
