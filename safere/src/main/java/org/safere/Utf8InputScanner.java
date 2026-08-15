@@ -9,6 +9,7 @@ import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
 
 import java.lang.invoke.VarHandle;
+import java.util.Arrays;
 
 final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   private static final int REPLACEMENT_CHARACTER = 0xFFFD;
@@ -53,6 +54,67 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
 
   Utf8InputScanner slice(int start, int end) {
     return new Utf8InputScanner(bytes, offset + start, end - start);
+  }
+
+  boolean startsWith(byte[] prefix, int startPos) {
+    int prefixLen = prefix.length;
+    if (startPos >= 0 && length - startPos >= prefixLen) {
+      int start = offset + startPos;
+      if (Arrays.equals(bytes, start, start + prefixLen, prefix, 0, prefixLen)) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(prefixLen);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  boolean endsWith(byte[] suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
+    int suffixLen = suffix.length;
+    if (length >= suffixLen) {
+      int start = offset + length - suffixLen;
+      if (foldCase
+          ? equalsFoldCase(bytes, start, suffix, 0, suffixLen)
+          : Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(suffixLen);
+        }
+        return true;
+      }
+    }
+    if (!wasDollar || length == 0) {
+      return false;
+    }
+    int effectiveLen = trailingLineTerminatorStart(unixLines, length);
+    if (effectiveLen >= suffixLen) {
+      int start = offset + effectiveLen - suffixLen;
+      if (foldCase
+          ? equalsFoldCase(bytes, start, suffix, 0, suffixLen)
+          : Arrays.equals(bytes, start, start + suffixLen, suffix, 0, suffixLen)) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(suffixLen);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean equalsFoldCase(
+      byte[] input, int inputStart, byte[] suffix, int suffixStart, int len) {
+    for (int i = 0; i < len; i++) {
+      byte b1 = input[inputStart + i];
+      byte b2 = suffix[suffixStart + i];
+      if (b1 != b2) {
+        int c1 = b1 >= 'A' && b1 <= 'Z' ? b1 + ('a' - 'A') : b1;
+        int c2 = b2 >= 'A' && b2 <= 'Z' ? b2 + ('a' - 'A') : b2;
+        if (c1 != c2) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   @Override
@@ -269,13 +331,75 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
-  int indexOfAsciiClass(boolean[] asciiClass, int start) {
+  int indexOfIgnoreCase(String prefix, int[] failure, int start) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return start;
+    }
+    if (!WorkCounterConfig.ENABLED) {
+      if (prefixLen == 1) {
+        char first = prefix.charAt(0);
+        if (first <= 127) {
+          int low = Ascii.toLowerCase(first);
+          int high = Ascii.toUpperCase(first);
+          if (low == high) {
+            return indexOfByte((byte) low, start);
+          }
+          if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
+            int position = start;
+            int scalarLimit = Math.min(length, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
+            for (; position < scalarLimit; position++) {
+              int b = bytes[offset + position] & 0xFF;
+              if (b == low || b == high) {
+                return position;
+              }
+            }
+            int[] ranges = new int[] {high, high, low, low};
+            int result = scanProvider.indexOfAsciiClass(bytes, offset, length, ranges, position);
+            if (result != VectorScanProvider.UNSUPPORTED) {
+              return result;
+            }
+          }
+          return ByteSwarScan.indexOfBytePair(
+              bytes, offset, length, (byte) low, (byte) high, start);
+        }
+      }
+    }
+    return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
+  }
+
+  static int indexOfLinearIgnoreCase(
+      byte[] bytes, int offset, int length, String prefix, int[] failure, int start) {
+    int prefixLen = prefix.length();
+    int matched = 0;
+    for (int position = start; position < length; position++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      int current = Ascii.toLowerCase(bytes[offset + position] & 0xFF);
+      while (matched > 0 && current != Ascii.toLowerCase(prefix.charAt(matched))) {
+        matched = failure[matched - 1];
+      }
+      if (current == Ascii.toLowerCase(prefix.charAt(matched))) {
+        matched++;
+        if (matched == prefixLen) {
+          return position - prefixLen + 1;
+        }
+      }
+    }
+    return -1;
+  }
+
+  int indexOfAsciiClass(AsciiBitmap asciiClass, int start) {
+    if (asciiClass == null || asciiClass.isEmpty()) {
+      return -1;
+    }
     int first = -1;
     int second = -1;
     int last = -1;
     boolean contiguous = true;
-    for (int value = 0; value < asciiClass.length; value++) {
-      if (asciiClass[value]) {
+    for (int value = 0; value < 128; value++) {
+      if (asciiClass.contains(value)) {
         if (first < 0) {
           first = value;
         } else if (second < 0) {
@@ -343,13 +467,13 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
-  private int indexOfAsciiClassScalar(boolean[] asciiClass, int start) {
+  private int indexOfAsciiClassScalar(AsciiBitmap asciiClass, int start) {
     for (int position = start; position < length; position++) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }
       int value = bytes[offset + position] & 0xFF;
-      if (value < asciiClass.length && asciiClass[value]) {
+      if (asciiClass.contains(value)) {
         return position;
       }
     }
@@ -518,17 +642,6 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
 
   @Override
   public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
-    int pos = Math.max(0, start);
-    int[] ranges = scanInfo.ranges;
-    long b0 = scanInfo.bitmap0;
-    long b1 = scanInfo.bitmap1;
-    while (pos < length) {
-      int ascii = asciiAt(pos);
-      if (ascii >= 0 && InputScanner.classContains(ranges, b0, b1, ascii)) {
-        return pos;
-      }
-      pos++;
-    }
-    return -1;
+    return indexOfCodePointClass(scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, start);
   }
 }

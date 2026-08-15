@@ -7,6 +7,7 @@ package org.safere.fuzz;
 
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class FindSequenceFuzzer {
@@ -56,12 +57,7 @@ final class FindSequenceFuzzer {
         regex = "$";
         flags = 0;
         String terminator =
-            switch (data.consumeInt(0, 2)) {
-              case 0 -> "\n";
-              case 1 -> "\r\n";
-              case 2 -> "\u2028";
-              default -> throw new AssertionError();
-            };
+            data.pickValue(List.of("\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029"));
         input = data.consumeString(64) + "a" + terminator;
       }
       case 4 -> {

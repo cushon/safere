@@ -23,7 +23,10 @@ sealed interface Utf8StartAccelerator {
     if (descriptor == null || !descriptor.hasStartAcceleration()) {
       return null;
     }
-    if (descriptor.prefix() != null && !descriptor.prefixFoldCase()) {
+    if (descriptor.prefix() != null) {
+      if (descriptor.prefixFoldCase()) {
+        return CaseInsensitiveLiteral.create(descriptor.prefix());
+      }
       return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
@@ -83,7 +86,34 @@ sealed interface Utf8StartAccelerator {
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record FixedOffset(FixedOffsetLiteral fixedOffset, boolean[] charClassPrefixAscii)
+  record CaseInsensitiveLiteral(String prefix, int[] failure) implements Utf8StartAccelerator {
+
+    static Utf8StartAccelerator create(String prefix) {
+      for (int i = 0; i < prefix.length(); i++) {
+        if (prefix.charAt(i) > 127) {
+          return null;
+        }
+      }
+      return new CaseInsensitiveLiteral(prefix, Ascii.ignoreCaseFailure(prefix));
+    }
+
+    @Override
+    public MatchStrategy strategy() {
+      return MatchStrategy.LITERAL;
+    }
+
+    @Override
+    public boolean isExactMatchCandidate() {
+      return true;
+    }
+
+    @Override
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      return scanner.indexOfIgnoreCase(prefix, failure, fromIndex);
+    }
+  }
+
+  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap charClassPrefixAscii)
       implements Utf8StartAccelerator {
 
     @Override
@@ -104,7 +134,7 @@ sealed interface Utf8StartAccelerator {
     private static int nextFixedOffsetCandidate(
         Utf8InputScanner scanner,
         FixedOffsetLiteral fixedOffsetLiteral,
-        boolean[] charClassPrefixAscii,
+        AsciiBitmap charClassPrefixAscii,
         int searchFrom) {
       int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
       int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
@@ -126,9 +156,7 @@ sealed interface Utf8StartAccelerator {
             int candidateStart = literalStart - offset;
             if (candidateStart >= searchFrom) {
               int first = scanner.asciiAt(candidateStart);
-              if (first >= 0
-                  && first < charClassPrefixAscii.length
-                  && charClassPrefixAscii[first]
+              if (charClassPrefixAscii.contains(first)
                   && (earliestValid < 0 || candidateStart < earliestValid)) {
                 earliestValid = candidateStart;
               }
