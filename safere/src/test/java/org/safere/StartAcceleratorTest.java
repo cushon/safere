@@ -54,8 +54,8 @@ class StartAcceleratorTest {
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
-    assertThat(utf8Acc.strategy()).isEqualTo(MatchStrategy.LITERAL);
-    assertThat(utf8Acc.isExactMatchCandidate()).isTrue();
+    assertThat(utf8Acc.policy().strategy()).isEqualTo(MatchStrategy.LITERAL);
+    assertThat(utf8Acc.policy().isExactMatchCandidate()).isTrue();
     assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with NEEDLE here"), 0)).isEqualTo(14);
     assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with nEeDlE here"), 0)).isEqualTo(14);
     assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with needle here"), 15)).isEqualTo(-1);
@@ -134,9 +134,9 @@ class StartAcceleratorTest {
                 "Utf8StartAccelerator should match StringStartAccelerator presence for pattern: %s",
                 patStr)
             .isNotNull();
-        assertThat(utf8Acc.strategy())
+        assertThat(utf8Acc.policy().strategy())
             .as("Strategies should match for pattern: %s", patStr)
-            .isEqualTo(strAcc.strategy());
+            .isEqualTo(strAcc.policy().strategy());
 
         for (String input : testInputs) {
           int strCandidate = strAcc.findCandidate(input, 0, false);
