@@ -2123,7 +2123,7 @@ class MatcherTest {
         assertThat(m.hasMatch()).isTrue();
 
         m.usePattern(p2);
-        assertThat(m.hasMatch()).isFalse();
+        assertThat(m.hasMatch()).isTrue();
 
         m.reset("xyz");
         assertThat(m.hasMatch()).isFalse();

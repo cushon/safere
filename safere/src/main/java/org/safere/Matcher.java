@@ -3556,15 +3556,24 @@ public final class Matcher implements MatchResult {
       if (!groupZeroResolved) {
         resolveCaptures();
       }
-      searchFrom = groups[1];
-      if (groups[0] == groups[1] && searchFrom < regionEnd) {
+      int prevStart = groups[0];
+      int prevEnd = groups[1];
+      searchFrom = prevEnd;
+      if (prevStart == prevEnd && searchFrom < regionEnd) {
         searchFrom++;
       }
+      this.parentPattern = newPattern;
+      this.groups = new int[2 * newPattern.prog().numCaptures()];
+      Arrays.fill(this.groups, -1);
+      this.groups[0] = prevStart;
+      this.groups[1] = prevEnd;
+      clearDeferredCaptureState();
+    } else {
+      this.parentPattern = newPattern;
+      this.groups = new int[2 * newPattern.prog().numCaptures()];
+      clearCurrentResult();
     }
-    this.parentPattern = newPattern;
-    this.groups = new int[2 * newPattern.prog().numCaptures()];
     invalidatePatternCaches();
-    clearCurrentResult();
     eagerFallbackCaptures = false;
     return this;
   }
