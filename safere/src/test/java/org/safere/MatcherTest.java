@@ -2115,7 +2115,7 @@ class MatcherTest {
       }
 
       @Test
-      @DisplayName("hasMatch() resets to false on reset() and usePattern()")
+      @DisplayName("hasMatch() survives usePattern() and resets to false on reset()")
       void resetAndUsePatternHasMatch() {
         Pattern p1 = Pattern.compile("abc");
         Pattern p2 = Pattern.compile("xyz");

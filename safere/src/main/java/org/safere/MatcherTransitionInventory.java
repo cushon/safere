@@ -208,7 +208,7 @@ final class MatcherTransitionInventory {
           observer(signature("toString")),
           transition(
               signature("usePattern", Pattern.class),
-              ResultEffect.RESET_NO_ATTEMPT,
+              ResultEffect.PRESERVE,
               DeferredCaptureEffect.CLEAR,
               CursorEffect.DERIVE_FROM_PREVIOUS_RESULT_THEN_SEARCH,
               ReplacementEffect.PRESERVE,
