@@ -74,5 +74,30 @@ final class ByteVectorScan {
     return false;
   }
 
+  public static int indexOfIgnoreCase(
+      byte[] bytes, int offset, int length, String prefix, int start) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+    if (prefixLen > 1) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    char first = prefix.charAt(0);
+    byte low = (byte) Ascii.toLowerCase(first);
+    byte high = (byte) Ascii.toUpperCase(first);
+    if (low == high) {
+      int[] range = new int[] {low, low};
+      return indexOfAsciiClass(bytes, offset, length, range, start);
+    }
+    int[] ranges = new int[] {high, high, low, low};
+    return indexOfAsciiClass(bytes, offset, length, ranges, start);
+  }
+
   private ByteVectorScan() {}
 }

@@ -57,16 +57,28 @@ class PatternInternalTest {
   void transparentGroupsPreserveCharacterClassAccelerators() {
     Pattern p = Pattern.compile("(?:[A-Z]+)");
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['A']).isTrue();
+    assertThat(prefix.contains('A')).isTrue();
     assertThat(p.matchDescriptor().charClassMatch()).isNotNull();
+  }
+
+  @Test
+  void textStartAnchorsPreservePrefixAccelerators() {
+    assertThat(Pattern.compile("^https://.*").anchoredPrefix()).isEqualTo("https://");
+    assertThat(Pattern.compile("\\Ahttps://.*").anchoredPrefix()).isEqualTo("https://");
+
+    AsciiBitmap prefix = Pattern.compile("^[0-9]+").anchoredCharClassPrefixAscii();
+    assertThat(prefix).isNotNull();
+    assertThat(prefix.contains('0')).isTrue();
+    assertThat(prefix.contains('9')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
   }
 
   @Test
   void asciiPrefixScanInfoHandlesMissingAndEmptyClasses() {
     assertThat(Pattern.buildAsciiClassScanInfo(null)).isNull();
-    assertThat(Pattern.buildAsciiClassScanInfo(new boolean[128])).isNull();
+    assertThat(Pattern.buildAsciiClassScanInfo(AsciiBitmap.EMPTY)).isNull();
   }
 
   @Test
@@ -146,48 +158,48 @@ class PatternInternalTest {
   @Test
   void alternatePrefixAcceleration() {
     Pattern p = Pattern.compile("(?:cat|dog|bird)s?");
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['c']).isTrue();
-    assertThat(prefix['d']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['a']).isFalse();
+    assertThat(prefix.contains('c')).isTrue();
+    assertThat(prefix.contains('d')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
   }
 
   @Test
   void alternatePrefixCaseInsensitiveAcceleration() {
     Pattern p = Pattern.compile("(?i)(?:cat|dog|bird)s?");
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['c']).isTrue();
-    assertThat(prefix['C']).isTrue();
-    assertThat(prefix['d']).isTrue();
-    assertThat(prefix['D']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['B']).isTrue();
-    assertThat(prefix['a']).isFalse();
+    assertThat(prefix.contains('c')).isTrue();
+    assertThat(prefix.contains('C')).isTrue();
+    assertThat(prefix.contains('d')).isTrue();
+    assertThat(prefix.contains('D')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('B')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
   }
 
   @Test
   void deeplyNestedRequiredQuantifierPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedRequiredPlusPattern(1_000, "[ab]"));
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['a']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['c']).isFalse();
+    assertThat(prefix.contains('a')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('c')).isFalse();
   }
 
   @Test
   void deeplyNestedAlternationPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedAlternationPattern(1_000));
 
-    boolean[] prefix = p.charClassPrefixAscii();
+    AsciiBitmap prefix = p.charClassPrefixAscii();
     assertThat(prefix).isNotNull();
-    assertThat(prefix['a']).isTrue();
-    assertThat(prefix['b']).isTrue();
-    assertThat(prefix['c']).isFalse();
+    assertThat(prefix.contains('a')).isTrue();
+    assertThat(prefix.contains('b')).isTrue();
+    assertThat(prefix.contains('c')).isFalse();
   }
 
   @Test
@@ -351,6 +363,41 @@ class PatternInternalTest {
     assertThat(Pattern.compile(regex).rejectDescriptor().requiredLiteral()).isNull();
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "'.*\\.json$',                         .json,                        false",
+    "'(?i).*\\.json$',                     .json,                        true",
+    "'.*report_2026\\.log$',               report_2026.log,              false",
+    "'.*(foo)(bar)$',                      foobar,                       false",
+    "'[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$',  ABCDEFGHIJKLMNOPQRSTUVWXYZ,   false",
+    "'.*test\\z',                          test,                         false",
+    "'.*(?i:test)\\z',                     test,                         true"
+  })
+  void endAnchoredLiteralSuffixIsRecorded(String regex, String expected, boolean foldCase) {
+    Pattern.SuffixInfo info = Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix();
+    assertThat(info.suffix()).isEqualTo(expected);
+    assertThat(info.foldCase()).isEqualTo(foldCase);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {".*", ".*json", "(?m).*\\.json$"})
+  void unanchoredOrMultilineDollarDoNotRecordEndAnchoredSuffix(String regex) {
+    assertThat(Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix()).isNull();
+  }
+
+  @Test
+  void endAnchoredSuffixRejectsUtf8Input() {
+    Pattern p = Pattern.compile(".*\\.json$");
+    assertThat(
+            p.find(
+                Utf8Input.trusted("config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+        .isTrue();
+    assertThat(
+            p.find(
+                Utf8Input.trusted("config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+        .isFalse();
+  }
+
   @Test
   void disjointRequiredLiteralsAreRecordedForAlternations() {
     Pattern p = Pattern.compile(".*(?:apple|banana|cherry).*");
@@ -441,19 +488,20 @@ class PatternInternalTest {
 
   private static Pattern.CharClassScanInfo assertAsciiScanInfo(
       int[] members, int[] expectedRanges) {
-    boolean[] asciiClass = new boolean[128];
+    AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
     for (int member : members) {
-      asciiClass[member] = true;
+      builder.add(member);
     }
+    AsciiBitmap asciiClass = builder.build();
 
     Pattern.CharClassScanInfo info = Pattern.buildAsciiClassScanInfo(asciiClass);
 
     assertThat(info).isNotNull();
     assertThat(info.ranges).containsExactly(expectedRanges);
-    for (int codePoint = 0; codePoint < asciiClass.length; codePoint++) {
+    for (int codePoint = 0; codePoint < 128; codePoint++) {
       assertThat(InputScanner.classContains(info.ranges, info.bitmap0, info.bitmap1, codePoint))
           .as("ASCII member %s", codePoint)
-          .isEqualTo(asciiClass[codePoint]);
+          .isEqualTo(asciiClass.containsAscii(codePoint));
     }
     return info;
   }

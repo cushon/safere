@@ -35,6 +35,60 @@ final class Ascii {
     return a == b || toLowerCase(a) == toLowerCase(b);
   }
 
+  /** Returns true if the code point is an ASCII uppercase letter. */
+  static boolean isUpper(int r) {
+    return r >= 'A' && r <= 'Z';
+  }
+
+  /** Returns true if the code point is an ASCII lowercase letter. */
+  static boolean isLower(int r) {
+    return r >= 'a' && r <= 'z';
+  }
+
+  /** Returns true if the code point is an ASCII letter. */
+  static boolean isAlpha(int r) {
+    return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
+  }
+
+  /** Returns true if the code point is an ASCII digit. */
+  static boolean isDigit(int r) {
+    return r >= '0' && r <= '9';
+  }
+
+  /** Returns true if the code point is an ASCII letter or digit. */
+  static boolean isAlnum(int r) {
+    return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
+  }
+
+  /** Returns true if the code point is an ASCII word character (letter, digit, or underscore). */
+  static boolean isWordChar(int r) {
+    return isAlnum(r) || r == '_';
+  }
+
+  /** Returns true if the code point is an ASCII hex digit. */
+  static boolean isHexDigit(int r) {
+    return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f');
+  }
+
+  /**
+   * Returns the value of a hex digit, or -1 if not a hex digit.
+   *
+   * @param r a code point
+   * @return 0-15 for valid hex digits, -1 otherwise
+   */
+  static int unhex(int r) {
+    if (r >= '0' && r <= '9') {
+      return r - '0';
+    }
+    if (r >= 'A' && r <= 'F') {
+      return r - 'A' + 10;
+    }
+    if (r >= 'a' && r <= 'f') {
+      return r - 'a' + 10;
+    }
+    return -1;
+  }
+
   /** Builds the KMP failure function for an ASCII case-insensitive pattern. */
   static int[] ignoreCaseFailure(String pattern) {
     int[] failure = new int[pattern.length()];
