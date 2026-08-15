@@ -1130,4 +1130,297 @@ class PatternTest {
       assertThat(p.find(input)).isTrue();
     }
   }
+
+  @Nested
+  @DisplayName("end-anchored suffix reject prefilter")
+  class EndAnchoredSuffixTests {
+
+    @Test
+    @DisplayName("matches and find reject inputs not ending with suffix")
+    void endAnchoredSuffixRejectsMismatchedInputs() {
+      Pattern p = Pattern.compile(".*\\.json$");
+
+      assertThat(p.matcher("config.json").matches()).isTrue();
+      assertThat(p.matcher("config.json").find()).isTrue();
+
+      assertThat(p.matcher("config.yaml").matches()).isFalse();
+      assertThat(p.matcher("config.yaml").find()).isFalse();
+
+      assertThat(p.matcher(".json").matches()).isTrue();
+      assertThat(p.matcher(".jso").matches()).isFalse();
+
+      // Utf8Input
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isFalse();
+    }
+
+    @Test
+    @DisplayName("case-insensitive end-anchored suffix rejects mismatched inputs")
+    void caseInsensitiveEndAnchoredSuffixRejectsMismatchedInputs() {
+      for (String regex : List.of("(?i).*\\.json$", ".*(?i:\\.json)$", "(?i).*\\.json\\z")) {
+        Pattern p = Pattern.compile(regex);
+
+        assertThat(p.matcher("config.json").matches()).isTrue();
+        assertThat(p.matcher("config.JSON").matches()).isTrue();
+        assertThat(p.matcher("config.JsOn").find()).isTrue();
+
+        assertThat(p.matcher("config.yaml").matches()).isFalse();
+        assertThat(p.matcher("config.YAML").find()).isFalse();
+
+        // Utf8Input
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "config.JSON".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isTrue();
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "config.YAML".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
+    }
+
+    @Test
+    @DisplayName("dollar and \\Z anchors match all supported trailing line terminators")
+    void dollarAndZAnchorsMatchAllTrailingLineTerminators() {
+      for (String regex : List.of(".*\\.json$", ".*\\.json\\Z")) {
+        Pattern p = Pattern.compile(regex);
+        String[] terminators = {"\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029"};
+        for (String term : terminators) {
+          String input = "config.json" + term;
+          assertThat(p.matcher(input).find()).isTrue();
+          assertThat(p.matcher(input).matches()).isFalse();
+          assertThat(
+                  p.find(
+                      Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+              .isTrue();
+        }
+        assertThat(p.matcher("config.yaml\u0085").find()).isFalse();
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "config.yaml\u0085".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
+    }
+
+    @Test
+    @DisplayName("strict \\z anchor does not match before trailing line terminators")
+    void strictEndAnchorDoesNotMatchTrailingLineTerminators() {
+      Pattern p = Pattern.compile(".*\\.json\\z");
+
+      assertThat(p.matcher("config.json").find()).isTrue();
+      assertThat(p.matcher("config.json").matches()).isTrue();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+
+      String[] terminators = {"\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029"};
+      for (String term : terminators) {
+        String input = "config.json" + term;
+        assertThat(p.matcher(input).find()).isFalse();
+        assertThat(p.matcher(input).matches()).isFalse();
+        assertThat(
+                p.find(Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
+    }
+
+    @Test
+    @DisplayName("UNIX_LINES mode only allows trailing newline for dollar anchor")
+    void unixLinesModeOnlyAllowsTrailingNewline() {
+      Pattern p = Pattern.compile(".*\\.json$", Pattern.UNIX_LINES);
+
+      assertThat(p.matcher("config.json\n").find()).isTrue();
+      assertThat(p.matcher("config.json\n").matches()).isFalse();
+      assertThat(
+              p.find(
+                  Utf8Input.trusted(
+                      "config.json\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+          .isTrue();
+
+      String[] nonUnixTerminators = {"\r", "\r\n", "\u0085", "\u2028", "\u2029"};
+      for (String term : nonUnixTerminators) {
+        String input = "config.json" + term;
+        assertThat(p.matcher(input).find()).isFalse();
+        assertThat(p.matcher(input).matches()).isFalse();
+        assertThat(
+                p.find(Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029"})
+    @DisplayName("end anchors recognize every final line terminator")
+    void endAnchorsRecognizeEveryFinalLineTerminator(String terminator) {
+      String input = "config.json" + terminator;
+      Utf8Input utf8 = Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+      for (String anchor : List.of("$", "\\Z")) {
+        Pattern suffix = Pattern.compile(".*\\.json" + anchor);
+        Pattern characterClass = Pattern.compile(".*[0-9]" + anchor);
+
+        assertThat(suffix.matcher(input).find()).isTrue();
+        assertThat(suffix.find(utf8)).isTrue();
+        assertThat(characterClass.matcher("item3" + terminator).find()).isTrue();
+        assertThat(
+                characterClass.find(
+                    Utf8Input.trusted(
+                        ("item3" + terminator).getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isTrue();
+      }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\r", "\r\n", "\u0085", "\u2028", "\u2029"})
+    @DisplayName("UNIX_LINES restricts final line terminators to newline")
+    void unixLinesRestrictsFinalLineTerminatorsToNewline(String terminator) {
+      String input = "config.json" + terminator;
+      Utf8Input utf8 = Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+      for (String anchor : List.of("$", "\\Z")) {
+        Pattern suffix = Pattern.compile(".*\\.json" + anchor, Pattern.UNIX_LINES);
+
+        assertThat(suffix.matcher(input).find()).isFalse();
+        assertThat(suffix.find(utf8)).isFalse();
+      }
+    }
+
+    @Test
+    @DisplayName("end-anchored character class rejects inputs not ending with class")
+    void endAnchoredCharClassRejectsMismatchedInputs() {
+      for (String regex : List.of(".*[0-9]$", ".*[0-9]\\Z")) {
+        Pattern p = Pattern.compile(regex);
+
+        assertThat(p.matcher("item123").find()).isTrue();
+        assertThat(p.matcher("item123").matches()).isTrue();
+
+        String[] terminators = {"\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029"};
+        for (String term : terminators) {
+          String input = "item123" + term;
+          assertThat(p.matcher(input).find()).isTrue();
+          assertThat(p.matcher(input).matches()).isFalse();
+          assertThat(
+                  p.find(
+                      Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+              .isTrue();
+        }
+
+        assertThat(p.matcher("item123abc").find()).isFalse();
+        assertThat(p.matcher("item123abc").matches()).isFalse();
+        assertThat(p.matcher("item123abc\n").find()).isFalse();
+        assertThat(p.matcher("item123abc\u0085").find()).isFalse();
+
+        assertThat(p.matcher("").find()).isFalse();
+        assertThat(p.matcher("\n").find()).isFalse();
+        assertThat(p.matcher("\u0085").find()).isFalse();
+
+        // Utf8Input
+        assertThat(
+                p.find(
+                    Utf8Input.trusted("item123".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isTrue();
+        assertThat(
+                p.find(
+                    Utf8Input.trusted(
+                        "item123abc".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+            .isFalse();
+      }
+    }
+
+    @Test
+    @DisplayName("end-anchored character class with strict \\z and UNIX_LINES")
+    void endAnchoredCharClassStrictAndUnixLines() {
+      Pattern strict = Pattern.compile(".*[0-9]\\z");
+      assertThat(strict.matcher("item123").find()).isTrue();
+      assertThat(strict.matcher("item123\n").find()).isFalse();
+      assertThat(strict.matcher("item123\u0085").find()).isFalse();
+
+      Pattern unix = Pattern.compile(".*[0-9]$", Pattern.UNIX_LINES);
+      assertThat(unix.matcher("item123\n").find()).isTrue();
+      assertThat(unix.matcher("item123\r").find()).isFalse();
+      assertThat(unix.matcher("item123\u0085").find()).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("start-anchored prefix and char class fast paths")
+  class StartAnchoredPrefixTests {
+
+    @Test
+    @DisplayName("start-anchored character class rejects empty UTF-8 input safely")
+    void startAnchoredCharacterClassRejectsEmptyUtf8InputSafely() {
+      Pattern pattern = Pattern.compile("^[0-9]+");
+      Utf8Input empty = Utf8Input.trusted(new byte[0]);
+
+      assertThat(pattern.find(empty)).isFalse();
+      assertThat(pattern.matcher(empty).find()).isFalse();
+      assertThat(pattern.matcher(empty).matches()).isFalse();
+      assertThat(pattern.matcher(empty).lookingAt()).isFalse();
+    }
+
+    @Test
+    @DisplayName(
+        "start-anchored literal prefix rejects mismatched inputs in find, matches, lookingAt")
+    void startAnchoredLiteralPrefixRejectsMismatchedInputs() {
+      Pattern p = Pattern.compile("^https://.*");
+
+      assertThat(p.matcher("https://example.com").find()).isTrue();
+      assertThat(p.matcher("https://example.com").matches()).isTrue();
+      assertThat(p.matcher("https://example.com").lookingAt()).isTrue();
+
+      assertThat(p.matcher("http://example.com").find()).isFalse();
+      assertThat(p.matcher("http://example.com").matches()).isFalse();
+      assertThat(p.matcher("http://example.com").lookingAt()).isFalse();
+
+      assertThat(p.matcher("prefix https://example.com").find()).isFalse();
+
+      // Utf8Input
+      byte[] matchUtf8 = "https://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] noMatchUtf8 = "http://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] lateMatchUtf8 =
+          "prefix https://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+      assertThat(p.find(Utf8Input.trusted(matchUtf8))).isTrue();
+      assertThat(p.find(Utf8Input.trusted(noMatchUtf8))).isFalse();
+      assertThat(p.find(Utf8Input.trusted(lateMatchUtf8))).isFalse();
+    }
+
+    @Test
+    @DisplayName("start-anchored character class rejects mismatched first character")
+    void startAnchoredCharClassRejectsMismatchedFirstChar() {
+      Pattern p = Pattern.compile("^[0-9]+[a-z]+");
+
+      assertThat(p.matcher("123abc").find()).isTrue();
+      assertThat(p.matcher("123abc").matches()).isTrue();
+      assertThat(p.matcher("123abc").lookingAt()).isTrue();
+
+      assertThat(p.matcher("abc123").find()).isFalse();
+      assertThat(p.matcher("abc123").matches()).isFalse();
+      assertThat(p.matcher("abc123").lookingAt()).isFalse();
+
+      assertThat(p.matcher("").find()).isFalse();
+      assertThat(p.matcher("").matches()).isFalse();
+      assertThat(p.matcher("").lookingAt()).isFalse();
+
+      // Utf8Input
+      byte[] matchUtf8 = "123abc".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] noMatchUtf8 = "abc123".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+      assertThat(p.find(Utf8Input.trusted(matchUtf8))).isTrue();
+      assertThat(p.find(Utf8Input.trusted(noMatchUtf8))).isFalse();
+    }
+  }
 }

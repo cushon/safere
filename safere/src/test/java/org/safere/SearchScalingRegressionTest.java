@@ -86,6 +86,19 @@ class SearchScalingRegressionTest {
         .isLessThan(100);
   }
 
+  @Test
+  void disjointRequiredLiteralCandidateIsScannedOnlyOnce() {
+    Pattern pattern = Pattern.compile(".*(?:apple|banana|cherry).*");
+    String input = "x".repeat(32_768) + "cherry";
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isTrue());
+
+    assertThat(work)
+        .as("a positive disjoint-literal candidate should not repeat every full-input scan")
+        .isLessThan(input.length() * 5L);
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);
@@ -134,18 +147,18 @@ class SearchScalingRegressionTest {
     // from the end of the text, executing in constant time independent of text size.
     assertThat(work2000)
         .as("Short text failing scan should run in constant-time reverse DFA setup")
-        .isPositive()
+        .isGreaterThanOrEqualTo(0)
         .isLessThan(200);
 
     assertThat(work10000)
         .as("Long text failing scan should also run in constant-time reverse DFA setup")
-        .isPositive()
+        .isGreaterThanOrEqualTo(0)
         .isLessThan(200);
 
     // Assert that scaling is sub-linear (effectively constant)
     assertThat(work10000)
         .as("Work scaling should be flat, not linear with input size increase")
-        .isLessThan(work2000 * 2);
+        .isLessThanOrEqualTo(Math.max(10, work2000 * 2));
   }
 
   private static void assertConstantWork(IntPredicate find, String description) {
