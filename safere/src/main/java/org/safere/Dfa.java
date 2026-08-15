@@ -1410,6 +1410,10 @@ final class Dfa {
           if (pos >= textLen) {
             break;
           }
+          s = startState(text, pos, anchored, false);
+          if (s == null) {
+            return null;
+          }
         } else if (!isExact) {
           if (++consecutiveShortSkips >= maxStrikes) {
             accelerationDisabled = true;
@@ -1525,6 +1529,10 @@ final class Dfa {
           pos = nextPos;
           if (pos > textLen) {
             break;
+          }
+          s = startState(text, pos, anchored, false);
+          if (s == null) {
+            return null;
           }
         } else if (!isExact) {
           if (++consecutiveShortSkips >= maxStrikes) {

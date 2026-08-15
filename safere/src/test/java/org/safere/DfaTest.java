@@ -578,4 +578,72 @@ class DfaTest {
       assertThat(result.pos()).isEqualTo(7 + 2000 + 1);
     }
   }
+
+  @Test
+  void issue711_multilineAnchorAlternationWithFalseCandidate() {
+    String regex = "(b|(?m:^a))cd[0-9]";
+    String input = "x".repeat(100) + "0cb\r1bacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().startAcceleration(false).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+    Pattern control = Pattern.compile(regex, 0, disabled);
+    Utf8Input utf8 = Utf8Input.validated(input.getBytes(UTF_8));
+
+    assertThat(control.find(utf8)).isFalse();
+    assertThat(accelerated.find(utf8))
+        .as("Accelerated DFA must not match (?m:^a) when 'a' is not after line terminator")
+        .isEqualTo(control.find(utf8));
+  }
+
+  @Test
+  void issue711_multilineAnchorStringScannerEquivalence() {
+    String regex = "(b|(?m:^a))cd[0-9]";
+    String input = "x".repeat(100) + "0cb\r1bacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().startAcceleration(false).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+    Pattern control = Pattern.compile(regex, 0, disabled);
+
+    assertThat(control.matcher(input).find()).isFalse();
+    assertThat(accelerated.matcher(input).find())
+        .as("Accelerated DFA String search must match unaccelerated control")
+        .isEqualTo(control.matcher(input).find());
+  }
+
+  @Test
+  void wordBoundaryAnchorAlternationWithFalseCandidate() {
+    String regex = "(b|\\ba)cd[0-9]";
+    String input = "x".repeat(100) + "0cb_bacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().startAcceleration(false).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+    Pattern control = Pattern.compile(regex, 0, disabled);
+
+    assertThat(control.matcher(input).find()).isFalse();
+    assertThat(accelerated.matcher(input).find()).isEqualTo(control.matcher(input).find());
+  }
+
+  @Test
+  void startOfTextAnchorAlternationWithFalseCandidate() {
+    String regex = "(b|\\Aa)cd[0-9]";
+    String input = "x".repeat(100) + "0cb1bacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().startAcceleration(false).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+    Pattern control = Pattern.compile(regex, 0, disabled);
+
+    assertThat(control.matcher(input).find()).isFalse();
+    assertThat(accelerated.matcher(input).find()).isEqualTo(control.matcher(input).find());
+  }
+
+  @Test
+  void multilineAnchorTrueCandidateMatches() {
+    String regex = "(b|(?m:^a))cd[0-9]";
+    String input = "x".repeat(100) + "0cb\nacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+
+    assertThat(accelerated.matcher(input).find()).isTrue();
+    assertThat(accelerated.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
+  }
 }
