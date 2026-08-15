@@ -9,6 +9,8 @@ package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -75,8 +77,7 @@ class PatternSplitAsStreamTest {
   @DisplayName("splitAsStream splits input around matches")
   void splitAsStreamBasic() {
     Pattern p = Pattern.compile(",");
-    java.util.List<String> parts =
-        p.splitAsStream("a,b,c").collect(java.util.stream.Collectors.toList());
+    List<String> parts = p.splitAsStream("a,b,c").collect(Collectors.toList());
     assertThat(parts).containsExactly("a", "b", "c");
   }
 
@@ -84,8 +85,7 @@ class PatternSplitAsStreamTest {
   @DisplayName("splitAsStream with no match returns entire input")
   void splitAsStreamNoMatch() {
     Pattern p = Pattern.compile(",");
-    java.util.List<String> parts =
-        p.splitAsStream("abc").collect(java.util.stream.Collectors.toList());
+    List<String> parts = p.splitAsStream("abc").collect(Collectors.toList());
     assertThat(parts).containsExactly("abc");
   }
 
@@ -93,8 +93,7 @@ class PatternSplitAsStreamTest {
   @DisplayName("splitAsStream with regex pattern")
   void splitAsStreamRegex() {
     Pattern p = Pattern.compile("\\s+");
-    java.util.List<String> parts =
-        p.splitAsStream("hello  world\tfoo").collect(java.util.stream.Collectors.toList());
+    List<String> parts = p.splitAsStream("hello  world\tfoo").collect(Collectors.toList());
     assertThat(parts).containsExactly("hello", "world", "foo");
   }
 
@@ -110,8 +109,7 @@ class PatternSplitAsStreamTest {
   @DisplayName("splitAsStream discards trailing empty strings")
   void splitAsStreamTrailingEmpty() {
     Pattern p = Pattern.compile(",");
-    java.util.List<String> parts =
-        p.splitAsStream("a,b,").collect(java.util.stream.Collectors.toList());
+    List<String> parts = p.splitAsStream("a,b,").collect(Collectors.toList());
     assertThat(parts).containsExactly("a", "b");
   }
 
@@ -119,9 +117,8 @@ class PatternSplitAsStreamTest {
   @DisplayName("splitAsStream reads custom CharSequence content via charAt()")
   void splitAsStreamCustomCharSequence() {
     Pattern p = Pattern.compile(",");
-    java.util.List<String> parts =
-        p.splitAsStream(new LiteralCharSequence("a,b,c"))
-            .collect(java.util.stream.Collectors.toList());
+    List<String> parts =
+        p.splitAsStream(new LiteralCharSequence("a,b,c")).collect(Collectors.toList());
     assertThat(parts).containsExactly("a", "b", "c");
   }
 
@@ -134,6 +131,6 @@ class PatternSplitAsStreamTest {
 
     input.set("x,y,z");
 
-    assertThat(stream.collect(java.util.stream.Collectors.toList())).containsExactly("x", "y", "z");
+    assertThat(stream.collect(Collectors.toList())).containsExactly("x", "y", "z");
   }
 }

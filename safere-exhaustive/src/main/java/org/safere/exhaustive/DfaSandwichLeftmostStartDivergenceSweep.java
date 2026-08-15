@@ -12,7 +12,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /** Offline differential sweep for reverse-DFA sandwich leftmost-start semantics. */
 public final class DfaSandwichLeftmostStartDivergenceSweep {
@@ -68,9 +70,9 @@ public final class DfaSandwichLeftmostStartDivergenceSweep {
   private static final List<FlagMode> FLAG_MODES =
       List.of(
           flags("none", 0),
-          flags("dotall", java.util.regex.Pattern.DOTALL),
-          flags("multiline", java.util.regex.Pattern.MULTILINE),
-          flags("unicodeCharacterClass", java.util.regex.Pattern.UNICODE_CHARACTER_CLASS));
+          flags("dotall", Pattern.DOTALL),
+          flags("multiline", Pattern.MULTILINE),
+          flags("unicodeCharacterClass", Pattern.UNICODE_CHARACTER_CLASS));
 
   private static final List<String> INPUTS =
       List.of(
@@ -313,13 +315,11 @@ public final class DfaSandwichLeftmostStartDivergenceSweep {
   }
 
   private static List<String> divergenceClassificationNames() {
-    return java.util.Arrays.stream(DivergenceClass.values()).map(Enum::name).toList();
+    return Arrays.stream(DivergenceClass.values()).map(Enum::name).toList();
   }
 
   private static List<DivergenceStatus> divergenceClassificationStatuses() {
-    return java.util.Arrays.stream(DivergenceClass.values())
-        .map(DivergenceClassification::status)
-        .toList();
+    return Arrays.stream(DivergenceClass.values()).map(DivergenceClassification::status).toList();
   }
 
   private static CaseSpec caseFromIndex(long index) {

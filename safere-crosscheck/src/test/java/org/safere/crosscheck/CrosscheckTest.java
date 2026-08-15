@@ -11,6 +11,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.util.regex.MatchResult;
 import java.util.regex.PatternSyntaxException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -609,7 +610,7 @@ class CrosscheckTest {
     void toMatchResult() {
       Matcher m = Pattern.compile("(\\d+)").matcher("abc123def");
       assertThat(m.find()).isTrue();
-      java.util.regex.MatchResult mr = m.toMatchResult();
+      MatchResult mr = m.toMatchResult();
       assertThat(mr.group()).isEqualTo("123");
       assertThat(mr.group(1)).isEqualTo("123");
       assertThat(mr.start()).isEqualTo(3);

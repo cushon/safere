@@ -22,6 +22,7 @@
     <workCounter.enabled>false</workCounter.enabled>
     <test.groups></test.groups>
     <test.excludedGroups>work-counter</test.excludedGroups>
+    <error-prone.extra-checks>-Xep:UnnecessarilyFullyQualified:ERROR</error-prone.extra-checks>
   </properties>
 
   <dependencyManagement>
@@ -134,7 +135,7 @@ final class WorkCounterConfig {
                 <!-- Continue compilation past type-checking errors so Error Prone can analyze
                      code that has downstream errors in later phases. -->
                 <arg>--should-stop=ifError=FLOW</arg>
-                <arg>-Xplugin:ErrorProne -XepCompilingTestOnlyCode ${error-prone.checks}</arg>
+                <arg>-Xplugin:ErrorProne -XepCompilingTestOnlyCode ${error-prone.checks} ${error-prone.extra-checks}</arg>
               </compilerArgs>
               <annotationProcessorPaths>
                 <path>
