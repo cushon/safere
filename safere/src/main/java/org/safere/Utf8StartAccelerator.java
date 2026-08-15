@@ -23,7 +23,10 @@ sealed interface Utf8StartAccelerator {
     if (descriptor == null || !descriptor.hasStartAcceleration()) {
       return null;
     }
-    if (descriptor.prefix() != null && !descriptor.prefixFoldCase()) {
+    if (descriptor.prefix() != null) {
+      if (descriptor.prefixFoldCase()) {
+        return CaseInsensitiveLiteral.create(descriptor.prefix());
+      }
       return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
@@ -70,6 +73,34 @@ sealed interface Utf8StartAccelerator {
         return scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts, fromIndex);
       }
       return fromIndex;
+    }
+  }
+
+  @SuppressWarnings("ArrayRecordComponent")
+  record CaseInsensitiveLiteral(String prefix, int[] failure) implements Utf8StartAccelerator {
+
+    static Utf8StartAccelerator create(String prefix) {
+      for (int i = 0; i < prefix.length(); i++) {
+        if (prefix.charAt(i) > 127) {
+          return null;
+        }
+      }
+      return new CaseInsensitiveLiteral(prefix, Ascii.ignoreCaseFailure(prefix));
+    }
+
+    @Override
+    public MatchStrategy strategy() {
+      return MatchStrategy.LITERAL;
+    }
+
+    @Override
+    public boolean isExactMatchCandidate() {
+      return true;
+    }
+
+    @Override
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      return scanner.indexOfIgnoreCase(prefix, failure, fromIndex);
     }
   }
 

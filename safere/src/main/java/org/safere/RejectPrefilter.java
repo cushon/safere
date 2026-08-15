@@ -8,6 +8,8 @@ package org.safere;
 import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.DisjointRequiredLiterals;
+import org.safere.Pattern.EndAnchoredCharClassInfo;
+import org.safere.Pattern.SuffixInfo;
 
 /**
  * Whole-input rejection filter (Tier 0 acceleration).
@@ -19,6 +21,8 @@ sealed interface RejectPrefilter
     permits RejectPrefilter.Literal,
         RejectPrefilter.CharClass,
         RejectPrefilter.DisjointLiterals,
+        RejectPrefilter.EndAnchoredSuffix,
+        RejectPrefilter.EndAnchoredCharClass,
         RejectPrefilter.Composite {
 
   /** Returns whether the input starting from {@code searchFrom} can be rejected. */
@@ -52,6 +56,14 @@ sealed interface RejectPrefilter
     if (descriptor == null) {
       return null;
     }
+    RejectPrefilter suffixFilter =
+        descriptor.endAnchoredSuffix() != null
+            ? EndAnchoredSuffix.create(descriptor.endAnchoredSuffix())
+            : null;
+    RejectPrefilter endCcFilter =
+        descriptor.endAnchoredCharClass() != null
+            ? EndAnchoredCharClass.create(descriptor.endAnchoredCharClass())
+            : null;
     RejectPrefilter litFilter =
         descriptor.requiredLiteral() != null ? Literal.create(descriptor.requiredLiteral()) : null;
     RejectPrefilter ccFilter =
@@ -62,16 +74,32 @@ sealed interface RejectPrefilter
         descriptor.disjointRequiredLiterals() != null
             ? DisjointLiterals.create(descriptor.disjointRequiredLiterals())
             : null;
-    int count =
-        (litFilter != null ? 1 : 0) + (ccFilter != null ? 1 : 0) + (disjointFilter != null ? 1 : 0);
+    int count = 0;
+    if (suffixFilter != null) count++;
+    if (endCcFilter != null) count++;
+    if (litFilter != null) count++;
+    if (ccFilter != null) count++;
+    if (disjointFilter != null) count++;
+
     if (count == 0) {
       return null;
     }
     if (count == 1) {
-      return litFilter != null ? litFilter : (ccFilter != null ? ccFilter : disjointFilter);
+      if (suffixFilter != null) return suffixFilter;
+      if (endCcFilter != null) return endCcFilter;
+      if (litFilter != null) return litFilter;
+      if (ccFilter != null) return ccFilter;
+      if (disjointFilter != null) return disjointFilter;
+      return null;
     }
     RejectPrefilter[] filters = new RejectPrefilter[count];
     int idx = 0;
+    if (suffixFilter != null) {
+      filters[idx++] = suffixFilter;
+    }
+    if (endCcFilter != null) {
+      filters[idx++] = endCcFilter;
+    }
     if (litFilter != null) {
       filters[idx++] = litFilter;
     }
@@ -192,6 +220,168 @@ sealed interface RejectPrefilter
     @Override
     public MatchStrategy strategy() {
       return MatchStrategy.LITERAL;
+    }
+  }
+
+  @SuppressWarnings("ArrayRecordComponent")
+  record EndAnchoredSuffix(
+      String suffix, byte[] suffixUtf8, boolean wasDollar, boolean unixLines, boolean foldCase)
+      implements RejectPrefilter {
+
+    static EndAnchoredSuffix create(SuffixInfo info) {
+      if (info == null || info.suffix() == null || info.suffix().isEmpty()) {
+        return null;
+      }
+      byte[] utf8 = info.suffix().getBytes(StandardCharsets.UTF_8);
+      return new EndAnchoredSuffix(
+          info.suffix(), utf8, info.wasDollar(), info.unixLines(), info.foldCase());
+    }
+
+    @Override
+    public boolean canReject(
+        InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
+      if (!options.literalFastPaths()) {
+        return false;
+      }
+      if (scanner instanceof Utf8InputScanner utf8Scanner) {
+        return !utf8Scanner.endsWith(suffixUtf8, wasDollar, unixLines, foldCase);
+      }
+      if (text != null) {
+        return !endsWith(text, suffix, wasDollar, unixLines, foldCase);
+      }
+      return false;
+    }
+
+    @Override
+    public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
+      if (!options.literalFastPaths()) {
+        return false;
+      }
+      return !scanner.endsWith(suffixUtf8, wasDollar, unixLines, foldCase);
+    }
+
+    @Override
+    public MatchStrategy strategy() {
+      return MatchStrategy.LITERAL;
+    }
+
+    private static boolean endsWith(
+        String text, String suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
+      int suffixLen = suffix.length();
+      int textLen = text.length();
+      if (textLen >= suffixLen
+          && (foldCase
+              ? text.regionMatches(true, textLen - suffixLen, suffix, 0, suffixLen)
+              : text.endsWith(suffix))) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(suffixLen);
+        }
+        return true;
+      }
+      if (!wasDollar || text.isEmpty()) {
+        return false;
+      }
+      int trailingStart = StringInputScanner.trailingLineTerminatorStart(text, unixLines, textLen);
+      if (trailingStart >= suffixLen
+          && (foldCase
+              ? text.regionMatches(true, trailingStart - suffixLen, suffix, 0, suffixLen)
+              : text.startsWith(suffix, trailingStart - suffixLen))) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(suffixLen);
+        }
+        return true;
+      }
+      return false;
+    }
+  }
+
+  record EndAnchoredCharClass(AsciiBitmap bitmap, boolean wasDollar, boolean unixLines)
+      implements RejectPrefilter {
+    static EndAnchoredCharClass create(EndAnchoredCharClassInfo info) {
+      if (info == null || info.bitmap() == null) {
+        return null;
+      }
+      return new EndAnchoredCharClass(info.bitmap(), info.wasDollar(), info.unixLines());
+    }
+
+    @Override
+    public boolean canReject(
+        InputScanner scanner, String text, int searchFrom, EnginePathOptions options) {
+      if (!options.charClassMatchFastPaths()) {
+        return false;
+      }
+      if (scanner instanceof Utf8InputScanner utf8Scanner) {
+        return canReject(utf8Scanner, searchFrom, options);
+      }
+      if (text != null) {
+        return canReject(text);
+      }
+      return false;
+    }
+
+    @Override
+    public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
+      if (!options.charClassMatchFastPaths()) {
+        return false;
+      }
+      int len = scanner.length();
+      if (len == 0) {
+        return true;
+      }
+      int ascii = scanner.asciiAt(len - 1);
+      if (bitmap.contains(ascii)) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(1);
+        }
+        return false;
+      }
+      if (!wasDollar) {
+        return true;
+      }
+      int prevPos = scanner.trailingLineTerminatorStart(unixLines, len);
+      if (prevPos > 0) {
+        int prevAscii = scanner.asciiAt(prevPos - 1);
+        if (bitmap.contains(prevAscii)) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(1);
+          }
+          return false;
+        }
+      }
+      return true;
+    }
+
+    private boolean canReject(String text) {
+      int len = text.length();
+      if (len == 0) {
+        return true;
+      }
+      char last = text.charAt(len - 1);
+      if (bitmap.contains(last)) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(1);
+        }
+        return false;
+      }
+      if (!wasDollar) {
+        return true;
+      }
+      int prevPos = StringInputScanner.trailingLineTerminatorStart(text, unixLines, len);
+      if (prevPos > 0) {
+        char prev = text.charAt(prevPos - 1);
+        if (bitmap.contains(prev)) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(1);
+          }
+          return false;
+        }
+      }
+      return true;
+    }
+
+    @Override
+    public MatchStrategy strategy() {
+      return MatchStrategy.CHARACTER_CLASS;
     }
   }
 

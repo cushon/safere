@@ -80,7 +80,8 @@ final class ByteVectorScan {
     return false;
   }
 
-  static int indexOfIgnoreCase(byte[] bytes, int offset, int length, String prefix, int start) {
+  public static int indexOfIgnoreCase(
+      byte[] bytes, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
@@ -90,42 +91,18 @@ final class ByteVectorScan {
         return VectorScanProvider.UNSUPPORTED;
       }
     }
-
-    int pos = Math.max(0, start);
-    int vectorLen = SPECIES.length();
-    int limit = length - vectorLen;
-
+    if (prefixLen > 1) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
     char first = prefix.charAt(0);
-    byte low = (byte) toLowerCase(first);
-    byte high = (byte) toUpperCase(first);
-    ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
-    ByteVector highVec = ByteVector.broadcast(SPECIES, high);
-
-    for (; pos <= limit; pos += vectorLen) {
-      ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
-      VectorMask<Byte> matchMask = inputVec.compare(EQ, lowVec).or(inputVec.compare(EQ, highVec));
-
-      if (matchMask.anyTrue()) {
-        long activeLanes = matchMask.toLong();
-        while (activeLanes != 0) {
-          int bit = Long.numberOfTrailingZeros(activeLanes);
-          int candidatePos = pos + bit;
-          if (candidatePos + prefixLen <= length
-              && regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
-            return candidatePos;
-          }
-          activeLanes &= activeLanes - 1;
-        }
-      }
+    byte low = (byte) Ascii.toLowerCase(first);
+    byte high = (byte) Ascii.toUpperCase(first);
+    if (low == high) {
+      int[] range = new int[] {low, low};
+      return indexOfAsciiClass(bytes, offset, length, range, start);
     }
-
-    int limitScalar = length - prefixLen;
-    for (; pos <= limitScalar; pos++) {
-      if (regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
-        return pos;
-      }
-    }
-    return -1;
+    int[] ranges = new int[] {high, high, low, low};
+    return indexOfAsciiClass(bytes, offset, length, ranges, start);
   }
 
   static int indexOfAsciiClass(String text, int[] ranges, int start) {
@@ -171,8 +148,8 @@ final class ByteVectorScan {
     int limit = length - vectorLen;
 
     char first = prefix.charAt(0);
-    byte low = (byte) toLowerCase(first);
-    byte high = (byte) toUpperCase(first);
+    byte low = (byte) Ascii.toLowerCase(first);
+    byte high = (byte) Ascii.toUpperCase(first);
     ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
     ByteVector highVec = ByteVector.broadcast(SPECIES, high);
 
