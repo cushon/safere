@@ -64,6 +64,18 @@ class PatternInternalTest {
   }
 
   @Test
+  void textStartAnchorsPreservePrefixAccelerators() {
+    assertThat(Pattern.compile("^https://.*").anchoredPrefix()).isEqualTo("https://");
+    assertThat(Pattern.compile("\\Ahttps://.*").anchoredPrefix()).isEqualTo("https://");
+
+    AsciiBitmap prefix = Pattern.compile("^[0-9]+").anchoredCharClassPrefixAscii();
+    assertThat(prefix).isNotNull();
+    assertThat(prefix.contains('0')).isTrue();
+    assertThat(prefix.contains('9')).isTrue();
+    assertThat(prefix.contains('a')).isFalse();
+  }
+
+  @Test
   void asciiPrefixScanInfoHandlesMissingAndEmptyClasses() {
     assertThat(Pattern.buildAsciiClassScanInfo(null)).isNull();
     assertThat(Pattern.buildAsciiClassScanInfo(AsciiBitmap.EMPTY)).isNull();
@@ -349,6 +361,41 @@ class PatternInternalTest {
       })
   void optionalCaseInsensitiveAndAlreadyPrefixedLiteralsAreNotRecorded(String regex) {
     assertThat(Pattern.compile(regex).rejectDescriptor().requiredLiteral()).isNull();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "'.*\\.json$',                         .json,                        false",
+    "'(?i).*\\.json$',                     .json,                        true",
+    "'.*report_2026\\.log$',               report_2026.log,              false",
+    "'.*(foo)(bar)$',                      foobar,                       false",
+    "'[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$',  ABCDEFGHIJKLMNOPQRSTUVWXYZ,   false",
+    "'.*test\\z',                          test,                         false",
+    "'.*(?i:test)\\z',                     test,                         true"
+  })
+  void endAnchoredLiteralSuffixIsRecorded(String regex, String expected, boolean foldCase) {
+    Pattern.SuffixInfo info = Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix();
+    assertThat(info.suffix()).isEqualTo(expected);
+    assertThat(info.foldCase()).isEqualTo(foldCase);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {".*", ".*json", "(?m).*\\.json$"})
+  void unanchoredOrMultilineDollarDoNotRecordEndAnchoredSuffix(String regex) {
+    assertThat(Pattern.compile(regex).rejectDescriptor().endAnchoredSuffix()).isNull();
+  }
+
+  @Test
+  void endAnchoredSuffixRejectsUtf8Input() {
+    Pattern p = Pattern.compile(".*\\.json$");
+    assertThat(
+            p.find(
+                Utf8Input.trusted("config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+        .isTrue();
+    assertThat(
+            p.find(
+                Utf8Input.trusted("config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+        .isFalse();
   }
 
   @Test

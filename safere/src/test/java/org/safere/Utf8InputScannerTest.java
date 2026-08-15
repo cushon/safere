@@ -263,10 +263,11 @@ class Utf8InputScannerTest {
   @Test
   void asciiPrefixClassSearchCoversSingletonPairAndRange() {
     for (int[] members : List.of(new int[] {'x'}, new int[] {'x', 'z'}, asciiRange('0', '9'))) {
-      boolean[] asciiClass = new boolean[128];
+      AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
       for (int member : members) {
-        asciiClass[member] = true;
+        builder.add(member);
       }
+      AsciiBitmap asciiClass = builder.build();
       byte matchingByte = (byte) members[members.length - 1];
       byte[] bytes = "a".repeat(40).getBytes(UTF_8);
       bytes[31] = matchingByte;
