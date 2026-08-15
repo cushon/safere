@@ -679,7 +679,9 @@ final class Nfa {
     int[] initialCap = new int[threadArraySize];
 
     int engineEndPos = context.engineEndPos();
-    for (int pos = start; pos < engineEndPos + 2; pos++) {
+    boolean isUtf8 = text instanceof Utf8InputScanner;
+    int pos = start;
+    while (pos < engineEndPos + 2) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }
@@ -694,13 +696,21 @@ final class Nfa {
         addToThreadq(runq, prog.start(), text, pos, initialCap, false);
       }
 
+      int nextBoundaryPos;
       if (!runq.isEmpty()) {
         long stepResult = inputStep(text, pos);
         int cp = (int) (stepResult >>> 32);
         int nextPos = (int) stepResult;
         step(runq, delayedBuffer, delayedGrapheme, cp, text, pos, nextPos);
+        nextBoundaryPos = nextPos;
       } else {
         freeQueue(runq);
+        if (isUtf8 && pos < engineEndPos) {
+          long decoded = text.decodeForward(pos);
+          nextBoundaryPos = Math.max(pos + 1, InputScanner.position(decoded));
+        } else {
+          nextBoundaryPos = pos + 1;
+        }
       }
       if (matched
           && runq.isEmpty()
@@ -708,6 +718,11 @@ final class Nfa {
               ? delayedGrapheme.isEmpty()
               : isDelayedBufferEmpty(delayedBuffer))) {
         break;
+      }
+      if (isUtf8 && pos < engineEndPos) {
+        pos = nextBoundaryPos;
+      } else {
+        pos++;
       }
     }
 
