@@ -3,25 +3,24 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.internal;
+package org.safere;
 
-import static org.safere.internal.Ascii.equalsIgnoreCase;
-import static org.safere.internal.Ascii.ignoreCaseFailure;
+import static org.safere.Ascii.equalsIgnoreCase;
+import static org.safere.Ascii.ignoreCaseFailure;
 
 /** UTF-16 code unit traversal and search utilities. */
-public final class Utf16 {
+final class Utf16 {
 
   private Utf16() {}
 
   /** Returns the UTF-16 code unit at {@code index} in little-endian byte representation. */
-  public static char getChar(byte[] bytes, int offset, int index) {
+  static char getChar(byte[] bytes, int offset, int index) {
     int byteIndex = offset + (index << 1);
     return (char) ((bytes[byteIndex] & 0xFF) | ((bytes[byteIndex + 1] & 0xFF) << 8));
   }
 
   /** Finds an ASCII prefix in UTF-16 code units in linear time. */
-  public static int indexOfIgnoreCase(
-      char[] input, int offset, int length, String pattern, int start) {
+  static int indexOfIgnoreCase(char[] input, int offset, int length, String pattern, int start) {
     if (pattern.isEmpty()) {
       return Math.min(Math.max(0, start), length);
     }
@@ -43,7 +42,7 @@ public final class Utf16 {
   }
 
   /** Finds an ASCII prefix in little-endian UTF-16 bytes in linear time. */
-  public static int indexOfIgnoreCaseUtf16(
+  static int indexOfIgnoreCaseUtf16(
       byte[] input, int offset, int length, String pattern, int start) {
     if (pattern.isEmpty()) {
       return Math.min(Math.max(0, start), length);
@@ -66,8 +65,7 @@ public final class Utf16 {
   }
 
   /** Returns whether a character sequence matches a pattern prefix ignoring ASCII case. */
-  public static boolean regionMatchesIgnoreCase(
-      char[] chars, int offset, String prefix, int prefixLen) {
+  static boolean regionMatchesIgnoreCase(char[] chars, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
       if (!equalsIgnoreCase(chars[offset + i], prefix.charAt(i))) {
         return false;
@@ -77,7 +75,7 @@ public final class Utf16 {
   }
 
   /** Returns whether little-endian UTF-16 bytes match a pattern prefix ignoring ASCII case. */
-  public static boolean regionMatchesIgnoreCaseUtf16(
+  static boolean regionMatchesIgnoreCaseUtf16(
       byte[] bytes, int byteOffset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
       char c =

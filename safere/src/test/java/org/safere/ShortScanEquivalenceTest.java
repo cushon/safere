@@ -266,7 +266,7 @@ class ShortScanEquivalenceTest {
   @Test
   @DisplayName("Ignore-case prefix scans use a linear failure function")
   void ignoreCasePrefixFailureFunction() {
-    assertThat(org.safere.internal.Ascii.ignoreCaseFailure("aaaaab"))
+    assertThat(Ascii.ignoreCaseFailure("aaaaab"))
         .containsExactly(0, 1, 2, 3, 4, 0);
   }
 

@@ -3,21 +3,21 @@
 // Modifications and Java port Copyright (c) 2026 Eddie Aftandilian.
 // Licensed under the BSD 3-Clause License (see LICENSE file).
 
-package org.safere.internal;
+package org.safere;
 
 /** Shared 64-bit SWAR (SIMD within a register) broadword constants and arithmetic operations. */
-public final class Swar {
+final class Swar {
 
-  public static final long BYTE_ONES = 0x0101_0101_0101_0101L;
-  public static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
+  static final long BYTE_ONES = 0x0101_0101_0101_0101L;
+  static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
-  public static final long SHORT_ONES = 0x0001_0001_0001_0001L;
-  public static final long SHORT_HIGH_BITS = 0x8000_8000_8000_8000L;
+  static final long SHORT_ONES = 0x0001_0001_0001_0001L;
+  static final long SHORT_HIGH_BITS = 0x8000_8000_8000_8000L;
 
   private Swar() {}
 
   /** Returns whether the ranges can be matched one UTF-16 code unit at a time. */
-  public static boolean supportsBmpCodeUnitRanges(int[] ranges, int maximumRanges) {
+  static boolean supportsBmpCodeUnitRanges(int[] ranges, int maximumRanges) {
     if (ranges.length < 2 || ranges.length > maximumRanges * 2 || (ranges.length & 1) != 0) {
       return false;
     }
@@ -35,7 +35,7 @@ public final class Swar {
   }
 
   /** Returns whether the ranges can be matched by an ASCII byte kernel. */
-  public static boolean supportsAsciiRanges(int[] ranges, int maximumRanges) {
+  static boolean supportsAsciiRanges(int[] ranges, int maximumRanges) {
     if (ranges.length < 2 || ranges.length > maximumRanges * 2 || (ranges.length & 1) != 0) {
       return false;
     }
@@ -48,15 +48,14 @@ public final class Swar {
   }
 
   /** Computes a borrow-free 1-byte SWAR range mask for {@code [low, high]}. */
-  public static long exactAsciiRangeMask(
-      long values, long ascii, long repeatedLow, long repeatedHigh) {
+  static long exactAsciiRangeMask(long values, long ascii, long repeatedLow, long repeatedHigh) {
     long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
     long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
     return ascii & atLeastLow & atMostHigh;
   }
 
   /** Computes a borrow-free 2-byte UTF-16 SWAR range mask for {@code [low, high]}. */
-  public static long exactShortRangeMask(long word, long repeatedLow, long repeatedHigh) {
+  static long exactShortRangeMask(long word, long repeatedLow, long repeatedHigh) {
     long atLeastLow = ((word | SHORT_HIGH_BITS) - repeatedLow) & SHORT_HIGH_BITS;
     long atMostHigh = ((repeatedHigh | SHORT_HIGH_BITS) - word) & SHORT_HIGH_BITS;
     return atLeastLow & atMostHigh;

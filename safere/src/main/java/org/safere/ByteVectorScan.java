@@ -9,14 +9,13 @@ import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static jdk.incubator.vector.VectorOperators.EQ;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
-import static org.safere.internal.Ascii.regionMatchesIgnoreCase;
-import static org.safere.internal.Ascii.toLowerCase;
-import static org.safere.internal.Ascii.toUpperCase;
+import static org.safere.Ascii.regionMatchesIgnoreCase;
+import static org.safere.Ascii.toLowerCase;
+import static org.safere.Ascii.toUpperCase;
 
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorSpecies;
-import org.safere.internal.Swar;
 
 /**
  * Stateless SIMD kernels using the incubating Vector API for 1-byte sequences (UTF-8 and Latin-1).
