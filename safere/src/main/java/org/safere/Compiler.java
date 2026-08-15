@@ -971,8 +971,8 @@ final class Compiler extends Walker<Compiler.Frag> {
   }
 
   private Frag asciiFoldedLiteral(int rune) {
-    int lower = UnicodeCaseFolding.asciiFoldRune(rune);
-    int upper = lower - ('a' - 'A');
+    int lower = Ascii.toLowerCase(rune);
+    int upper = Ascii.toUpperCase(rune);
     int id = allocInst();
     if (id < 0) {
       return Frag.NO_MATCH;
@@ -982,7 +982,7 @@ final class Compiler extends Walker<Compiler.Frag> {
   }
 
   private static boolean isAsciiLetter(int rune) {
-    return ('A' <= rune && rune <= 'Z') || ('a' <= rune && rune <= 'z');
+    return Ascii.isAlpha(rune);
   }
 
   /** Compiles an "any code point" fragment. */
