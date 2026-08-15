@@ -89,13 +89,8 @@ sealed interface Utf8StartAccelerator {
     }
 
     @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.LITERAL;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return true;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
     @Override
