@@ -38,4 +38,10 @@ record MatchDescriptor(
         || keywordAlternation != null
         || charClassMatch != null;
   }
+
+  boolean hasFindFastPath() {
+    return literalMatch != null
+        || singleCharClass != null
+        || keywordAlternation != null;
+  }
 }

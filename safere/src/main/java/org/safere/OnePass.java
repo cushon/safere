@@ -490,43 +490,26 @@ final class OnePass {
 
   /** Builds sorted code point boundaries from all CHAR_RANGE and CHAR_CLASS instructions. */
   private static int[] buildBoundaries(Prog prog) {
-    int maxBounds = 2;
+    IntArrayList bounds = new IntArrayList();
+    bounds.add(0);
+    bounds.add(Utils.MAX_RUNE + 1);
     for (int i = 0; i < prog.size(); i++) {
       Inst inst = prog.inst(i);
       if (inst.op == InstOp.CHAR_RANGE) {
-        maxBounds += 2;
-      } else if (inst.op == InstOp.CHAR_CLASS) {
-        maxBounds += inst.ranges.length;
-      }
-    }
-    int[] raw = new int[maxBounds];
-    int count = 0;
-    raw[count++] = 0;
-    raw[count++] = Utils.MAX_RUNE + 1;
-    for (int i = 0; i < prog.size(); i++) {
-      Inst inst = prog.inst(i);
-      if (inst.op == InstOp.CHAR_RANGE) {
-        raw[count++] = inst.lo;
+        bounds.add(inst.lo);
         if (inst.hi < Utils.MAX_RUNE) {
-          raw[count++] = inst.hi + 1;
+          bounds.add(inst.hi + 1);
         }
       } else if (inst.op == InstOp.CHAR_CLASS) {
         for (int j = 0; j < inst.ranges.length; j += 2) {
-          raw[count++] = inst.ranges[j];
+          bounds.add(inst.ranges[j]);
           if (inst.ranges[j + 1] < Utils.MAX_RUNE) {
-            raw[count++] = inst.ranges[j + 1] + 1;
+            bounds.add(inst.ranges[j + 1] + 1);
           }
         }
       }
     }
-    Arrays.sort(raw, 0, count);
-    int unique = 0;
-    for (int i = 0; i < count; i++) {
-      if (unique == 0 || raw[i] != raw[unique - 1]) {
-        raw[unique++] = raw[i];
-      }
-    }
-    return Arrays.copyOf(raw, unique);
+    return bounds.toSortedUniqueArray();
   }
 
   // -------------------------------------------------------------------------
