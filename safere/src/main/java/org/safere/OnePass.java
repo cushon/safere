@@ -88,16 +88,15 @@ final class OnePass {
   // -------------------------------------------------------------------------
 
   /**
-   * Flattened transition table: {@code flatActions[state * numClasses + eqClass]} = encoded action.
-   * Flat layout eliminates one level of indirection vs a {@code long[][]}, improving cache locality
-   * and removing a pointer chase on every character processed.
+   * Flattened transition table: {@code flatActions[stateOffset + eqClass]} = encoded action with
+   * pre-scaled nextStateOffset.
    */
   private final long[] flatActions;
 
-  /** Number of equivalence classes (stride for {@link #flatActions}). */
-  private final int numClasses;
-
-  /** Match actions: {@code matchAction[state]} = encoded action when at a match state. */
+  /**
+   * Match actions: {@code matchAction[stateOffset]} = encoded action when at a match state ({@link
+   * #NO_ACTION} otherwise).
+   */
   private final long[] matchAction;
 
   /** Sorted code point boundaries defining equivalence classes. */
@@ -121,25 +120,14 @@ final class OnePass {
   /** Whether empty-width checks need the grapheme-cluster boundary flag. */
   private final boolean hasGraphemeSemantics;
 
-  /**
-   * Bitset indicating which states have match actions. Bit {@code s} is set if {@code
-   * matchAction[s] != NO_ACTION}. Used to skip the {@code matchAction[]} array load for non-match
-   * states in the search loop. Only valid when numStates &le; 64; otherwise set to -1L (all bits
-   * set) to force the array check.
-   */
-  private final long matchStateBits;
-
   private OnePass(
       long[] flatActions,
-      int numStates,
-      int numClasses,
       long[] matchAction,
       int[] boundaries,
       boolean anchorEnd,
       boolean dollarAnchorEnd,
       boolean unixLines,
       boolean hasGraphemeSemantics) {
-    this.numClasses = numClasses;
     this.flatActions = flatActions;
     this.matchAction = matchAction;
     this.boundaries = boundaries;
@@ -148,19 +136,6 @@ final class OnePass {
     this.dollarAnchorEnd = dollarAnchorEnd;
     this.unixLines = unixLines;
     this.hasGraphemeSemantics = hasGraphemeSemantics;
-
-    // Pre-compute match state bitset.
-    long bits = 0;
-    if (numStates <= 64) {
-      for (int s = 0; s < numStates; s++) {
-        if (matchAction[s] != NO_ACTION) {
-          bits |= (1L << s);
-        }
-      }
-    } else {
-      bits = -1L; // fall back to checking every state
-    }
-    this.matchStateBits = bits;
   }
 
   // -------------------------------------------------------------------------
@@ -390,7 +365,9 @@ final class OnePass {
 
       for (int cls = 0; cls < numClasses; cls++) {
         if (nextStates[cls] != -1) {
-          long action = encodeAction(nextStates[cls], capMasks[cls], emptyFlagsList[cls], matched);
+          long action =
+              encodeAction(
+                  nextStates[cls] * numClasses, capMasks[cls], emptyFlagsList[cls], matched);
           long existing = tables.action(stateIndex, cls);
           if (existing != NO_ACTION && existing != action) {
             return null;
@@ -402,8 +379,6 @@ final class OnePass {
 
     return new OnePass(
         tables.actions(),
-        tables.stateCount(),
-        numClasses,
         tables.matchActions(),
         boundaries,
         prog.anchorEnd(),
@@ -447,8 +422,9 @@ final class OnePass {
     int addState() {
       ensureStateCapacity(stateCount + 1);
       int state = stateCount++;
-      Arrays.fill(actions, state * numClasses, (state + 1) * numClasses, NO_ACTION);
-      matchActions[state] = NO_ACTION;
+      int stateOffset = state * numClasses;
+      Arrays.fill(actions, stateOffset, stateOffset + numClasses, NO_ACTION);
+      Arrays.fill(matchActions, stateOffset, stateOffset + numClasses, NO_ACTION);
       return state;
     }
 
@@ -461,11 +437,11 @@ final class OnePass {
     }
 
     long matchAction(int state) {
-      return matchActions[state];
+      return matchActions[state * numClasses];
     }
 
     void setMatchAction(int state, long action) {
-      matchActions[state] = action;
+      matchActions[state * numClasses] = action;
     }
 
     long[] actions() {
@@ -473,7 +449,7 @@ final class OnePass {
     }
 
     long[] matchActions() {
-      return Arrays.copyOf(matchActions, stateCount);
+      return Arrays.copyOf(matchActions, stateCount * numClasses);
     }
 
     private void ensureStateCapacity(int minStates) {
@@ -483,7 +459,7 @@ final class OnePass {
       int newStates = Math.max(minStates, Math.max(4, allocatedStates * 2));
       newStates = Math.min(newStates, maxStates);
       actions = Arrays.copyOf(actions, Math.toIntExact((long) newStates * numClasses));
-      matchActions = Arrays.copyOf(matchActions, newStates);
+      matchActions = Arrays.copyOf(matchActions, Math.toIntExact((long) newStates * numClasses));
       allocatedStates = newStates;
     }
   }
@@ -596,15 +572,13 @@ final class OnePass {
     Arrays.fill(cap, -1);
     cap[0] = startPos;
 
-    int state = 0;
+    int stateOffset = 0;
     boolean matched = false;
     int[] bestCap = reuseGroups != null && reuseGroups.length >= ncap ? reuseGroups : new int[ncap];
 
-    int nc = numClasses;
     long[] fa = flatActions;
     long[] ma = matchAction;
     int[] ascMap = asciiClassMap;
-    long msb = matchStateBits;
     String stringText =
         text instanceof StringInputScanner stringScanner ? stringScanner.text() : null;
 
@@ -613,24 +587,26 @@ final class OnePass {
     // handled after the loop to avoid a redundant pos >= endPos comparison on every iteration.
     while (pos < endPos) {
       // Check match condition at current state BEFORE consuming next character.
-      // The bitset test avoids the matchAction[] array load for non-match states.
       boolean shouldCopy = false;
-      if (!endMatch && !(anchorEnd && !dollarAnchorEnd) && (msb & (1L << state)) != 0) {
-        long matchAct = ma[state];
-        int reqEmpty = (int) (matchAct & EMPTY_MASK);
-        if (reqEmpty == 0
-            || (reqEmpty
-                    & ~Nfa.emptyFlags(text, pos, unixLines, hasGraphemeSemantics, graphemeContext))
-                == 0) {
-          int capMask = (int) ((matchAct >>> CAP_SHIFT) & CAP_REG_MASK);
-          if (capMask != 0) {
-            applyCaptures(capMask, pos, cap);
+      if (!endMatch && !(anchorEnd && !dollarAnchorEnd)) {
+        long matchAct = ma[stateOffset];
+        if (matchAct != NO_ACTION) {
+          int reqEmpty = (int) (matchAct & EMPTY_MASK);
+          if (reqEmpty == 0
+              || (reqEmpty
+                      & ~Nfa.emptyFlags(
+                          text, pos, unixLines, hasGraphemeSemantics, graphemeContext))
+                  == 0) {
+            int capMask = (int) ((matchAct >>> CAP_SHIFT) & CAP_REG_MASK);
+            if (capMask != 0) {
+              applyCaptures(capMask, pos, cap);
+            }
+            if (ncap > 1) {
+              cap[1] = pos;
+            }
+            matched = true;
+            shouldCopy = true;
           }
-          if (ncap > 1) {
-            cap[1] = pos;
-          }
-          matched = true;
-          shouldCopy = true;
         }
       }
 
@@ -666,7 +642,7 @@ final class OnePass {
 
       // Equivalence classes and state indices are always valid for a well-formed OnePass
       // automaton, so no bounds check is needed on the flat actions array.
-      long action = fa[state * nc + cls];
+      long action = fa[stateOffset + cls];
       if (action == NO_ACTION) {
         if (shouldCopy) {
           System.arraycopy(cap, 0, bestCap, 0, ncap);
@@ -677,12 +653,10 @@ final class OnePass {
       if (shouldCopy) {
         boolean skipCopy = false;
         if ((action & MATCH_WINS_MASK) == 0) {
-          int nextState = (int) (action >>> INDEX_SHIFT);
-          if ((msb & (1L << nextState)) != 0) {
-            long nextMatchAct = ma[nextState];
-            if (nextMatchAct != NO_ACTION && (nextMatchAct & EMPTY_MASK) == 0) {
-              skipCopy = true;
-            }
+          int nextStateOffset = (int) (action >>> INDEX_SHIFT);
+          long nextMatchAct = ma[nextStateOffset];
+          if (nextMatchAct != NO_ACTION && (nextMatchAct & EMPTY_MASK) == 0) {
+            skipCopy = true;
           }
         }
         if (!skipCopy) {
@@ -707,27 +681,29 @@ final class OnePass {
           applyCaptures(capMask, pos, cap);
         }
       }
-      state = (int) (action >>> INDEX_SHIFT);
+      stateOffset = (int) (action >>> INDEX_SHIFT);
       pos = nextPos;
     }
 
     // Final match check at endPos (the position after the last character).
-    if (pos == endPos && (msb & (1L << state)) != 0) {
-      long matchAct = ma[state];
-      int reqEmpty = (int) (matchAct & EMPTY_MASK);
-      if (reqEmpty == 0
-          || (reqEmpty
-                  & ~Nfa.emptyFlags(text, pos, unixLines, hasGraphemeSemantics, graphemeContext))
-              == 0) {
-        int capMask = (int) ((matchAct >>> CAP_SHIFT) & CAP_REG_MASK);
-        if (capMask != 0) {
-          applyCaptures(capMask, pos, cap);
+    if (pos == endPos) {
+      long matchAct = ma[stateOffset];
+      if (matchAct != NO_ACTION) {
+        int reqEmpty = (int) (matchAct & EMPTY_MASK);
+        if (reqEmpty == 0
+            || (reqEmpty
+                    & ~Nfa.emptyFlags(text, pos, unixLines, hasGraphemeSemantics, graphemeContext))
+                == 0) {
+          int capMask = (int) ((matchAct >>> CAP_SHIFT) & CAP_REG_MASK);
+          if (capMask != 0) {
+            applyCaptures(capMask, pos, cap);
+          }
+          if (ncap > 1) {
+            cap[1] = pos;
+          }
+          matched = true;
+          System.arraycopy(cap, 0, bestCap, 0, ncap);
         }
-        if (ncap > 1) {
-          cap[1] = pos;
-        }
-        matched = true;
-        System.arraycopy(cap, 0, bestCap, 0, ncap);
       }
     }
 
