@@ -10,8 +10,6 @@ import static jdk.incubator.vector.VectorOperators.EQ;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
 import static org.safere.Ascii.regionMatchesIgnoreCase;
-import static org.safere.Ascii.toLowerCase;
-import static org.safere.Ascii.toUpperCase;
 
 import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
