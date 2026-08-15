@@ -151,8 +151,7 @@ final class StringInputScanner implements InputScanner {
         || !Character.isHighSurrogate(text.charAt(pos - 1));
   }
 
-  @Override
-  public int trailingLineTerminatorStart(boolean unixLines, int logicalEndPos) {
+  static int trailingLineTerminatorStart(String text, boolean unixLines, int logicalEndPos) {
     int len = logicalEndPos;
     if (len <= 0 || len > text.length()) {
       return -1;
@@ -168,6 +167,11 @@ final class StringInputScanner implements InputScanner {
       return len - 1;
     }
     return -1;
+  }
+
+  @Override
+  public int trailingLineTerminatorStart(boolean unixLines, int logicalEndPos) {
+    return trailingLineTerminatorStart(text, unixLines, logicalEndPos);
   }
 
   @Override

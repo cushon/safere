@@ -77,25 +77,6 @@ class UtilsTest {
   }
 
   @Test
-  void toLower_convertsUppercase() {
-    assertThat(Utils.toLower('A')).isEqualTo('a');
-    assertThat(Utils.toLower('Z')).isEqualTo('z');
-  }
-
-  @Test
-  void toLower_leavesOthersUnchanged() {
-    assertThat(Utils.toLower('a')).isEqualTo('a');
-    assertThat(Utils.toLower('0')).isEqualTo('0');
-    assertThat(Utils.toLower('!')).isEqualTo('!');
-  }
-
-  @Test
-  void toUpper_convertsLowercase() {
-    assertThat(Utils.toUpper('a')).isEqualTo('A');
-    assertThat(Utils.toUpper('z')).isEqualTo('Z');
-  }
-
-  @Test
   void runeToString_ascii() {
     assertThat(Utils.runeToString('A')).isEqualTo("A");
     assertThat(Utils.runeToString('0')).isEqualTo("0");

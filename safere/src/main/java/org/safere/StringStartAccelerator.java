@@ -84,9 +84,9 @@ sealed interface StringStartAccelerator {
 
   final class FixedOffset implements StringStartAccelerator {
     private final FixedOffsetLiteral fixedOffset;
-    private final boolean[] firstAscii;
+    private final AsciiBitmap firstAscii;
 
-    FixedOffset(FixedOffsetLiteral fixedOffset, boolean[] firstAscii) {
+    FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap firstAscii) {
       this.fixedOffset = fixedOffset;
       this.firstAscii = firstAscii;
     }
@@ -95,7 +95,7 @@ sealed interface StringStartAccelerator {
       return fixedOffset;
     }
 
-    public boolean[] firstAscii() {
+    public AsciiBitmap firstAscii() {
       return firstAscii;
     }
 
@@ -110,7 +110,7 @@ sealed interface StringStartAccelerator {
     }
 
     private static int nextFixedOffsetCandidate(
-        String text, FixedOffsetLiteral fixedOffsetLiteral, boolean[] firstAscii, int fromIndex) {
+        String text, FixedOffsetLiteral fixedOffsetLiteral, AsciiBitmap firstAscii, int fromIndex) {
       int minOffset = fixedOffsetLiteral.minOffset();
       if (minOffset > text.length() - fromIndex) {
         return -1;
@@ -137,7 +137,7 @@ sealed interface StringStartAccelerator {
             int candidateStart = literalStart - offset;
             if (candidateStart >= fromIndex) {
               int first = candidateStart < text.length() ? text.charAt(candidateStart) : -1;
-              if (first >= 0 && first < firstAscii.length && firstAscii[first]) {
+              if (first >= 0 && firstAscii.contains(first)) {
                 matchFound = true;
                 if (earliestValid < 0 || candidateStart < earliestValid) {
                   earliestValid = candidateStart;
@@ -174,13 +174,15 @@ sealed interface StringStartAccelerator {
   }
 
   final class CharClass implements StringStartAccelerator {
-    private final boolean[] asciiMap;
+    private final AsciiBitmap asciiMap;
+    private final boolean[] asciiTable;
 
-    CharClass(boolean[] asciiMap) {
+    CharClass(AsciiBitmap asciiMap) {
       this.asciiMap = asciiMap;
+      this.asciiTable = asciiMap.toBooleanArray();
     }
 
-    public boolean[] asciiMap() {
+    public AsciiBitmap asciiMap() {
       return asciiMap;
     }
 
@@ -191,16 +193,16 @@ sealed interface StringStartAccelerator {
 
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return indexOfCharClass(text, asciiMap, fromIndex);
+      return indexOfCharClass(text, asciiTable, fromIndex);
     }
 
-    private static int indexOfCharClass(String text, boolean[] asciiMap, int fromIndex) {
+    private static int indexOfCharClass(String text, boolean[] asciiTable, int fromIndex) {
       for (int i = fromIndex; i < text.length(); i++) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
         char ch = text.charAt(i);
-        if (ch < 128 && asciiMap[ch]) {
+        if (ch < 128 && asciiTable[ch]) {
           return i;
         }
       }
@@ -255,12 +257,12 @@ sealed interface StringStartAccelerator {
       return (acceleration.allowLineStart && lineStart) || asciiStart;
     }
 
-    private static boolean matchesAsciiStart(String text, int pos, boolean[] asciiStart) {
+    private static boolean matchesAsciiStart(String text, int pos, AsciiBitmap asciiStart) {
       if (asciiStart == null || pos >= text.length()) {
         return false;
       }
       char ch = text.charAt(pos);
-      return ch < 128 && asciiStart[ch];
+      return asciiStart.contains(ch);
     }
 
     private static boolean isBeginLine(String text, int pos, boolean unixLines) {

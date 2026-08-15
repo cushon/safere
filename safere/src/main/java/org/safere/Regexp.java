@@ -491,8 +491,8 @@ final class Regexp {
     if (r != 0 && r < 0x80 && "(){}[]*+?|.^$\\".indexOf((char) r) >= 0) {
       sb.append('\\');
       sb.appendCodePoint(r);
-    } else if (foldCase && 'a' <= r && r <= 'z') {
-      int upper = r - ('a' - 'A');
+    } else if (foldCase && Ascii.isLower(r)) {
+      int upper = Ascii.toUpperCase(r);
       sb.append('[');
       sb.append((char) upper);
       sb.append((char) r);

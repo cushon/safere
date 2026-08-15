@@ -29,6 +29,7 @@ final class Utf8InputFuzzer {
     assertKeywordAlternationMatchesString(data);
     assertFixedOffsetAccelerationMatchesString(data);
     assertMultiOffsetLiteralOccurrencesMatchString(data);
+    assertFinalLineTerminatorEndAnchorsMatchJdk(data);
     String repeatedLiteral =
         String.valueOf((char) data.consumeInt('A', 'Z')).repeat(data.consumeInt(2, 32));
     String suffix = new String(data.consumeBytes(data.consumeInt(0, 64)), StandardCharsets.UTF_8);
@@ -117,6 +118,23 @@ final class Utf8InputFuzzer {
             || utf8Matcher.start() < 0
             || utf8Matcher.end() > bytes.length)) {
       throw new AssertionError("UTF-8 literal search bounds differ from String search");
+    }
+  }
+
+  private static void assertFinalLineTerminatorEndAnchorsMatchJdk(FuzzedDataProvider data) {
+    String terminator = data.pickValue(List.of("\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029"));
+    String anchor = data.consumeBoolean() ? "$" : "\\Z";
+    String regex = data.consumeBoolean() ? ".*\\.json" + anchor : ".*[0-9]" + anchor;
+    String body = regex.contains("json") ? "config.json" : "item3";
+    String input = body + terminator;
+    int flags = data.consumeBoolean() ? 0 : Pattern.UNIX_LINES;
+
+    Pattern safeRe = Pattern.compile(regex, flags);
+    boolean expected = java.util.regex.Pattern.compile(regex, flags).matcher(input).find();
+    boolean stringFound = safeRe.matcher(input).find();
+    boolean utf8Found = safeRe.find(Utf8Input.validated(input.getBytes(StandardCharsets.UTF_8)));
+    if (stringFound != expected || utf8Found != expected) {
+      throw new AssertionError("end anchor differs from JDK for final line terminator");
     }
   }
 

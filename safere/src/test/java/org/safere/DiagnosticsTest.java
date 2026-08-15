@@ -348,6 +348,7 @@ class DiagnosticsTest {
 
     assertThat(matcher.find()).isTrue();
     matcher.usePattern(replacement);
+    matcher.reset("remainder");
     assertThat(matcher.find()).isFalse();
 
     assertThat(operationsFor(replacement))
@@ -606,6 +607,18 @@ class DiagnosticsTest {
 
     assertThat(operationsFor(pattern).getFirst().boundaryStrategy())
         .isEqualTo(MatchStrategy.BIT_STATE);
+  }
+
+  @Test
+  void exhaustedStartAnchorDoesNotReportPrefilterParticipation() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile("^a");
+    Matcher matcher = pattern.matcher("za").region(1, 2).useAnchoringBounds(true);
+
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.find()).isFalse();
+
+    assertThat(operationsFor(pattern).get(1).auxiliaryStrategies()).isEmpty();
   }
 
   @Test

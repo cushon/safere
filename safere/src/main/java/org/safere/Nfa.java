@@ -1503,7 +1503,7 @@ final class Nfa {
 
   /** Returns true if the code point is a word character ({@code [A-Za-z0-9_]}). */
   static boolean isWordChar(int c) {
-    return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9') || c == '_';
+    return Ascii.isWordChar(c);
   }
 
   /** Returns true if the code point is a Unicode word character (matching {@code \w} under UCC). */
