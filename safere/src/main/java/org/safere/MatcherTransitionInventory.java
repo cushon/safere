@@ -219,6 +219,7 @@ final class MatcherTransitionInventory {
           observer(signature("hasTransparentBounds")),
           boundsChange(signature("useAnchoringBounds", boolean.class)),
           observer(signature("hasAnchoringBounds")),
+          observer(signature("hasMatch")),
           transition(
               signature("toMatchResult"),
               ResultEffect.REQUIRES_MATCH,

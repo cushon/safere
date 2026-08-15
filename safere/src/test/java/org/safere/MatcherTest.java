@@ -2004,7 +2004,9 @@ class MatcherTest {
       Pattern p = Pattern.compile("(\\d+)");
       Matcher m = p.matcher("a1b2");
       m.find();
+      assertThat(m.hasMatch()).isTrue();
       MatchResult r = m.toMatchResult();
+      assertThat(r.hasMatch()).isTrue();
       assertThat(r.group()).isEqualTo("1");
       assertThat(r.group(1)).isEqualTo("1");
       assertThat(r.start()).isEqualTo(1);
@@ -2014,6 +2016,11 @@ class MatcherTest {
       m.find();
       assertThat(m.group()).isEqualTo("2");
       assertThat(r.group()).isEqualTo("1");
+      assertThat(r.hasMatch()).isTrue();
+      // Reset matcher; snapshot remains unaffected.
+      m.reset();
+      assertThat(m.hasMatch()).isFalse();
+      assertThat(r.hasMatch()).isTrue();
     }
 
     @Test
@@ -2022,7 +2029,9 @@ class MatcherTest {
       Pattern p = Pattern.compile("(?<letter>x)(y)?");
       Matcher m = p.matcher("abc");
 
+      assertThat(m.hasMatch()).isFalse();
       MatchResult result = m.toMatchResult();
+      assertThat(result.hasMatch()).isFalse();
 
       assertThat(result.groupCount()).isEqualTo(2);
       assertThat(result.namedGroups()).containsEntry("letter", 1);
@@ -2040,8 +2049,10 @@ class MatcherTest {
       Pattern p = Pattern.compile("x");
       Matcher m = p.matcher("abc");
       assertThat(m.find()).isFalse();
+      assertThat(m.hasMatch()).isFalse();
 
       MatchResult result = m.toMatchResult();
+      assertThat(result.hasMatch()).isFalse();
 
       assertThat(result.groupCount()).isZero();
       assertThatThrownBy(result::start).isInstanceOf(IllegalStateException.class);
@@ -2053,11 +2064,75 @@ class MatcherTest {
       Pattern p = Pattern.compile("(a)|(b)");
       Matcher m = p.matcher("a");
       assertThat(m.matches()).isTrue();
+      assertThat(m.hasMatch()).isTrue();
       MatchResult mr = m.toMatchResult();
+      assertThat(mr.hasMatch()).isTrue();
       assertThat(mr.group(1)).isEqualTo("a");
       assertThat(mr.group(2)).isNull();
       assertThat(mr.start(2)).isEqualTo(-1);
       assertThat(mr.end(2)).isEqualTo(-1);
+    }
+
+    @Nested
+    @DisplayName("hasMatch() lifecycle & contract tests")
+    class HasMatchTests {
+
+      @Test
+      @DisplayName("hasMatch() on fresh matcher returns false")
+      void freshMatcherHasMatchIsFalse() {
+        Pattern p = Pattern.compile("abc");
+        Matcher m = p.matcher("abcdef");
+        assertThat(m.hasMatch()).isFalse();
+      }
+
+      @Test
+      @DisplayName("hasMatch() reflects find() success and failure")
+      void findHasMatch() {
+        Pattern p = Pattern.compile("\\d+");
+        Matcher m = p.matcher("abc123def");
+        assertThat(m.hasMatch()).isFalse();
+
+        assertThat(m.find()).isTrue();
+        assertThat(m.hasMatch()).isTrue();
+
+        assertThat(m.find()).isFalse();
+        assertThat(m.hasMatch()).isFalse();
+      }
+
+      @Test
+      @DisplayName("hasMatch() reflects matches() and lookingAt() success and failure")
+      void matchesAndLookingAtHasMatch() {
+        Pattern p = Pattern.compile("abc");
+        Matcher m = p.matcher("abcdef");
+
+        assertThat(m.matches()).isFalse();
+        assertThat(m.hasMatch()).isFalse();
+
+        assertThat(m.lookingAt()).isTrue();
+        assertThat(m.hasMatch()).isTrue();
+      }
+
+      @Test
+      @DisplayName("hasMatch() resets to false on reset() and usePattern()")
+      void resetAndUsePatternHasMatch() {
+        Pattern p1 = Pattern.compile("abc");
+        Pattern p2 = Pattern.compile("xyz");
+        Matcher m = p1.matcher("abc");
+
+        assertThat(m.find()).isTrue();
+        assertThat(m.hasMatch()).isTrue();
+
+        m.usePattern(p2);
+        assertThat(m.hasMatch()).isFalse();
+
+        m.reset("xyz");
+        assertThat(m.hasMatch()).isFalse();
+        assertThat(m.find()).isTrue();
+        assertThat(m.hasMatch()).isTrue();
+
+        m.reset();
+        assertThat(m.hasMatch()).isFalse();
+      }
     }
 
     @Test

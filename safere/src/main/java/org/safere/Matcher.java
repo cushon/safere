@@ -2530,6 +2530,17 @@ public final class Matcher implements MatchResult {
   }
 
   /**
+   * Returns {@code true} if this matcher has a match.
+   *
+   * @return {@code true} if this matcher has a match, {@code false} otherwise
+   * @since 20
+   */
+  @Override
+  public boolean hasMatch() {
+    return hasMatch;
+  }
+
+  /**
    * Returns the offset after the last character of the subsequence captured by the given named
    * group.
    *
@@ -3818,6 +3829,11 @@ public final class Matcher implements MatchResult {
       this.groupCount = groupCount;
       this.namedGroups = Collections.unmodifiableMap(namedGroups);
       this.hasMatch = hasMatch;
+    }
+
+    @Override
+    public boolean hasMatch() {
+      return hasMatch;
     }
 
     @Override
