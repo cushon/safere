@@ -46,4 +46,14 @@ sealed interface StateAccelerator {
       return text.indexOfAsciiTriple(c1, c2, c3, fromIndex, limit);
     }
   }
+
+  /** Accelerator for a character-class escape (e.g. delimiters or character ranges). */
+  @SuppressWarnings("ArrayRecordComponent")
+  record CharClassEscape(int[] ranges, long bitmap0, long bitmap1) implements StateAccelerator {
+    @Override
+    public int findEscape(InputScanner text, int fromIndex, int limit) {
+      int found = text.indexOfCodePointClass(ranges, bitmap0, bitmap1, fromIndex);
+      return (found >= 0 && found < limit) ? found : -1;
+    }
+  }
 }
