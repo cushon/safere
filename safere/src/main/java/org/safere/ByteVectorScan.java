@@ -76,25 +76,42 @@ final class ByteVectorScan {
   }
 
   public static int indexOfIgnoreCase(
-      byte[] bytes, int offset, int length, String prefix, int start) {
-    int prefixLen = prefix.length();
+      byte[] bytes,
+      int offset,
+      int length,
+      String prefix,
+      int prefixLen,
+      int anchorOffset,
+      byte low,
+      byte high,
+      int start) {
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
     }
-    for (int i = 0; i < prefixLen; i++) {
-      if (prefix.charAt(i) > 127) {
-        return VectorScanProvider.UNSUPPORTED;
+    int pos = Math.max(0, start);
+
+    // Fast scalar prologue to catch immediate matches without SIMD setup
+    int scalarPrologueLimit = Math.min(length - prefixLen + 1, pos + Integer.BYTES);
+    for (; pos < scalarPrologueLimit; pos++) {
+      int b = bytes[offset + pos + anchorOffset] & 0xFF;
+      if ((b == (low & 0xFF) || b == (high & 0xFF))
+          && Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+        return pos;
       }
     }
 
-    int pos = Math.max(0, start);
     int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
+    if (pos > limit) {
+      int limitScalar = length - prefixLen;
+      for (int p = Math.max(start, pos - anchorOffset); p <= limitScalar; p++) {
+        if (Ascii.regionMatchesIgnoreCase(bytes, offset + p, prefix, prefixLen)) {
+          return p;
+        }
+      }
+      return -1;
+    }
 
-    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
-    char anchor = prefix.charAt(anchorOffset);
-    byte low = (byte) Ascii.toLowerCase(anchor);
-    byte high = (byte) Ascii.toUpperCase(anchor);
     ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
     ByteVector highVec = ByteVector.broadcast(SPECIES, high);
 
@@ -124,6 +141,25 @@ final class ByteVectorScan {
       }
     }
     return -1;
+  }
+
+  public static int indexOfIgnoreCase(
+      byte[] bytes, int offset, int length, String prefix, int start) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
+    char anchor = prefix.charAt(anchorOffset);
+    byte low = (byte) Ascii.toLowerCase(anchor);
+    byte high = (byte) Ascii.toUpperCase(anchor);
+    return indexOfIgnoreCase(
+        bytes, offset, length, prefix, prefixLen, anchorOffset, low, high, start);
   }
 
   private ByteVectorScan() {}
