@@ -72,9 +72,32 @@ final class StringVectorScan {
   }
 
   static int indexOfAsciiPair(String text, int c1, int c2, int fromIndex, int limit) {
-    if (!StringSupport.hasAccess() || !StringSupport.compatibleWith(text, ISO_8859_1)) {
+    if (!StringSupport.hasAccess()) {
       return -1;
     }
+    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return indexOfAsciiPairLatin1(text, c1, c2, fromIndex, limit);
+    }
+    if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
+      return indexOfAsciiPairUtf16(text, c1, c2, fromIndex, limit);
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiTriple(String text, int c1, int c2, int c3, int fromIndex, int limit) {
+    if (!StringSupport.hasAccess()) {
+      return -1;
+    }
+    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return indexOfAsciiTripleLatin1(text, c1, c2, c3, fromIndex, limit);
+    }
+    if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
+      return indexOfAsciiTripleUtf16(text, c1, c2, c3, fromIndex, limit);
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiPairLatin1(String text, int c1, int c2, int fromIndex, int limit) {
     int scanLimit = Math.min(limit, text.length());
     int pos = Math.max(0, fromIndex);
     int vectorLen = BYTE_SPECIES.length();
@@ -101,10 +124,35 @@ final class StringVectorScan {
     return -1;
   }
 
-  static int indexOfAsciiTriple(String text, int c1, int c2, int c3, int fromIndex, int limit) {
-    if (!StringSupport.hasAccess() || !StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return -1;
+  private static int indexOfAsciiPairUtf16(String text, int c1, int c2, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = SHORT_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ShortVector v1 = ShortVector.broadcast(SHORT_SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SHORT_SPECIES, (short) c2);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ShortVector inputVec = StringSupport.shortVectorFromString(SHORT_SPECIES, text, pos);
+      VectorMask<Short> matchMask = inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
     }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == c1 || c == c2) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiTripleLatin1(
+      String text, int c1, int c2, int c3, int fromIndex, int limit) {
     int scanLimit = Math.min(limit, text.length());
     int pos = Math.max(0, fromIndex);
     int vectorLen = BYTE_SPECIES.length();
@@ -117,6 +165,36 @@ final class StringVectorScan {
     for (; pos <= vecLimit; pos += vectorLen) {
       ByteVector inputVec = StringSupport.byteVectorFromString(BYTE_SPECIES, text, pos);
       VectorMask<Byte> matchMask =
+          inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2)).or(inputVec.compare(EQ, v3));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == c1 || c == c2 || c == c3) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiTripleUtf16(
+      String text, int c1, int c2, int c3, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = SHORT_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ShortVector v1 = ShortVector.broadcast(SHORT_SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SHORT_SPECIES, (short) c2);
+    ShortVector v3 = ShortVector.broadcast(SHORT_SPECIES, (short) c3);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ShortVector inputVec = StringSupport.shortVectorFromString(SHORT_SPECIES, text, pos);
+      VectorMask<Short> matchMask =
           inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2)).or(inputVec.compare(EQ, v3));
       if (matchMask.anyTrue()) {
         int bit = matchMask.firstTrue();
