@@ -320,6 +320,45 @@ def _fmt_cell(score, error):
 # ---------------------------------------------------------------------------
 
 
+_GENERIC_RUNNER_METHODS = frozenset({
+    "run",
+    "runBenchmark",
+    "runDeclared",
+    "runScaling",
+    "runNoFork",
+    "runColdStart",
+    "runSpecialized",
+})
+
+
+def _simplify_benchmark_name(benchmark):
+    """Dynamically strip package, class, and generic harness runner prefixes."""
+    parts = benchmark.split(".")
+
+    # 1. Skip leading lowercase package segments (e.g., 'org.safere.benchmark')
+    start_idx = 0
+    while start_idx < len(parts) and parts[start_idx] and parts[start_idx][0].islower():
+        if start_idx + 1 < len(parts) and parts[start_idx + 1] and parts[start_idx + 1][0].isupper():
+            start_idx += 1
+            break
+        start_idx += 1
+
+    remaining = parts[start_idx:]
+    if not remaining:
+        return benchmark
+
+    # 2. If the first segment is a Java class name (starts with uppercase)
+    if remaining[0] and remaining[0][0].isupper():
+        # If followed by a generic harness runner method, strip class + runner
+        if len(remaining) >= 3 and remaining[1] in _GENERIC_RUNNER_METHODS:
+            return ".".join(remaining[2:])
+        # Otherwise, strip just the class name
+        elif len(remaining) >= 2:
+            return ".".join(remaining[1:])
+
+    return ".".join(remaining)
+
+
 def _benchmark_class(benchmark):
     """Return the class portion of a ``ClassName.method`` benchmark name."""
     dot = benchmark.rfind(".")
@@ -362,15 +401,41 @@ def load_declared_plan(path):
     return statuses
 
 
-def generate_tables(results, engines, declared_statuses=None):
-    """Generate markdown tables from *results*, one per benchmark class.
+def _format_speedup(r_base, r_curr):
+    """Computes and formats the speedup ratio between a baseline and current measurement."""
+    if not r_base or not r_curr or r_base.score <= 0 or r_curr.score <= 0:
+        return "—"
+    unit = (r_base.unit or r_curr.unit or "").lower()
+    if "ops" in unit or "thrpt" in unit:
+        ratio = r_curr.score / r_base.score
+    else:
+        ratio = r_base.score / r_curr.score
+    if ratio >= 10.0:
+        return f"{ratio:.1f}x"
+    elif ratio >= 1.0:
+        return f"{ratio:.2f}x"
+    else:
+        return f"{ratio:.2f}x"
+
+
+def generate_tables(
+    results,
+    engines=None,
+    declared_statuses=None,
+    show_speedup=False,
+    single_table=False,
+):
+    """Generate markdown comparison tables from a list of Results.
 
     Args:
-        results: iterable of ``Result`` objects.
-        engines: ordered list of engine names for column layout.
+        results: list of Result namedtuples.
+        engines: list of engine names in column order, or None to auto-detect.
+        declared_statuses: optional dict from (benchmark, engine) to status.
+        show_speedup: if True and exactly 2 engines are compared, include Speedup column.
+        single_table: if True, render all results in one unified table with full names.
 
     Returns:
-        A string containing the full markdown output.
+        Markdown string containing one or more tables.
     """
     # Index: (benchmark, engine) → Result
     index = {}
@@ -396,21 +461,27 @@ def generate_tables(results, engines, declared_statuses=None):
             if e not in engines:
                 engines.append(e)
 
-    # Group benchmarks by class.
-    groups = collections.OrderedDict()
-    for bench in all_benchmarks:
-        cls = _benchmark_class(bench)
-        groups.setdefault(cls, []).append(bench)
+    # Group benchmarks by class (or single group if single_table is True).
+    if single_table:
+        groups = collections.OrderedDict([("", list(all_benchmarks.keys()))])
+    else:
+        groups = collections.OrderedDict()
+        for bench in all_benchmarks:
+            cls = _benchmark_class(bench)
+            groups.setdefault(cls, []).append(bench)
+
+    include_speedup = show_speedup and len(engines) == 2
 
     lines = []
     first_group = True
     for cls, benchmarks in groups.items():
-        if not first_group:
+        if not first_group and cls:
             lines.append("")
         first_group = False
 
-        lines.append(f"### {cls}")
-        lines.append("")
+        if cls:
+            lines.append(f"### {cls}")
+            lines.append("")
 
         # Determine the unit from the first available result for this group.
         unit = ""
@@ -426,11 +497,13 @@ def generate_tables(results, engines, declared_statuses=None):
         # Build header.
         header_bench = "Benchmark"
         engine_headers = [f"{eng} ({unit})" if unit else eng for eng in engines]
+        if include_speedup:
+            engine_headers.append("Speedup")
 
         # Compute cell contents so we can measure column widths.
         rows = []
         for bench in benchmarks:
-            method = _benchmark_method(bench)
+            name = _simplify_benchmark_name(bench) if single_table else _benchmark_method(bench)
             cells = []
             for eng in engines:
                 r = index.get((bench, eng))
@@ -442,7 +515,11 @@ def generate_tables(results, engines, declared_statuses=None):
                     cells.append("missing")
                 else:
                     cells.append("—")
-            rows.append((method, cells))
+            if include_speedup:
+                r1 = index.get((bench, engines[0]))
+                r2 = index.get((bench, engines[1]))
+                cells.append(_format_speedup(r1, r2))
+            rows.append((name, cells))
 
         # Column widths.
         bench_width = max(len(header_bench), *(len(row[0]) for row in rows))
@@ -466,8 +543,8 @@ def generate_tables(results, engines, declared_statuses=None):
         lines.append("| " + " | ".join(sep_parts) + " |")
 
         # Emit data rows.
-        for method, cells in rows:
-            parts = [_pad(method, bench_width)]
+        for name, cells in rows:
+            parts = [_pad(name, bench_width)]
             for i, cell in enumerate(cells):
                 parts.append(_rpad(cell, col_widths[i]))
             lines.append("| " + " | ".join(parts) + " |")
@@ -512,6 +589,16 @@ def main(argv=None):
         metavar="FILE",
         help="Write all parsed results in the normalized JSON-lines format.",
     )
+    parser.add_argument(
+        "--speedup",
+        action="store_true",
+        help="Include a Speedup column when comparing exactly two engines.",
+    )
+    parser.add_argument(
+        "--single-table",
+        action="store_true",
+        help="Emit all results in a single unified table with full benchmark names.",
+    )
     args = parser.parse_args(argv)
 
     if not args.jmh and not args.json:
@@ -536,7 +623,15 @@ def main(argv=None):
     declared_statuses = (
         load_declared_plan(args.declared_plan) if args.declared_plan else None
     )
-    print(generate_tables(results, engines, declared_statuses))
+    print(
+        generate_tables(
+            results,
+            engines,
+            declared_statuses,
+            show_speedup=args.speedup,
+            single_table=args.single_table,
+        )
+    )
 
 
 if __name__ == "__main__":

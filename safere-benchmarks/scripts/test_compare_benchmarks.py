@@ -203,5 +203,65 @@ class CrossEngineResultParsingTest(unittest.TestCase):
             ],
         )
 
+    def test_generate_tables_with_speedup(self):
+        results = [
+            COMPARE.Result("baseline", "RegexBenchmark.literalMatch", 100.0, 5.0, "ns/op"),
+            COMPARE.Result("current", "RegexBenchmark.literalMatch", 25.0, 1.0, "ns/op"),
+        ]
+        table = COMPARE.generate_tables(
+            results,
+            engines=["baseline", "current"],
+            show_speedup=True,
+        )
+        self.assertIn("Speedup", table)
+        self.assertIn("4.00x", table)
+
+    def test_generate_tables_single_table(self):
+        results = [
+            COMPARE.Result(
+                "baseline",
+                "RealWorldRegexBenchmark.runBenchmark.jsonBlock.match.1000",
+                100.0,
+                5.0,
+                "ns/op",
+            ),
+            COMPARE.Result(
+                "current",
+                "RealWorldRegexBenchmark.runBenchmark.jsonBlock.match.1000",
+                25.0,
+                1.0,
+                "ns/op",
+            ),
+        ]
+        table = COMPARE.generate_tables(
+            results,
+            engines=["baseline", "current"],
+            single_table=True,
+        )
+        self.assertNotIn("### RealWorldRegexBenchmark", table)
+        self.assertIn("jsonBlock.match.1000", table)
+        self.assertNotIn("RealWorldRegexBenchmark.runBenchmark.", table)
+
+    def test_simplify_benchmark_name_dynamic(self):
+        self.assertEqual(
+            COMPARE._simplify_benchmark_name(
+                "org.safere.benchmark.RealWorldRegexBenchmark.runBenchmark.caseInsensitiveKeywordFind.match.1000"
+            ),
+            "caseInsensitiveKeywordFind.match.1000",
+        )
+        self.assertEqual(
+            COMPARE._simplify_benchmark_name("ApplicationBenchmark.uuidValidation"),
+            "uuidValidation",
+        )
+        self.assertEqual(
+            COMPARE._simplify_benchmark_name("SingleCharClassBenchmark.findDigitAbsent.1048576"),
+            "findDigitAbsent.1048576",
+        )
+        self.assertEqual(
+            COMPARE._simplify_benchmark_name("CustomClassBenchmark.run.specialTrial"),
+            "specialTrial",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
