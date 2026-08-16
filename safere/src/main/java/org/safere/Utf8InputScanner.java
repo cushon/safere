@@ -52,6 +52,41 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return length;
   }
 
+  @Override
+  public int indexOfAscii(int ascii, int fromIndex, int limit) {
+    int start = Math.max(0, fromIndex);
+    int scanLen = Math.min(length, limit);
+    if (start >= scanLen) {
+      return -1;
+    }
+    int res = indexOfByte((byte) ascii, start);
+    return (res >= 0 && res < limit) ? res : -1;
+  }
+
+  @Override
+  public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
+    int start = Math.max(0, fromIndex);
+    int scanLen = Math.min(length, limit);
+    if (start >= scanLen) {
+      return -1;
+    }
+    int res = ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, (byte) c1, (byte) c2, start);
+    return (res >= 0 && res < limit) ? res : -1;
+  }
+
+  @Override
+  public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
+    int start = Math.max(0, fromIndex);
+    int scanLen = Math.min(length, limit);
+    if (start >= scanLen) {
+      return -1;
+    }
+    int res =
+        ByteSwarScan.indexOfByteTriple(
+            bytes, offset, scanLen, (byte) c1, (byte) c2, (byte) c3, start);
+    return (res >= 0 && res < limit) ? res : -1;
+  }
+
   Utf8InputScanner slice(int start, int end) {
     return new Utf8InputScanner(bytes, offset + start, end - start);
   }

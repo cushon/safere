@@ -7,6 +7,7 @@ package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -147,6 +148,45 @@ class EnginePathEquivalenceTest {
         "foo[0-9]+",
         "xxfoo123 yyfoo45",
         EnginePathOptions.builder().startAcceleration(false).build());
+  }
+
+  @Test
+  @DisplayName("DFA-loop start acceleration preserves position-dependent state across inputs")
+  void dfaLoopStartAccelerationPreservesPositionDependentStateAcrossInputs() {
+    String regex = "(b|(?m:^a))c[0-9]";
+    for (String lineTerminator : List.of("\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029")) {
+      Pattern accelerated = Pattern.compile(regex);
+      Pattern control =
+          Pattern.compile(regex, 0, EnginePathOptions.builder().startAcceleration(false).build());
+      for (String input : List.of(lineTerminator + "acz9y", " ycby ", "y0c\n1bac19c1__19x y_")) {
+        boolean expected = java.util.regex.Pattern.compile(regex).matcher(input).find();
+        Utf8Input utf8 = Utf8Input.validated(input.getBytes(StandardCharsets.UTF_8));
+
+        assertThat(control.find(utf8)).as("control for %s", printable(input)).isEqualTo(expected);
+        assertThat(accelerated.find(utf8))
+            .as("accelerated search for %s", printable(input))
+            .isEqualTo(expected);
+      }
+    }
+
+    String nonAsciiInput = "bxc\rca9\né\nac9é\r0x\r9a0";
+    Pattern accelerated = Pattern.compile(regex);
+    Pattern control =
+        Pattern.compile(regex, 0, EnginePathOptions.builder().startAcceleration(false).build());
+    boolean expected = java.util.regex.Pattern.compile(regex).matcher(nonAsciiInput).find();
+    assertThat(control.matcher(nonAsciiInput).find()).isEqualTo(expected);
+    assertThat(accelerated.matcher(nonAsciiInput).find()).isEqualTo(expected);
+  }
+
+  @Test
+  @DisplayName("disabled start acceleration is not installed in forward DFAs")
+  void disabledStartAccelerationIsNotInstalledInForwardDfas() {
+    Pattern pattern =
+        Pattern.compile(
+            "foo[0-9]+", 0, EnginePathOptions.builder().startAcceleration(false).build());
+
+    assertThat(pattern.forwardFirstMatchDfa().hasStartAcceleration()).isFalse();
+    assertThat(pattern.forwardLongestMatchDfa().hasStartAcceleration()).isFalse();
   }
 
   @Test
@@ -360,6 +400,10 @@ class EnginePathEquivalenceTest {
     }
     traces.add(snapshot(matcher, false));
     return traces;
+  }
+
+  private static String printable(String input) {
+    return input.replace("\r", "\\r").replace("\n", "\\n");
   }
 
   private static String appendReplacementTrace(Matcher matcher) {

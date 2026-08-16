@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
@@ -508,5 +509,177 @@ class DfaTest {
     assertThat(second.matched()).isTrue();
     assertThat(first.ambiguous()).isTrue();
     assertThat(second.ambiguous()).isTrue();
+  }
+
+  @Nested
+  @DisplayName("Self-Loop Escape Acceleration")
+  class SelfLoopEscapeAcceleration {
+    @Test
+    void quotedStringLongPayload() {
+      String filler = "x".repeat(5000);
+      String text = "prefix \"" + filler + "\" suffix";
+      Dfa.SearchResult result = search("\"[^\"]*\"", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(8 + 5000 + 1);
+    }
+
+    @Test
+    void headerLineTerminatorLongPayload() {
+      String filler = "a".repeat(10000);
+      String text = "header:" + filler + "\nrest";
+      Dfa.SearchResult result = search("header:[^\n]*\n", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(7 + 10000 + 1);
+    }
+
+    @Test
+    void htmlTagLongPayload() {
+      String filler = "content".repeat(1000);
+      String text = "before <div " + filler + "> after";
+      Dfa.SearchResult result = search("<[^>]*>", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(12 + 7000 + 1);
+    }
+
+    @Test
+    void multiEscapeBytePair() {
+      String filler = "data".repeat(1000);
+      String text = "prefix " + filler + ",suffix";
+      Dfa.SearchResult result = search("[^,\n]*,", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(7 + 4000 + 1);
+    }
+
+    @Test
+    void selfLoopNoEscapeFoundUntilEof() {
+      String filler = "x".repeat(5000);
+      String text = "start \"" + filler;
+      Dfa.SearchResult result = search("\"[^\"]*\"", text);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isFalse();
+    }
+
+    @Test
+    void selfLoopStopsAtNonAsciiTransitions() {
+      assertNonAsciiEscapeMatches("é");
+      assertNonAsciiEscapeMatches("😀");
+    }
+
+    @Test
+    void startAccelerationUsesOnlyTheActiveInputSubstrate() {
+      Pattern pattern = Pattern.compile("(?m)^foo");
+      Dfa dfa = pattern.forwardFirstMatchDfa();
+
+      assertThat(dfa.hasStartAcceleration(new StringInputScanner("foo"))).isTrue();
+      assertThat(dfa.hasStartAcceleration(new Utf8InputScanner("foo".getBytes(UTF_8)))).isFalse();
+    }
+
+    @Test
+    void selfLoopUtf8ScannerEquivalence() {
+      String filler = "x".repeat(2000);
+      String text = "start \"" + filler + "\" end";
+      byte[] bytes = text.getBytes(UTF_8);
+      Regexp re = Parser.parse("\"[^\"]*\"", FLAGS);
+      Prog prog = Compiler.compile(re);
+      Utf8InputScanner scanner = new Utf8InputScanner(bytes, 0, bytes.length);
+      Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+      Dfa.SearchResult result = dfa.doSearch(scanner, 0, false, false);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+      assertThat(result.pos()).isEqualTo(7 + 2000 + 1);
+    }
+
+    private static void assertNonAsciiEscapeMatches(String escape) {
+      String pattern = "A[\\x00-\\x21\\x23-\\x7F]*" + escape;
+      String text = "A" + "x".repeat(1000) + escape;
+      Pattern compiledPattern = Pattern.compile(pattern);
+      assertThat(compiledPattern.matcher(text).find()).isTrue();
+      assertThat(compiledPattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+
+      Dfa.SearchResult stringResult = search(pattern, text);
+      assertThat(stringResult).isNotNull();
+      assertThat(stringResult.matched()).isTrue();
+
+      byte[] bytes = text.getBytes(UTF_8);
+      Regexp re = Parser.parse(pattern, FLAGS);
+      Prog prog = Compiler.compile(re);
+      Dfa.SearchResult utf8Result =
+          new Dfa(prog, 1000, Dfa.buildSetup(prog), false)
+              .doSearch(new Utf8InputScanner(bytes, 0, bytes.length), 0, false, false);
+      assertThat(utf8Result).isNotNull();
+      assertThat(utf8Result.matched()).isTrue();
+    }
+  }
+
+  @Test
+  void multilineAnchorAlternationRejectsFalseUtf8Candidate() {
+    String regex = "(b|(?m:^a))cd[0-9]";
+    String input = "x".repeat(100) + "0cb\r1bacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().startAcceleration(false).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+    Pattern control = Pattern.compile(regex, 0, disabled);
+    Utf8Input utf8 = Utf8Input.validated(input.getBytes(UTF_8));
+
+    assertThat(control.find(utf8)).isFalse();
+    assertThat(accelerated.find(utf8))
+        .as("Accelerated DFA must not match (?m:^a) when 'a' is not after line terminator")
+        .isEqualTo(control.find(utf8));
+  }
+
+  @Test
+  void multilineAnchorAlternationRejectsFalseStringCandidate() {
+    String regex = "(b|(?m:^a))cd[0-9]";
+    String input = "x".repeat(100) + "0cb\r1bacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().startAcceleration(false).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+    Pattern control = Pattern.compile(regex, 0, disabled);
+
+    assertThat(control.matcher(input).find()).isFalse();
+    assertThat(accelerated.matcher(input).find())
+        .as("Accelerated DFA String search must match unaccelerated control")
+        .isEqualTo(control.matcher(input).find());
+  }
+
+  @Test
+  void wordBoundaryAnchorAlternationWithFalseCandidate() {
+    String regex = "(b|\\ba)cd[0-9]";
+    String input = "x".repeat(100) + "0cb_bacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().startAcceleration(false).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+    Pattern control = Pattern.compile(regex, 0, disabled);
+
+    assertThat(control.matcher(input).find()).isFalse();
+    assertThat(accelerated.matcher(input).find()).isEqualTo(control.matcher(input).find());
+  }
+
+  @Test
+  void startOfTextAnchorAlternationWithFalseCandidate() {
+    String regex = "(b|\\Aa)cd[0-9]";
+    String input = "x".repeat(100) + "0cb1bacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    EnginePathOptions disabled = EnginePathOptions.builder().startAcceleration(false).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+    Pattern control = Pattern.compile(regex, 0, disabled);
+
+    assertThat(control.matcher(input).find()).isFalse();
+    assertThat(accelerated.matcher(input).find()).isEqualTo(control.matcher(input).find());
+  }
+
+  @Test
+  void multilineAnchorTrueCandidateMatches() {
+    String regex = "(b|(?m:^a))cd[0-9]";
+    String input = "x".repeat(100) + "0cb\nacd19c1__19x y_";
+    EnginePathOptions enabled = EnginePathOptions.builder().startAcceleration(true).build();
+    Pattern accelerated = Pattern.compile(regex, 0, enabled);
+
+    assertThat(accelerated.matcher(input).find()).isTrue();
+    assertThat(accelerated.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
   }
 }
