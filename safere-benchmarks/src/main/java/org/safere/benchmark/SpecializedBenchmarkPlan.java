@@ -5,6 +5,7 @@
 
 package org.safere.benchmark;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,7 +26,7 @@ final class SpecializedBenchmarkPlan {
 
   static SpecializedBenchmarkPlan load() {
     Map<String, Trial> trials = new LinkedHashMap<>();
-    List<MaterializedExecutionPlan.Entry> exclusions = new java.util.ArrayList<>();
+    List<MaterializedExecutionPlan.Entry> exclusions = new ArrayList<>();
     for (MaterializedExecutionPlan.Entry entry :
         MaterializedExecutionPlan.load().entriesForRunner("java")) {
       if (!isSpecialized(entry.operation(), entry.measurement())) {

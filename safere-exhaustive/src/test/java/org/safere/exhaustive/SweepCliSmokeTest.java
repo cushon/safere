@@ -6,12 +6,15 @@
 package org.safere.exhaustive;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -155,7 +158,7 @@ class SweepCliSmokeTest {
   void regionScalarSweepClassifiesQuantifiedSplitSurrogateCompositionAsIntentional() {
     assertThat(
             RegionScalarDivergenceSweep.classifyDivergenceShapeForTesting(
-                ".", "%s+", java.util.regex.Pattern.DOTALL, "\uD83D\uDE00", 0, 1))
+                ".", "%s+", Pattern.DOTALL, "\uD83D\uDE00", 0, 1))
         .isEqualTo("QUANTIFIED_SPLIT_SURROGATE_SCALAR_COMPOSITION");
     assertThat(
             RegionScalarDivergenceSweep.classifyDivergenceShapeForTesting(
@@ -167,7 +170,7 @@ class SweepCliSmokeTest {
   void regionScalarSweepIncludesSplitSurrogateOrdinaryAtomCases() {
     assertThat(
             RegionScalarDivergenceSweep.containsGeneratedCaseForTesting(
-                ".", "%s", java.util.regex.Pattern.DOTALL, "\uD83D\uDE00", 0, 1))
+                ".", "%s", Pattern.DOTALL, "\uD83D\uDE00", 0, 1))
         .isTrue();
     assertThat(
             RegionScalarDivergenceSweep.containsGeneratedCaseForTesting(
@@ -187,7 +190,7 @@ class SweepCliSmokeTest {
         .isTrue();
     assertThat(
             RegionZeroWidthDivergenceSweep.containsGeneratedCaseForTesting(
-                "\\B", java.util.regex.Pattern.UNICODE_CHARACTER_CLASS, "a\uD83D\uDE00", 1, 2))
+                "\\B", Pattern.UNICODE_CHARACTER_CLASS, "a\uD83D\uDE00", 1, 2))
         .isTrue();
     assertThat(
             RegionZeroWidthDivergenceSweep.containsGeneratedCaseForTesting(
@@ -199,7 +202,7 @@ class SweepCliSmokeTest {
         .isTrue();
     assertThat(
             RegionZeroWidthDivergenceSweep.containsGeneratedCaseForTesting(
-                "\\B.", java.util.regex.Pattern.DOTALL, "\uD83D\uDE00", 0, 1))
+                "\\B.", Pattern.DOTALL, "\uD83D\uDE00", 0, 1))
         .isTrue();
     assertThat(
             RegionZeroWidthDivergenceSweep.containsGeneratedCaseForTesting(
@@ -223,7 +226,7 @@ class SweepCliSmokeTest {
         .isEqualTo("NON_WORD_BOUNDARY_SPLIT_SURROGATE_INTERIOR_POSITION");
     assertThat(
             RegionZeroWidthDivergenceSweep.classifyDivergenceShapeForTesting(
-                "y|\\B.", java.util.regex.Pattern.DOTALL, "x\uD83D\uDE00y", 1, 4, true, false))
+                "y|\\B.", Pattern.DOTALL, "x\uD83D\uDE00y", 1, 4, true, false))
         .isEqualTo("NON_WORD_BOUNDARY_SPLIT_SURROGATE_INTERIOR_POSITION");
   }
 
@@ -276,7 +279,7 @@ class SweepCliSmokeTest {
 
   @Test
   void regexSweepTraceIncludesCapturesForZeroWidthPossessiveStar() {
-    RegexSweep.Outcome outcome = RegexSweep.jdkTraceOutcome("()*+", 0, java.util.List.of(""), 1);
+    RegexSweep.Outcome outcome = RegexSweep.jdkTraceOutcome("()*+", 0, List.of(""), 1);
 
     assertThat(outcome.accepted()).isTrue();
     assertThat(outcome.trace()).contains(":matches=true@0-0{groups=1;g1=0-0:");
@@ -301,14 +304,11 @@ class SweepCliSmokeTest {
                 "((\\b{g})*+)a?", "a"))
         .isTrue();
 
-    RegexSweep.Outcome outcome =
-        RegexSweep.jdkTraceOutcome("(?:()*+|a).", 0, java.util.List.of("ab"), 1);
-    RegexSweep.Outcome capturedAnchor =
-        RegexSweep.jdkTraceOutcome("(^)*+a", 0, java.util.List.of("ba"), 1);
-    RegexSweep.Outcome zeroCount =
-        RegexSweep.jdkTraceOutcome("(){0}+a", 0, java.util.List.of("ba"), 1);
+    RegexSweep.Outcome outcome = RegexSweep.jdkTraceOutcome("(?:()*+|a).", 0, List.of("ab"), 1);
+    RegexSweep.Outcome capturedAnchor = RegexSweep.jdkTraceOutcome("(^)*+a", 0, List.of("ba"), 1);
+    RegexSweep.Outcome zeroCount = RegexSweep.jdkTraceOutcome("(){0}+a", 0, List.of("ba"), 1);
     RegexSweep.Outcome repeatedFindZeroLength =
-        RegexSweep.jdkTraceOutcome("((\\b{g})*+)a?", 0, java.util.List.of("a"), 2);
+        RegexSweep.jdkTraceOutcome("((\\b{g})*+)a?", 0, List.of("a"), 2);
 
     assertThat(outcome.accepted()).isTrue();
     assertThat(outcome.trace()).contains("ab:matches=true@0-2{groups=1;g1=0-0:");
@@ -700,7 +700,7 @@ class SweepCliSmokeTest {
         """);
 
     assertThat(
-            org.assertj.core.api.Assertions.catchThrowable(
+            catchThrowable(
                 () -> ZeroWidthQuantifierDivergenceSweep.main(replayArgs(outputDir, replayFile))))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("unknown behavioral divergences");
@@ -764,7 +764,7 @@ class SweepCliSmokeTest {
         """);
 
     assertThat(
-            org.assertj.core.api.Assertions.catchThrowable(
+            catchThrowable(
                 () ->
                     GraphemeClusterDivergenceSweep.main(
                         replayArgs(outputDir, replayFile, "--unknown-stratified-samples=2"))))

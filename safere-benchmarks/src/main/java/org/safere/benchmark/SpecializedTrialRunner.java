@@ -8,12 +8,17 @@ package org.safere.benchmark;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.LongAdder;
 import org.openjdk.jmh.infra.Blackhole;
+import org.safere.OperationDiagnostics;
+import org.safere.Pattern;
 import org.safere.PatternSet;
+import org.safere.SafeReMatchDiagnostics;
+import org.safere.Utf8Input;
+import org.safere.Utf8Matcher;
+import org.safere.Utf8Sink;
 
 /** Prepared execution state for one SafeRE-specific declarative trial. */
 final class SpecializedTrialRunner implements AutoCloseable {
-  private static final org.safere.SafeReMatchDiagnostics NO_OP =
-      new org.safere.SafeReMatchDiagnostics() {};
+  private static final SafeReMatchDiagnostics NO_OP = new SafeReMatchDiagnostics() {};
 
   private final Task task;
   private final boolean diagnostics;
@@ -62,14 +67,14 @@ final class SpecializedTrialRunner implements AutoCloseable {
   }
 
   private static Task captureBounds(DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
-    org.safere.Pattern pattern = org.safere.Pattern.compile(workload.patterns().getFirst());
-    org.safere.Utf8Input input = utf8Input(workload);
+    Pattern pattern = Pattern.compile(workload.patterns().getFirst());
+    Utf8Input input = utf8Input(workload);
     int[] groups =
         ((DeclarativeBenchmarkPlan.RecipeIntegerList) workload.arguments().get("groups"))
             .values().stream().mapToInt(Integer::intValue).toArray();
     boolean includeEnd = stringArgument(workload, "bounds", "startEnd").equals("startEnd");
     return blackhole -> {
-      org.safere.Utf8Matcher matcher = pattern.matcher(input);
+      Utf8Matcher matcher = pattern.matcher(input);
       int sum = 0;
       while (matcher.find()) {
         for (int group : groups) {
@@ -84,22 +89,22 @@ final class SpecializedTrialRunner implements AutoCloseable {
   }
 
   private static Task decodeFind(DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
-    org.safere.Pattern pattern = org.safere.Pattern.compile(workload.patterns().getFirst());
+    Pattern pattern = Pattern.compile(workload.patterns().getFirst());
     byte[] bytes = BenchmarkData.get().getInputBytes(workload.inputIds().getFirst());
     return blackhole ->
         blackhole.consume(pattern.matcher(new String(bytes, StandardCharsets.UTF_8)).find());
   }
 
   private static Task utf8Replacement(DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
-    org.safere.Pattern pattern = org.safere.Pattern.compile(workload.patterns().getFirst());
-    org.safere.Utf8Input input = utf8Input(workload);
-    org.safere.Utf8Input replacement =
-        org.safere.Utf8Input.validated(
+    Pattern pattern = Pattern.compile(workload.patterns().getFirst());
+    Utf8Input input = utf8Input(workload);
+    Utf8Input replacement =
+        Utf8Input.validated(
             stringArgument(workload, "replacement", "").getBytes(StandardCharsets.UTF_8));
     CountingSink sink = new CountingSink();
     return blackhole -> {
       sink.reset();
-      org.safere.Utf8Matcher matcher = pattern.matcher(input);
+      Utf8Matcher matcher = pattern.matcher(input);
       while (matcher.find()) {
         matcher.appendReplacement(sink, replacement);
       }
@@ -115,9 +120,8 @@ final class SpecializedTrialRunner implements AutoCloseable {
             .filter(step -> step.kind() == DeclarativeBenchmarkPlan.LifecycleStepKind.REGION)
             .findFirst()
             .orElseThrow();
-    org.safere.Utf8Input input =
-        org.safere.Utf8Input.trusted(storage, region.start(), region.end() - region.start());
-    org.safere.Pattern pattern = org.safere.Pattern.compile(workload.patterns().getFirst());
+    Utf8Input input = Utf8Input.trusted(storage, region.start(), region.end() - region.start());
+    Pattern pattern = Pattern.compile(workload.patterns().getFirst());
     return blackhole -> blackhole.consume(pattern.find(input));
   }
 
@@ -125,39 +129,36 @@ final class SpecializedTrialRunner implements AutoCloseable {
     byte[] bytes = BenchmarkData.get().getInputBytes(workload.inputIds().getFirst());
     boolean validated = stringArgument(workload, "mode", "trusted").equals("validated");
     return blackhole ->
-        blackhole.consume(
-            validated
-                ? org.safere.Utf8Input.validated(bytes)
-                : org.safere.Utf8Input.trusted(bytes));
+        blackhole.consume(validated ? Utf8Input.validated(bytes) : Utf8Input.trusted(bytes));
   }
 
   private static Task analyze(DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
     String regex = workload.patterns().getFirst();
-    return blackhole -> blackhole.consume(org.safere.Pattern.compile(regex));
+    return blackhole -> blackhole.consume(Pattern.compile(regex));
   }
 
   private static Task cachedAnalysis(DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
-    org.safere.Pattern pattern = org.safere.Pattern.compile(workload.patterns().getFirst());
+    Pattern pattern = Pattern.compile(workload.patterns().getFirst());
     pattern.analysis();
     return blackhole -> blackhole.consume(pattern.analysis());
   }
 
   private static Task compileAndAnalyze(DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
     String regex = workload.patterns().getFirst();
-    return blackhole -> blackhole.consume(org.safere.Pattern.compile(regex).analysis());
+    return blackhole -> blackhole.consume(Pattern.compile(regex).analysis());
   }
 
   private static Task diagnostics(DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
     String listener = stringArgument(workload, "listener", "disabled");
-    org.safere.Pattern.setDiagnostics(
+    Pattern.setDiagnostics(
         switch (listener) {
-          case "disabled" -> org.safere.SafeReMatchDiagnostics.NONE;
+          case "disabled" -> SafeReMatchDiagnostics.NONE;
           case "noop" -> NO_OP;
           case "longAdder" -> new AggregatingDiagnostics();
           default ->
               throw new IllegalArgumentException("Unknown diagnostics listener: " + listener);
         });
-    org.safere.Pattern pattern = org.safere.Pattern.compile(workload.patterns().getFirst());
+    Pattern pattern = Pattern.compile(workload.patterns().getFirst());
     String input = inputString(workload);
     String action = stringArgument(workload, "action", "find");
     String replacement = stringArgument(workload, "replacement", "");
@@ -174,10 +175,8 @@ final class SpecializedTrialRunner implements AutoCloseable {
     return BenchmarkData.get().getInputString(workload.inputIds().getFirst());
   }
 
-  private static org.safere.Utf8Input utf8Input(
-      DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
-    return org.safere.Utf8Input.trusted(
-        BenchmarkData.get().getInputBytes(workload.inputIds().getFirst()));
+  private static Utf8Input utf8Input(DeclarativeBenchmarkPlan.ExpandedWorkload workload) {
+    return Utf8Input.trusted(BenchmarkData.get().getInputBytes(workload.inputIds().getFirst()));
   }
 
   private static String stringArgument(
@@ -199,7 +198,7 @@ final class SpecializedTrialRunner implements AutoCloseable {
   @Override
   public void close() {
     if (diagnostics) {
-      org.safere.Pattern.setDiagnostics(org.safere.SafeReMatchDiagnostics.NONE);
+      Pattern.setDiagnostics(SafeReMatchDiagnostics.NONE);
     }
   }
 
@@ -207,7 +206,7 @@ final class SpecializedTrialRunner implements AutoCloseable {
     void run(Blackhole blackhole);
   }
 
-  private static final class CountingSink implements org.safere.Utf8Sink {
+  private static final class CountingSink implements Utf8Sink {
     private int length;
 
     @Override
@@ -224,12 +223,12 @@ final class SpecializedTrialRunner implements AutoCloseable {
     }
   }
 
-  private static final class AggregatingDiagnostics extends org.safere.SafeReMatchDiagnostics {
+  private static final class AggregatingDiagnostics extends SafeReMatchDiagnostics {
     private final LongAdder operations = new LongAdder();
     private final LongAdder matches = new LongAdder();
 
     @Override
-    public void onOperationCompleted(org.safere.OperationDiagnostics event) {
+    public void onOperationCompleted(OperationDiagnostics event) {
       operations.increment();
       matches.add(event.matchCount());
     }
