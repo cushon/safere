@@ -339,7 +339,7 @@ public final class Pattern implements Serializable {
     this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
-    if (canUseOnePass()) {
+    if (shouldEagerlyBuildOnePass()) {
       onePassAnalysis();
     }
     forwardDfaSetup();
@@ -1107,11 +1107,6 @@ public final class Pattern implements Serializable {
   private OnePassAnalysis onePassAnalysis() {
     OnePassAnalysis analysis = onePassAnalysis;
     if (analysis == null) {
-      if (!canUseOnePass()) {
-        analysis = OnePassAnalysis.DISABLED;
-        onePassAnalysis = analysis;
-        return analysis;
-      }
       // Lazy quantifiers are excluded because OnePass returns leftmost-longest capture group
       // boundaries, which differs from leftmost-first semantics for lazy groups. When hasLazy is
       // true, neither canPrimary nor canSubmatch can use OnePass, so we can skip building OnePass.
@@ -1234,8 +1229,7 @@ public final class Pattern implements Serializable {
     return !prog.anchorStart() && !matchDescriptor.hasFindFastPath();
   }
 
-  /** Returns true if this pattern can participate in OnePass matching or capture extraction. */
-  boolean canUseOnePass() {
+  private boolean shouldEagerlyBuildOnePass() {
     return !hasLazy && !matchDescriptor.hasFindFastPath();
   }
 
