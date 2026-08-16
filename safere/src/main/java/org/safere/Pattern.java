@@ -1017,9 +1017,7 @@ public final class Pattern implements Serializable {
 
   private Matcher.PreparedMatchRunner createPreparedRunner(boolean regionActive) {
     String literal = matchDescriptor.literalMatch();
-    if (enginePathOptions.literalFastPaths()
-        && literal != null
-        && numGroups() == 0) {
+    if (enginePathOptions.literalFastPaths() && literal != null && numGroups() == 0) {
       return new Matcher.LiteralPreparedRunner(
           literal,
           prefixFoldCase,
@@ -3753,7 +3751,8 @@ public final class Pattern implements Serializable {
             GRAPHEME_CLUSTER_BOUNDARY,
             HAVE_MATCH,
             QUEST,
-            STAR -> 0;
+            STAR ->
+            0;
         case LITERAL -> Character.charCount(re.rune);
         case LITERAL_STRING -> {
           int count = 0;
