@@ -41,15 +41,7 @@ sealed interface StateAccelerator {
       case AsciiTripleEscape triple ->
           text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
       case CharClassEscape cc ->
-          switch (text) {
-            case Utf8InputScanner utf8 ->
-                utf8.indexOfCodePointClass(
-                    cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
-            case StringInputScanner unusedString -> -1;
-              // TODO: Enable character-class self-loop acceleration for StringInputScanner once
-              // vectorized string scanning is available (see PR #656). On scalar
-              // StringInputScanner, the scalar charAt/bitmap loop is slower than the DFA table.
-          };
+          text.indexOfCodePointClass(cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
     };
   }
 
