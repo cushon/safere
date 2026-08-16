@@ -4189,10 +4189,11 @@ public final class Matcher implements MatchResult {
       matcher.diagnosticBoundary(MatchStrategy.LITERAL);
       int idx;
       if (foldCase) {
-        idx =
-            matcher.text == null
-                ? -1
-                : indexOfIgnoreCase(matcher.text, literal, matcher.searchFrom);
+        if (matcher.text != null) {
+          idx = indexOfIgnoreCase(matcher.text, literal, matcher.searchFrom);
+        } else {
+          return matcher.doFindCore(regionActive);
+        }
       } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
         idx = utf8Scanner.indexOf(literalUtf8, failure, shifts, matcher.searchFrom);
       } else if (matcher.text != null) {
