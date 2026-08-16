@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /** Discovers generic benchmark runners, trials, and report identities from the declared plan. */
@@ -99,9 +100,7 @@ final class BenchmarkCollectionPlan {
   }
 
   private static List<Runner> filterRunners(
-      List<Runner> runners,
-      java.util.function.Predicate<String> includeTrial,
-      boolean standardOnly) {
+      List<Runner> runners, Predicate<String> includeTrial, boolean standardOnly) {
     return runners.stream()
         .filter(runner -> !standardOnly || runner.profile().equals("standard"))
         .map(

@@ -7,6 +7,7 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1074,10 +1075,7 @@ class PatternTest {
       Matcher m = p.matcher("grapefruit orange peach plum lemon");
       assertThat(m.find()).isFalse();
 
-      Utf8Input input =
-          Utf8Input.trusted(
-              "grapefruit orange peach plum lemon"
-                  .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      Utf8Input input = Utf8Input.trusted("grapefruit orange peach plum lemon".getBytes(UTF_8));
       assertThat(p.find(input)).isFalse();
     }
 
@@ -1090,9 +1088,7 @@ class PatternTest {
       assertThat(m.group()).isEqualTo("grapefruit banana peach pineapple lemon");
 
       Utf8Input input =
-          Utf8Input.trusted(
-              "grapefruit banana peach pineapple lemon"
-                  .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+          Utf8Input.trusted("grapefruit banana peach pineapple lemon".getBytes(UTF_8));
       assertThat(p.find(input)).isTrue();
     }
 
@@ -1124,8 +1120,7 @@ class PatternTest {
     @DisplayName("supplementary literals are not subsumed by UTF-16 surrogate fragments")
     void supplementaryLiteralIsNotPrunedBySurrogateFragment() {
       Pattern p = Pattern.compile("(?:a\uD83D|za\uD83D\uDE00|banana)");
-      Utf8Input input =
-          Utf8Input.trusted("za\uD83D\uDE00".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      Utf8Input input = Utf8Input.trusted("za\uD83D\uDE00".getBytes(UTF_8));
 
       assertThat(p.find(input)).isTrue();
     }
@@ -1150,16 +1145,8 @@ class PatternTest {
       assertThat(p.matcher(".jso").matches()).isFalse();
 
       // Utf8Input
-      assertThat(
-              p.find(
-                  Utf8Input.trusted(
-                      "config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isTrue();
-      assertThat(
-              p.find(
-                  Utf8Input.trusted(
-                      "config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isFalse();
+      assertThat(p.find(Utf8Input.trusted("config.json".getBytes(UTF_8)))).isTrue();
+      assertThat(p.find(Utf8Input.trusted("config.yaml".getBytes(UTF_8)))).isFalse();
     }
 
     @Test
@@ -1176,16 +1163,8 @@ class PatternTest {
         assertThat(p.matcher("config.YAML").find()).isFalse();
 
         // Utf8Input
-        assertThat(
-                p.find(
-                    Utf8Input.trusted(
-                        "config.JSON".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-            .isTrue();
-        assertThat(
-                p.find(
-                    Utf8Input.trusted(
-                        "config.YAML".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-            .isFalse();
+        assertThat(p.find(Utf8Input.trusted("config.JSON".getBytes(UTF_8)))).isTrue();
+        assertThat(p.find(Utf8Input.trusted("config.YAML".getBytes(UTF_8)))).isFalse();
       }
     }
 
@@ -1199,17 +1178,10 @@ class PatternTest {
           String input = "config.json" + term;
           assertThat(p.matcher(input).find()).isTrue();
           assertThat(p.matcher(input).matches()).isFalse();
-          assertThat(
-                  p.find(
-                      Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-              .isTrue();
+          assertThat(p.find(Utf8Input.trusted(input.getBytes(UTF_8)))).isTrue();
         }
         assertThat(p.matcher("config.yaml\u0085").find()).isFalse();
-        assertThat(
-                p.find(
-                    Utf8Input.trusted(
-                        "config.yaml\u0085".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-            .isFalse();
+        assertThat(p.find(Utf8Input.trusted("config.yaml\u0085".getBytes(UTF_8)))).isFalse();
       }
     }
 
@@ -1220,20 +1192,14 @@ class PatternTest {
 
       assertThat(p.matcher("config.json").find()).isTrue();
       assertThat(p.matcher("config.json").matches()).isTrue();
-      assertThat(
-              p.find(
-                  Utf8Input.trusted(
-                      "config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isTrue();
+      assertThat(p.find(Utf8Input.trusted("config.json".getBytes(UTF_8)))).isTrue();
 
       String[] terminators = {"\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029"};
       for (String term : terminators) {
         String input = "config.json" + term;
         assertThat(p.matcher(input).find()).isFalse();
         assertThat(p.matcher(input).matches()).isFalse();
-        assertThat(
-                p.find(Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-            .isFalse();
+        assertThat(p.find(Utf8Input.trusted(input.getBytes(UTF_8)))).isFalse();
       }
     }
 
@@ -1244,20 +1210,14 @@ class PatternTest {
 
       assertThat(p.matcher("config.json\n").find()).isTrue();
       assertThat(p.matcher("config.json\n").matches()).isFalse();
-      assertThat(
-              p.find(
-                  Utf8Input.trusted(
-                      "config.json\n".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-          .isTrue();
+      assertThat(p.find(Utf8Input.trusted("config.json\n".getBytes(UTF_8)))).isTrue();
 
       String[] nonUnixTerminators = {"\r", "\r\n", "\u0085", "\u2028", "\u2029"};
       for (String term : nonUnixTerminators) {
         String input = "config.json" + term;
         assertThat(p.matcher(input).find()).isFalse();
         assertThat(p.matcher(input).matches()).isFalse();
-        assertThat(
-                p.find(Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-            .isFalse();
+        assertThat(p.find(Utf8Input.trusted(input.getBytes(UTF_8)))).isFalse();
       }
     }
 
@@ -1266,7 +1226,7 @@ class PatternTest {
     @DisplayName("end anchors recognize every final line terminator")
     void endAnchorsRecognizeEveryFinalLineTerminator(String terminator) {
       String input = "config.json" + terminator;
-      Utf8Input utf8 = Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      Utf8Input utf8 = Utf8Input.trusted(input.getBytes(UTF_8));
 
       for (String anchor : List.of("$", "\\Z")) {
         Pattern suffix = Pattern.compile(".*\\.json" + anchor);
@@ -1275,10 +1235,7 @@ class PatternTest {
         assertThat(suffix.matcher(input).find()).isTrue();
         assertThat(suffix.find(utf8)).isTrue();
         assertThat(characterClass.matcher("item3" + terminator).find()).isTrue();
-        assertThat(
-                characterClass.find(
-                    Utf8Input.trusted(
-                        ("item3" + terminator).getBytes(java.nio.charset.StandardCharsets.UTF_8))))
+        assertThat(characterClass.find(Utf8Input.trusted(("item3" + terminator).getBytes(UTF_8))))
             .isTrue();
       }
     }
@@ -1288,7 +1245,7 @@ class PatternTest {
     @DisplayName("UNIX_LINES restricts final line terminators to newline")
     void unixLinesRestrictsFinalLineTerminatorsToNewline(String terminator) {
       String input = "config.json" + terminator;
-      Utf8Input utf8 = Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      Utf8Input utf8 = Utf8Input.trusted(input.getBytes(UTF_8));
 
       for (String anchor : List.of("$", "\\Z")) {
         Pattern suffix = Pattern.compile(".*\\.json" + anchor, Pattern.UNIX_LINES);
@@ -1312,10 +1269,7 @@ class PatternTest {
           String input = "item123" + term;
           assertThat(p.matcher(input).find()).isTrue();
           assertThat(p.matcher(input).matches()).isFalse();
-          assertThat(
-                  p.find(
-                      Utf8Input.trusted(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-              .isTrue();
+          assertThat(p.find(Utf8Input.trusted(input.getBytes(UTF_8)))).isTrue();
         }
 
         assertThat(p.matcher("item123abc").find()).isFalse();
@@ -1328,15 +1282,8 @@ class PatternTest {
         assertThat(p.matcher("\u0085").find()).isFalse();
 
         // Utf8Input
-        assertThat(
-                p.find(
-                    Utf8Input.trusted("item123".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-            .isTrue();
-        assertThat(
-                p.find(
-                    Utf8Input.trusted(
-                        "item123abc".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-            .isFalse();
+        assertThat(p.find(Utf8Input.trusted("item123".getBytes(UTF_8)))).isTrue();
+        assertThat(p.find(Utf8Input.trusted("item123abc".getBytes(UTF_8)))).isFalse();
       }
     }
 
@@ -1388,10 +1335,9 @@ class PatternTest {
       assertThat(p.matcher("prefix https://example.com").find()).isFalse();
 
       // Utf8Input
-      byte[] matchUtf8 = "https://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-      byte[] noMatchUtf8 = "http://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-      byte[] lateMatchUtf8 =
-          "prefix https://example.com".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] matchUtf8 = "https://example.com".getBytes(UTF_8);
+      byte[] noMatchUtf8 = "http://example.com".getBytes(UTF_8);
+      byte[] lateMatchUtf8 = "prefix https://example.com".getBytes(UTF_8);
 
       assertThat(p.find(Utf8Input.trusted(matchUtf8))).isTrue();
       assertThat(p.find(Utf8Input.trusted(noMatchUtf8))).isFalse();
@@ -1416,8 +1362,8 @@ class PatternTest {
       assertThat(p.matcher("").lookingAt()).isFalse();
 
       // Utf8Input
-      byte[] matchUtf8 = "123abc".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-      byte[] noMatchUtf8 = "abc123".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] matchUtf8 = "123abc".getBytes(UTF_8);
+      byte[] noMatchUtf8 = "abc123".getBytes(UTF_8);
 
       assertThat(p.find(Utf8Input.trusted(matchUtf8))).isTrue();
       assertThat(p.find(Utf8Input.trusted(noMatchUtf8))).isFalse();

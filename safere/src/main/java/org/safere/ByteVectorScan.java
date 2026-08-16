@@ -18,9 +18,8 @@ import jdk.incubator.vector.VectorSpecies;
 final class ByteVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
-  public static int indexOfAsciiClass(
-      byte[] bytes, int offset, int length, int[] ranges, int start) {
-    if (ranges.length < 2 || ranges.length > 8 || (ranges.length & 1) != 0) {
+  static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
+    if (!Swar.supportsAsciiRanges(ranges, 4)) {
       return VectorScanProvider.UNSUPPORTED;
     }
     int position = Math.max(0, start);
@@ -60,7 +59,7 @@ final class ByteVectorScan {
     if (low == high) {
       return values.eq(low);
     }
-    if (high == low + 1) {
+    if (highBound == lowBound + 1) {
       return values.eq(low).or(values.eq(high));
     }
     return values.compare(GE, low).and(values.compare(LE, high));

@@ -10,7 +10,10 @@ package org.safere;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ConcurrentModificationException;
+import java.util.List;
 import java.util.regex.MatchResult;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -22,8 +25,7 @@ class MatcherResultsStreamTest {
   void resultsStream() {
     Pattern p = Pattern.compile("\\d+");
     Matcher m = p.matcher("abc 123 def 456 ghi");
-    java.util.List<String> matches =
-        m.results().map(MatchResult::group).collect(java.util.stream.Collectors.toList());
+    List<String> matches = m.results().map(MatchResult::group).collect(Collectors.toList());
     assertThat(matches).containsExactly("123", "456");
   }
 
@@ -40,7 +42,7 @@ class MatcherResultsStreamTest {
   void resultsPositions() {
     Pattern p = Pattern.compile("[a-z]+");
     Matcher m = p.matcher("123 abc 456 def");
-    java.util.List<MatchResult> results = m.results().collect(java.util.stream.Collectors.toList());
+    List<MatchResult> results = m.results().collect(Collectors.toList());
     assertThat(results).hasSize(2);
     assertThat(results.get(0).start()).isEqualTo(4);
     assertThat(results.get(0).end()).isEqualTo(7);
@@ -65,7 +67,7 @@ class MatcherResultsStreamTest {
                           m.find();
                           return result.group();
                         })
-                    .collect(java.util.stream.Collectors.toList()))
-        .isInstanceOf(java.util.ConcurrentModificationException.class);
+                    .collect(Collectors.toList()))
+        .isInstanceOf(ConcurrentModificationException.class);
   }
 }

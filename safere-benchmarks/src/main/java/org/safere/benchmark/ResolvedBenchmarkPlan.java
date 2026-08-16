@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Materializes the complete engine/workload compatibility join for every benchmark runner.
@@ -90,13 +91,11 @@ final class ResolvedBenchmarkPlan {
     List<DeclarativeBenchmarkPlan.ExpandedWorkload> workloads = plan.expandedWorkloads();
     plan.validateTrialExclusions(
         workloads,
-        engines.stream()
-            .map(Engine::id)
-            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
+        engines.stream().map(Engine::id).collect(Collectors.toCollection(LinkedHashSet::new)));
     patternProfiles.validateReferences(
         workloads.stream()
             .flatMap(workload -> workload.patterns().stream())
-            .collect(java.util.stream.Collectors.toSet()),
+            .collect(Collectors.toSet()),
         "pattern");
     replacementProfiles.validateReferences(
         workloads.stream()
@@ -104,7 +103,7 @@ final class ResolvedBenchmarkPlan {
             .filter(DeclarativeBenchmarkPlan.RecipeString.class::isInstance)
             .map(DeclarativeBenchmarkPlan.RecipeString.class::cast)
             .map(DeclarativeBenchmarkPlan.RecipeString::value)
-            .collect(java.util.stream.Collectors.toSet()),
+            .collect(Collectors.toSet()),
         "replacement");
     JsonArray entries = new JsonArray();
     for (DeclarativeBenchmarkPlan.ExpandedWorkload workload : workloads) {

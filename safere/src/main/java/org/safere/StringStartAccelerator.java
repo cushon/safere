@@ -43,14 +43,10 @@ sealed interface StringStartAccelerator {
    */
   int findCandidate(String text, int fromIndex, boolean unixLines);
 
-  /** Returns the diagnostic strategy associated with this accelerator, or {@code null} if none. */
-  MatchStrategy strategy();
-
-  /**
-   * Returns whether this accelerator identifies an exact candidate match start that can be directly
-   * validated with a single anchored forward DFA pass.
-   */
-  boolean isExactMatchCandidate();
+  /** Returns the tuning and diagnostic policy for this accelerator. */
+  default AcceleratorPolicy policy() {
+    return AcceleratorPolicy.DEFAULT;
+  }
 
   final class Literal implements StringStartAccelerator {
     private final String prefix;
@@ -70,13 +66,8 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.LITERAL;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return true;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
     @Override
@@ -109,13 +100,8 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.LITERAL;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return true;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
     @Override
@@ -201,13 +187,8 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public MatchStrategy strategy() {
-      return MatchStrategy.CHARACTER_CLASS;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return false;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.CHAR_CLASS;
     }
 
     @Override
@@ -241,13 +222,8 @@ sealed interface StringStartAccelerator {
     }
 
     @Override
-    public MatchStrategy strategy() {
-      return null;
-    }
-
-    @Override
-    public boolean isExactMatchCandidate() {
-      return false;
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LINE_ANCHOR;
     }
 
     @Override
