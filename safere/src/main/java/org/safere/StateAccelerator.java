@@ -40,16 +40,16 @@ sealed interface StateAccelerator {
       case AsciiPairEscape pair -> text.indexOfAsciiPair(pair.c1(), pair.c2(), fromIndex, limit);
       case AsciiTripleEscape triple ->
           text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
-      case CharClassEscape cc -> {
-        // TODO: Enable character-class self-loop acceleration for StringInputScanner once
-        // vectorized string scanning is available (see PR #656). On scalar StringInputScanner,
-        // the scalar charAt/bitmap loop is slower than the DFA's native transition table.
-        if (text instanceof Utf8InputScanner) {
-          yield text.indexOfCodePointClass(
-              cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
-        }
-        yield -1;
-      }
+      case CharClassEscape cc ->
+          switch (text) {
+            case Utf8InputScanner utf8 ->
+                utf8.indexOfCodePointClass(
+                    cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
+            case StringInputScanner str -> -1;
+              // TODO: Enable character-class self-loop acceleration for StringInputScanner once
+              // vectorized string scanning is available (see PR #656). On scalar
+              // StringInputScanner, the scalar charAt/bitmap loop is slower than the DFA table.
+          };
     };
   }
 
