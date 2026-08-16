@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.PatternSyntaxException;
 import org.junit.jupiter.api.DisplayName;
@@ -832,7 +833,7 @@ class CrossEngineExhaustiveTest {
           boolean jdkFound = jdkM.find();
 
           assertThat(safereFound)
-              .as("find() pat=%s bytes=%s", pat, java.util.Arrays.toString(bytes))
+              .as("find() pat=%s bytes=%s", pat, Arrays.toString(bytes))
               .isEqualTo(jdkFound);
 
           if (safereFound && jdkFound) {

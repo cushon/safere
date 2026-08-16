@@ -5,6 +5,8 @@
 
 package org.safere.benchmark;
 
+import org.safere.Pattern;
+
 /** Shared parser for benchmark flag-set names. */
 final class BenchmarkFlags {
   private BenchmarkFlags() {}
@@ -12,12 +14,11 @@ final class BenchmarkFlags {
   static int parse(String flagSet) {
     return switch (flagSet) {
       case "0" -> 0;
-      case "CASE_INSENSITIVE" -> org.safere.Pattern.CASE_INSENSITIVE;
-      case "UNICODE_CHARACTER_CLASS" -> org.safere.Pattern.UNICODE_CHARACTER_CLASS;
-      case "CASE_INSENSITIVE_UNICODE_CASE" ->
-          org.safere.Pattern.CASE_INSENSITIVE | org.safere.Pattern.UNICODE_CASE;
+      case "CASE_INSENSITIVE" -> Pattern.CASE_INSENSITIVE;
+      case "UNICODE_CHARACTER_CLASS" -> Pattern.UNICODE_CHARACTER_CLASS;
+      case "CASE_INSENSITIVE_UNICODE_CASE" -> Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
       case "CASE_INSENSITIVE_UNICODE_CHARACTER_CLASS" ->
-          org.safere.Pattern.CASE_INSENSITIVE | org.safere.Pattern.UNICODE_CHARACTER_CLASS;
+          Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS;
       default -> throw new IllegalArgumentException("Unknown flag set: " + flagSet);
     };
   }

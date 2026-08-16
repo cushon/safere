@@ -14,6 +14,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -617,7 +618,7 @@ class Utf8InputScannerTest {
   }
 
   private static List<Integer> traceForward(Utf8InputScanner scanner) {
-    java.util.ArrayList<Integer> result = new java.util.ArrayList<>();
+    ArrayList<Integer> result = new ArrayList<>();
     int position = 0;
     while (position < scanner.length()) {
       long decoded = scanner.decodeForward(position);
@@ -628,7 +629,7 @@ class Utf8InputScannerTest {
   }
 
   private static List<Integer> traceBackward(Utf8InputScanner scanner) {
-    java.util.ArrayList<Integer> result = new java.util.ArrayList<>();
+    ArrayList<Integer> result = new ArrayList<>();
     int position = scanner.length();
     while (position > 0) {
       long decoded = scanner.decodeBackward(position);

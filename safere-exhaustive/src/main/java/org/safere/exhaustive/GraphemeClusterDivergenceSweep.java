@@ -5,6 +5,7 @@
 
 package org.safere.exhaustive;
 
+import com.google.gson.JsonObject;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -1248,7 +1249,7 @@ public final class GraphemeClusterDivergenceSweep {
       return SweepJson.toJson(object);
     }
 
-    private static com.google.gson.JsonObject caseJson(CaseSpec spec) {
+    private static JsonObject caseJson(CaseSpec spec) {
       var object = SweepJson.object();
       object.addProperty("regexLabel", spec.regexTemplate().label());
       object.addProperty("regex", spec.regex());

@@ -12,6 +12,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.MutableCallSite;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,6 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.Spliterator;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.regex.PatternSyntaxException;
@@ -307,18 +309,16 @@ public final class Pattern implements Serializable {
     this.prefixUtf8 =
         startDescriptor.prefix() == null || startDescriptor.prefix().isEmpty()
             ? null
-            : startDescriptor.prefix().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            : startDescriptor.prefix().getBytes(StandardCharsets.UTF_8);
     this.anchoredPrefix = startDescriptor.anchoredPrefix();
     this.anchoredPrefixUtf8 =
         anchoredPrefix == null || anchoredPrefix.isEmpty()
             ? null
-            : anchoredPrefix.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            : anchoredPrefix.getBytes(StandardCharsets.UTF_8);
     this.matchDescriptor = matchDescriptor != null ? matchDescriptor : MatchDescriptor.NONE;
     String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
-        literalMatch == null
-            ? null
-            : literalMatch.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        literalMatch == null ? null : literalMatch.getBytes(StandardCharsets.UTF_8);
     this.literalMatchFailure = literalMatchUtf8 == null ? null : literalFailure(literalMatchUtf8);
     this.literalMatchShifts = literalMatchUtf8 == null ? null : literalShifts(literalMatchUtf8);
     this.hasLazy = hasLazy;
@@ -784,7 +784,7 @@ public final class Pattern implements Serializable {
       return null;
     }
     int[] shifts = new int[256];
-    java.util.Arrays.fill(shifts, literal.length);
+    Arrays.fill(shifts, literal.length);
     for (int index = 0; index < literal.length - 1; index++) {
       shifts[literal[index] & 0xFF] = literal.length - index - 1;
     }
@@ -2018,7 +2018,7 @@ public final class Pattern implements Serializable {
       this.minOffset = minOffset;
       this.maxOffset = maxOffset;
       this.discreteOffsets = discreteOffsets;
-      this.utf8 = literal.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      this.utf8 = literal.getBytes(StandardCharsets.UTF_8);
       this.failure = literalFailure(utf8);
       this.shifts = literalShifts(utf8);
     }
@@ -2351,7 +2351,7 @@ public final class Pattern implements Serializable {
       if (child.discreteWidths == null) {
         return new AsciiWidthRange(0, child.maxWidth, null);
       }
-      java.util.TreeSet<Integer> discrete = new java.util.TreeSet<>();
+      TreeSet<Integer> discrete = new TreeSet<>();
       discrete.add(0);
       for (int width : child.discreteWidths) {
         discrete.add(width);
@@ -2368,7 +2368,7 @@ public final class Pattern implements Serializable {
       }
       int minWidth = Integer.MAX_VALUE;
       int maxWidth = Integer.MIN_VALUE;
-      java.util.TreeSet<Integer> discrete = new java.util.TreeSet<>();
+      TreeSet<Integer> discrete = new TreeSet<>();
       boolean allDiscrete = true;
       for (AsciiWidthRange child : childArgs) {
         if (!child.isValid()) {
@@ -2417,7 +2417,7 @@ public final class Pattern implements Serializable {
     if (left.discreteWidths != null
         && right.discreteWidths != null
         && left.discreteWidths.length * right.discreteWidths.length <= 16) {
-      java.util.TreeSet<Integer> combined = new java.util.TreeSet<>();
+      TreeSet<Integer> combined = new TreeSet<>();
       for (int leftWidth : left.discreteWidths) {
         for (int rightWidth : right.discreteWidths) {
           int width = addWidth(leftWidth, rightWidth);

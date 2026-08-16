@@ -5,6 +5,8 @@
 
 package org.safere.exhaustive;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -850,12 +852,12 @@ public final class CharacterClassDivergenceSweep {
       return SweepJson.toJson(object);
     }
 
-    private static com.google.gson.JsonObject caseJson(CaseSpec spec) {
+    private static JsonObject caseJson(CaseSpec spec) {
       var object = SweepJson.object();
       object.addProperty("template", spec.template());
       object.addProperty("comments", spec.comments());
       object.addProperty("negated", spec.negated());
-      var pieces = new com.google.gson.JsonArray();
+      var pieces = new JsonArray();
       for (Piece piece : spec.pieces()) {
         var pieceObject = SweepJson.object();
         pieceObject.addProperty("label", piece.label());

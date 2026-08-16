@@ -13,10 +13,12 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -266,7 +268,7 @@ class RE2ByteSearchTest {
     if (found && tc.expectedFindGroup() != null) {
       // Test caller-owned zero-copy group slicing from byte bounds.
       byte[] expectedBytes = tc.expectedFindGroup().getBytes(StandardCharsets.UTF_8);
-      assertThat(java.util.Arrays.copyOfRange(bytes, m.start(), m.end()))
+      assertThat(Arrays.copyOfRange(bytes, m.start(), m.end()))
           .as(
               "find() bounds for pattern \"%s\" on byte representation of \"%s\"",
               tc.pattern(), tc.text())
@@ -274,7 +276,7 @@ class RE2ByteSearchTest {
     }
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   void testWordBoundaryDiscrepancy() {
     Pattern p = Pattern.compile("(?:(?:(?:\\b).)*)");
     byte[] bytes = "aa ".getBytes(StandardCharsets.UTF_8);
@@ -286,7 +288,7 @@ class RE2ByteSearchTest {
     assertThat(matches).containsExactly("[0,1)", "[1,1)", "[2,3)", "[3,3)");
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   void testWordBoundaryDiscrepancyString() {
     Pattern p = Pattern.compile("(?:(?:(?:\\b).)*)");
     Matcher m = p.matcher("aa ");
@@ -297,7 +299,7 @@ class RE2ByteSearchTest {
     assertThat(matches).containsExactly("[0,1)", "[1,1)", "[2,3)", "[3,3)");
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   void testDollarNewlineDiscrepancy() {
     Pattern p = Pattern.compile("(?:(?:(?:$)\n))$");
     byte[] bytes =
@@ -309,7 +311,7 @@ class RE2ByteSearchTest {
     assertThat(m.end()).isEqualTo(263);
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   void testDollarNewlineDiscrepancyString() {
     Pattern p = Pattern.compile("(?:(?:(?:$)\n))$");
     String text =
@@ -320,7 +322,7 @@ class RE2ByteSearchTest {
     assertThat(m.end()).isEqualTo(263);
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   void testUnixLinesDollarTrailingCr() {
     Pattern p = Pattern.compile("a$", Pattern.UNIX_LINES);
     byte[] bytes = "a\r".getBytes(StandardCharsets.UTF_8);
@@ -328,23 +330,23 @@ class RE2ByteSearchTest {
     assertThat(m.find()).isFalse();
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   void testGraphemePatternByteMode() {
     Pattern p = Pattern.compile("a\\X");
     byte[] bytes = "ab".getBytes(StandardCharsets.UTF_8);
     Utf8Matcher m = p.matcher(Utf8Input.validated(bytes));
-    org.junit.jupiter.api.Assertions.assertTrue(m.find());
-    org.junit.jupiter.api.Assertions.assertEquals(0, m.start());
-    org.junit.jupiter.api.Assertions.assertEquals(2, m.end());
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(0);
+    assertThat(m.end()).isEqualTo(2);
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   void testUnicodeWordBoundaryByteMode() {
     Pattern p = Pattern.compile("\\ba", Pattern.UNICODE_CHARACTER_CLASS);
     byte[] bytes = "ab".getBytes(StandardCharsets.UTF_8);
     Utf8Matcher m = p.matcher(Utf8Input.validated(bytes));
-    org.junit.jupiter.api.Assertions.assertTrue(m.find());
-    org.junit.jupiter.api.Assertions.assertEquals(0, m.start());
-    org.junit.jupiter.api.Assertions.assertEquals(1, m.end());
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(0);
+    assertThat(m.end()).isEqualTo(1);
   }
 }

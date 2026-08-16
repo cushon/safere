@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -96,12 +97,12 @@ class Utf8LinearTimeTest {
   }
 
   private static byte[] validInput(int scalars) {
-    return "aé😀".repeat(scalars / 3).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    return "aé😀".repeat(scalars / 3).getBytes(UTF_8);
   }
 
   private static byte[] malformedInput(int bytes) {
     byte[] input = new byte[bytes];
-    java.util.Arrays.fill(input, (byte) 0x80);
+    Arrays.fill(input, (byte) 0x80);
     return input;
   }
 }
