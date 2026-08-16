@@ -116,4 +116,16 @@ final class Ascii {
     }
     return true;
   }
+
+  /** Returns whether a byte array matches a pattern prefix ignoring ASCII case. */
+  static boolean regionMatchesIgnoreCase(byte[] bytes, int offset, String prefix, int prefixLen) {
+    for (int i = 0; i < prefixLen; i++) {
+      int c = bytes[offset + i] & 0xFF;
+      char p = prefix.charAt(i);
+      if (c != p && toLowerCase(c) != toLowerCase(p)) {
+        return false;
+      }
+    }
+    return true;
+  }
 }

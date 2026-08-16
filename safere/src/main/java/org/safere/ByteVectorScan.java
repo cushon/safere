@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static jdk.incubator.vector.VectorOperators.EQ;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
 
@@ -85,18 +86,42 @@ final class ByteVectorScan {
         return VectorScanProvider.UNSUPPORTED;
       }
     }
-    if (prefixLen > 1) {
-      return VectorScanProvider.UNSUPPORTED;
-    }
+
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
     char first = prefix.charAt(0);
     byte low = (byte) Ascii.toLowerCase(first);
     byte high = (byte) Ascii.toUpperCase(first);
-    if (low == high) {
-      int[] range = new int[] {low, low};
-      return indexOfAsciiClass(bytes, offset, length, range, start);
+    ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
+    ByteVector highVec = ByteVector.broadcast(SPECIES, high);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
+      VectorMask<Byte> matchMask = inputVec.compare(EQ, lowVec).or(inputVec.compare(EQ, highVec));
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = pos + bit;
+          if (candidatePos + prefixLen <= length
+              && Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
+            return candidatePos;
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
     }
-    int[] ranges = new int[] {high, high, low, low};
-    return indexOfAsciiClass(bytes, offset, length, ranges, start);
+
+    int limitScalar = length - prefixLen;
+    for (; pos <= limitScalar; pos++) {
+      if (Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+        return pos;
+      }
+    }
+    return -1;
   }
 
   private ByteVectorScan() {}

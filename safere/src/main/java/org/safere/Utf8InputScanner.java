@@ -372,6 +372,12 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       return start;
     }
     if (!WorkCounterConfig.ENABLED) {
+      if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
+        int result = ByteVectorScan.indexOfIgnoreCase(bytes, offset, length, prefix, start);
+        if (result != VectorScanProvider.UNSUPPORTED) {
+          return result;
+        }
+      }
       if (prefixLen == 1) {
         char first = prefix.charAt(0);
         if (first <= 127) {
@@ -379,21 +385,6 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
           int high = Ascii.toUpperCase(first);
           if (low == high) {
             return indexOfByte((byte) low, start);
-          }
-          if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
-            int position = start;
-            int scalarLimit = Math.min(length, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
-            for (; position < scalarLimit; position++) {
-              int b = bytes[offset + position] & 0xFF;
-              if (b == low || b == high) {
-                return position;
-              }
-            }
-            int[] ranges = new int[] {high, high, low, low};
-            int result = scanProvider.indexOfAsciiClass(bytes, offset, length, ranges, position);
-            if (result != VectorScanProvider.UNSUPPORTED) {
-              return result;
-            }
           }
           return ByteSwarScan.indexOfBytePair(
               bytes, offset, length, (byte) low, (byte) high, start);
