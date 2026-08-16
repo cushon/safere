@@ -352,9 +352,9 @@ def _simplify_benchmark_name(benchmark):
         # If followed by a generic harness runner method, strip class + runner
         if len(remaining) >= 3 and remaining[1] in _GENERIC_RUNNER_METHODS:
             return ".".join(remaining[2:])
-        # Otherwise, strip just the class name
+        # Otherwise retain the class so methods shared by multiple classes remain distinct.
         elif len(remaining) >= 2:
-            return ".".join(remaining[1:])
+            return ".".join(remaining)
 
     return ".".join(remaining)
 
@@ -401,19 +401,48 @@ def load_declared_plan(path):
     return statuses
 
 
+_TIME_UNIT_SECONDS = {
+    "ns/op": 1e-9,
+    "us/op": 1e-6,
+    "ms/op": 1e-3,
+    "s/op": 1.0,
+}
+_THROUGHPUT_UNIT_PER_SECOND = {
+    "ops/ns": 1e9,
+    "ops/us": 1e6,
+    "ops/ms": 1e3,
+    "ops/s": 1.0,
+}
+
+
+def _canonical_measurement(result):
+    unit = (result.unit or "").lower().replace("µ", "u").replace("μ", "u")
+    if unit in _TIME_UNIT_SECONDS:
+        return "time", result.score * _TIME_UNIT_SECONDS[unit]
+    if unit in _THROUGHPUT_UNIT_PER_SECOND:
+        return "throughput", result.score * _THROUGHPUT_UNIT_PER_SECOND[unit]
+    return None
+
+
 def _format_speedup(r_base, r_curr):
-    """Computes and formats the speedup ratio between a baseline and current measurement."""
+    """Computes and formats a unit-normalized speedup ratio."""
     if not r_base or not r_curr or r_base.score <= 0 or r_curr.score <= 0:
         return "—"
-    unit = (r_base.unit or r_curr.unit or "").lower()
-    if "ops" in unit or "thrpt" in unit:
-        ratio = r_curr.score / r_base.score
+
+    base = _canonical_measurement(r_base)
+    current = _canonical_measurement(r_curr)
+    if base is None or current is None or base[0] != current[0]:
+        return "—"
+    if base[0] == "throughput":
+        ratio = current[1] / base[1]
     else:
-        ratio = r_base.score / r_curr.score
+        ratio = base[1] / current[1]
     if ratio >= 10.0:
         return f"{ratio:.1f}x"
     elif ratio >= 1.0:
         return f"{ratio:.2f}x"
+    elif ratio < 0.01:
+        return f"{ratio:.2g}x"
     else:
         return f"{ratio:.2f}x"
 
@@ -483,16 +512,17 @@ def generate_tables(
             lines.append(f"### {cls}")
             lines.append("")
 
-        # Determine the unit from the first available result for this group.
-        unit = ""
-        for bench in benchmarks:
-            for eng in engines:
-                r = index.get((bench, eng))
-                if r and r.unit:
-                    unit = r.unit
-                    break
-            if unit:
-                break
+        # A grouped table normally has one unit. A unified table may combine benchmark families,
+        # so preserve mixed units explicitly per row rather than mislabeling every measurement with
+        # the first result's unit.
+        units = {
+            r.unit
+            for bench in benchmarks
+            for eng in engines
+            if (r := index.get((bench, eng))) and r.unit
+        }
+        mixed_units = len(units) > 1
+        unit = next(iter(units), "") if not mixed_units else ""
 
         # Build header.
         header_bench = "Benchmark"
@@ -508,7 +538,8 @@ def generate_tables(
             for eng in engines:
                 r = index.get((bench, eng))
                 if r:
-                    cells.append(_fmt_cell(r.score, r.error))
+                    cell = _fmt_cell(r.score, r.error)
+                    cells.append(f"{cell} {r.unit}" if mixed_units and r.unit else cell)
                 elif declared_statuses and declared_statuses.get((bench, eng)) == "excluded":
                     cells.append("excluded")
                 elif declared_statuses and declared_statuses.get((bench, eng)) == "declared":

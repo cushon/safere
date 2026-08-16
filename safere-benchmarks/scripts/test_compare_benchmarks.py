@@ -216,6 +216,24 @@ class CrossEngineResultParsingTest(unittest.TestCase):
         self.assertIn("Speedup", table)
         self.assertIn("4.00x", table)
 
+    def test_speedup_normalizes_compatible_units(self):
+        baseline = COMPARE.Result("baseline", "Benchmark.run", 1000.0, 10.0, "ns/op")
+        current = COMPARE.Result("current", "Benchmark.run", 1.0, 0.01, "us/op")
+
+        self.assertEqual(COMPARE._format_speedup(baseline, current), "1.00x")
+
+    def test_speedup_rejects_incompatible_units(self):
+        latency = COMPARE.Result("baseline", "Benchmark.run", 100.0, 1.0, "ns/op")
+        throughput = COMPARE.Result("current", "Benchmark.run", 100.0, 1.0, "ops/s")
+
+        self.assertEqual(COMPARE._format_speedup(latency, throughput), "—")
+
+    def test_speedup_preserves_very_small_nonzero_ratios(self):
+        baseline = COMPARE.Result("baseline", "Benchmark.run", 100.0, 1.0, "ns/op")
+        current = COMPARE.Result("current", "Benchmark.run", 100000.0, 1.0, "ns/op")
+
+        self.assertEqual(COMPARE._format_speedup(baseline, current), "0.001x")
+
     def test_generate_tables_single_table(self):
         results = [
             COMPARE.Result(
@@ -242,6 +260,36 @@ class CrossEngineResultParsingTest(unittest.TestCase):
         self.assertIn("jsonBlock.match.1000", table)
         self.assertNotIn("RealWorldRegexBenchmark.runBenchmark.", table)
 
+    def test_generate_single_table_preserves_mixed_units(self):
+        results = [
+            COMPARE.Result("baseline", "Benchmark.latency", 100.0, 5.0, "ns/op"),
+            COMPARE.Result("current", "Benchmark.latency", 50.0, 2.0, "ns/op"),
+            COMPARE.Result("baseline", "Benchmark.throughput", 10.0, 0.5, "ops/s"),
+            COMPARE.Result("current", "Benchmark.throughput", 20.0, 1.0, "ops/s"),
+        ]
+
+        table = COMPARE.generate_tables(
+            results,
+            engines=["baseline", "current"],
+            show_speedup=True,
+            single_table=True,
+        )
+
+        self.assertIn("100 ± 5.0 ns/op", table)
+        self.assertIn("10 ± 0.50 ops/s", table)
+        self.assertIn("2.00x", table)
+
+    def test_single_table_preserves_class_identity(self):
+        results = [
+            COMPARE.Result("baseline", "FooBenchmark.match", 10.0, 1.0, "ns/op"),
+            COMPARE.Result("baseline", "BarBenchmark.match", 20.0, 2.0, "ns/op"),
+        ]
+
+        table = COMPARE.generate_tables(results, single_table=True)
+
+        self.assertIn("FooBenchmark.match", table)
+        self.assertIn("BarBenchmark.match", table)
+
     def test_simplify_benchmark_name_dynamic(self):
         self.assertEqual(
             COMPARE._simplify_benchmark_name(
@@ -251,11 +299,11 @@ class CrossEngineResultParsingTest(unittest.TestCase):
         )
         self.assertEqual(
             COMPARE._simplify_benchmark_name("ApplicationBenchmark.uuidValidation"),
-            "uuidValidation",
+            "ApplicationBenchmark.uuidValidation",
         )
         self.assertEqual(
             COMPARE._simplify_benchmark_name("SingleCharClassBenchmark.findDigitAbsent.1048576"),
-            "findDigitAbsent.1048576",
+            "SingleCharClassBenchmark.findDigitAbsent.1048576",
         )
         self.assertEqual(
             COMPARE._simplify_benchmark_name("CustomClassBenchmark.run.specialTrial"),
