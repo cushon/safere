@@ -161,6 +161,8 @@ public final class Pattern implements Serializable {
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
   private final transient EnginePathOptions enginePathOptions;
+  private final transient Matcher.PreparedMatchRunner defaultPreparedMatchRunner;
+  private final transient Matcher.PreparedMatchRunner regionPreparedMatchRunner;
   private final long patternId;
   private transient volatile PatternAnalysis patternAnalysis;
   private transient volatile PatternDescriptor patternDescriptor;
@@ -337,6 +339,8 @@ public final class Pattern implements Serializable {
     this.enginePathOptions = enginePathOptions;
     this.rejectDescriptor = rejectDescriptor != null ? rejectDescriptor : RejectDescriptor.NONE;
     this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
+    this.defaultPreparedMatchRunner = createPreparedRunner(false);
+    this.regionPreparedMatchRunner = createPreparedRunner(true);
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
     onePassAnalysis();
@@ -1005,6 +1009,49 @@ public final class Pattern implements Serializable {
 
   EnginePathOptions enginePathOptions() {
     return enginePathOptions;
+  }
+
+  Matcher.PreparedMatchRunner preparedMatchRunner(boolean regionActive) {
+    return regionActive ? regionPreparedMatchRunner : defaultPreparedMatchRunner;
+  }
+
+  private Matcher.PreparedMatchRunner createPreparedRunner(boolean regionActive) {
+    String literal = matchDescriptor.literalMatch();
+    if (enginePathOptions.literalFastPaths()
+        && literal != null
+        && numGroups() == 0) {
+      return new Matcher.LiteralPreparedRunner(
+          literal,
+          prefixFoldCase,
+          literalMatchUtf8,
+          literalMatchFailure,
+          literalMatchShifts,
+          prog.anchorStart());
+    }
+
+    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
+    Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
+    if (enginePathOptions.charClassMatchFastPaths()
+        && (singleCharClass != null || charClassMatch != null)) {
+      return new Matcher.SingleCharClassPreparedRunner(
+          singleCharClass, charClassMatch, prog.anchorStart());
+    }
+
+    if (regionActive) {
+      return Matcher.FallbackPreparedRunner.INSTANCE;
+    }
+
+    Pattern.KeywordAlternation keywordAlternation = matchDescriptor.keywordAlternation();
+    if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
+      return new Matcher.KeywordAlternationPreparedRunner(
+          keywordAlternation, prog.numCaptures(), prog.anchorStart());
+    }
+
+    if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
+      return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
+    }
+
+    return Matcher.FallbackPreparedRunner.INSTANCE;
   }
 
   boolean innerCapturesObserved() {
