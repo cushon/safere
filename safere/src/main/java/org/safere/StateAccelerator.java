@@ -45,7 +45,7 @@ sealed interface StateAccelerator {
             case Utf8InputScanner utf8 ->
                 utf8.indexOfCodePointClass(
                     cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
-            case StringInputScanner str -> -1;
+            case StringInputScanner unusedString -> -1;
               // TODO: Enable character-class self-loop acceleration for StringInputScanner once
               // vectorized string scanning is available (see PR #656). On scalar
               // StringInputScanner, the scalar charAt/bitmap loop is slower than the DFA table.

@@ -808,9 +808,9 @@ final class Dfa {
 
   private AcceleratorPolicy startAccelerationPolicy(InputScanner text) {
     return switch (text) {
-      case Utf8InputScanner utf8 ->
+      case Utf8InputScanner unusedUtf8 ->
           utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
-      case StringInputScanner string ->
+      case StringInputScanner unusedString ->
           stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
     };
   }
