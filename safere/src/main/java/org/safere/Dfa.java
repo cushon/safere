@@ -807,37 +807,12 @@ final class Dfa {
   }
 
   private AcceleratorPolicy startAccelerationPolicy(InputScanner text) {
-    if (text instanceof Utf8InputScanner) {
-      return utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
-    }
-    if (text instanceof StringInputScanner) {
-      return stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
-    }
-    return null;
-  }
-
-  /**
-   * Fast-forwards to the next escape character in a self-loop state.
-   *
-   * <p>Direct sealed-type pattern matching avoids {@code invokeinterface} dispatch overhead on hot
-   * matching loops (see PR #693 and PR #695 review). HotSpot C2 does not automatically devirtualize
-   * megamorphic interface calls with &ge; 3 implementations across the JVM lifecycle; unwrapping
-   * the sealed record subtypes at this call site allows C2 to inline the underlying {@link
-   * InputScanner} search primitives directly into the caller.
-   */
-  private static int findSelfLoopEscape(
-      StateAccelerator accelerator, InputScanner text, int fromIndex, int limit) {
-    if (accelerator instanceof StateAccelerator.SingleAsciiEscape single) {
-      return text.indexOfAscii(single.escape(), fromIndex, limit);
-    } else if (accelerator instanceof StateAccelerator.AsciiPairEscape pair) {
-      return text.indexOfAsciiPair(pair.c1(), pair.c2(), fromIndex, limit);
-    } else if (accelerator instanceof StateAccelerator.AsciiTripleEscape triple) {
-      return text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
-    } else if (accelerator instanceof StateAccelerator.CharClassEscape cc) {
-      int found = text.indexOfCodePointClass(cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex);
-      return (found >= 0 && found < limit) ? found : -1;
-    }
-    return accelerator.findEscape(text, fromIndex, limit);
+    return switch (text) {
+      case Utf8InputScanner utf8 ->
+          utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
+      case StringInputScanner string ->
+          stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
+    };
   }
 
   private static boolean instMatches(Inst ip, int ch) {
@@ -1344,20 +1319,25 @@ final class Dfa {
    * state.
    */
   private int fastForward(InputScanner text, int pos, int posDepThreshold) {
-    if (text instanceof Utf8InputScanner utf8Scanner) {
-      if (utf8StartAccelerator != null) {
-        int idx = utf8StartAccelerator.findCandidate(utf8Scanner, pos);
-        if (idx >= 0) {
-          return Math.min(idx, posDepThreshold - 1);
+    return switch (text) {
+      case Utf8InputScanner utf8Scanner -> {
+        if (utf8StartAccelerator != null) {
+          int idx = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, utf8Scanner, pos);
+          if (idx >= 0) {
+            yield Math.min(idx, posDepThreshold - 1);
+          }
+          yield -1;
         }
-        return -1;
+        yield pos;
       }
-    } else if (text instanceof StringInputScanner stringScanner) {
-      if (stringStartAccelerator != null) {
-        return stringStartAccelerator.findCandidate(stringScanner.text(), pos, prog.unixLines());
+      case StringInputScanner stringScanner -> {
+        if (stringStartAccelerator != null) {
+          yield StringStartAccelerator.findNextCandidate(
+              stringStartAccelerator, stringScanner.text(), pos, prog.unixLines());
+        }
+        yield pos;
       }
-    }
-    return pos;
+    };
   }
 
   /**
@@ -1474,7 +1454,7 @@ final class Dfa {
       int sId = s.id * numClasses;
       while (pos < limit) {
         if (s.accelerator != null && !s.isStartState && (limit - pos >= 16)) {
-          int nextPos = findSelfLoopEscape(s.accelerator, text, pos, limit);
+          int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, limit);
           if (nextPos == -1) {
             pos = limit;
             break;
@@ -1593,7 +1573,7 @@ final class Dfa {
         }
       }
       if (s.accelerator != null && !s.isStartState && (textLen - pos >= 16)) {
-        int nextPos = findSelfLoopEscape(s.accelerator, text, pos, textLen);
+        int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, textLen);
         if (nextPos == -1) {
           pos = textLen;
         } else if (nextPos > pos) {

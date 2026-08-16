@@ -581,7 +581,12 @@ public final class Matcher implements MatchResult {
     }
     int idx =
         activeScanner()
-            .indexOfCodePointClass(scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex);
+            .indexOfCodePointClass(
+                scanInfo.ranges,
+                scanInfo.bitmap0,
+                scanInfo.bitmap1,
+                fromIndex,
+                activeScanner().length());
     if (idx >= 0) {
       int end =
           text != null
@@ -4052,7 +4057,11 @@ public final class Matcher implements MatchResult {
       }
       int idx =
           scanner.indexOfCodePointClass(
-              singleCharClass.ranges, singleCharClass.bitmap0, singleCharClass.bitmap1, fromIndex);
+              singleCharClass.ranges,
+              singleCharClass.bitmap0,
+              singleCharClass.bitmap1,
+              fromIndex,
+              scanner.length());
       if (idx < 0) {
         return -1L;
       }
