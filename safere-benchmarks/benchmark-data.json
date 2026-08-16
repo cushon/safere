@@ -3178,6 +3178,44 @@
       "requirements": []
     },
     {
+      "id": "RealWorldRegexBenchmark.runBenchmark.caseInsensitiveKeywordFind.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        {
+          "java": "(?i)keyword_to_find",
+          "alternates": {
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
+      ],
+      "inputs": [
+        "realWorldRegex.caseInsensitiveKeyword.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "requirements": []
+    },
+    {
       "id": "RealWorldRegexBenchmark.runBenchmark.boundedNameMatch.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
