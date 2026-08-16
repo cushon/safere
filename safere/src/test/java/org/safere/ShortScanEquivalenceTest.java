@@ -10,6 +10,7 @@ import static java.nio.charset.StandardCharsets.UTF_16;
 import static java.nio.charset.StandardCharsets.UTF_16LE;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.DisplayName;
@@ -182,7 +183,7 @@ class ShortScanEquivalenceTest {
   @DisplayName("UTF-16 kernels handle unsigned ranges and reject non-BMP ranges")
   void utf16RangeBoundaries() {
     char[] chars = new char[64];
-    java.util.Arrays.fill(chars, '\uA000');
+    Arrays.fill(chars, '\uA000');
     chars[10] = '\u7500';
     byte[] utf16Bytes = new String(chars).getBytes(UTF_16LE);
     int[] crossingSignedBoundary = {'\u7000', '\u9000'};
@@ -226,7 +227,7 @@ class ShortScanEquivalenceTest {
       return;
     }
     char[] chars = new char[64];
-    java.util.Arrays.fill(chars, '\uA000');
+    Arrays.fill(chars, '\uA000');
     chars[10] = '\u7500';
     chars[20] = '\u8500';
     byte[] utf16Bytes = new String(chars).getBytes(UTF_16LE);
@@ -282,7 +283,6 @@ class ShortScanEquivalenceTest {
       assertThat(StringSupport.compatibleWith(utf16, UTF_16)).isTrue();
     }
   }
-
   private static int scalarIndexOfAsciiClass(byte[] input, int[] ranges, int start) {
     for (int i = start; i < input.length; i++) {
       int b = input[i] & 0xFF;

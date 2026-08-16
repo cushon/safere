@@ -243,6 +243,10 @@ final class Dfa {
   private State[] offsetToState;
   private int nextStateId;
 
+  private final Utf8StartAccelerator utf8StartAccelerator;
+  private final StringStartAccelerator stringStartAccelerator;
+  private final boolean hasStartAcceleration;
+
   // ---------------------------------------------------------------------------
   // Construction
   // ---------------------------------------------------------------------------
@@ -744,6 +748,9 @@ final class Dfa {
           escapes[escapeCount] = ch;
         }
         escapeCount++;
+        if (escapeCount == 4) {
+          return null;
+        }
         continue;
       }
       int[] frontier = expand(seeds, seedCount, 0);
@@ -752,6 +759,29 @@ final class Dfa {
           escapes[escapeCount] = ch;
         }
         escapeCount++;
+        if (escapeCount == 4) {
+          return null;
+        }
+      }
+    }
+
+    // The scanner skips directly to an ASCII escape and therefore also skips over non-ASCII code
+    // points. Prove that every non-ASCII equivalence class remains in this state before enabling
+    // the accelerator. The DFA boundaries make one representative per interval sufficient.
+    for (int i = 0; i + 1 < boundaries.length; i++) {
+      int ch = Math.max(128, boundaries[i]);
+      if (ch >= boundaries[i + 1]) {
+        continue;
+      }
+      int seedCount = 0;
+      for (int id : insts) {
+        Inst ip = prog.inst(id);
+        if (instMatches(ip, ch)) {
+          seeds[seedCount++] = ip.out;
+        }
+      }
+      if (seedCount == 0 || !Arrays.equals(expand(seeds, seedCount, 0), insts)) {
+        return null;
       }
     }
 
@@ -767,7 +797,35 @@ final class Dfa {
     return null;
   }
 
-  /** Fast-forwards to the next escape character in a self-loop state. */
+  /** Returns whether this DFA was constructed with start-position acceleration enabled. */
+  boolean hasStartAcceleration() {
+    return hasStartAcceleration;
+  }
+
+  /** Returns whether this DFA can accelerate start positions for the supplied input substrate. */
+  boolean hasStartAcceleration(InputScanner text) {
+    return startAccelerationPolicy(text) != null;
+  }
+
+  private AcceleratorPolicy startAccelerationPolicy(InputScanner text) {
+    if (text instanceof Utf8InputScanner) {
+      return utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
+    }
+    if (text instanceof StringInputScanner) {
+      return stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
+    }
+    return null;
+  }
+
+  /**
+   * Fast-forwards to the next escape character in a self-loop state.
+   *
+   * <p>Direct sealed-type pattern matching avoids {@code invokeinterface} dispatch overhead on hot
+   * matching loops (see PR #693 and PR #695 review). HotSpot C2 does not automatically devirtualize
+   * megamorphic interface calls with &ge; 3 implementations across the JVM lifecycle; unwrapping
+   * the sealed record subtypes at this call site allows C2 to inline the underlying {@link
+   * InputScanner} search primitives directly into the caller.
+   */
   private static int findSelfLoopEscape(
       StateAccelerator accelerator, InputScanner text, int fromIndex, int limit) {
     if (accelerator instanceof StateAccelerator.SingleAsciiEscape single) {
@@ -1354,20 +1412,15 @@ final class Dfa {
       return new SearchResult(matched, matchEnd);
     }
 
-    boolean canAccelerate = hasStartAcceleration && !anchored;
+    AcceleratorPolicy activePolicy = startAccelerationPolicy(text);
+    boolean canAccelerate = activePolicy != null && !anchored;
     int minSkip = AcceleratorPolicy.DEFAULT.minProfitableSkip();
     int maxStrikes = AcceleratorPolicy.DEFAULT.strikeBudget();
     boolean isExact = false;
     if (canAccelerate) {
-      AcceleratorPolicy policy =
-          stringStartAccelerator != null
-              ? stringStartAccelerator.policy()
-              : (utf8StartAccelerator != null
-                  ? utf8StartAccelerator.policy()
-                  : AcceleratorPolicy.DEFAULT);
-      minSkip = policy.minProfitableSkip();
-      maxStrikes = policy.strikeBudget();
-      isExact = policy.isExactMatchCandidate();
+      minSkip = activePolicy.minProfitableSkip();
+      maxStrikes = activePolicy.strikeBudget();
+      isExact = activePolicy.isExactMatchCandidate();
     }
 
     // Adaptive defeat detection: track consecutive sub-threshold skips to avoid repeatedly paying
@@ -1400,6 +1453,13 @@ final class Dfa {
           pos = nextPos;
           if (pos >= textLen) {
             break;
+          }
+          s = startState(text, pos, anchored, false);
+          if (s == null) {
+            return null;
+          }
+          if (s == deadState) {
+            return new SearchResult(matched, matchEnd);
           }
         } else if (!isExact) {
           if (++consecutiveShortSkips >= maxStrikes) {
@@ -1516,6 +1576,13 @@ final class Dfa {
           pos = nextPos;
           if (pos > textLen) {
             break;
+          }
+          s = startState(text, pos, anchored, false);
+          if (s == null) {
+            return null;
+          }
+          if (s == deadState) {
+            return new SearchResult(matched, matchEnd);
           }
         } else if (!isExact) {
           if (++consecutiveShortSkips >= maxStrikes) {

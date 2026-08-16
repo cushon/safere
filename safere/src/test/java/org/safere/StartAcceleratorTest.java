@@ -30,15 +30,13 @@ class StartAcceleratorTest {
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.Literal.class);
-    assertThat(strAcc.policy().strategy()).isEqualTo(MatchStrategy.LITERAL);
-    assertThat(strAcc.policy().isExactMatchCandidate()).isTrue();
+    assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
     assertThat(strAcc.findCandidate("haystack with needle here", 0, false)).isEqualTo(14);
     assertThat(strAcc.findCandidate("haystack with needle here", 15, false)).isEqualTo(-1);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.Literal.class);
-    assertThat(utf8Acc.policy().strategy()).isEqualTo(MatchStrategy.LITERAL);
-    assertThat(utf8Acc.policy().isExactMatchCandidate()).isTrue();
+    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
     assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with needle here"), 0)).isEqualTo(14);
     assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with needle here"), 15)).isEqualTo(-1);
   }
@@ -79,12 +77,12 @@ class StartAcceleratorTest {
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.FixedOffset.class);
-    assertThat(strAcc.policy().strategy()).isEqualTo(MatchStrategy.LITERAL);
+    assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
     assertThat(strAcc.findCandidate("abtoken cd", 0, false)).isEqualTo(0);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.FixedOffset.class);
-    assertThat(utf8Acc.policy().strategy()).isEqualTo(MatchStrategy.LITERAL);
+    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
     assertThat(utf8Acc.findCandidate(utf8Scanner("abtoken cd"), 0)).isEqualTo(0);
   }
 
@@ -95,14 +93,12 @@ class StartAcceleratorTest {
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
-    assertThat(strAcc.policy().strategy()).isEqualTo(MatchStrategy.CHARACTER_CLASS);
-    assertThat(strAcc.policy().isExactMatchCandidate()).isFalse();
+    assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
     assertThat(strAcc.findCandidate("xxxa", 0, false)).isEqualTo(3);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
-    assertThat(utf8Acc.policy().strategy()).isEqualTo(MatchStrategy.CHARACTER_CLASS);
-    assertThat(utf8Acc.policy().isExactMatchCandidate()).isFalse();
+    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
     assertThat(utf8Acc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
   }
 

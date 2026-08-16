@@ -23,6 +23,11 @@ record AcceleratorPolicy(
     boolean isExactMatchCandidate,
     MatchStrategy strategy) {
 
+  // TODO: Conduct systematic empirical micro-benchmarking across diverse CPU architectures (x86
+  // AVX-512/AVX2, ARM Neon) to precisely tune minimum profitable skip thresholds.
+  // TODO: Measure defeat sensitivity across varied payload densities and evaluate whether dynamic
+  // backoff or payload-length-proportional strike budgets outperform static constant budgets.
+
   /** Policy for vectorized literal and fixed-offset substring searches (AVX2 / SWAR). */
   static final AcceleratorPolicy LITERAL =
       new AcceleratorPolicy(16, 4, true, MatchStrategy.LITERAL);

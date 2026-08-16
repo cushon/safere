@@ -8,6 +8,7 @@ package org.safere.fuzz;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -30,6 +31,7 @@ final class Utf8InputFuzzer {
     assertFixedOffsetAccelerationMatchesString(data);
     assertMultiOffsetLiteralOccurrencesMatchString(data);
     assertFinalLineTerminatorEndAnchorsMatchJdk(data);
+    assertPositionDependentStartAccelerationMatchesJdk(data);
     String repeatedLiteral =
         String.valueOf((char) data.consumeInt('A', 'Z')).repeat(data.consumeInt(2, 32));
     String suffix = new String(data.consumeBytes(data.consumeInt(0, 64)), StandardCharsets.UTF_8);
@@ -135,6 +137,24 @@ final class Utf8InputFuzzer {
     boolean utf8Found = safeRe.find(Utf8Input.validated(input.getBytes(StandardCharsets.UTF_8)));
     if (stringFound != expected || utf8Found != expected) {
       throw new AssertionError("end anchor differs from JDK for final line terminator");
+    }
+  }
+
+  private static void assertPositionDependentStartAccelerationMatchesJdk(FuzzedDataProvider data) {
+    String terminator = data.pickValue(List.of("\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029"));
+    String regex = "(b|(?m:^a))c[0-9]";
+    Pattern pattern = Pattern.compile(regex);
+    for (String input :
+        List.of(
+            terminator + "acz9y",
+            " ycby ",
+            "y0c" + terminator + "1bac19c1__19x y_",
+            "bxc\rca9\né\nac9é\r0x\r9a0")) {
+      boolean expected = java.util.regex.Pattern.compile(regex).matcher(input).find();
+      Utf8Input utf8 = Utf8Input.validated(input.getBytes(StandardCharsets.UTF_8));
+      if (pattern.matcher(input).find() != expected || pattern.find(utf8) != expected) {
+        throw new AssertionError("DFA-loop start acceleration differs from JDK anchor semantics");
+      }
     }
   }
 
@@ -255,7 +275,7 @@ final class Utf8InputFuzzer {
           .onUnmappableCharacter(CodingErrorAction.REPORT)
           .decode(ByteBuffer.wrap(bytes, offset, length));
       return true;
-    } catch (java.nio.charset.CharacterCodingException e) {
+    } catch (CharacterCodingException e) {
       return false;
     }
   }

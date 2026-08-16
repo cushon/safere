@@ -6,6 +6,7 @@
 package org.safere.exhaustive;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.io.BufferedWriter;
 import java.io.StringWriter;
@@ -123,7 +124,7 @@ class CompactDivergenceLogsTest {
     }
 
     assertThat(
-            org.assertj.core.api.Assertions.catchThrowable(
+            catchThrowable(
                 () ->
                     new CompactDivergenceLogs(
                         tempDir,
@@ -181,7 +182,7 @@ class CompactDivergenceLogsTest {
     }
 
     assertThat(
-            org.assertj.core.api.Assertions.catchThrowable(
+            catchThrowable(
                 () ->
                     CompactDivergenceExpander.main(
                         new String[] {"--input-dir=" + tempDir, "--sample-limit=2"})))

@@ -7,11 +7,13 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.regex.MatchResult;
@@ -1946,7 +1948,7 @@ class MatcherTest {
     void customCharSequenceWithoutToString() {
       // A CharSequence backed by a byte array that does NOT override toString().
       // This mimics Ghidra's ByteCharSequence pattern.
-      byte[] data = "hello world".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+      byte[] data = "hello world".getBytes(US_ASCII);
       CharSequence byteSeq =
           new CharSequence() {
             @Override
@@ -3131,7 +3133,7 @@ class MatcherTest {
     for (int i = 0; i < samples.length; i++) {
       samples[i] = runtimeNanos(task);
     }
-    java.util.Arrays.sort(samples);
+    Arrays.sort(samples);
     return samples[samples.length / 2];
   }
 
