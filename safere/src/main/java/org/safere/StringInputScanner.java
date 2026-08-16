@@ -22,6 +22,12 @@ final class StringInputScanner implements InputScanner {
   }
 
   @Override
+  public int asciiAt(int pos) {
+    char c = text.charAt(pos);
+    return c < 0x80 ? c : -1;
+  }
+
+  @Override
   public int indexOfAscii(int ascii, int fromIndex, int limit) {
     int idx = text.indexOf(ascii, fromIndex);
     return (idx >= 0 && idx < limit) ? idx : -1;
@@ -63,12 +69,6 @@ final class StringInputScanner implements InputScanner {
     return -1;
   }
 
-  @Override
-  public int asciiAt(int pos) {
-    char c = text.charAt(pos);
-    return c < 0x80 ? c : -1;
-  }
-
 
   @Override
   public int singleUnitCodePointAt(int pos) {
@@ -94,7 +94,7 @@ final class StringInputScanner implements InputScanner {
   public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
     VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
     if (provider != null) {
-      int vectorIndex = provider.indexOfCharClass(text, scanInfo, start);
+      int vectorIndex = provider.indexOfCharClass(text, scanInfo.ranges, start);
       if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
         return vectorIndex;
       }
@@ -120,7 +120,7 @@ final class StringInputScanner implements InputScanner {
   public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
     VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
     if (provider != null) {
-      int vectorIndex = provider.indexOfCodePointClass(text, ranges, bitmap0, bitmap1, start);
+      int vectorIndex = provider.indexOfCharClass(text, ranges, start);
       if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
         return vectorIndex;
       }

@@ -164,9 +164,6 @@ final class Dfa {
   private final Prog prog;
   private final int maxStates;
   private final boolean longest;
-  private final Utf8StartAccelerator utf8StartAccelerator;
-  private final StringStartAccelerator stringStartAccelerator;
-  private final boolean hasStartAcceleration;
   private final boolean hasGraphemeSemantics;
 
   /** Whether consuming transitions can depend on the absolute input position. */
@@ -242,6 +239,10 @@ final class Dfa {
   private int[] transitions;
   private State[] offsetToState;
   private int nextStateId;
+
+  private final Utf8StartAccelerator utf8StartAccelerator;
+  private final StringStartAccelerator stringStartAccelerator;
+  private final boolean hasStartAcceleration;
 
   // ---------------------------------------------------------------------------
   // Construction

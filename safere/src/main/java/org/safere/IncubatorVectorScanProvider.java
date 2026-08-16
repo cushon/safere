@@ -35,35 +35,16 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   }
 
   @Override
-  public int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start) {
-    if (!StringSupport.hasAccess()) {
-      return UNSUPPORTED;
-    }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      if (scanInfo.isAscii) {
-        return ByteVectorScan.indexOfAsciiClass(text, scanInfo.ranges, start);
-      }
-      int[] clamped = clampRangesForLatin1(scanInfo.ranges);
-      if (clamped != null) {
-        return ByteVectorScan.indexOfAsciiClass(text, clamped, start);
-      }
-      return UNSUPPORTED;
-    }
-    return ShortVectorScan.indexOfCharClassUtf16(text, scanInfo.ranges, start);
-  }
-
-  @Override
-  public int indexOfCodePointClass(
-      String text, int[] ranges, long bitmap0, long bitmap1, int start) {
+  public int indexOfCharClass(String text, int[] ranges, int start) {
     if (!StringSupport.hasAccess()) {
       return UNSUPPORTED;
     }
     if (StringSupport.compatibleWith(text, ISO_8859_1)) {
       int[] clamped = clampRangesForLatin1(ranges);
-      if (clamped == null) {
-        return -1;
+      if (clamped != null) {
+        return ByteVectorScan.indexOfAsciiClass(text, clamped, start);
       }
-      return ByteVectorScan.indexOfAsciiClass(text, clamped, start);
+      return UNSUPPORTED;
     }
     return ShortVectorScan.indexOfCharClassUtf16(text, ranges, start);
   }

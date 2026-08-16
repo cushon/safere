@@ -105,17 +105,6 @@ final class Ascii {
     return failure;
   }
 
-  /** Returns whether ASCII bytes match a pattern prefix ignoring ASCII case. */
-  static boolean regionMatchesIgnoreCase(byte[] bytes, int offset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
-      int b = bytes[offset + i] & 0xFF;
-      int p = prefix.charAt(i);
-      if (b != p && toLowerCase(b) != toLowerCase(p)) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {

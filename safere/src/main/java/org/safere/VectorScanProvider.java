@@ -18,10 +18,7 @@ interface VectorScanProvider {
   int indexOfAsciiClass(String text, int[] ranges, int start);
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  int indexOfCharClass(String text, Pattern.CharClassScanInfo scanInfo, int start);
-
-  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  int indexOfCodePointClass(String text, int[] ranges, long bitmap0, long bitmap1, int start);
+  int indexOfCharClass(String text, int[] ranges, int start);
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfIgnoreCase(String text, String prefix, int start);
