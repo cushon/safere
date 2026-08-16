@@ -351,18 +351,22 @@ public final class Pattern implements Serializable {
     }
   }
 
-  private static MatchDescriptor extractMatchDescriptor(Regexp metadataAst, int flags) {
+  private static MatchDescriptor extractMatchDescriptor(
+      Regexp metadataAst, Regexp sourceAst, int flags) {
     String literalMatch = extractLiteralMatch(metadataAst);
     CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
     KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
     CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
+    int minMatchLength = extractMinMatchLength(sourceAst);
     if (literalMatch == null
         && singleCharClass == null
         && keywordAlternation == null
-        && ccMatch == null) {
+        && ccMatch == null
+        && minMatchLength <= 0) {
       return MatchDescriptor.NONE;
     }
-    return new MatchDescriptor(literalMatch, singleCharClass, keywordAlternation, ccMatch);
+    return new MatchDescriptor(
+        literalMatch, singleCharClass, keywordAlternation, ccMatch, minMatchLength);
   }
 
   private static long nextPatternId() {
@@ -451,7 +455,7 @@ public final class Pattern implements Serializable {
     }
     Map<String, Integer> named = extractNamedGroups(re);
     StartDescriptor startDescriptor = extractStartDescriptor(metadataAst);
-    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, flags);
+    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, re, flags);
     boolean hasLazy = hasLazyQuantifiers(re);
     boolean hasAlt = hasAlternation(re);
     boolean canMatchEmpty = canMatchEmpty(re);
@@ -627,6 +631,9 @@ public final class Pattern implements Serializable {
 
   boolean findWithoutDiagnostics(Utf8InputScanner scanner) {
     int length = scanner.length();
+    if (matchDescriptor.minMatchLength() > 0 && length < matchDescriptor.minMatchLength()) {
+      return false;
+    }
     if (literalMatchUtf8 != null && !prefixFoldCase) {
       return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
     }
@@ -2967,6 +2974,19 @@ public final class Pattern implements Serializable {
       this.bitmap1 = bitmap1;
       this.isAscii = isAscii;
     }
+
+    boolean contains(int cp) {
+      if (cp < 64) {
+        return cp >= 0 && (bitmap0 & (1L << cp)) != 0;
+      }
+      if (cp < 128) {
+        return (bitmap1 & (1L << (cp - 64))) != 0;
+      }
+      if (isAscii) {
+        return false;
+      }
+      return Matcher.binarySearchRanges(ranges, cp);
+    }
   }
 
   static CharClassScanInfo buildAsciiClassScanInfo(AsciiBitmap asciiClass) {
@@ -3663,6 +3683,69 @@ public final class Pattern implements Serializable {
       return "";
     }
     return foldCase ? sb.toString().toLowerCase(Locale.ROOT) : sb.toString();
+  }
+
+  private static final class MinMatchLengthWalker extends Walker<Integer> {
+    @Override
+    protected Integer shortVisit(Regexp re, Integer parentArg) {
+      return 0;
+    }
+
+    @Override
+    protected Integer postVisit(
+        Regexp re, Integer parentArg, Integer preArg, List<Integer> childArgs) {
+      return switch (re.op) {
+        case NO_MATCH -> Integer.MAX_VALUE / 2;
+        case EMPTY_MATCH,
+            BEGIN_LINE,
+            END_LINE,
+            BEGIN_TEXT,
+            END_TEXT,
+            WORD_BOUNDARY,
+            NO_WORD_BOUNDARY,
+            GRAPHEME_CLUSTER_BOUNDARY,
+            HAVE_MATCH,
+            QUEST,
+            STAR -> 0;
+        case LITERAL -> Character.charCount(re.rune);
+        case LITERAL_STRING -> {
+          int count = 0;
+          if (re.runes != null) {
+            for (int r : re.runes) {
+              count += Character.charCount(r);
+            }
+          }
+          yield count;
+        }
+        case CHAR_CLASS, ANY_CHAR, ANY_BYTE, GRAPHEME_CLUSTER -> 1;
+        case CAPTURE, NON_CAPTURE, PLUS -> childArgs.isEmpty() ? 0 : childArgs.getFirst();
+        case REPEAT -> {
+          int subMin = childArgs.isEmpty() ? 0 : childArgs.getFirst();
+          yield (int) Math.min((long) subMin * Math.max(0, re.min), Integer.MAX_VALUE / 2);
+        }
+        case CONCAT -> {
+          long sum = 0;
+          for (int child : childArgs) {
+            sum += child;
+          }
+          yield (int) Math.min(sum, Integer.MAX_VALUE / 2);
+        }
+        case ALTERNATE -> {
+          int min = Integer.MAX_VALUE / 2;
+          for (int child : childArgs) {
+            min = Math.min(min, child);
+          }
+          yield min == Integer.MAX_VALUE / 2 ? 0 : min;
+        }
+      };
+    }
+  }
+
+  private static int extractMinMatchLength(Regexp re) {
+    if (re == null) {
+      return 0;
+    }
+    return new MinMatchLengthWalker().walk(re, 0);
   }
 
   /** Deserialization: recompile the pattern from the stored string and flags. */

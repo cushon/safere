@@ -470,6 +470,14 @@ public final class Matcher implements MatchResult {
     clearDeferredCaptureState();
   }
 
+  private boolean cannotMatchLength(int availableLength) {
+    if (diagnosticOperation != null) {
+      return false;
+    }
+    int min = parentPattern.matchDescriptor().minMatchLength();
+    return min > 0 && availableLength < min;
+  }
+
   private EnginePathOptions enginePathOptions() {
     return parentPattern.enginePathOptions();
   }
@@ -622,7 +630,7 @@ public final class Matcher implements MatchResult {
   }
 
   /** Binary search through sorted [lo, hi] ranges to check if {@code cp} is in any range. */
-  private static boolean binarySearchRanges(int[] ranges, int cp) {
+  static boolean binarySearchRanges(int[] ranges, int cp) {
     int lo = 0;
     int hi = ranges.length / 2 - 1;
     while (lo <= hi) {
@@ -834,6 +842,10 @@ public final class Matcher implements MatchResult {
     modCount++;
     findExhaustedAfterTerminalEmptyMatch = false;
     searchFrom = regionStart;
+
+    if (cannotMatchLength(regionEnd - regionStart)) {
+      return applyFailedMatchResult();
+    }
 
     // --- Region setup ---
     boolean regionActive = (regionStart != 0 || regionEnd != getTextLength());
@@ -1084,6 +1096,10 @@ public final class Matcher implements MatchResult {
     modCount++;
     findExhaustedAfterTerminalEmptyMatch = false;
     searchFrom = regionStart;
+
+    if (cannotMatchLength(regionEnd - regionStart)) {
+      return applyFailedMatchResult();
+    }
 
     // --- Region setup ---
     boolean regionActive = (regionStart != 0 || regionEnd != getTextLength());
@@ -1349,6 +1365,9 @@ public final class Matcher implements MatchResult {
 
   /** Runs the engine search from {@link #searchFrom} and stores the result. */
   private boolean doFind() {
+    if (cannotMatchLength(getTextLength() - searchFrom)) {
+      return applyFailedMatchResult();
+    }
     boolean regionActive = (regionStart != 0 || regionEnd != getTextLength());
     if (regionActive) {
       return doFindRegion(regionActive);
@@ -1365,6 +1384,9 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean doFindRegion(boolean regionActive) {
+    if (cannotMatchLength(regionEnd - searchFrom)) {
+      return applyFailedMatchResult();
+    }
     // --- Region setup: temporarily substitute text with the region substring ---
     String savedText = text;
     InputScanner savedTextScanner = textScanner;
@@ -4206,33 +4228,15 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean matches(Matcher matcher) {
-      if (isStartAnchored && matcher.searchFrom > 0) {
-        return matcher.applyFailedMatchResult();
-      }
-      matcher.capturesResolved = true;
-      if (matcher.text != null) {
-        matcher.diagnosticBoundary(MatchStrategy.LITERAL);
-        boolean matched;
-        if (foldCase) {
-          matched =
-              matcher.text.length() == literal.length()
-                  && matcher.literalRegionMatches(literal, 0, literal.length());
-        } else {
-          matched = matcher.text.equals(literal);
-        }
-        if (matched) {
-          matcher.applyFullMatchResult(new int[] {0, matcher.text.length()});
-        } else {
-          if (matcher.isPartialLiteralMatch(literal, 0)) {}
-          matcher.applyFailedMatchResult();
-        }
-        return matcher.hasMatch;
-      }
-      return matcher.matchesCore();
+      return matchLiteral(matcher, true);
     }
 
     @Override
     public boolean lookingAt(Matcher matcher) {
+      return matchLiteral(matcher, false);
+    }
+
+    private boolean matchLiteral(Matcher matcher, boolean fullMatch) {
       if (isStartAnchored && matcher.searchFrom > 0) {
         return matcher.applyFailedMatchResult();
       }
@@ -4242,20 +4246,47 @@ public final class Matcher implements MatchResult {
         boolean matched;
         if (foldCase) {
           matched =
-              matcher.text.length() >= literal.length()
+              (fullMatch
+                      ? matcher.text.length() == literal.length()
+                      : matcher.text.length() >= literal.length())
                   && matcher.literalRegionMatches(literal, 0, literal.length());
         } else {
-          matched = matcher.text.startsWith(literal);
+          matched = fullMatch ? matcher.text.equals(literal) : matcher.text.startsWith(literal);
         }
         if (matched) {
-          matcher.applyFullMatchResult(new int[] {0, literal.length()});
+          matcher.applyFullMatchResult(
+              new int[] {0, fullMatch ? matcher.text.length() : literal.length()});
         } else {
           if (matcher.isPartialLiteralMatch(literal, 0)) {}
           matcher.applyFailedMatchResult();
         }
         return matcher.hasMatch;
+      } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
+        matcher.diagnosticBoundary(MatchStrategy.LITERAL);
+        if (foldCase) {
+          return fullMatch ? matcher.matchesCore() : matcher.lookingAtCore();
+        }
+        boolean matched;
+        if (literalUtf8 != null) {
+          matched =
+              (fullMatch
+                      ? utf8Scanner.length() == literalUtf8.length
+                      : utf8Scanner.length() >= literalUtf8.length)
+                  && utf8Scanner.startsWith(literalUtf8, 0);
+        } else {
+          matched = literal.isEmpty() && (!fullMatch || utf8Scanner.length() == 0);
+        }
+        if (matched) {
+          matcher.applyFullMatchResult(
+              new int[] {
+                0, fullMatch ? utf8Scanner.length() : (literalUtf8 == null ? 0 : literalUtf8.length)
+              });
+        } else {
+          matcher.applyFailedMatchResult();
+        }
+        return matcher.hasMatch;
       }
-      return matcher.lookingAtCore();
+      return fullMatch ? matcher.matchesCore() : matcher.lookingAtCore();
     }
   }
 
@@ -4287,20 +4318,56 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean matches(Matcher matcher) {
-      if (isStartAnchored && matcher.searchFrom > 0) {
-        return matcher.applyFailedMatchResult();
-      }
-      matcher.capturesResolved = true;
-      if (charClassMatch != null && matcher.text != null) {
-        matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
-        return matcher.charClassMatchFastPath(charClassMatch);
-      }
-      return matcher.matchesCore();
+      return matchSingleCharClass(matcher, true);
     }
 
     @Override
     public boolean lookingAt(Matcher matcher) {
-      return matcher.lookingAtCore();
+      return matchSingleCharClass(matcher, false);
+    }
+
+    private boolean matchSingleCharClass(Matcher matcher, boolean fullMatch) {
+      if (isStartAnchored && matcher.searchFrom > 0) {
+        return matcher.applyFailedMatchResult();
+      }
+      matcher.capturesResolved = true;
+      if (charClassMatch != null && fullMatch && matcher.text != null) {
+        matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
+        return matcher.charClassMatchFastPath(charClassMatch);
+      }
+      if (singleCharClass != null) {
+        matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
+        if (matcher.text != null) {
+          int len = matcher.text.length();
+          if (len >= 1) {
+            char c0 = matcher.text.charAt(0);
+            if (len >= 2 && Character.isSurrogatePair(c0, matcher.text.charAt(1))) {
+              int cp = matcher.text.codePointAt(0);
+              if ((!fullMatch || len == 2) && singleCharClass.contains(cp)) {
+                return matcher.applyFullMatchResult(new int[] {0, 2});
+              }
+            } else {
+              int cp = c0;
+              if ((!fullMatch || len == 1) && singleCharClass.contains(cp)) {
+                return matcher.applyFullMatchResult(new int[] {0, 1});
+              }
+            }
+          }
+          return matcher.applyFailedMatchResult();
+        } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
+          int len = utf8Scanner.length();
+          if (len > 0) {
+            long decoded = utf8Scanner.decodeForward(0);
+            int cp = InputScanner.codePoint(decoded);
+            int nextPos = InputScanner.position(decoded);
+            if ((!fullMatch || len == nextPos) && singleCharClass.contains(cp)) {
+              return matcher.applyFullMatchResult(new int[] {0, nextPos});
+            }
+          }
+          return matcher.applyFailedMatchResult();
+        }
+      }
+      return fullMatch ? matcher.matchesCore() : matcher.lookingAtCore();
     }
   }
 
