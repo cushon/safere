@@ -185,6 +185,7 @@ final class WorkCounterConfig {
           <archive>
             <manifestEntries>
               <Automatic-Module-Name>org.safere</Automatic-Module-Name>
+              <Multi-Release>true</Multi-Release>
             </manifestEntries>
           </archive>
         </configuration>

@@ -8,13 +8,13 @@ package org.safere;
 import static java.lang.invoke.MethodHandles.byteArrayViewVarHandle;
 import static java.nio.ByteOrder.nativeOrder;
 import static java.util.Objects.requireNonNull;
+import static org.safere.Swar.BYTE_HIGH_BITS;
+import static org.safere.Swar.BYTE_ONES;
 
 import java.lang.invoke.VarHandle;
 
 /** Shared 64-bit SWAR kernels for scanning bounded 1-byte sequences. */
 abstract class ByteSwarScan {
-  static final long BYTE_ONES = 0x0101_0101_0101_0101L;
-  static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
   /**
    * Input sizes at which the SWAR candidate filter overtakes the skip loop. The filter always
@@ -245,15 +245,7 @@ abstract class ByteSwarScan {
   static long exactAsciiRangeMask(long word, int low, int high) {
     long values = word & ~BYTE_HIGH_BITS;
     long ascii = ~word & BYTE_HIGH_BITS;
-    return exactAsciiRangeMask(values, ascii, low * BYTE_ONES, high * BYTE_ONES);
-  }
-
-  static long exactAsciiRangeMask(long values, long ascii, long repeatedLow, long repeatedHigh) {
-    // Setting each minuend's high bit makes both subtractions independent in every byte lane:
-    // each lane subtracts at most 127 from at least 128, so no borrow can cross a lane boundary.
-    long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
-    long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
-    return ascii & atLeastLow & atMostHigh;
+    return Swar.exactAsciiRangeMask(values, ascii, low * BYTE_ONES, high * BYTE_ONES);
   }
 
   static int indexOfMultipleByteRanges(
@@ -278,8 +270,8 @@ abstract class ByteSwarScan {
       long word = (long) LONG_VIEW.get(bytes, offset + position);
       long values = word & ~BYTE_HIGH_BITS;
       long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
+      long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low1, high1);
       if (matches != 0) {
         return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, position + Long.BYTES);
       }
@@ -302,9 +294,9 @@ abstract class ByteSwarScan {
       long word = (long) LONG_VIEW.get(bytes, offset + position);
       long values = word & ~BYTE_HIGH_BITS;
       long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
-      matches |= exactAsciiRangeMask(values, ascii, low2, high2);
+      long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low1, high1);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low2, high2);
       if (matches != 0) {
         return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, position + Long.BYTES);
       }
@@ -329,16 +321,81 @@ abstract class ByteSwarScan {
       long word = (long) LONG_VIEW.get(bytes, offset + position);
       long values = word & ~BYTE_HIGH_BITS;
       long ascii = ~word & BYTE_HIGH_BITS;
-      long matches = exactAsciiRangeMask(values, ascii, low0, high0);
-      matches |= exactAsciiRangeMask(values, ascii, low1, high1);
-      matches |= exactAsciiRangeMask(values, ascii, low2, high2);
-      matches |= exactAsciiRangeMask(values, ascii, low3, high3);
+      long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low1, high1);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low2, high2);
+      matches |= Swar.exactAsciiRangeMask(values, ascii, low3, high3);
       if (matches != 0) {
         return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, position + Long.BYTES);
       }
       position += Long.BYTES;
     }
     return scalarRangeCheck(bytes, offset, bitmap0, bitmap1, position, length);
+  }
+
+  static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
+    if (!Swar.supportsAsciiRanges(ranges, 2)) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    int numRanges = ranges.length / 2;
+
+    int pos = Math.max(0, start);
+    int wordEnd = length - Long.BYTES;
+
+    long low0 = (ranges[0] & 0xFFL) * BYTE_ONES;
+    long high0 = (ranges[1] & 0xFFL) * BYTE_ONES;
+    long low1 = numRanges > 1 ? (ranges[2] & 0xFFL) * BYTE_ONES : 0;
+    long high1 = numRanges > 1 ? (ranges[3] & 0xFFL) * BYTE_ONES : 0;
+
+    if (numRanges == 1) {
+      while (pos <= wordEnd) {
+        long word = (long) LONG_VIEW.get(bytes, offset + pos);
+        long values = word & ~BYTE_HIGH_BITS;
+        long ascii = ~word & BYTE_HIGH_BITS;
+        long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
+
+        if (matches != 0) {
+          int limit = pos + Long.BYTES;
+          for (int i = pos; i < limit; i++) {
+            int b = bytes[offset + i] & 0xFF;
+            if (b >= ranges[0] && b <= ranges[1]) {
+              return i;
+            }
+          }
+        }
+        pos += Long.BYTES;
+      }
+    } else {
+      while (pos <= wordEnd) {
+        long word = (long) LONG_VIEW.get(bytes, offset + pos);
+        long values = word & ~BYTE_HIGH_BITS;
+        long ascii = ~word & BYTE_HIGH_BITS;
+        long matches =
+            Swar.exactAsciiRangeMask(values, ascii, low0, high0)
+                | Swar.exactAsciiRangeMask(values, ascii, low1, high1);
+
+        if (matches != 0) {
+          int limit = pos + Long.BYTES;
+          for (int i = pos; i < limit; i++) {
+            int b = bytes[offset + i] & 0xFF;
+            if ((b >= ranges[0] && b <= ranges[1]) || (b >= ranges[2] && b <= ranges[3])) {
+              return i;
+            }
+          }
+        }
+        pos += Long.BYTES;
+      }
+    }
+
+    for (; pos < length; pos++) {
+      int b = bytes[offset + pos] & 0xFF;
+      for (int r = 0; r < numRanges; r++) {
+        if (b >= ranges[r * 2] && b <= ranges[r * 2 + 1]) {
+          return pos;
+        }
+      }
+    }
+    return -1;
   }
 
   private static int scalarRangeCheck(
