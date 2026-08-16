@@ -33,27 +33,31 @@ final class StringVectorScan {
       return VectorScanProvider.UNSUPPORTED;
     }
     if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return indexOfLatin1Class(text, ranges, start);
+      return indexOfLatin1Class(text, ranges, start, text.length());
     }
     if (StringSupport.compatibleWith(text, UTF_16)) {
-      return indexOfUtf16Class(text, ranges, start);
+      return indexOfUtf16Class(text, ranges, start, text.length());
     }
     return VectorScanProvider.UNSUPPORTED;
   }
 
   static int indexOfCharClass(String text, int[] ranges, int start) {
+    return indexOfCharClass(text, ranges, start, text.length());
+  }
+
+  static int indexOfCharClass(String text, int[] ranges, int start, int limit) {
     if (!StringSupport.hasAccess()) {
       return VectorScanProvider.UNSUPPORTED;
     }
     if (StringSupport.compatibleWith(text, ISO_8859_1)) {
       int[] clamped = clampRangesForLatin1(ranges);
       if (clamped != null) {
-        return indexOfLatin1Class(text, clamped, start);
+        return indexOfLatin1Class(text, clamped, start, limit);
       }
       return VectorScanProvider.UNSUPPORTED;
     }
     if (StringSupport.compatibleWith(text, UTF_16)) {
-      return indexOfUtf16Class(text, ranges, start);
+      return indexOfUtf16Class(text, ranges, start, limit);
     }
     return VectorScanProvider.UNSUPPORTED;
   }
@@ -211,18 +215,19 @@ final class StringVectorScan {
     return -1;
   }
 
-  private static int indexOfLatin1Class(String text, int[] ranges, int start) {
-    int length = text.length();
+  private static int indexOfLatin1Class(String text, int[] ranges, int start, int limit) {
+    int scanLimit = Math.min(limit, text.length());
     int position = Math.max(0, start);
-    int limit = position + BYTE_SPECIES.loopBound(length - position);
-    for (; position < limit; position += BYTE_SPECIES.length()) {
+    int vecLimit = scanLimit - BYTE_SPECIES.length();
+    for (; position <= vecLimit; position += BYTE_SPECIES.length()) {
       ByteVector values = StringSupport.byteVectorFromString(BYTE_SPECIES, text, position);
       VectorMask<Byte> matches = ByteVectorScan.matches(values, ranges);
       if (matches.anyTrue()) {
-        return position + matches.firstTrue();
+        int found = position + matches.firstTrue();
+        return found < scanLimit ? found : -1;
       }
     }
-    for (; position < length; position++) {
+    for (; position < scanLimit; position++) {
       char c = text.charAt(position);
       if (c < 256 && ByteVectorScan.matches((byte) c, ranges)) {
         return position;
@@ -231,24 +236,25 @@ final class StringVectorScan {
     return -1;
   }
 
-  private static int indexOfUtf16Class(String text, int[] ranges, int start) {
+  private static int indexOfUtf16Class(String text, int[] ranges, int start, int limit) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 4) || nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;
     }
-    int length = text.length();
+    int scanLimit = Math.min(limit, text.length());
     int position = Math.max(0, start);
     int vectorLen = SHORT_SPECIES.length();
-    int limit = length - vectorLen;
+    int vecLimit = scanLimit - vectorLen;
 
-    for (; position <= limit; position += vectorLen) {
+    for (; position <= vecLimit; position += vectorLen) {
       ShortVector values = StringSupport.shortVectorFromString(SHORT_SPECIES, text, position);
       VectorMask<Short> matches = ShortVectorScan.matches(values, ranges);
       if (matches.anyTrue()) {
-        return position + matches.firstTrue();
+        int found = position + matches.firstTrue();
+        return found < scanLimit ? found : -1;
       }
     }
 
-    for (; position < length; position++) {
+    for (; position < scanLimit; position++) {
       char ch = text.charAt(position);
       if (ShortVectorScan.matches(ch, ranges)) {
         return position;

@@ -43,6 +43,25 @@ sealed interface StringStartAccelerator {
    */
   int findCandidate(String text, int fromIndex, boolean unixLines);
 
+  /**
+   * Finds the next candidate match start position at or after {@code fromIndex} using
+   * pattern-matched devirtualization.
+   *
+   * <p>Direct sealed-type pattern matching avoids {@code invokeinterface} dispatch overhead on hot
+   * matching loops. HotSpot C2 does not automatically devirtualize megamorphic interface calls with
+   * &ge; 3 implementations across the JVM lifecycle; switching over the sealed subtypes here allows
+   * C2 to inline candidate searches directly into caller loops.
+   */
+  static int findNextCandidate(
+      StringStartAccelerator accelerator, String text, int fromIndex, boolean unixLines) {
+    return switch (accelerator) {
+      case Literal lit -> lit.findCandidate(text, fromIndex, unixLines);
+      case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
+      case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
+      case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
+    };
+  }
+
   /** Returns the tuning and diagnostic policy for this accelerator. */
   default AcceleratorPolicy policy() {
     return AcceleratorPolicy.DEFAULT;

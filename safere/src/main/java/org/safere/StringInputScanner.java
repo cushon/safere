@@ -7,9 +7,11 @@ package org.safere;
 
 final class StringInputScanner implements InputScanner {
   private final String text;
+  private final VectorScanProvider scanProvider;
 
   StringInputScanner(String text) {
     this.text = text;
+    this.scanProvider = VectorScanProviders.providerForLength(text.length());
   }
 
   String text() {
@@ -35,7 +37,7 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
-    if (VectorScanProviders.providerForLength(limit - fromIndex) != null) {
+    if (scanProvider != null && limit - fromIndex >= scanProvider.minimumInputLength()) {
       int idx = StringVectorScan.indexOfAsciiPair(text, c1, c2, fromIndex, limit);
       if (idx != -1 || fromIndex >= limit) {
         return idx;
@@ -57,7 +59,7 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
-    if (VectorScanProviders.providerForLength(limit - fromIndex) != null) {
+    if (scanProvider != null && limit - fromIndex >= scanProvider.minimumInputLength()) {
       int idx = StringVectorScan.indexOfAsciiTriple(text, c1, c2, c3, fromIndex, limit);
       if (idx != -1 || fromIndex >= limit) {
         return idx;
@@ -99,9 +101,8 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
-    VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
-    if (provider != null) {
-      int vectorIndex = provider.indexOfCharClass(text, scanInfo.ranges, start);
+    if (scanProvider != null) {
+      int vectorIndex = scanProvider.indexOfCharClass(text, scanInfo.ranges, start);
       if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
         return vectorIndex;
       }
@@ -127,21 +128,26 @@ final class StringInputScanner implements InputScanner {
     return -1;
   }
 
+  boolean hasVectorScan(int length) {
+    return scanProvider != null && length >= scanProvider.minimumInputLength();
+  }
+
   @Override
-  public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
-    VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
-    if (provider != null) {
-      int vectorIndex = provider.indexOfCharClass(text, ranges, start);
+  public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start, int limit) {
+    if (scanProvider != null && limit - start >= scanProvider.minimumInputLength()) {
+      int vectorIndex = StringVectorScan.indexOfCharClass(text, ranges, start, limit);
       if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
         return vectorIndex;
       }
     }
-    return scalarIndexOfCodePointClass(ranges, bitmap0, bitmap1, start);
+    return scalarIndexOfCodePointClass(ranges, bitmap0, bitmap1, start, limit);
   }
 
-  private int scalarIndexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
+  private int scalarIndexOfCodePointClass(
+      int[] ranges, long bitmap0, long bitmap1, int start, int limit) {
     int position = Math.max(0, start);
-    while (position < text.length()) {
+    int bound = Math.min(limit, text.length());
+    while (position < bound) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }
