@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
@@ -491,7 +492,7 @@ public final class Matcher implements MatchResult {
         new Spliterators.AbstractSpliterator<>(
             Long.MAX_VALUE, Spliterator.ORDERED | Spliterator.NONNULL) {
           @Override
-          public boolean tryAdvance(java.util.function.Consumer<? super MatchResult> action) {
+          public boolean tryAdvance(Consumer<? super MatchResult> action) {
             boolean srHasNext = safereIterator.hasNext();
             boolean jrHasNext = jdkIterator.hasNext();
             checkBoolean("results.hasNext", "", srHasNext, jrHasNext);

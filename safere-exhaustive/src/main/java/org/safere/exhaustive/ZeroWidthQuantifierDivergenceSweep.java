@@ -5,6 +5,7 @@
 
 package org.safere.exhaustive;
 
+import com.google.gson.JsonObject;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -18,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Offline differential sweep for repeated quantifiers over zero-width operands. */
 public final class ZeroWidthQuantifierDivergenceSweep {
@@ -26,14 +29,14 @@ public final class ZeroWidthQuantifierDivergenceSweep {
   private static final int ACTIONABLE_SAMPLE_LIMIT = 100;
   private static final int MAX_QUANTIFIER_CHAIN_LENGTH = 4;
   private static final long DEFAULT_PROGRESS_INTERVAL = 10_000_000;
-  private static final java.util.regex.Pattern CAPTURE_FIELD =
-      java.util.regex.Pattern.compile("g(\\d+)=(?:null|-?\\d+-\\d+:[^;}]*+)");
-  private static final java.util.regex.Pattern FIND_TRACE_FIELD =
-      java.util.regex.Pattern.compile("(?:^|,)[^,:]*+:find\\d+=(?:true@\\d+-\\d+|false)");
-  private static final java.util.regex.Pattern NON_REPLACEMENT_TRACE_FIELD =
-      java.util.regex.Pattern.compile("(?:^|,)([^,:]*+:(?:matches|lookingAt|find\\d++))=([^,]*+)");
-  private static final java.util.regex.Pattern DECOMPOSED_E_ACUTE_TRACE_FIELD =
-      java.util.regex.Pattern.compile("(?:^|,)e\u0301:[^,]*");
+  private static final Pattern CAPTURE_FIELD =
+      Pattern.compile("g(\\d+)=(?:null|-?\\d+-\\d+:[^;}]*+)");
+  private static final Pattern FIND_TRACE_FIELD =
+      Pattern.compile("(?:^|,)[^,:]*+:find\\d+=(?:true@\\d+-\\d+|false)");
+  private static final Pattern NON_REPLACEMENT_TRACE_FIELD =
+      Pattern.compile("(?:^|,)([^,:]*+:(?:matches|lookingAt|find\\d++))=([^,]*+)");
+  private static final Pattern DECOMPOSED_E_ACUTE_TRACE_FIELD =
+      Pattern.compile("(?:^|,)e\u0301:[^,]*");
 
   private static final List<Atom> ZERO_WIDTH_ATOMS =
       List.of(
@@ -77,9 +80,9 @@ public final class ZeroWidthQuantifierDivergenceSweep {
   private static final List<FlagMode> FLAG_MODES =
       List.of(
           new FlagMode("none", "", 0, ""),
-          new FlagMode("commentsFlag", "", java.util.regex.Pattern.COMMENTS, " "),
-          new FlagMode("commentsFlagTab", "", java.util.regex.Pattern.COMMENTS, "\t"),
-          new FlagMode("commentsFlagComment", "", java.util.regex.Pattern.COMMENTS, "#q\n"),
+          new FlagMode("commentsFlag", "", Pattern.COMMENTS, " "),
+          new FlagMode("commentsFlagTab", "", Pattern.COMMENTS, "\t"),
+          new FlagMode("commentsFlagComment", "", Pattern.COMMENTS, "#q\n"),
           new FlagMode("commentsEmbedded", "(?x)", 0, " "),
           new FlagMode("commentsEmbeddedComment", "(?x)", 0, "#q\n"));
 
@@ -220,7 +223,7 @@ public final class ZeroWidthQuantifierDivergenceSweep {
             SweepJson.string(caseObject, "trivia")));
   }
 
-  private static QuantifierChain replayQuantifierChain(com.google.gson.JsonObject caseObject) {
+  private static QuantifierChain replayQuantifierChain(JsonObject caseObject) {
     if (caseObject.has("quantifierChainLabel")) {
       return new QuantifierChain(
           SweepJson.string(caseObject, "quantifierChainLabel"),
@@ -759,7 +762,7 @@ public final class ZeroWidthQuantifierDivergenceSweep {
       return SweepJson.toJson(object);
     }
 
-    private static com.google.gson.JsonObject caseJson(CaseSpec spec) {
+    private static JsonObject caseJson(CaseSpec spec) {
       var object = SweepJson.object();
       object.addProperty("operandLabel", spec.operand().label());
       object.addProperty("operandRegex", spec.operand().regex());
@@ -1231,7 +1234,7 @@ public final class ZeroWidthQuantifierDivergenceSweep {
 
   private static Map<String, String> nonReplacementTraceFields(String trace) {
     Map<String, String> fields = new LinkedHashMap<>();
-    java.util.regex.Matcher matcher = NON_REPLACEMENT_TRACE_FIELD.matcher(trace);
+    Matcher matcher = NON_REPLACEMENT_TRACE_FIELD.matcher(trace);
     while (matcher.find()) {
       fields.put(matcher.group(1), matcher.group(2));
     }

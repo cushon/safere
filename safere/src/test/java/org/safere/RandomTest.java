@@ -111,7 +111,7 @@ class RandomTest {
       }
       try {
         jdkPattern = java.util.regex.Pattern.compile(pattern);
-      } catch (java.util.regex.PatternSyntaxException e) {
+      } catch (PatternSyntaxException e) {
         skipped++;
         continue;
       }

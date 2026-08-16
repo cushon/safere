@@ -366,7 +366,7 @@ class QuantifiedCaptureSemanticsTest {
   }
 
   private static void assertMatchResultMatchesJdk(
-      GeneratedCase testCase, java.util.regex.MatchResult jdk, MatchResult safere) {
+      GeneratedCase testCase, MatchResult jdk, MatchResult safere) {
     assertThat(safere.groupCount()).isEqualTo(jdk.groupCount());
     for (int group = 0; group <= jdk.groupCount(); group++) {
       assertThat(safere.group(group))

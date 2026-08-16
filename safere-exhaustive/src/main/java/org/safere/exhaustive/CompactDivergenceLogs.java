@@ -5,6 +5,7 @@
 
 package org.safere.exhaustive;
 
+import com.google.gson.JsonArray;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -117,7 +118,7 @@ final class CompactDivergenceLogs implements AutoCloseable {
         classCounts.addProperty(classifications.get(i), count);
       }
       object.add("classCounts", classCounts);
-      var workerStates = new com.google.gson.JsonArray();
+      var workerStates = new JsonArray();
       for (int i = 0; i < workers.length; i++) {
         var workerObject = SweepJson.object();
         workerObject.addProperty("worker", i);
@@ -145,12 +146,12 @@ final class CompactDivergenceLogs implements AutoCloseable {
     object.addProperty("rangeEnd", rangeEndExclusive);
     object.addProperty("totalCases", totalCases);
     object.addProperty("threads", workers.length);
-    var classes = new com.google.gson.JsonArray();
+    var classes = new JsonArray();
     for (String classification : classifications) {
       classes.add(classification);
     }
     object.add("classifications", classes);
-    var statuses = new com.google.gson.JsonArray();
+    var statuses = new JsonArray();
     for (DivergenceStatus status : classificationStatuses) {
       statuses.add(status.name());
     }

@@ -9,6 +9,8 @@ import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.util.ArrayList;
 import java.util.List;
+import org.safere.Matcher;
+import org.safere.Pattern;
 
 final class RegionBoundsFuzzer {
   private record GraphemeRegion(String input, int start, int end) {}
@@ -130,8 +132,8 @@ final class RegionBoundsFuzzer {
 
   private static void compareSafeReGraphemeModelCases() {
     for (SafeReModelCase testCase : SAFE_RE_GRAPHEME_MODEL_CASES) {
-      org.safere.Matcher matcher =
-          org.safere.Pattern.compile(testCase.regex())
+      Matcher matcher =
+          Pattern.compile(testCase.regex())
               .matcher(testCase.input())
               .region(testCase.start(), testCase.end());
       List<String> actual = new ArrayList<>();

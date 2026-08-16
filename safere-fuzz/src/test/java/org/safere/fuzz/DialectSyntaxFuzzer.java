@@ -9,6 +9,8 @@ import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.util.List;
 import java.util.Objects;
+import org.safere.Matcher;
+import org.safere.Pattern;
 
 final class DialectSyntaxFuzzer {
 
@@ -82,8 +84,8 @@ final class DialectSyntaxFuzzer {
   }
 
   private static void assertSafeRePythonNamedGroupExtension(String regex) {
-    org.safere.Pattern pattern = org.safere.Pattern.compile(regex);
-    org.safere.Matcher matcher = pattern.matcher("a");
+    Pattern pattern = Pattern.compile(regex);
+    Matcher matcher = pattern.matcher("a");
     if (!matcher.matches()) {
       throw new AssertionError("SafeRE Python-style named group did not match: " + regex);
     }
