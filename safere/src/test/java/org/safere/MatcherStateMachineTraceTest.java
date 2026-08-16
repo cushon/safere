@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.MatchResult;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -235,7 +236,7 @@ class MatcherStateMachineTraceTest {
 
     void appendTail(StringBuilder builder);
 
-    java.util.stream.Stream<String> resultsWithMutation(Mutation mutation);
+    Stream<String> resultsWithMutation(Mutation mutation);
 
     String replaceAllWithMutation(Mutation mutation);
 
@@ -350,7 +351,7 @@ class MatcherStateMachineTraceTest {
     }
 
     @Override
-    public java.util.stream.Stream<String> resultsWithMutation(Mutation mutation) {
+    public Stream<String> resultsWithMutation(Mutation mutation) {
       return matcher
           .results()
           .map(
@@ -487,7 +488,7 @@ class MatcherStateMachineTraceTest {
     }
 
     @Override
-    public java.util.stream.Stream<String> resultsWithMutation(Mutation mutation) {
+    public Stream<String> resultsWithMutation(Mutation mutation) {
       return matcher
           .results()
           .map(

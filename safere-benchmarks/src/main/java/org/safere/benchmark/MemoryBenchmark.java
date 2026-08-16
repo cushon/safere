@@ -9,6 +9,8 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.safere.Matcher;
+import org.safere.Pattern;
 
 /**
  * Measures the retained heap size of compiled regex patterns across engines (SafeRE, JDK, RE2/J).
@@ -133,7 +135,7 @@ public final class MemoryBenchmark {
 
     for (int trial = 0; trial < TRIALS; trial++) {
       // Compile the pattern (DFA cache starts empty).
-      org.safere.Pattern p = org.safere.Pattern.compile(pattern);
+      Pattern p = Pattern.compile(pattern);
 
       // Warm up: run a short match so JIT compiles the matching path.
       p.matcher("warmup").find();
@@ -142,7 +144,7 @@ public final class MemoryBenchmark {
       long before = usedMemory();
 
       // Run matching against large text to populate the DFA state cache.
-      org.safere.Matcher m = p.matcher(text);
+      Matcher m = p.matcher(text);
       while (m.find()) {
         // DFA states are lazily created during matching.
       }

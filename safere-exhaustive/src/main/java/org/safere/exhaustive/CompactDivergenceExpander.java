@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 
@@ -279,7 +280,7 @@ public final class CompactDivergenceExpander {
   }
 
   private static String fileName(String classification) {
-    return classification.toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+    return classification.toLowerCase(Locale.ROOT).replace('_', '-');
   }
 
   private static void deleteExampleFiles(Path expandedDir, CompactDivergenceLogs.Manifest manifest)

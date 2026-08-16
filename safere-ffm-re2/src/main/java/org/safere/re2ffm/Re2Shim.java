@@ -12,6 +12,7 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Locale;
 
@@ -351,8 +352,7 @@ final class Re2Shim {
       int actualLen = outLenSeg.get(ValueLayout.JAVA_INT, 0);
       byte[] resBytes = new byte[actualLen];
       MemorySegment.copy(outBuf, ValueLayout.JAVA_BYTE, 0, resBytes, 0, actualLen);
-      return new ReplaceResult(
-          new String(resBytes, java.nio.charset.StandardCharsets.UTF_8), count);
+      return new ReplaceResult(new String(resBytes, StandardCharsets.UTF_8), count);
     }
   }
 }

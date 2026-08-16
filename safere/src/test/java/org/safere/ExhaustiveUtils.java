@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.fail;
 
 import java.util.ArrayDeque;
@@ -150,7 +151,7 @@ final class ExhaustiveUtils {
     }
 
     Utf8Coordinates utf8Coordinates = Utf8Coordinates.forText(text);
-    byte[] utf8 = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    byte[] utf8 = text.getBytes(UTF_8);
 
     // Compare matches()
     tests++;
@@ -352,7 +353,7 @@ final class ExhaustiveUtils {
     }
 
     static Utf8Coordinates forText(String text) {
-      byte[] utf8 = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      byte[] utf8 = text.getBytes(UTF_8);
       int[] utf16ByUtf8Offset = new int[utf8.length + 1];
       Arrays.fill(utf16ByUtf8Offset, -1);
       int utf8Offset = 0;
