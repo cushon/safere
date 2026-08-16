@@ -91,9 +91,10 @@ final class ByteVectorScan {
     int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
 
-    char first = prefix.charAt(0);
-    byte low = (byte) Ascii.toLowerCase(first);
-    byte high = (byte) Ascii.toUpperCase(first);
+    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
+    char anchor = prefix.charAt(anchorOffset);
+    byte low = (byte) Ascii.toLowerCase(anchor);
+    byte high = (byte) Ascii.toUpperCase(anchor);
     ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
     ByteVector highVec = ByteVector.broadcast(SPECIES, high);
 
@@ -105,8 +106,9 @@ final class ByteVectorScan {
         long activeLanes = matchMask.toLong();
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
-          int candidatePos = pos + bit;
-          if (candidatePos + prefixLen <= length
+          int candidatePos = pos + bit - anchorOffset;
+          if (candidatePos >= start
+              && candidatePos + prefixLen <= length
               && Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
             return candidatePos;
           }
@@ -116,9 +118,9 @@ final class ByteVectorScan {
     }
 
     int limitScalar = length - prefixLen;
-    for (; pos <= limitScalar; pos++) {
-      if (Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
-        return pos;
+    for (int p = Math.max(start, pos - anchorOffset); p <= limitScalar; p++) {
+      if (Ascii.regionMatchesIgnoreCase(bytes, offset + p, prefix, prefixLen)) {
+        return p;
       }
     }
     return -1;
