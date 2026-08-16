@@ -730,6 +730,7 @@ final class Dfa {
 
     int escapeCount = 0;
     int[] escapes = new int[4];
+    AsciiBitmap.Builder escapeBitmap = null;
     int[] seeds = new int[insts.length];
 
     for (int ch = 0; ch < 128; ch++) {
@@ -740,25 +741,19 @@ final class Dfa {
           seeds[seedCount++] = ip.out;
         }
       }
-      if (seedCount == 0) {
+      if (seedCount == 0 || !Arrays.equals(expand(seeds, seedCount, 0), insts)) {
         if (escapeCount < 4) {
           escapes[escapeCount] = ch;
+        } else if (escapeBitmap == null) {
+          escapeBitmap = new AsciiBitmap.Builder();
+          for (int i = 0; i < 4; i++) {
+            escapeBitmap.add(escapes[i]);
+          }
+        }
+        if (escapeBitmap != null) {
+          escapeBitmap.add(ch);
         }
         escapeCount++;
-        if (escapeCount == 4) {
-          return null;
-        }
-        continue;
-      }
-      int[] frontier = expand(seeds, seedCount, 0);
-      if (!Arrays.equals(frontier, insts)) {
-        if (escapeCount < 4) {
-          escapes[escapeCount] = ch;
-        }
-        escapeCount++;
-        if (escapeCount == 4) {
-          return null;
-        }
       }
     }
 
@@ -789,6 +784,13 @@ final class Dfa {
         return new StateAccelerator.AsciiPairEscape(escapes[0], escapes[1]);
       } else {
         return new StateAccelerator.AsciiTripleEscape(escapes[0], escapes[1], escapes[2]);
+      }
+    }
+    if (escapeBitmap != null && escapeCount < 128) {
+      AsciiBitmap bitmap = escapeBitmap.build();
+      int[] ranges = bitmap.toRanges();
+      if (ranges.length <= 8) {
+        return new StateAccelerator.CharClassEscape(ranges, bitmap.bitmap0(), bitmap.bitmap1());
       }
     }
     return null;
@@ -831,6 +833,9 @@ final class Dfa {
       return text.indexOfAsciiPair(pair.c1(), pair.c2(), fromIndex, limit);
     } else if (accelerator instanceof StateAccelerator.AsciiTripleEscape triple) {
       return text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
+    } else if (accelerator instanceof StateAccelerator.CharClassEscape cc) {
+      int found = text.indexOfCodePointClass(cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex);
+      return (found >= 0 && found < limit) ? found : -1;
     }
     return accelerator.findEscape(text, fromIndex, limit);
   }
