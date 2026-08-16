@@ -2193,7 +2193,9 @@ public final class Pattern implements Serializable {
         if (index > 0 && (prefixWidth.minWidth > 0 || prefixWidth.maxWidth > 0)) {
           int minimumLiteralLength = prefixWidth.discreteWidths != null ? 1 : 2;
           if (literal.length() >= minimumLiteralLength
-              && (best == null || literal.length() > best.literal().length())) {
+              && (best == null
+                  || RarityOracle.literalSelectivityScore(literal)
+                      > RarityOracle.literalSelectivityScore(best.literal()))) {
             best =
                 new FixedOffsetLiteral(
                     literal.toString(),
@@ -3389,10 +3391,13 @@ public final class Pattern implements Serializable {
         case LITERAL_STRING -> {
           if ((node.flags & ParseFlags.FOLD_CASE) == 0
               && node.runes != null
-              && node.runes.length >= 2
-              && (longest == null
-                  || node.runes.length > longest.codePointCount(0, longest.length()))) {
-            longest = new String(node.runes, 0, node.runes.length);
+              && node.runes.length >= 2) {
+            String candidate = new String(node.runes, 0, node.runes.length);
+            if (longest == null
+                || RarityOracle.literalSelectivityScore(candidate)
+                    > RarityOracle.literalSelectivityScore(longest)) {
+              longest = candidate;
+            }
           }
         }
         default -> {}

@@ -587,4 +587,20 @@ class PatternInternalTest {
     Pattern p3 = Pattern.compile("(<template name>.*)([^>])");
     assertThat(p3.prefix()).isEqualTo("<template name>");
   }
+
+  @Test
+  void fixedOffsetLiteralPrefersRareTokenOverLongCommonToken() {
+    // "____" has length 4 with common underscores.
+    // "zq" has length 2 with rare letters 'z' and 'q'.
+    Pattern pattern = Pattern.compile("[0-9]{2}____[a-z]zq[a-z]");
+    assertThat(pattern.fixedOffsetLiteral()).isNotNull();
+    // "zq" has higher selectivity than "____"
+    assertThat(pattern.fixedOffsetLiteral().literal()).isEqualTo("zq");
+  }
+
+  @Test
+  void requiredLiteralPrefersRareToken() {
+    Pattern pattern = Pattern.compile(".*(____).*?(404_ERROR).*");
+    assertThat(pattern.rejectDescriptor().requiredLiteral()).isEqualTo("404_ERROR");
+  }
 }
