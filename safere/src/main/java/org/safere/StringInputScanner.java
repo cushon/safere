@@ -36,11 +36,15 @@ final class StringInputScanner implements InputScanner {
   @Override
   public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
     if (VectorScanProviders.providerForLength(limit - fromIndex) != null) {
-      int idx = ByteVectorScan.indexOfAsciiPair(text, c1, c2, fromIndex, limit);
+      int idx = StringVectorScan.indexOfAsciiPair(text, c1, c2, fromIndex, limit);
       if (idx != -1 || fromIndex >= limit) {
         return idx;
       }
     }
+    return scalarIndexOfAsciiPair(c1, c2, fromIndex, limit);
+  }
+
+  private int scalarIndexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
       char ch = text.charAt(i);
@@ -54,11 +58,15 @@ final class StringInputScanner implements InputScanner {
   @Override
   public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
     if (VectorScanProviders.providerForLength(limit - fromIndex) != null) {
-      int idx = ByteVectorScan.indexOfAsciiTriple(text, c1, c2, c3, fromIndex, limit);
+      int idx = StringVectorScan.indexOfAsciiTriple(text, c1, c2, c3, fromIndex, limit);
       if (idx != -1 || fromIndex >= limit) {
         return idx;
       }
     }
+    return scalarIndexOfAsciiTriple(c1, c2, c3, fromIndex, limit);
+  }
+
+  private int scalarIndexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
       char ch = text.charAt(i);
@@ -98,6 +106,10 @@ final class StringInputScanner implements InputScanner {
         return vectorIndex;
       }
     }
+    return scalarIndexOfCharClass(scanInfo, start);
+  }
+
+  private int scalarIndexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
     int position = Math.max(0, start);
     int[] ranges = scanInfo.ranges;
     long bitmap0 = scanInfo.bitmap0;
@@ -124,6 +136,10 @@ final class StringInputScanner implements InputScanner {
         return vectorIndex;
       }
     }
+    return scalarIndexOfCodePointClass(ranges, bitmap0, bitmap1, start);
+  }
+
+  private int scalarIndexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
     int position = Math.max(0, start);
     while (position < text.length()) {
       if (WorkCounterConfig.ENABLED) {

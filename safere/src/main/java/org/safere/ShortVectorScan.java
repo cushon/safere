@@ -7,7 +7,6 @@ package org.safere;
 
 import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
-import static java.nio.charset.StandardCharsets.UTF_16;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
 import static org.safere.Ascii.toLowerCase;
@@ -25,7 +24,7 @@ import jdk.incubator.vector.VectorSpecies;
  * Stateless SIMD kernels using the incubating Vector API for 2-byte sequences (UTF-16 and char[]).
  */
 final class ShortVectorScan {
-  private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
+  static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
   private static final VectorSpecies<Byte> BYTE_SPECIES = SPECIES.withLanes(byte.class);
 
   static int indexOfCharClass(char[] chars, int offset, int length, int[] ranges, int start) {
@@ -77,87 +76,6 @@ final class ShortVectorScan {
                   | ((bytes[offset + (position << 1) + 1] & 0xFF) << 8));
       if (matches(ch, ranges)) {
         return position;
-      }
-    }
-    return -1;
-  }
-
-  static int indexOfCharClassUtf16(String text, int[] ranges, int start) {
-    if (!Swar.supportsBmpCodeUnitRanges(ranges, 4) || !StringSupport.compatibleWith(text, UTF_16)) {
-      return VectorScanProvider.UNSUPPORTED;
-    }
-    int length = text.length();
-    int position = Math.max(0, start);
-    int vectorLen = SPECIES.length();
-    int limit = length - vectorLen;
-
-    for (; position <= limit; position += vectorLen) {
-      ShortVector values = StringSupport.shortVectorFromString(SPECIES, text, position);
-      VectorMask<Short> matches = matches(values, ranges);
-      if (matches.anyTrue()) {
-        return position + matches.firstTrue();
-      }
-    }
-
-    for (; position < length; position++) {
-      char ch = text.charAt(position);
-      if (matches(ch, ranges)) {
-        return position;
-      }
-    }
-    return -1;
-  }
-
-  static int indexOfIgnoreCaseUtf16(String text, String prefix, int start) {
-    int prefixLen = prefix.length();
-    int length = text.length();
-    if (prefixLen == 0) {
-      return Math.min(Math.max(0, start), length);
-    }
-    for (int i = 0; i < prefixLen; i++) {
-      if (prefix.charAt(i) > 127) {
-        return VectorScanProvider.UNSUPPORTED;
-      }
-    }
-    if (prefixLen > 1 || !StringSupport.compatibleWith(text, UTF_16)) {
-      return VectorScanProvider.UNSUPPORTED;
-    }
-
-    int pos = Math.max(0, start);
-    int vectorLen = SPECIES.length();
-    int limit = length - vectorLen;
-
-    char first = prefix.charAt(0);
-    short low = (short) toLowerCase(first);
-    short high = (short) toUpperCase(first);
-    ShortVector lowVec = ShortVector.broadcast(SPECIES, low);
-    ShortVector highVec = ShortVector.broadcast(SPECIES, high);
-
-    for (; pos <= limit; pos += vectorLen) {
-      ShortVector inputVec = StringSupport.shortVectorFromString(SPECIES, text, pos);
-      VectorMask<Short> matchMask =
-          inputVec
-              .compare(VectorOperators.EQ, lowVec)
-              .or(inputVec.compare(VectorOperators.EQ, highVec));
-
-      if (matchMask.anyTrue()) {
-        long activeLanes = matchMask.toLong();
-        while (activeLanes != 0) {
-          int bit = Long.numberOfTrailingZeros(activeLanes);
-          int candidatePos = pos + bit;
-          if (candidatePos + prefixLen <= length
-              && Ascii.regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)) {
-            return candidatePos;
-          }
-          activeLanes &= activeLanes - 1;
-        }
-      }
-    }
-
-    int limitScalar = length - prefixLen;
-    for (; pos <= limitScalar; pos++) {
-      if (Ascii.regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
-        return pos;
       }
     }
     return -1;
@@ -277,7 +195,7 @@ final class ShortVectorScan {
     return -1;
   }
 
-  private static VectorMask<Short> matches(ShortVector values, int[] ranges) {
+  static VectorMask<Short> matches(ShortVector values, int[] ranges) {
     VectorMask<Short> matches = matches(values, ranges[0], ranges[1]);
     if (ranges.length >= 4) {
       matches = matches.or(matches(values, ranges[2], ranges[3]));
@@ -309,7 +227,7 @@ final class ShortVectorScan {
     return biasedValues.compare(GE, biasedLow).and(biasedValues.compare(LE, biasedHigh));
   }
 
-  private static boolean matches(char value, int[] ranges) {
+  static boolean matches(char value, int[] ranges) {
     for (int index = 0; index < ranges.length; index += 2) {
       if (value >= ranges[index] && value <= ranges[index + 1]) {
         return true;

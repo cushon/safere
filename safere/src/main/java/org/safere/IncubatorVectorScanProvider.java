@@ -5,10 +5,6 @@
 
 package org.safere;
 
-import static java.nio.charset.StandardCharsets.ISO_8859_1;
-
-import java.util.Arrays;
-
 /** Experimental scan operations implemented with the incubating Vector API. */
 final class IncubatorVectorScanProvider implements VectorScanProvider {
   private static final int MINIMUM_INPUT_LENGTH = 64;
@@ -25,63 +21,16 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
 
   @Override
   public int indexOfAsciiClass(String text, int[] ranges, int start) {
-    if (!StringSupport.hasAccess()) {
-      return UNSUPPORTED;
-    }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return ByteVectorScan.indexOfAsciiClass(text, ranges, start);
-    }
-    return ShortVectorScan.indexOfCharClassUtf16(text, ranges, start);
+    return StringVectorScan.indexOfAsciiClass(text, ranges, start);
   }
 
   @Override
   public int indexOfCharClass(String text, int[] ranges, int start) {
-    if (!StringSupport.hasAccess()) {
-      return UNSUPPORTED;
-    }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      int[] clamped = clampRangesForLatin1(ranges);
-      if (clamped != null) {
-        return ByteVectorScan.indexOfAsciiClass(text, clamped, start);
-      }
-      return UNSUPPORTED;
-    }
-    return ShortVectorScan.indexOfCharClassUtf16(text, ranges, start);
+    return StringVectorScan.indexOfCharClass(text, ranges, start);
   }
 
   @Override
   public int indexOfIgnoreCase(String text, String prefix, int start) {
-    if (!StringSupport.hasAccess()) {
-      return UNSUPPORTED;
-    }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return ByteVectorScan.indexOfIgnoreCase(text, prefix, start);
-    }
-    return ShortVectorScan.indexOfIgnoreCaseUtf16(text, prefix, start);
-  }
-
-  private static int[] clampRangesForLatin1(int[] ranges) {
-    int numRanges = ranges.length / 2;
-    int[] clamped = new int[ranges.length];
-    int writeIdx = 0;
-    for (int r = 0; r < numRanges; r++) {
-      int low = ranges[r * 2];
-      int high = ranges[r * 2 + 1];
-      if (low > 255) {
-        continue;
-      }
-      int clampedHigh = Math.min(high, 255);
-      if (low <= clampedHigh) {
-        clamped[writeIdx++] = low;
-        clamped[writeIdx++] = clampedHigh;
-      }
-    }
-    if (writeIdx == 0) {
-      return null;
-    }
-    if (writeIdx < ranges.length) {
-      return Arrays.copyOf(clamped, writeIdx);
-    }
-    return clamped;
+    return StringVectorScan.indexOfIgnoreCase(text, prefix, start);
   }
 }
