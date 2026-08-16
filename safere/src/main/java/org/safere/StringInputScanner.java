@@ -128,10 +128,6 @@ final class StringInputScanner implements InputScanner {
     return -1;
   }
 
-  boolean hasVectorScan(int length) {
-    return scanProvider != null && length >= scanProvider.minimumInputLength();
-  }
-
   @Override
   public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start, int limit) {
     if (scanProvider != null && limit - start >= scanProvider.minimumInputLength()) {

@@ -41,18 +41,7 @@ sealed interface StateAccelerator {
       case AsciiTripleEscape triple ->
           text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
       case CharClassEscape cc ->
-          switch (text) {
-            case Utf8InputScanner utf8 ->
-                utf8.indexOfCodePointClass(
-                    cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
-            case StringInputScanner string -> {
-              if (string.hasVectorScan(limit - fromIndex)) {
-                yield string.indexOfCodePointClass(
-                    cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
-              }
-              yield -1;
-            }
-          };
+          text.indexOfCodePointClass(cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
     };
   }
 
