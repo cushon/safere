@@ -399,18 +399,6 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
   }
 
-  int indexOfIgnoreCase(String prefix, int[] failure, int start) {
-    int prefixLen = prefix.length();
-    if (prefixLen == 0) {
-      return start;
-    }
-    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
-    char anchor = prefix.charAt(anchorOffset);
-    byte low = (byte) Ascii.toLowerCase(anchor);
-    byte high = (byte) Ascii.toUpperCase(anchor);
-    return indexOfIgnoreCase(prefix, failure, anchorOffset, low, high, start);
-  }
-
   static int indexOfLinearIgnoreCase(
       byte[] bytes, int offset, int length, String prefix, int[] failure, int start) {
     int prefixLen = prefix.length();

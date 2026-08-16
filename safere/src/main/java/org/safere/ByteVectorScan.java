@@ -143,24 +143,5 @@ final class ByteVectorScan {
     return -1;
   }
 
-  public static int indexOfIgnoreCase(
-      byte[] bytes, int offset, int length, String prefix, int start) {
-    int prefixLen = prefix.length();
-    if (prefixLen == 0) {
-      return Math.min(Math.max(0, start), length);
-    }
-    for (int i = 0; i < prefixLen; i++) {
-      if (prefix.charAt(i) > 127) {
-        return VectorScanProvider.UNSUPPORTED;
-      }
-    }
-    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
-    char anchor = prefix.charAt(anchorOffset);
-    byte low = (byte) Ascii.toLowerCase(anchor);
-    byte high = (byte) Ascii.toUpperCase(anchor);
-    return indexOfIgnoreCase(
-        bytes, offset, length, prefix, prefixLen, anchorOffset, low, high, start);
-  }
-
   private ByteVectorScan() {}
 }
