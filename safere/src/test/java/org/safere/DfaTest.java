@@ -681,6 +681,5 @@ class DfaTest {
 
     assertThat(accelerated.matcher(input).find()).isTrue();
     assertThat(accelerated.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
->>>>>>> origin/main
   }
 }

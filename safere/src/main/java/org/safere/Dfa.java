@@ -243,10 +243,6 @@ final class Dfa {
   private State[] offsetToState;
   private int nextStateId;
 
-  private final Utf8StartAccelerator utf8StartAccelerator;
-  private final StringStartAccelerator stringStartAccelerator;
-  private final boolean hasStartAcceleration;
-
   // ---------------------------------------------------------------------------
   // Construction
   // ---------------------------------------------------------------------------

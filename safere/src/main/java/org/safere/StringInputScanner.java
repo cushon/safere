@@ -69,35 +69,6 @@ final class StringInputScanner implements InputScanner {
     return c < 0x80 ? c : -1;
   }
 
-  @Override
-  public int indexOfAscii(int ascii, int fromIndex, int limit) {
-    int idx = text.indexOf(ascii, fromIndex);
-    return (idx >= 0 && idx < limit) ? idx : -1;
-  }
-
-  @Override
-  public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
-    int end = Math.min(limit, text.length());
-    for (int i = Math.max(0, fromIndex); i < end; i++) {
-      char ch = text.charAt(i);
-      if (ch == c1 || ch == c2) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  @Override
-  public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
-    int end = Math.min(limit, text.length());
-    for (int i = Math.max(0, fromIndex); i < end; i++) {
-      char ch = text.charAt(i);
-      if (ch == c1 || ch == c2 || ch == c3) {
-        return i;
-      }
-    }
-    return -1;
-  }
 
   @Override
   public int singleUnitCodePointAt(int pos) {
