@@ -321,9 +321,11 @@ public final class Pattern implements Serializable {
     this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
-    onePassAnalysis();
+    if (shouldEagerlyBuildOnePass()) {
+      onePassAnalysis();
+    }
     forwardDfaSetup();
-    if (!prog.anchorStart()) {
+    if (canUseReverseDfa()) {
       flatReverseDfaProg();
     }
 
@@ -1195,6 +1197,18 @@ public final class Pattern implements Serializable {
   /** Returns whether this pattern contains any lazy quantifiers. */
   boolean hasLazyQuantifiers() {
     return hasLazy;
+  }
+
+  /**
+   * Returns true if this pattern can participate in reverse DFA matching (e.g. unanchored find or
+   * end-anchored reverse-first rejection).
+   */
+  boolean canUseReverseDfa() {
+    return !prog.anchorStart() && !matchDescriptor.hasFindFastPath();
+  }
+
+  private boolean shouldEagerlyBuildOnePass() {
+    return !hasLazy && !matchDescriptor.hasFindFastPath();
   }
 
   /**

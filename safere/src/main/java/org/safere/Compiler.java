@@ -657,19 +657,27 @@ final class Compiler extends Walker<Compiler.Frag> {
    * ("patched") to point to the next instruction. The list is threaded through the unused out/out1
    * fields of the instructions themselves.
    *
-   * <p>Encoding: {@code (instIndex << 1)} means patch {@code inst.out}; {@code (instIndex << 1) |
-   * 1} means patch {@code inst.out1}.
+   * <p>A patch list is packed into a primitive {@code long}: upper 32 bits are {@code head}, lower
+   * 32 bits are {@code tail}.
    */
-  record PatchList(int head, int tail) {
+  private static final class PatchList {
 
-    static final PatchList EMPTY = new PatchList(0, 0);
+    static final long EMPTY = 0L;
 
-    static PatchList mk(int encoded) {
-      return new PatchList(encoded, encoded);
+    static long mk(int encoded) {
+      return ((long) encoded << 32) | (encoded & 0xFFFFFFFFL);
     }
 
-    static void patch(Prog prog, PatchList l, int target) {
-      int current = l.head;
+    static int head(long l) {
+      return (int) (l >>> 32);
+    }
+
+    static int tail(long l) {
+      return (int) l;
+    }
+
+    static void patch(Prog prog, long l, int target) {
+      int current = head(l);
       while (current != 0) {
         Inst ip = prog.mutableInst(current >> 1);
         if ((current & 1) != 0) {
@@ -682,20 +690,24 @@ final class Compiler extends Walker<Compiler.Frag> {
       }
     }
 
-    static PatchList append(Prog prog, PatchList l1, PatchList l2) {
-      if (l1.head == 0) {
+    static long append(Prog prog, long l1, long l2) {
+      int h1 = head(l1);
+      if (h1 == 0) {
         return l2;
       }
-      if (l2.head == 0) {
+      int h2 = head(l2);
+      if (h2 == 0) {
         return l1;
       }
-      Inst ip = prog.mutableInst(l1.tail >> 1);
-      if ((l1.tail & 1) != 0) {
-        ip.out1 = l2.head;
+      int t1 = tail(l1);
+      Inst ip = prog.mutableInst(t1 >> 1);
+      if ((t1 & 1) != 0) {
+        ip.out1 = h2;
       } else {
-        ip.out = l2.head;
+        ip.out = h2;
       }
-      return new PatchList(l1.head, l2.tail);
+      int t2 = tail(l2);
+      return ((long) h1 << 32) | (t2 & 0xFFFFFFFFL);
     }
   }
 
@@ -707,7 +719,7 @@ final class Compiler extends Walker<Compiler.Frag> {
    * A compiled program fragment with a beginning instruction, a patch list of unfilled outputs, and
    * a nullable flag.
    */
-  record Frag(int begin, PatchList end, boolean nullable) {
+  record Frag(int begin, long end, boolean nullable) {
     static final Frag NO_MATCH = new Frag(0, PatchList.EMPTY, false);
   }
 
@@ -734,7 +746,7 @@ final class Compiler extends Walker<Compiler.Frag> {
 
     // Elide no-op.
     Inst begin = prog.mutableInst(a.begin);
-    if (begin.op == InstOp.NOP && a.end.head == (a.begin << 1) && begin.out == 0) {
+    if (begin.op == InstOp.NOP && PatchList.head(a.end) == (a.begin << 1) && begin.out == 0) {
       PatchList.patch(prog, a.end, b.begin);
       return b;
     }
@@ -779,7 +791,7 @@ final class Compiler extends Walker<Compiler.Frag> {
       }
       int loopReg = nextLoopReg++;
       prog.mutableInst(pcId).initProgressCheck(loopReg, a.begin, 0, nongreedy);
-      PatchList pl = PatchList.mk((pcId << 1) | 1); // patch out1 (exit)
+      long pl = PatchList.mk((pcId << 1) | 1); // patch out1 (exit)
 
       // Patch the body end to loop back to pcId.
       PatchList.patch(prog, a.end, pcId);
@@ -790,7 +802,7 @@ final class Compiler extends Walker<Compiler.Frag> {
     if (id < 0) {
       return Frag.NO_MATCH;
     }
-    PatchList pl;
+    long pl;
     if (nongreedy) {
       prog.mutableInst(id).initAlt(0, a.begin);
       pl = PatchList.mk(id << 1);
@@ -811,7 +823,7 @@ final class Compiler extends Walker<Compiler.Frag> {
     if (id < 0) {
       return Frag.NO_MATCH;
     }
-    PatchList pl;
+    long pl;
     if (nongreedy) {
       prog.mutableInst(id).initAlt(0, a.begin);
       pl = PatchList.mk(id << 1);
@@ -831,7 +843,7 @@ final class Compiler extends Walker<Compiler.Frag> {
     if (id < 0) {
       return Frag.NO_MATCH;
     }
-    PatchList pl;
+    long pl;
     if (nongreedy) {
       prog.mutableInst(id).initAlt(0, a.begin);
       pl = PatchList.mk(id << 1);
@@ -907,11 +919,13 @@ final class Compiler extends Walker<Compiler.Frag> {
   }
 
   private void suppressCapture(Frag a, int cap) {
-    if (isNoMatch(a) || a.end.head != a.end.tail || (a.end.head & 1) != 0) {
+    if (isNoMatch(a)
+        || PatchList.head(a.end) != PatchList.tail(a.end)
+        || (PatchList.head(a.end) & 1) != 0) {
       return;
     }
     Inst start = prog.mutableInst(a.begin);
-    int endId = a.end.head >> 1;
+    int endId = PatchList.head(a.end) >> 1;
     Inst end = prog.mutableInst(endId);
     if (start.op == InstOp.CAPTURE
         && start.arg == 2 * cap
@@ -979,6 +993,28 @@ final class Compiler extends Walker<Compiler.Frag> {
     }
     prog.mutableInst(id).initCharClass(0, new int[] {upper, upper, lower, lower});
     return new Frag(id, PatchList.mk(id << 1), false);
+  }
+
+  private Frag literalString(int[] runes, int flags) {
+    if (runes == null || runes.length == 0) {
+      return nop();
+    }
+    if (runes.length == 1) {
+      return literal(runes[0], flags);
+    }
+    Frag first = literal(runes[0], flags);
+    if (isNoMatch(first)) {
+      return Frag.NO_MATCH;
+    }
+    Frag current = first;
+    for (int i = 1; i < runes.length; i++) {
+      Frag next = literal(runes[i], flags);
+      if (isNoMatch(next)) {
+        return Frag.NO_MATCH;
+      }
+      current = cat(current, next);
+    }
+    return current;
   }
 
   private static boolean isAsciiLetter(int rune) {
@@ -1061,16 +1097,7 @@ final class Compiler extends Walker<Compiler.Frag> {
 
       case LITERAL -> literal(re.rune, re.flags);
 
-      case LITERAL_STRING -> {
-        if (re.runes == null || re.runes.length == 0) {
-          yield nop();
-        }
-        Frag f = literal(re.runes[0], re.flags);
-        for (int i = 1; i < re.runes.length; i++) {
-          f = cat(f, literal(re.runes[i], re.flags));
-        }
-        yield f;
-      }
+      case LITERAL_STRING -> literalString(re.runes, re.flags);
 
       case ANY_CHAR -> anyCodePoint();
 

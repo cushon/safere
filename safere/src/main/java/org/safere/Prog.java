@@ -10,7 +10,6 @@ package org.safere;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -471,6 +470,35 @@ final class Prog {
     }
   }
 
+  private static final class PredecessorGraph {
+    final int[] head;
+    int[] nextEdge;
+    int[] predInst;
+    int edgeCount;
+
+    PredecessorGraph(int ninst) {
+      head = new int[ninst];
+      Arrays.fill(head, -1);
+      nextEdge = new int[Math.max(16, ninst * 2)];
+      predInst = new int[Math.max(16, ninst * 2)];
+    }
+
+    void addPredecessor(int to, int from) {
+      if (to < 0 || to >= head.length) {
+        return;
+      }
+      if (edgeCount == nextEdge.length) {
+        int newCap = nextEdge.length * 2;
+        nextEdge = Arrays.copyOf(nextEdge, newCap);
+        predInst = Arrays.copyOf(predInst, newCap);
+      }
+      int edge = edgeCount++;
+      predInst[edge] = from;
+      nextEdge[edge] = head[to];
+      head[to] = edge;
+    }
+  }
+
   public void flatten() {
     if (didFlatten) {
       return;
@@ -479,25 +507,21 @@ final class Prog {
     int ninst = instructions.size();
     int[] rootmap = new int[ninst];
     Arrays.fill(rootmap, -1);
-    List<Integer> roots = new ArrayList<>();
-
-    List<List<Integer>> predecessors = new ArrayList<>(ninst);
-    for (int i = 0; i < ninst; i++) {
-      predecessors.add(new ArrayList<>());
-    }
+    IntArrayList roots = new IntArrayList(ninst);
+    PredecessorGraph predecessors = new PredecessorGraph(ninst);
 
     boolean[] reachable = new boolean[ninst];
-    List<Integer> reachableList = new ArrayList<>();
-    List<Integer> stack = new ArrayList<>();
+    IntArrayList reachableList = new IntArrayList(ninst);
+    IntArrayList stack = new IntArrayList(ninst);
 
     // Pass 1: Mark successor roots and predecessors.
     markSuccessors(rootmap, roots, predecessors, reachable, reachableList, stack);
 
     // Pass 2: Mark dominator roots by working backwards.
-    List<Integer> sortedRoots = new ArrayList<>(roots);
-    Collections.sort(sortedRoots);
-    for (int i = sortedRoots.size() - 1; i >= 0; i--) {
-      int root = sortedRoots.get(i);
+    int[] sortedRoots = roots.toArray();
+    Arrays.sort(sortedRoots);
+    for (int i = sortedRoots.length - 1; i >= 0; i--) {
+      int root = sortedRoots[i];
       markDominator(root, rootmap, roots, predecessors, reachable, reachableList, stack);
     }
 
@@ -508,7 +532,7 @@ final class Prog {
     for (int r = 0; r < roots.size(); r++) {
       int root = roots.get(r);
       flatmap[r] = flat.size();
-      emitList(root, rootmap, flat, reachable, stack);
+      emitList(root, rootmap, flat, reachable, reachableList, stack);
       flat.get(flat.size() - 1).last = true;
     }
 
@@ -541,11 +565,11 @@ final class Prog {
 
   private void markSuccessors(
       int[] rootmap,
-      List<Integer> roots,
-      List<List<Integer>> predecessors,
+      IntArrayList roots,
+      PredecessorGraph predecessors,
       boolean[] reachable,
-      List<Integer> reachableList,
-      List<Integer> stack) {
+      IntArrayList reachableList,
+      IntArrayList stack) {
 
     // Mark the kInstFail instruction.
     rootmap[0] = roots.size();
@@ -561,7 +585,6 @@ final class Prog {
       roots.add(start);
     }
 
-    Arrays.fill(reachable, false);
     reachableList.clear();
     stack.clear();
     stack.add(startUnanchored);
@@ -586,9 +609,8 @@ final class Prog {
         case ALT, ALT_MATCH -> {
           int out = inst.out;
           int out1 = inst.out1;
-          for (int o : new int[] {out, out1}) {
-            predecessors.get(o).add(id);
-          }
+          predecessors.addPredecessor(out, id);
+          predecessors.addPredecessor(out1, id);
           stack.add(out1);
           nextId = out;
         }
@@ -622,18 +644,21 @@ final class Prog {
         }
       }
     }
+
+    for (int i = 0; i < reachableList.size(); i++) {
+      reachable[reachableList.get(i)] = false;
+    }
   }
 
   private void markDominator(
       int root,
       int[] rootmap,
-      List<Integer> roots,
-      List<List<Integer>> predecessors,
+      IntArrayList roots,
+      PredecessorGraph predecessors,
       boolean[] reachable,
-      List<Integer> reachableList,
-      List<Integer> stack) {
+      IntArrayList reachableList,
+      IntArrayList stack) {
 
-    Arrays.fill(reachable, false);
     reachableList.clear();
     stack.clear();
     stack.add(root);
@@ -679,9 +704,10 @@ final class Prog {
       }
     }
 
-    for (int i : reachableList) {
-      List<Integer> preds = predecessors.get(i);
-      for (int pred : preds) {
+    for (int idx = 0; idx < reachableList.size(); idx++) {
+      int i = reachableList.get(idx);
+      for (int edge = predecessors.head[i]; edge != -1; edge = predecessors.nextEdge[edge]) {
+        int pred = predecessors.predInst[edge];
         if (!reachable[pred]) {
           if (rootmap[i] == -1) {
             rootmap[i] = roots.size();
@@ -690,12 +716,21 @@ final class Prog {
         }
       }
     }
+
+    for (int idx = 0; idx < reachableList.size(); idx++) {
+      reachable[reachableList.get(idx)] = false;
+    }
   }
 
   private void emitList(
-      int root, int[] rootmap, List<Inst> flat, boolean[] reachable, List<Integer> stack) {
+      int root,
+      int[] rootmap,
+      List<Inst> flat,
+      boolean[] reachable,
+      IntArrayList reachableList,
+      IntArrayList stack) {
 
-    Arrays.fill(reachable, false);
+    reachableList.clear();
     stack.clear();
     stack.add(root);
 
@@ -712,6 +747,7 @@ final class Prog {
         continue;
       }
       reachable[id] = true;
+      reachableList.add(id);
 
       if (id != root && rootmap[id] != -1) {
         Inst nop = new Inst();
@@ -756,6 +792,10 @@ final class Prog {
           flat.add(newInst);
         }
       }
+    }
+
+    for (int idx = 0; idx < reachableList.size(); idx++) {
+      reachable[reachableList.get(idx)] = false;
     }
   }
 }
