@@ -5,12 +5,14 @@
 
 package org.safere.exhaustive;
 
+import com.google.gson.JsonObject;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 /** Offline differential sweep for case-insensitive character-class closure bugs. */
@@ -19,14 +21,10 @@ public final class CaseFoldingCharacterClassDivergenceSweep {
 
   private static final List<FlagMode> FLAG_MODES =
       List.of(
-          new FlagMode("caseInsensitive", java.util.regex.Pattern.CASE_INSENSITIVE),
+          new FlagMode("caseInsensitive", Pattern.CASE_INSENSITIVE),
+          new FlagMode("unicodeCase", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE),
           new FlagMode(
-              "unicodeCase",
-              java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE),
-          new FlagMode(
-              "unicodeCharacterClass",
-              java.util.regex.Pattern.CASE_INSENSITIVE
-                  | java.util.regex.Pattern.UNICODE_CHARACTER_CLASS));
+              "unicodeCharacterClass", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS));
 
   private static final List<PatternSpec> PATTERNS =
       List.of(
@@ -333,7 +331,7 @@ public final class CaseFoldingCharacterClassDivergenceSweep {
       return SweepJson.toJson(object);
     }
 
-    private static com.google.gson.JsonObject caseJson(CaseSpec spec) {
+    private static JsonObject caseJson(CaseSpec spec) {
       var object = SweepJson.object();
       object.addProperty("patternLabel", spec.pattern().label());
       object.addProperty("regex", spec.pattern().regex());

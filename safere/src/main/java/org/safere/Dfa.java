@@ -88,6 +88,8 @@ final class Dfa {
     final int[] insts; // sorted NFA instruction IDs (CHAR_RANGE, EMPTY_WIDTH, and MATCH only)
     final int flags;
     final boolean isHighestPriorityMatch;
+    final StateAccelerator accelerator;
+    boolean isStartState;
 
     /**
      * Match IDs from word-boundary expansion (for PatternSet multi-match). Null if not applicable.
@@ -103,12 +105,14 @@ final class Dfa {
         int flags,
         int[] wordBoundaryMatchIds,
         int numClasses,
-        boolean isHighestPriorityMatch) {
+        boolean isHighestPriorityMatch,
+        StateAccelerator accelerator) {
       this.id = id;
       this.insts = insts;
       this.flags = flags;
       this.wordBoundaryMatchIds = wordBoundaryMatchIds;
       this.isHighestPriorityMatch = isHighestPriorityMatch;
+      this.accelerator = accelerator;
       this.next = new State[numClasses];
     }
 
@@ -234,6 +238,10 @@ final class Dfa {
   private State[] offsetToState;
   private int nextStateId;
 
+  private final Utf8StartAccelerator utf8StartAccelerator;
+  private final StringStartAccelerator stringStartAccelerator;
+  private final boolean hasStartAcceleration;
+
   // ---------------------------------------------------------------------------
   // Construction
   // ---------------------------------------------------------------------------
@@ -259,9 +267,22 @@ final class Dfa {
   }
 
   Dfa(Prog prog, int maxStates, Setup setup, boolean longest) {
+    this(prog, maxStates, setup, longest, null, null);
+  }
+
+  Dfa(
+      Prog prog,
+      int maxStates,
+      Setup setup,
+      boolean longest,
+      Utf8StartAccelerator utf8StartAccelerator,
+      StringStartAccelerator stringStartAccelerator) {
     this.prog = prog;
     this.maxStates = maxStates;
     this.longest = longest;
+    this.utf8StartAccelerator = utf8StartAccelerator;
+    this.stringStartAccelerator = stringStartAccelerator;
+    this.hasStartAcceleration = utf8StartAccelerator != null || stringStartAccelerator != null;
     this.hasGraphemeSemantics = prog.hasGraphemeSemantics();
     this.hasPositionDependentTransitions = hasGraphemeSemantics || prog.hasTextAnchor();
     this.stateEmptyFlagsMask =
@@ -284,7 +305,7 @@ final class Dfa {
     this.expandStack = new int[prog.size()];
     this.expandFrontier = new int[prog.size()];
     this.computeBuf = new int[prog.size()];
-    this.deadState = new State(0, EMPTY_INSTS, 0, null, numClasses, false);
+    this.deadState = new State(0, EMPTY_INSTS, 0, null, numClasses, false, null);
     this.nextStateId = 1;
     this.transitions = new int[1024];
     this.offsetToState = new State[1024];
@@ -678,12 +699,148 @@ final class Dfa {
     }
     boolean isHighestPriorityMatch =
         insts.length > 0 && prog.inst(insts[0]).opCode == InstOp.OP_MATCH;
+    StateAccelerator accelerator = analyzeStateAcceleration(insts, flags, isHighestPriorityMatch);
     s =
         new State(
-            nextStateId++, insts, flags, wordBoundaryMatchIds, numClasses, isHighestPriorityMatch);
+            nextStateId++,
+            insts,
+            flags,
+            wordBoundaryMatchIds,
+            numClasses,
+            isHighestPriorityMatch,
+            accelerator);
     addStateToFlatArrays(s);
     cache.put(lookupKey.copy(), s);
     return s;
+  }
+
+  private StateAccelerator analyzeStateAcceleration(
+      int[] insts, int flags, boolean isHighestPriorityMatch) {
+    if (isHighestPriorityMatch || insts.length == 0 || (flags & FLAG_MATCH) != 0) {
+      return null;
+    }
+    for (int id : insts) {
+      Inst ip = prog.inst(id);
+      if (ip.opCode == InstOp.OP_EMPTY_WIDTH || ip.opCode == InstOp.OP_MATCH) {
+        return null;
+      }
+    }
+
+    int escapeCount = 0;
+    int[] escapes = new int[4];
+    int[] seeds = new int[insts.length];
+
+    for (int ch = 0; ch < 128; ch++) {
+      int seedCount = 0;
+      for (int id : insts) {
+        Inst ip = prog.inst(id);
+        if (instMatches(ip, ch)) {
+          seeds[seedCount++] = ip.out;
+        }
+      }
+      if (seedCount == 0) {
+        if (escapeCount < 4) {
+          escapes[escapeCount] = ch;
+        }
+        escapeCount++;
+        if (escapeCount == 4) {
+          return null;
+        }
+        continue;
+      }
+      int[] frontier = expand(seeds, seedCount, 0);
+      if (!Arrays.equals(frontier, insts)) {
+        if (escapeCount < 4) {
+          escapes[escapeCount] = ch;
+        }
+        escapeCount++;
+        if (escapeCount == 4) {
+          return null;
+        }
+      }
+    }
+
+    // The scanner skips directly to an ASCII escape and therefore also skips over non-ASCII code
+    // points. Prove that every non-ASCII equivalence class remains in this state before enabling
+    // the accelerator. The DFA boundaries make one representative per interval sufficient.
+    for (int i = 0; i + 1 < boundaries.length; i++) {
+      int ch = Math.max(128, boundaries[i]);
+      if (ch >= boundaries[i + 1]) {
+        continue;
+      }
+      int seedCount = 0;
+      for (int id : insts) {
+        Inst ip = prog.inst(id);
+        if (instMatches(ip, ch)) {
+          seeds[seedCount++] = ip.out;
+        }
+      }
+      if (seedCount == 0 || !Arrays.equals(expand(seeds, seedCount, 0), insts)) {
+        return null;
+      }
+    }
+
+    if (escapeCount >= 1 && escapeCount <= 3) {
+      if (escapeCount == 1) {
+        return new StateAccelerator.SingleAsciiEscape(escapes[0]);
+      } else if (escapeCount == 2) {
+        return new StateAccelerator.AsciiPairEscape(escapes[0], escapes[1]);
+      } else {
+        return new StateAccelerator.AsciiTripleEscape(escapes[0], escapes[1], escapes[2]);
+      }
+    }
+    return null;
+  }
+
+  /** Returns whether this DFA was constructed with start-position acceleration enabled. */
+  boolean hasStartAcceleration() {
+    return hasStartAcceleration;
+  }
+
+  /** Returns whether this DFA can accelerate start positions for the supplied input substrate. */
+  boolean hasStartAcceleration(InputScanner text) {
+    return startAccelerationPolicy(text) != null;
+  }
+
+  private AcceleratorPolicy startAccelerationPolicy(InputScanner text) {
+    if (text instanceof Utf8InputScanner) {
+      return utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
+    }
+    if (text instanceof StringInputScanner) {
+      return stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
+    }
+    return null;
+  }
+
+  /**
+   * Fast-forwards to the next escape character in a self-loop state.
+   *
+   * <p>Direct sealed-type pattern matching avoids {@code invokeinterface} dispatch overhead on hot
+   * matching loops (see PR #693 and PR #695 review). HotSpot C2 does not automatically devirtualize
+   * megamorphic interface calls with &ge; 3 implementations across the JVM lifecycle; unwrapping
+   * the sealed record subtypes at this call site allows C2 to inline the underlying {@link
+   * InputScanner} search primitives directly into the caller.
+   */
+  private static int findSelfLoopEscape(
+      StateAccelerator accelerator, InputScanner text, int fromIndex, int limit) {
+    if (accelerator instanceof StateAccelerator.SingleAsciiEscape single) {
+      return text.indexOfAscii(single.escape(), fromIndex, limit);
+    } else if (accelerator instanceof StateAccelerator.AsciiPairEscape pair) {
+      return text.indexOfAsciiPair(pair.c1(), pair.c2(), fromIndex, limit);
+    } else if (accelerator instanceof StateAccelerator.AsciiTripleEscape triple) {
+      return text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
+    }
+    return accelerator.findEscape(text, fromIndex, limit);
+  }
+
+  private static boolean instMatches(Inst ip, int ch) {
+    if (ip.opCode == InstOp.OP_CHAR_RANGE) {
+      return ip.matchesChar(ch);
+    }
+    if (ip.opCode == InstOp.OP_CHAR_CLASS) {
+      return ip.matchesCharClass(ch);
+    }
+    return false;
   }
 
   /**
@@ -795,6 +952,7 @@ final class Dfa {
     }
     State s = getOrCreate(insts, flags);
     if (s != null) {
+      s.isStartState = true;
       startStateByContext[cacheKey] = s;
     }
     return s;
@@ -1175,6 +1333,27 @@ final class Dfa {
   }
 
   /**
+   * Fast-forwards the start position of unanchored search matching when returning to the start
+   * state.
+   */
+  private int fastForward(InputScanner text, int pos, int posDepThreshold) {
+    if (text instanceof Utf8InputScanner utf8Scanner) {
+      if (utf8StartAccelerator != null) {
+        int idx = utf8StartAccelerator.findCandidate(utf8Scanner, pos);
+        if (idx >= 0) {
+          return Math.min(idx, posDepThreshold - 1);
+        }
+        return -1;
+      }
+    } else if (text instanceof StringInputScanner stringScanner) {
+      if (stringStartAccelerator != null) {
+        return stringStartAccelerator.findCandidate(stringScanner.text(), pos, prog.unixLines());
+      }
+    }
+    return pos;
+  }
+
+  /**
    * Main DFA search loop.
    *
    * <p>Iterates over each code point in the text starting from {@code startPos}, following
@@ -1228,16 +1407,78 @@ final class Dfa {
       return new SearchResult(matched, matchEnd);
     }
 
+    AcceleratorPolicy activePolicy = startAccelerationPolicy(text);
+    boolean canAccelerate = activePolicy != null && !anchored;
+    int minSkip = AcceleratorPolicy.DEFAULT.minProfitableSkip();
+    int maxStrikes = AcceleratorPolicy.DEFAULT.strikeBudget();
+    boolean isExact = false;
+    if (canAccelerate) {
+      minSkip = activePolicy.minProfitableSkip();
+      maxStrikes = activePolicy.strikeBudget();
+      isExact = activePolicy.isExactMatchCandidate();
+    }
+
+    // Adaptive defeat detection: track consecutive sub-threshold skips to avoid repeatedly paying
+    // accelerator setup and candidate check overhead on dense matching inputs.
+    boolean accelerationDisabled = false;
+    int consecutiveShortSkips = 0;
+
     int[] transitions = this.transitions;
     State[] offsetToState = this.offsetToState;
     int[] asciiClassMap = this.asciiClassMap;
     int pos = startPos;
     // Fast path: loop through ASCII characters (characters < 128)
     while (pos < textLen) {
+      if (canAccelerate && !accelerationDisabled && s.isStartState && (textLen - pos >= minSkip)) {
+        int nextPos = fastForward(text, pos, posDepThreshold);
+        if (nextPos == -1) {
+          return new SearchResult(matched, matchEnd);
+        }
+        if (nextPos > pos) {
+          int skip = nextPos - pos;
+          if (!isExact) {
+            if (skip < minSkip) {
+              if (++consecutiveShortSkips >= maxStrikes) {
+                accelerationDisabled = true;
+              }
+            } else {
+              consecutiveShortSkips = 0;
+            }
+          }
+          pos = nextPos;
+          if (pos >= textLen) {
+            break;
+          }
+          s = startState(text, pos, anchored, false);
+          if (s == null) {
+            return null;
+          }
+          if (s == deadState) {
+            return new SearchResult(matched, matchEnd);
+          }
+        } else if (!isExact) {
+          if (++consecutiveShortSkips >= maxStrikes) {
+            accelerationDisabled = true;
+          }
+        }
+      }
       int limit =
           hasPositionDependentTransitions ? Math.min(textLen, posDepThreshold - 1) : textLen;
       int sId = s.id * numClasses;
       while (pos < limit) {
+        if (s.accelerator != null && !s.isStartState && (limit - pos >= 16)) {
+          int nextPos = findSelfLoopEscape(s.accelerator, text, pos, limit);
+          if (nextPos == -1) {
+            pos = limit;
+            break;
+          }
+          if (nextPos > pos) {
+            pos = nextPos;
+            if (pos >= limit) {
+              break;
+            }
+          }
+        }
         int ch = text.asciiAt(pos);
         if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
           break;
@@ -1262,6 +1503,7 @@ final class Dfa {
           }
         }
         sId = nsId;
+        s = offsetToState[sId];
         pos++;
       }
       s = offsetToState[sId];
@@ -1310,6 +1552,50 @@ final class Dfa {
 
     // General loop handles non-ASCII, position-dependent checks, and trailing end-of-text sentinel
     while (pos <= textLen) {
+      if (canAccelerate && !accelerationDisabled && s.isStartState && (textLen - pos >= minSkip)) {
+        int nextPos = fastForward(text, pos, posDepThreshold);
+        if (nextPos == -1) {
+          return new SearchResult(matched, matchEnd);
+        }
+        if (nextPos > pos) {
+          int skip = nextPos - pos;
+          if (!isExact) {
+            if (skip < minSkip) {
+              if (++consecutiveShortSkips >= maxStrikes) {
+                accelerationDisabled = true;
+              }
+            } else {
+              consecutiveShortSkips = 0;
+            }
+          }
+          pos = nextPos;
+          if (pos > textLen) {
+            break;
+          }
+          s = startState(text, pos, anchored, false);
+          if (s == null) {
+            return null;
+          }
+          if (s == deadState) {
+            return new SearchResult(matched, matchEnd);
+          }
+        } else if (!isExact) {
+          if (++consecutiveShortSkips >= maxStrikes) {
+            accelerationDisabled = true;
+          }
+        }
+      }
+      if (s.accelerator != null && !s.isStartState && (textLen - pos >= 16)) {
+        int nextPos = findSelfLoopEscape(s.accelerator, text, pos, textLen);
+        if (nextPos == -1) {
+          pos = textLen;
+        } else if (nextPos > pos) {
+          pos = nextPos;
+          if (pos > textLen) {
+            break;
+          }
+        }
+      }
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }

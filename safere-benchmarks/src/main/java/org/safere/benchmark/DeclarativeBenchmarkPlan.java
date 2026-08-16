@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Strict, versioned model for the normalized declarative benchmark plan.
@@ -30,8 +31,7 @@ import java.util.regex.Matcher;
 final class DeclarativeBenchmarkPlan {
 
   static final int SCHEMA_VERSION = 1;
-  private static final java.util.regex.Pattern PLACEHOLDER =
-      java.util.regex.Pattern.compile("(?<!\\$)\\{([A-Za-z][A-Za-z0-9_]*)}");
+  private static final Pattern PLACEHOLDER = Pattern.compile("(?<!\\$)\\{([A-Za-z][A-Za-z0-9_]*)}");
 
   private final Map<String, InputDeclaration> inputs;
   private final List<WorkloadDeclaration> workloads;

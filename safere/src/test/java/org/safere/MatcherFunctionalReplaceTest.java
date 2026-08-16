@@ -10,6 +10,8 @@ package org.safere;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ConcurrentModificationException;
+import java.util.function.Function;
 import java.util.regex.MatchResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -100,7 +102,7 @@ class MatcherFunctionalReplaceTest {
   void replaceAllFunctionNullThrows() {
     Pattern p = Pattern.compile("x");
     Matcher m = p.matcher("x");
-    assertThatThrownBy(() -> m.replaceAll((java.util.function.Function<MatchResult, String>) null))
+    assertThatThrownBy(() -> m.replaceAll((Function<MatchResult, String>) null))
         .isInstanceOf(NullPointerException.class);
   }
 
@@ -109,8 +111,7 @@ class MatcherFunctionalReplaceTest {
   void replaceFirstFunctionNullThrows() {
     Pattern p = Pattern.compile("x");
     Matcher m = p.matcher("x");
-    assertThatThrownBy(
-            () -> m.replaceFirst((java.util.function.Function<MatchResult, String>) null))
+    assertThatThrownBy(() -> m.replaceFirst((Function<MatchResult, String>) null))
         .isInstanceOf(NullPointerException.class);
   }
 
@@ -130,7 +131,7 @@ class MatcherFunctionalReplaceTest {
                       m.find();
                       return "x";
                     }))
-        .isInstanceOf(java.util.ConcurrentModificationException.class);
+        .isInstanceOf(ConcurrentModificationException.class);
   }
 
   @Test
@@ -149,6 +150,6 @@ class MatcherFunctionalReplaceTest {
                       m.find();
                       return "x";
                     }))
-        .isInstanceOf(java.util.ConcurrentModificationException.class);
+        .isInstanceOf(ConcurrentModificationException.class);
   }
 }

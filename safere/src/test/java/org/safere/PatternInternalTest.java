@@ -7,6 +7,7 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
@@ -388,14 +389,8 @@ class PatternInternalTest {
   @Test
   void endAnchoredSuffixRejectsUtf8Input() {
     Pattern p = Pattern.compile(".*\\.json$");
-    assertThat(
-            p.find(
-                Utf8Input.trusted("config.json".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-        .isTrue();
-    assertThat(
-            p.find(
-                Utf8Input.trusted("config.yaml".getBytes(java.nio.charset.StandardCharsets.UTF_8))))
-        .isFalse();
+    assertThat(p.find(Utf8Input.trusted("config.json".getBytes(UTF_8)))).isTrue();
+    assertThat(p.find(Utf8Input.trusted("config.yaml".getBytes(UTF_8)))).isFalse();
   }
 
   @Test

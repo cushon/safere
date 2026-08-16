@@ -29,6 +29,24 @@ interface InputScanner {
   /** Returns the first position at or after {@code start} in the supplied code-point class. */
   int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start);
 
+  /**
+   * Returns the first index in {@code [fromIndex, limit)} containing {@code ascii}, or {@code -1}
+   * if none exists.
+   */
+  int indexOfAscii(int ascii, int fromIndex, int limit);
+
+  /**
+   * Returns the first index in {@code [fromIndex, limit)} containing {@code c1} or {@code c2}, or
+   * {@code -1} if none exists.
+   */
+  int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit);
+
+  /**
+   * Returns the first index in {@code [fromIndex, limit)} containing {@code c1}, {@code c2}, or
+   * {@code c3}, or {@code -1} if none exists.
+   */
+  int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit);
+
   /** Decodes the scalar at {@code pos} and packs it with the following logical position. */
   long decodeForward(int pos);
 

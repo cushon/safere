@@ -8,13 +8,12 @@ package org.safere.fuzz;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.util.List;
+import org.safere.Pattern;
 
 final class MatchFuzzer {
-  private static final int CI = org.safere.Pattern.CASE_INSENSITIVE;
-  private static final int CI_U =
-      org.safere.Pattern.CASE_INSENSITIVE | org.safere.Pattern.UNICODE_CASE;
-  private static final int CI_UCC =
-      org.safere.Pattern.CASE_INSENSITIVE | org.safere.Pattern.UNICODE_CHARACTER_CLASS;
+  private static final int CI = Pattern.CASE_INSENSITIVE;
+  private static final int CI_U = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+  private static final int CI_UCC = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CHARACTER_CLASS;
 
   private static final List<RegressionCase> CASE_FOLDING_REGRESSIONS =
       List.of(
@@ -94,7 +93,7 @@ final class MatchFuzzer {
 
   private static void assertUnicodeBoundaryStartCacheMatchesJdk() {
     String regex = "\\b.";
-    int flags = org.safere.Pattern.UNICODE_CHARACTER_CLASS;
+    int flags = Pattern.UNICODE_CHARACTER_CLASS;
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, flags);
     if (pattern == null) {
       return;
@@ -180,7 +179,7 @@ final class MatchFuzzer {
 
   private static void assertZeroWidthPossessiveCaptureRetentionJdk() {
     FuzzSupport.CompiledPattern pattern =
-        FuzzSupport.compileCompatibleOrSkip("(?m:^(\\B)*+$)", org.safere.Pattern.MULTILINE);
+        FuzzSupport.compileCompatibleOrSkip("(?m:^(\\B)*+$)", Pattern.MULTILINE);
     if (pattern == null) {
       return;
     }
@@ -207,7 +206,7 @@ final class MatchFuzzer {
   }
 
   private static void assertFullMatchesSafeRe(String regex, int flags, List<String> inputs) {
-    org.safere.Pattern pattern = org.safere.Pattern.compile(regex, flags);
+    Pattern pattern = Pattern.compile(regex, flags);
     for (String input : inputs) {
       if (!pattern.matcher(input).matches()) {
         throw new AssertionError(
