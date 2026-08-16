@@ -32,11 +32,6 @@ sealed interface InputScanner permits StringInputScanner, Utf8InputScanner {
    */
   int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start, int limit);
 
-  /** Returns the first position in {@code [start, length())} belonging to the code-point class. */
-  default int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
-    return indexOfCodePointClass(ranges, bitmap0, bitmap1, start, length());
-  }
-
   /**
    * Returns the first index in {@code [fromIndex, limit)} containing {@code ascii}, or {@code -1}
    * if none exists.
