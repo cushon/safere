@@ -36,8 +36,8 @@ final class OnePass {
 
   private static final int MAX_CAP_REGS = 2 * MAX_CAPTURE_GROUPS;
 
-  // OnePass is an optional accelerator. Keep its dense transition table within a fixed raw
-  // payload budget and fall back to the other engines when a pattern would exceed it.
+  // OnePass is an optional accelerator. Keep its dense action tables within a fixed raw payload
+  // budget and fall back to the other engines when a pattern would exceed it.
   private static final int MAX_STATES = 65_000;
   private static final long MAX_ACTION_BYTES = 16L * 1024L * 1024L;
   static final long MAX_ACTION_CELLS = MAX_ACTION_BYTES / Long.BYTES;
@@ -388,7 +388,8 @@ final class OnePass {
   }
 
   private static boolean exceedsActionBudget(int maxStates, int numClasses) {
-    return maxStates > MAX_ACTION_CELLS / numClasses;
+    // flatActions and matchActions have the same stateCount * numClasses layout.
+    return maxStates > MAX_ACTION_CELLS / 2 / numClasses;
   }
 
   private static int maxOnePassStates(Prog prog) {

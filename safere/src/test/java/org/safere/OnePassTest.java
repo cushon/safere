@@ -137,6 +137,16 @@ class OnePassTest {
 
       assertThat(build(distinctLiteralRun(literalCount))).isNull();
     }
+
+    @Test
+    @DisplayName("the memory budget includes both dense action tables")
+    void memoryBudgetIncludesBothDenseActionTables() {
+      // A distinct literal run has roughly N states and 2N equivalence classes. At this size each
+      // dense table fits the budget independently, but the two tables exceed it together.
+      int literalCount = (int) Math.ceil(Math.sqrt(OnePass.MAX_ACTION_CELLS / 4.0)) + 4;
+
+      assertThat(build(distinctLiteralRun(literalCount))).isNull();
+    }
   }
 
   // ---------------------------------------------------------------------------
