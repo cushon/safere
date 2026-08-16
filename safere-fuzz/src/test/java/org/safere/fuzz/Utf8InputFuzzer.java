@@ -8,6 +8,7 @@ package org.safere.fuzz;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -274,7 +275,7 @@ final class Utf8InputFuzzer {
           .onUnmappableCharacter(CodingErrorAction.REPORT)
           .decode(ByteBuffer.wrap(bytes, offset, length));
       return true;
-    } catch (java.nio.charset.CharacterCodingException e) {
+    } catch (CharacterCodingException e) {
       return false;
     }
   }

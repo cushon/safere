@@ -8,6 +8,7 @@ package org.safere.fuzz;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.util.List;
+import org.safere.Pattern;
 
 final class ParserCompatibilityFuzzer {
 
@@ -146,7 +147,7 @@ final class ParserCompatibilityFuzzer {
     int flags = FuzzSupport.consumeParserFlags(data);
     String regex;
     if (data.consumeBoolean()) {
-      flags |= org.safere.Pattern.COMMENTS;
+      flags |= Pattern.COMMENTS;
       regex =
           data.pickValue(COMMENT_TERMINATED_PREFIXES) + data.pickValue(MALFORMED_GROUP_SUFFIXES);
     } else if (data.consumeBoolean()) {

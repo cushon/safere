@@ -131,6 +131,7 @@
                         <exclude name="RejectPrefilterTest.java"/>
                         <exclude name="SafeReDiagnosticsTest.java"/>
                         <exclude name="SearchScalingRegressionTest.java"/>
+                        <exclude name="ShortScanEquivalenceTest.java"/>
                         <exclude name="SimplifierTest.java"/>
                         <exclude name="StartAcceleratorDifferentialTest.java"/>
                         <exclude name="StartAcceleratorTest.java"/>
