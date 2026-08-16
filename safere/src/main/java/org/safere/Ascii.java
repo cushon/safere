@@ -105,7 +105,6 @@ final class Ascii {
     return failure;
   }
 
-
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {

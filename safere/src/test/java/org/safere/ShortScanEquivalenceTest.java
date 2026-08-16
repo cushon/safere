@@ -283,6 +283,7 @@ class ShortScanEquivalenceTest {
       assertThat(StringSupport.compatibleWith(utf16, UTF_16)).isTrue();
     }
   }
+
   private static int scalarIndexOfAsciiClass(byte[] input, int[] ranges, int start) {
     for (int i = start; i < input.length; i++) {
       int b = input[i] & 0xFF;

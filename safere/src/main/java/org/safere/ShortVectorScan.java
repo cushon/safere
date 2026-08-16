@@ -162,6 +162,7 @@ final class ShortVectorScan {
     }
     return -1;
   }
+
   static int indexOfIgnoreCase(char[] chars, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {

@@ -69,7 +69,6 @@ final class StringInputScanner implements InputScanner {
     return -1;
   }
 
-
   @Override
   public int singleUnitCodePointAt(int pos) {
     char c = text.charAt(pos);
