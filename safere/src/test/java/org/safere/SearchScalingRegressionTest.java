@@ -58,6 +58,59 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void replaceAllWithoutCaptureReferencesSkipsCaptureResolutionWork() {
+    Pattern pattern = Pattern.compile("x(a+)y([0-9]+)z");
+    String input = "xay1z xay2z";
+
+    assertThat(pattern.innerCapturesObserved()).isFalse();
+    String replacedLiteral = pattern.matcher(input).replaceAll("REPLACED");
+    assertThat(replacedLiteral).isEqualTo("REPLACED REPLACED");
+    assertThat(pattern.innerCapturesObserved())
+        .as("Literal replacement must not mark inner captures as observed")
+        .isFalse();
+
+    String replacedWithCaptures = pattern.matcher(input).replaceAll("$1-$2");
+    assertThat(replacedWithCaptures).isEqualTo("a-1 a-2");
+    assertThat(pattern.innerCapturesObserved())
+        .as("Replacement with capture references must mark inner captures as observed")
+        .isTrue();
+  }
+
+  @Test
+  void literalReplaceWithGroupZeroReferenceUsesFastPathWithoutDfaWork() {
+    Pattern pattern = Pattern.compile("(abc)");
+    String input = "abc ".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              String replaced = pattern.matcher(input).replaceAll("[$0]");
+              assertThat(replaced).isNotNull();
+            });
+
+    assertThat(work)
+        .as("Literal replacement with group zero reference should execute on fast path without DFA work")
+        .isEqualTo(0);
+  }
+
+  @Test
+  void literalSplitWithParenthesesUsesFastPathWithoutDfaWork() {
+    Pattern pattern = Pattern.compile("(delim)");
+    String input = "item delim ".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              String[] parts = pattern.split(input);
+              assertThat(parts).hasSize(1_001);
+            });
+
+    assertThat(work)
+        .as("Literal split on parenthesized pattern should execute on fast path without DFA work")
+        .isEqualTo(0);
+  }
+
+  @Test
   void disjointRequiredLiteralOptimizationDoesNotAddRedundantUtf8Scans() {
     String regex = "(?:banana\\d|apple\\d)";
     Pattern defaultPattern = Pattern.compile(regex);

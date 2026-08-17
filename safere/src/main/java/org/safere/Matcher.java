@@ -2640,13 +2640,22 @@ public final class Matcher implements MatchResult {
       return sb.toString();
     }
     ReplacementSegment[] compiledTemplate = template.get();
+    boolean needsCaptures = template.needsCaptures();
     do {
-      if (!groupZeroResolved) {
+      if (needsCaptures && !groupZeroResolved) {
         resolveCaptures();
       }
-      sb.append(text, appendPos, groups[0]);
-      applyReplacementTemplate(sb, compiledTemplate);
-      appendPos = groups[1];
+      int matchStart = groupZeroResolved ? groups[0] : deferredMatchStart;
+      int matchEnd = groupZeroResolved ? groups[1] : deferredMatchEnd;
+      sb.append(text, appendPos, matchStart);
+      if (needsCaptures) {
+        applyReplacementTemplate(sb, compiledTemplate);
+      } else {
+        groups[0] = matchStart;
+        groups[1] = matchEnd;
+        applyReplacementTemplate(sb, compiledTemplate);
+      }
+      appendPos = matchEnd;
     } while (findAndRecordReplacementMatch());
     appendTail(sb);
     return sb.toString();
@@ -2768,6 +2777,9 @@ public final class Matcher implements MatchResult {
     ReplacementSegment[] compiledTemplate = template.get();
 
     boolean needsCaptures = template.needsCaptures();
+    if (needsCaptures) {
+      parentPattern.recordInnerCaptureAccess();
+    }
     boolean useOnePass =
         needsCaptures
             && enginePathOptions().onePass()
@@ -3096,17 +3108,26 @@ public final class Matcher implements MatchResult {
       return null;
     }
 
-    String replacement = template.replacement;
-    boolean simpleReplacement = isSimpleReplacement(replacement);
-    if (!simpleReplacement && groupCount() > 0) {
-      return null; // Cannot handle complex replacements with captures yet
-    }
-
     DiagnosticOperation activeDiagnostics = diagnosticOperation;
     DiagnosticAccumulator accumulator =
         activeDiagnostics == null ? null : activeDiagnostics.accumulator();
     if (accumulator != null) {
       accumulator.participate(MatchStrategy.LITERAL, StrategyRole.CANDIDATE_VERIFICATION);
+    }
+
+    int firstIdx = text.indexOf(literal, searchFrom);
+    if (firstIdx < 0) {
+      if (accumulator != null) {
+        accumulator.boundary(MatchStrategy.LITERAL);
+      }
+      applyFailedMatchResult();
+      return text;
+    }
+
+    String replacement = template.replacement;
+    boolean simpleReplacement = isSimpleReplacement(replacement);
+    if (!simpleReplacement && template.needsCaptures()) {
+      return null; // Cannot handle complex replacements with inner captures yet
     }
 
     StringBuilder sb = null;
@@ -3130,7 +3151,8 @@ public final class Matcher implements MatchResult {
         firstMatchStart = matchStart;
         firstMatchEnd = matchStart + literal.length();
         if (!simpleReplacement) {
-          applyFullMatchResult(new int[] {firstMatchStart, firstMatchEnd});
+          applyDeferredMatchResult(
+              firstMatchStart, firstMatchEnd, parentPattern.prog().numCaptures(), true, false);
           compiledTemplate = template.get();
         }
       }
@@ -3165,7 +3187,6 @@ public final class Matcher implements MatchResult {
       } else {
         applyDeferredMatchResult(
             firstMatchStart, firstMatchEnd, parentPattern.prog().numCaptures(), true, false);
-        resolveCaptures();
       }
     } else {
       this.searchFrom = regionEnd;
@@ -3929,28 +3950,9 @@ public final class Matcher implements MatchResult {
 
     boolean needsCaptures() {
       if (needsCaptures == null) {
-        needsCaptures = computeNeedsCaptures();
+        needsCaptures = !isSimpleReplacement(replacement) && templateNeedsCaptures(get());
       }
       return needsCaptures;
-    }
-
-    private boolean computeNeedsCaptures() {
-      if (replacement == null) {
-        return false;
-      }
-      int len = replacement.length();
-      int i = 0;
-      while (i < len) {
-        char c = replacement.charAt(i);
-        if (c == '\\') {
-          i += 2;
-        } else if (c == '$') {
-          return true;
-        } else {
-          i++;
-        }
-      }
-      return false;
     }
 
     ReplacementSegment[] get() {
@@ -4035,7 +4037,7 @@ public final class Matcher implements MatchResult {
 
     // Literal fast path
     String literal = parentPattern.literalMatch();
-    if (options.literalFastPaths() && literal != null && parentPattern.numGroups() == 0) {
+    if (options.literalFastPaths() && literal != null) {
       int idx =
           parentPattern.prefixFoldCase()
               ? indexOfIgnoreCase(text, literal, fromIndex)
