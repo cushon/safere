@@ -2112,23 +2112,7 @@ public final class Matcher implements MatchResult {
       return Math.min(Math.max(0, fromIndex), text.length());
     }
     if (prefixLen == 1) {
-      char first = prefix.charAt(0);
-      if (first <= 127) {
-        char low = Ascii.toLowerCase(first);
-        char high = Ascii.toUpperCase(first);
-        if (low == high) {
-          return text.indexOf(low, fromIndex);
-        }
-        int pos1 = text.indexOf(low, fromIndex);
-        int pos2 = text.indexOf(high, fromIndex);
-        if (pos1 < 0) {
-          return pos2;
-        }
-        if (pos2 < 0) {
-          return pos1;
-        }
-        return Math.min(pos1, pos2);
-      }
+      return Ascii.indexOfIgnoreCase(text, prefix.charAt(0), fromIndex);
     }
     int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
     char anchor = prefix.charAt(anchorOffset);
@@ -2214,14 +2198,7 @@ public final class Matcher implements MatchResult {
         }
       }
 
-      int nextAnchor;
-      if (nextLow < 0) {
-        nextAnchor = nextHigh;
-      } else if (nextHigh < 0) {
-        nextAnchor = nextLow;
-      } else {
-        nextAnchor = Math.min(nextLow, nextHigh);
-      }
+      int nextAnchor = Ascii.minNonNegative(nextLow, nextHigh);
       if (nextAnchor < 0) {
         return -1;
       }

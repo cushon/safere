@@ -133,6 +133,30 @@ final class Ascii {
     return -1;
   }
 
+  /** Returns the first index of character {@code ch} ignoring ASCII case, or -1 if not found. */
+  static int indexOfIgnoreCase(String text, char ch, int fromIndex) {
+    if (ch > 127) {
+      return text.indexOf(ch, fromIndex);
+    }
+    char low = toLowerCase(ch);
+    char high = toUpperCase(ch);
+    if (low == high) {
+      return text.indexOf(low, fromIndex);
+    }
+    return minNonNegative(text.indexOf(low, fromIndex), text.indexOf(high, fromIndex));
+  }
+
+  /** Returns the minimum of two indices that is >= 0, or -1 if both are negative. */
+  static int minNonNegative(int a, int b) {
+    if (a < 0) {
+      return b;
+    }
+    if (b < 0) {
+      return a;
+    }
+    return Math.min(a, b);
+  }
+
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
