@@ -340,6 +340,10 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return Math.max(1L, (long) remaining * 2);
   }
 
+  static boolean candidatePrefixInBounds(int candidate, int start, int length, int prefixLength) {
+    return candidate >= start && candidate <= length - prefixLength;
+  }
+
   static long addCandidateWork(long work, int candidateCount, int literalLength) {
     return work + (long) candidateCount * literalLength + Long.BYTES;
   }

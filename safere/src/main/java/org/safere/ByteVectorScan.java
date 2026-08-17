@@ -140,11 +140,11 @@ final class ByteVectorScan {
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit - anchorOffset;
-          if (candidateInBounds(candidatePos, start, length, prefixLen)
+          if (Utf8InputScanner.candidatePrefixInBounds(candidatePos, start, length, prefixLen)
               && Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
             return candidatePos;
           }
-          if (candidateInBounds(candidatePos, start, length, prefixLen)) {
+          if (Utf8InputScanner.candidatePrefixInBounds(candidatePos, start, length, prefixLen)) {
             verificationWork += prefixLen;
             if (verificationWork >= workLimit) {
               return VectorScanProvider.UNSUPPORTED;
@@ -170,10 +170,6 @@ final class ByteVectorScan {
       }
     }
     return -1;
-  }
-
-  static boolean candidateInBounds(int candidate, int start, int length, int prefixLength) {
-    return candidate >= start && candidate <= length - prefixLength;
   }
 
   private ByteVectorScan() {}
