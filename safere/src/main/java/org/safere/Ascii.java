@@ -128,12 +128,4 @@ final class Ascii {
     }
     return true;
   }
-
-  /**
-   * Returns the offset of the rarest ASCII character in the prefix (up to prefixLen). If all
-   * characters have identical rank, returns 0.
-   */
-  static int rarestAsciiOffset(CharSequence prefix, int prefixLen) {
-    return RarityOracle.rarestAsciiOffset(prefix, prefixLen);
-  }
 }
