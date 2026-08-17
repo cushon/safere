@@ -117,7 +117,7 @@ final class ShortVectorScan {
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit;
-          if (candidatePos + prefixLen <= length
+          if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)
               && regionMatchesIgnoreCase(chars, offset + candidatePos, prefix, prefixLen)) {
             return candidatePos;
           }
@@ -176,7 +176,7 @@ final class ShortVectorScan {
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit;
-          if (candidatePos + prefixLen <= length
+          if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)
               && regionMatchesIgnoreCaseUtf16(
                   bytes, offset + (candidatePos << 1), prefix, prefixLen)) {
             return candidatePos;

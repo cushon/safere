@@ -234,7 +234,7 @@ abstract class ByteSwarScan {
     long repeatedLast = (literal[last] & 0xFFL) * BYTE_ONES;
     int wordEnd = length - last - Long.BYTES;
     long work = 0;
-    long workLimit = Utf8InputScanner.workLimit(length - start);
+    long workLimit = WorkLimit.forRemaining(length - start);
     int position = start;
     while (position <= wordEnd) {
       long firstDifference = (long) LONG_VIEW.get(bytes, offset + position) ^ repeatedFirst;
@@ -258,11 +258,11 @@ abstract class ByteSwarScan {
             candidateCount++;
           }
         }
-        work = Utf8InputScanner.addCandidateWork(work, candidateCount, literal.length);
+        work = WorkLimit.addCandidateWork(work, candidateCount, literal.length);
       }
       position += Long.BYTES;
       work++;
-      if (work >= workLimit) {
+      if (WorkLimit.isExhausted(work, workLimit)) {
         return -2;
       }
     }

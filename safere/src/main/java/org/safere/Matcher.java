@@ -2115,14 +2115,78 @@ public final class Matcher implements MatchResult {
       }
     }
     int prefixLen = prefix.length();
-    int limit = text.length() - prefixLen;
-    for (int i = fromIndex; i <= limit; i++) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, fromIndex), text.length());
+    }
+    if (prefixLen == 1) {
+      char first = prefix.charAt(0);
+      if (first <= 127) {
+        char low = Ascii.toLowerCase(first);
+        char high = Ascii.toUpperCase(first);
+        if (low == high) {
+          return text.indexOf(low, fromIndex);
+        }
+        int pos1 = text.indexOf(low, fromIndex);
+        int pos2 = text.indexOf(high, fromIndex);
+        if (pos1 < 0) {
+          return pos2;
+        }
+        if (pos2 < 0) {
+          return pos1;
+        }
+        return Math.min(pos1, pos2);
       }
-      if (regionMatchesAsciiIgnoreCase(text, i, prefix, 0, prefixLen)) {
-        return i;
+    }
+    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
+    char anchor = prefix.charAt(anchorOffset);
+    char low = Ascii.toLowerCase(anchor);
+    char high = Ascii.toUpperCase(anchor);
+    int[] failure = Ascii.ignoreCaseFailure(prefix);
+    return indexOfIgnoreCase(text, prefix, failure, anchorOffset, low, high, fromIndex);
+  }
+
+  static int indexOfIgnoreCase(
+      String text,
+      String prefix,
+      int[] failure,
+      int anchorOffset,
+      char low,
+      char high,
+      int fromIndex) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, fromIndex), text.length());
+    }
+    int length = text.length();
+    int pos = Math.max(0, fromIndex);
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
+
+    while (pos <= length - prefixLen) {
+      int nextLow = text.indexOf(low, pos + anchorOffset);
+      int nextHigh = (low == high) ? -1 : text.indexOf(high, pos + anchorOffset);
+      int nextAnchor;
+      if (nextLow < 0) {
+        nextAnchor = nextHigh;
+      } else if (nextHigh < 0) {
+        nextAnchor = nextLow;
+      } else {
+        nextAnchor = Math.min(nextLow, nextHigh);
       }
+      if (nextAnchor < 0) {
+        return -1;
+      }
+      int candidatePos = nextAnchor - anchorOffset;
+      if (WorkLimit.candidateInBounds(candidatePos, pos, length, prefixLen)) {
+        if (Ascii.regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)) {
+          return candidatePos;
+        }
+        verificationWork += prefixLen;
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return Ascii.indexOfLinearIgnoreCase(text, prefix, failure, candidatePos + 1);
+        }
+      }
+      pos = candidatePos + 1;
     }
     return -1;
   }

@@ -189,7 +189,7 @@ final class ShortSwarScan {
       if (matches != 0) {
         int limit = pos + 4;
         for (int i = pos; i < limit; i++) {
-          if (i + prefixLen <= length
+          if (WorkLimit.candidateInBounds(i, start, length, prefixLen)
               && regionMatchesIgnoreCase(chars, offset + i, prefix, prefixLen)) {
             return i;
           }
@@ -245,7 +245,7 @@ final class ShortSwarScan {
       if (matches != 0) {
         int limit = pos + 4;
         for (int i = pos; i < limit; i++) {
-          if (i + prefixLen <= length
+          if (WorkLimit.candidateInBounds(i, start, length, prefixLen)
               && regionMatchesIgnoreCaseUtf16(bytes, offset + (i << 1), prefix, prefixLen)) {
             return i;
           }

@@ -70,10 +70,26 @@ sealed interface StringStartAccelerator {
   final class Literal implements StringStartAccelerator {
     private final String prefix;
     private final boolean prefixFoldCase;
+    private final int[] failure;
+    private final int anchorOffset;
+    private final char anchorLow;
+    private final char anchorHigh;
 
     Literal(String prefix, boolean prefixFoldCase) {
       this.prefix = prefix;
       this.prefixFoldCase = prefixFoldCase;
+      if (prefixFoldCase && prefix != null && !prefix.isEmpty()) {
+        this.failure = Ascii.ignoreCaseFailure(prefix);
+        this.anchorOffset = Ascii.rarestAsciiOffset(prefix, prefix.length());
+        char anchor = prefix.charAt(anchorOffset);
+        this.anchorLow = Ascii.toLowerCase(anchor);
+        this.anchorHigh = Ascii.toUpperCase(anchor);
+      } else {
+        this.failure = null;
+        this.anchorOffset = 0;
+        this.anchorLow = 0;
+        this.anchorHigh = 0;
+      }
     }
 
     public String prefix() {
@@ -99,7 +115,8 @@ sealed interface StringStartAccelerator {
             return vectorIndex;
           }
         }
-        return Matcher.indexOfIgnoreCase(text, prefix, fromIndex);
+        return Matcher.indexOfIgnoreCase(
+            text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
       }
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record(Math.max(0, text.length() - fromIndex));
