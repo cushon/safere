@@ -23,6 +23,28 @@ sealed interface StateAccelerator {
    */
   int findEscape(InputScanner text, int fromIndex, int limit);
 
+  /**
+   * Fast-forwards to the next escape character in a self-loop state using pattern-matched
+   * devirtualization.
+   *
+   * <p>Direct sealed-type pattern matching avoids {@code invokeinterface} dispatch overhead on hot
+   * matching loops. HotSpot C2 does not automatically devirtualize megamorphic interface calls with
+   * &ge; 3 implementations across the JVM lifecycle; switching over the sealed record subtypes here
+   * allows C2 to inline the underlying {@link InputScanner} search primitives directly into caller
+   * loops.
+   */
+  static int findNextEscape(
+      StateAccelerator accelerator, InputScanner text, int fromIndex, int limit) {
+    return switch (accelerator) {
+      case SingleAsciiEscape single -> text.indexOfAscii(single.escape(), fromIndex, limit);
+      case AsciiPairEscape pair -> text.indexOfAsciiPair(pair.c1(), pair.c2(), fromIndex, limit);
+      case AsciiTripleEscape triple ->
+          text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
+      case CharClassEscape cc ->
+          text.indexOfCodePointClass(cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
+    };
+  }
+
   /** Accelerator for a single escape character (e.g. quote {@code '"'} or newline {@code '\n'}). */
   record SingleAsciiEscape(int escape) implements StateAccelerator {
     @Override
@@ -44,6 +66,15 @@ sealed interface StateAccelerator {
     @Override
     public int findEscape(InputScanner text, int fromIndex, int limit) {
       return text.indexOfAsciiTriple(c1, c2, c3, fromIndex, limit);
+    }
+  }
+
+  /** Accelerator for a character-class escape (e.g. delimiters or character ranges). */
+  @SuppressWarnings("ArrayRecordComponent")
+  record CharClassEscape(int[] ranges, long bitmap0, long bitmap1) implements StateAccelerator {
+    @Override
+    public int findEscape(InputScanner text, int fromIndex, int limit) {
+      return text.indexOfCodePointClass(ranges, bitmap0, bitmap1, fromIndex, limit);
     }
   }
 }

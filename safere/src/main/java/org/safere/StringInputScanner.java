@@ -97,9 +97,10 @@ final class StringInputScanner implements InputScanner {
   }
 
   @Override
-  public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
+  public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start, int limit) {
     int position = Math.max(0, start);
-    while (position < text.length()) {
+    int bound = Math.min(limit, text.length());
+    while (position < bound) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }

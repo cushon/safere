@@ -48,6 +48,25 @@ sealed interface Utf8StartAccelerator {
    */
   int findCandidate(Utf8InputScanner scanner, int fromIndex);
 
+  /**
+   * Finds the next candidate match start position at or after {@code pos} using pattern-matched
+   * devirtualization.
+   *
+   * <p>Direct sealed-type pattern matching avoids {@code invokeinterface} dispatch overhead on hot
+   * matching loops. HotSpot C2 does not automatically devirtualize megamorphic interface calls with
+   * &ge; 3 implementations across the JVM lifecycle; switching over the sealed record subtypes here
+   * allows C2 to inline candidate searches directly into caller loops.
+   */
+  static int findNextCandidate(
+      Utf8StartAccelerator accelerator, Utf8InputScanner scanner, int pos) {
+    return switch (accelerator) {
+      case Literal lit -> lit.findCandidate(scanner, pos);
+      case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
+      case FixedOffset fo -> fo.findCandidate(scanner, pos);
+      case CharClass cc -> cc.findCandidate(scanner, pos);
+    };
+  }
+
   /** Returns the tuning and diagnostic policy for this accelerator. */
   default AcceleratorPolicy policy() {
     return AcceleratorPolicy.DEFAULT;
@@ -175,7 +194,7 @@ sealed interface Utf8StartAccelerator {
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (scanInfo != null) {
         return scanner.indexOfCodePointClass(
-            scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex);
+            scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex, scanner.length());
       }
       return fromIndex;
     }

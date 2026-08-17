@@ -366,6 +366,27 @@ class Utf8MatcherStateMachineTest {
   }
 
   @Test
+  void graphemePatternDoesNotSplitMultibyteCodePointInUnanchoredFind() {
+    String input = "\u1e99| 5  \u8ed6";
+    Utf8Matcher utf8Matcher =
+        Pattern.compile(".\\X| /0? ?5-").matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+    List<List<Integer>> actualMatches = new ArrayList<>();
+    while (utf8Matcher.find()) {
+      actualMatches.add(List.of(utf8Matcher.start(), utf8Matcher.end()));
+    }
+
+    Matcher stringMatcher = Pattern.compile(".\\X| /0? ?5-").matcher(input);
+    List<List<Integer>> expectedMatches = new ArrayList<>();
+    while (stringMatcher.find()) {
+      expectedMatches.add(
+          List.of(
+              utf8Offset(input, stringMatcher.start()), utf8Offset(input, stringMatcher.end())));
+    }
+
+    assertThat(actualMatches).isEqualTo(expectedMatches);
+  }
+
+  @Test
   void graphemePatternsWorkAcrossUtf8Scalars() {
     for (String input : List.of("a\r\nb", "a\u0301b", "👩‍💻x", "🇺🇸x")) {
       assertGraphemePatternsWorkAcrossUtf8Scalars(input);

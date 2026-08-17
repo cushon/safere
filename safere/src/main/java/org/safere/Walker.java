@@ -24,6 +24,7 @@ import java.util.List;
 abstract class Walker<T> {
 
   private final ArrayList<WalkState<T>> stack = new ArrayList<>();
+  private final boolean[] stop = new boolean[1];
   private boolean stoppedEarly;
   private int maxVisits;
 
@@ -126,7 +127,7 @@ abstract class Walker<T> {
           parent.n++;
           continue;
         }
-        boolean[] stop = {false};
+        stop[0] = false;
         s.preArg = preVisit(re, s.parentArg, stop);
         if (stop[0]) {
           T t = s.preArg;

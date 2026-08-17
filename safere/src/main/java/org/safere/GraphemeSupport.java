@@ -305,25 +305,31 @@ final class GraphemeSupport {
   }
 
   static int inputCodePointAt(InputScanner text, int pos, int endPos, boolean graphemeSensitive) {
-    if (text instanceof StringInputScanner stringInput) {
-      return inputCodePointAt(stringInput.text(), pos, endPos, graphemeSensitive);
-    }
-    if (pos < 0 || pos >= endPos || pos >= text.length()) {
-      return -1;
-    }
-    long decoded = text.decodeForward(pos);
-    return InputScanner.position(decoded) <= endPos ? InputScanner.codePoint(decoded) : -1;
+    return switch (text) {
+      case StringInputScanner stringInput ->
+          inputCodePointAt(stringInput.text(), pos, endPos, graphemeSensitive);
+      case Utf8InputScanner utf8Input -> {
+        if (pos < 0 || pos >= endPos || pos >= utf8Input.length()) {
+          yield -1;
+        }
+        long decoded = utf8Input.decodeForward(pos);
+        yield InputScanner.position(decoded) <= endPos ? InputScanner.codePoint(decoded) : -1;
+      }
+    };
   }
 
   static int inputNextPos(InputScanner text, int pos, int endPos, boolean graphemeSensitive) {
-    if (text instanceof StringInputScanner stringInput) {
-      return inputNextPos(stringInput.text(), pos, endPos, graphemeSensitive);
-    }
-    if (pos < 0 || pos >= endPos || pos >= text.length()) {
-      return endPos + 1;
-    }
-    int next = InputScanner.position(text.decodeForward(pos));
-    return next <= endPos ? next : endPos + 1;
+    return switch (text) {
+      case StringInputScanner stringInput ->
+          inputNextPos(stringInput.text(), pos, endPos, graphemeSensitive);
+      case Utf8InputScanner utf8Input -> {
+        if (pos < 0 || pos >= endPos || pos >= utf8Input.length()) {
+          yield endPos + 1;
+        }
+        int next = InputScanner.position(utf8Input.decodeForward(pos));
+        yield next <= endPos ? next : endPos + 1;
+      }
+    };
   }
 
   static int graphemeNextPos(InputScanner text, int pos, int endPos) {
