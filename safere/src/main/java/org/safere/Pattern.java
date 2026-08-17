@@ -1004,7 +1004,10 @@ public final class Pattern implements Serializable {
           literalMatchUtf8,
           literalMatchFailure,
           literalMatchShifts,
-          prog.anchorStart());
+          prog.anchorStart(),
+          prefixFoldCase
+              ? createLiteralFallbackRunner(regionActive)
+              : Matcher.FallbackPreparedRunner.INSTANCE);
     }
 
     Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
@@ -1026,6 +1029,32 @@ public final class Pattern implements Serializable {
     }
 
     if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
+      return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
+    }
+
+    return Matcher.FallbackPreparedRunner.INSTANCE;
+  }
+
+  private Matcher.PreparedMatchRunner createLiteralFallbackRunner(boolean regionActive) {
+    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
+    Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
+    if (enginePathOptions.charClassMatchFastPaths()
+        && (singleCharClass != null || charClassMatch != null)) {
+      return new Matcher.SingleCharClassPreparedRunner(
+          singleCharClass, charClassMatch, prog.anchorStart());
+    }
+
+    if (regionActive) {
+      return Matcher.FallbackPreparedRunner.INSTANCE;
+    }
+
+    Pattern.KeywordAlternation keywordAlternation = matchDescriptor.keywordAlternation();
+    if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
+      return new Matcher.KeywordAlternationPreparedRunner(
+          keywordAlternation, prog.numCaptures(), prog.anchorStart());
+    }
+
+    if (enginePathOptions.onePass()) {
       return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
 

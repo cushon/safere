@@ -4173,6 +4173,7 @@ public final class Matcher implements MatchResult {
     private final int matchLengthChars;
     private final int matchLengthBytes;
     private final boolean isStartAnchored;
+    private final PreparedMatchRunner fallback;
 
     LiteralPreparedRunner(
         String literal,
@@ -4180,7 +4181,8 @@ public final class Matcher implements MatchResult {
         byte[] literalUtf8,
         int[] failure,
         int[] shifts,
-        boolean isStartAnchored) {
+        boolean isStartAnchored,
+        PreparedMatchRunner fallback) {
       this.literal = literal;
       this.foldCase = foldCase;
       this.literalUtf8 = literalUtf8;
@@ -4189,6 +4191,7 @@ public final class Matcher implements MatchResult {
       this.matchLengthChars = literal != null ? literal.length() : 0;
       this.matchLengthBytes = literalUtf8 != null ? literalUtf8.length : 0;
       this.isStartAnchored = isStartAnchored;
+      this.fallback = fallback;
     }
 
     @Override
@@ -4196,16 +4199,15 @@ public final class Matcher implements MatchResult {
       if (isStartAnchored && matcher.searchFrom > 0) {
         return matcher.applyFailedMatchResult();
       }
+      if (foldCase && matcher.text == null) {
+        return fallback.find(matcher, regionActive);
+      }
       matcher.diagnosticBoundary(MatchStrategy.LITERAL);
       int idx;
       int matchLength;
       if (foldCase) {
-        if (matcher.text != null) {
-          idx = indexOfIgnoreCase(matcher.text, literal, matcher.searchFrom);
-          matchLength = matchLengthChars;
-        } else {
-          return matcher.doFindCore(regionActive);
-        }
+        idx = indexOfIgnoreCase(matcher.text, literal, matcher.searchFrom);
+        matchLength = matchLengthChars;
       } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
         idx = utf8Scanner.indexOf(literalUtf8, failure, shifts, matcher.searchFrom);
         matchLength = matchLengthBytes;
@@ -4239,6 +4241,9 @@ public final class Matcher implements MatchResult {
       if (isStartAnchored && matcher.searchFrom > 0) {
         return matcher.applyFailedMatchResult();
       }
+      if (foldCase && matcher.text == null) {
+        return fullMatch ? fallback.matches(matcher) : fallback.lookingAt(matcher);
+      }
       matcher.capturesResolved = true;
       if (matcher.text != null) {
         matcher.diagnosticBoundary(MatchStrategy.LITERAL);
@@ -4262,9 +4267,6 @@ public final class Matcher implements MatchResult {
         return matcher.hasMatch;
       } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
         matcher.diagnosticBoundary(MatchStrategy.LITERAL);
-        if (foldCase) {
-          return fullMatch ? matcher.matchesCore() : matcher.lookingAtCore();
-        }
         boolean matched;
         if (literalUtf8 != null) {
           matched =
