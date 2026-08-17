@@ -437,6 +437,39 @@ class Utf8MatcherStateMachineTest {
         .isEqualTo(expectedBoundaries);
   }
 
+  @Test
+  void caseInsensitiveMultiCharPrefixMatchesAcrossVectorBoundaries() {
+    String pattern = "(?i)http_query";
+    String input =
+        "http_first http_second http_third "
+            + "HTTP_other HTTP_next "
+            + "hTtP_almost "
+            + "HTTP_QUERY_final";
+    Pattern p = Pattern.compile(pattern);
+    Utf8Matcher matcher = p.matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+
+    assertThat(matcher.find()).isTrue();
+    int expectedStart = input.indexOf("HTTP_QUERY");
+    assertThat(matcher.start()).isEqualTo(expectedStart);
+    assertThat(matcher.end()).isEqualTo(expectedStart + "http_query".length());
+    assertThat(matcher.find()).isFalse();
+  }
+
+  @Test
+  void caseInsensitivePrefixWithRareAnchorHandlesDenseFalseCandidates() {
+    // 't' is very common, 'z' is rare.
+    String pattern = "(?i)the_zone";
+    String noise = "the_alpha the_beta the_gamma the_delta ";
+    String input = noise.repeat(5) + "THE_ZONE";
+    Pattern p = Pattern.compile(pattern);
+    Utf8Matcher matcher = p.matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+
+    assertThat(matcher.find()).isTrue();
+    int expectedStart = input.indexOf("THE_ZONE");
+    assertThat(matcher.start()).isEqualTo(expectedStart);
+    assertThat(matcher.end()).isEqualTo(expectedStart + "the_zone".length());
+  }
+
   private static Utf8Matcher matcher(String pattern, String input) {
     return Pattern.compile(pattern).matcher(Utf8Input.validated(input.getBytes(UTF_8)));
   }

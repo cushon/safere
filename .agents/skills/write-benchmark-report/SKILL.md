@@ -58,6 +58,23 @@ selected suite. Preserve the exact command and whether standard, long, smoke, cr
 external-suite modes were used. If the run failed, preserve its output, diagnose the failure, and
 continue only when doing so does not compromise comparability.
 
+### Targeted Revision Comparisons
+
+For a focused before/after comparison of two SafeRE revisions, prefer
+`safere-benchmarks/scripts/compare-branch.sh` when both revisions contain identical workload data,
+benchmark harnesses, runner settings, and relevant build definitions. Pass explicit refs, select
+exactly one `@safere-string` or `@safere-utf8` execution variant per invocation, and run separate
+invocations serially when both representations matter. Use `--vector` only when both revisions
+should enable the experimental Vector provider. Use standard mode first and `--long` to confirm
+close, surprising, or important results.
+
+The comparison script covers targeted SafeRE nanosecond workloads; it does not replace full
+collections, published evidence, cross-engine or cross-runtime comparisons, specialized timing
+modes, or memory measurements. If it rejects the revisions because benchmark definitions differ,
+do not bypass the check. Construct a controlled baseline carrying the experiment's benchmark-only
+declarations while keeping baseline production code, record that exact baseline commit, and run the
+project wrappers serially in isolated clean worktrees.
+
 ## Normalize And Audit
 
 Prefer `normalized-results.jsonl` for calculations and retain the original harness output as the

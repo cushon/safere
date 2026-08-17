@@ -115,11 +115,24 @@ class DiagnosticsTest {
     assertThat(operationsFor(lookingAtPattern).getLast().boundaryStrategy())
         .isEqualTo(MatchStrategy.ONE_PASS);
 
-    Pattern foldedUtf8Pattern = Pattern.compile("(?i)foo");
-    assertThat(foldedUtf8Pattern.matcher(Utf8Input.validated("FOObar".getBytes(UTF_8))).lookingAt())
+    Pattern foldedUtf8LookingAt = Pattern.compile("(?i)foo");
+    assertThat(
+            foldedUtf8LookingAt.matcher(Utf8Input.validated("FOObar".getBytes(UTF_8))).lookingAt())
         .isTrue();
-    assertThat(operationsFor(foldedUtf8Pattern).getLast().boundaryStrategy())
+    assertThat(operationsFor(foldedUtf8LookingAt).getLast().boundaryStrategy())
         .isEqualTo(MatchStrategy.ONE_PASS);
+
+    Pattern foldedUtf8Matches = Pattern.compile("(?i)foo");
+    assertThat(foldedUtf8Matches.matcher(Utf8Input.validated("FOO".getBytes(UTF_8))).matches())
+        .isTrue();
+    assertThat(operationsFor(foldedUtf8Matches).getLast().boundaryStrategy())
+        .isEqualTo(MatchStrategy.ONE_PASS);
+
+    Pattern foldedUtf8Find = Pattern.compile("(?i)foo");
+    assertThat(foldedUtf8Find.matcher(Utf8Input.validated("xxFOO".getBytes(UTF_8))).find())
+        .isTrue();
+    assertThat(operationsFor(foldedUtf8Find).getLast().boundaryStrategy())
+        .isEqualTo(MatchStrategy.DFA);
   }
 
   @Test

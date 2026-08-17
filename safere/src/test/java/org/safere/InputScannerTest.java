@@ -44,15 +44,21 @@ class InputScannerTest {
     StringInputScanner stringScanner = new StringInputScanner(text);
     Utf8InputScanner utf8Scanner = new Utf8InputScanner(text.getBytes(UTF_8));
 
-    assertThat(stringScanner.indexOfCodePointClass(cjk, 0, 0, 0)).isEqualTo(4);
-    assertThat(stringScanner.indexOfCodePointClass(supplementary, 0, 0, 0)).isEqualTo(2);
-    assertThat(stringScanner.indexOfCodePointClass(cjk, 0, 0, 5)).isEqualTo(-1);
-    assertThat(utf8Scanner.indexOfCodePointClass(cjk, 0, 0, 0)).isEqualTo(7);
-    assertThat(utf8Scanner.indexOfCodePointClass(supplementary, 0, 0, 0)).isEqualTo(3);
-    assertThat(utf8Scanner.indexOfCodePointClass(cjk, 0, 0, 10)).isEqualTo(-1);
+    assertThat(stringScanner.indexOfCodePointClass(cjk, 0, 0, 0, stringScanner.length()))
+        .isEqualTo(4);
+    assertThat(stringScanner.indexOfCodePointClass(supplementary, 0, 0, 0, stringScanner.length()))
+        .isEqualTo(2);
+    assertThat(stringScanner.indexOfCodePointClass(cjk, 0, 0, 5, stringScanner.length()))
+        .isEqualTo(-1);
+    assertThat(utf8Scanner.indexOfCodePointClass(cjk, 0, 0, 0, utf8Scanner.length())).isEqualTo(7);
+    assertThat(utf8Scanner.indexOfCodePointClass(supplementary, 0, 0, 0, utf8Scanner.length()))
+        .isEqualTo(3);
+    assertThat(utf8Scanner.indexOfCodePointClass(cjk, 0, 0, 10, utf8Scanner.length()))
+        .isEqualTo(-1);
 
     Utf8InputScanner paddedUtf8Scanner =
         new Utf8InputScanner(("a".repeat(24) + "中").getBytes(UTF_8));
-    assertThat(paddedUtf8Scanner.indexOfCodePointClass(cjk, 0, 0, 0)).isEqualTo(24);
+    assertThat(paddedUtf8Scanner.indexOfCodePointClass(cjk, 0, 0, 0, paddedUtf8Scanner.length()))
+        .isEqualTo(24);
   }
 }

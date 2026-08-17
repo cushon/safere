@@ -28,15 +28,17 @@ record MatchDescriptor(
     String literalMatch,
     CharClassScanInfo singleCharClass,
     KeywordAlternation keywordAlternation,
-    CharClassMatchInfo charClassMatch) {
+    CharClassMatchInfo charClassMatch,
+    int minMatchLength) {
 
-  static final MatchDescriptor NONE = new MatchDescriptor(null, null, null, null);
+  static final MatchDescriptor NONE = new MatchDescriptor(null, null, null, null, 0);
 
   boolean hasFastPath() {
     return literalMatch != null
         || singleCharClass != null
         || keywordAlternation != null
-        || charClassMatch != null;
+        || charClassMatch != null
+        || minMatchLength > 0;
   }
 
   boolean hasFindFastPath() {
