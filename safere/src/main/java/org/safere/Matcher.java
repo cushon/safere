@@ -1287,8 +1287,8 @@ public final class Matcher implements MatchResult {
   private boolean canUseReverseDfa() {
     return enginePathOptions().dfa()
         && enginePathOptions().reverseDfa()
-        && dfaSupportsProgram(parentPattern.flatReverseDfaProg())
-        && !parentPattern.prog().anchorStart();
+        && parentPattern.canUseReverseDfa()
+        && dfaSupportsProgram(parentPattern.flatReverseDfaProg());
   }
 
   /**

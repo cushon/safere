@@ -455,3 +455,29 @@ jobs:
 
       - name: Check .NET planned exclusions
         run: ./run-dotnet-benchmarks.sh --list-exclusions UnicodeCompileBenchmark
+
+  ci-gate:
+    if: ${{ always() }}
+    needs:
+      - changes
+      - build
+      - build-vector-runtime-artifacts
+      - build-vector
+      - fuzz-regression
+      - benchmark-python-tests
+      - benchmark-smoke-test-java
+      - vector-benchmark-smoke
+      - benchmark-smoke-test-cpp
+      - benchmark-smoke-test-go
+      - benchmark-smoke-test-rust
+      - benchmark-smoke-test-dotnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Require successful CI jobs
+        uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
+        with:
+          allowed-skips: >-
+            ${{ needs.changes.outputs.code == 'false' && toJSON(needs) || '' }}
+          jobs: ${{ toJSON(needs) }}
