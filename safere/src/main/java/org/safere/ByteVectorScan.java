@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static jdk.incubator.vector.VectorOperators.EQ;
 import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
 
@@ -75,28 +76,100 @@ final class ByteVectorScan {
   }
 
   public static int indexOfIgnoreCase(
-      byte[] bytes, int offset, int length, String prefix, int start) {
-    int prefixLen = prefix.length();
+      byte[] bytes,
+      int offset,
+      int length,
+      String prefix,
+      int prefixLen,
+      int anchorOffset,
+      byte low,
+      byte high,
+      int start) {
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
     }
-    for (int i = 0; i < prefixLen; i++) {
-      if (prefix.charAt(i) > 127) {
+    int pos = Math.max(0, start);
+    long verificationWork = 0;
+    long workLimit = Utf8InputScanner.workLimit(length - pos);
+
+    // Fast scalar prologue to catch immediate matches without SIMD setup
+    int scalarPrologueLimit = Math.min(length - prefixLen + 1, pos + Integer.BYTES);
+    for (; pos < scalarPrologueLimit; pos++) {
+      int b = bytes[offset + pos + anchorOffset] & 0xFF;
+      if ((b == (low & 0xFF) || b == (high & 0xFF))
+          && Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+        return pos;
+      }
+      if (b == (low & 0xFF) || b == (high & 0xFF)) {
+        verificationWork += prefixLen;
+        if (verificationWork >= workLimit) {
+          return VectorScanProvider.UNSUPPORTED;
+        }
+      }
+    }
+
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+    if (pos > limit) {
+      int limitScalar = length - prefixLen;
+      for (int p = Math.max(start, pos - anchorOffset); p <= limitScalar; p++) {
+        int b = bytes[offset + p + anchorOffset] & 0xFF;
+        if (b != (low & 0xFF) && b != (high & 0xFF)) {
+          continue;
+        }
+        if (Ascii.regionMatchesIgnoreCase(bytes, offset + p, prefix, prefixLen)) {
+          return p;
+        }
+        verificationWork += prefixLen;
+        if (verificationWork >= workLimit) {
+          return VectorScanProvider.UNSUPPORTED;
+        }
+      }
+      return -1;
+    }
+
+    ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
+    ByteVector highVec = ByteVector.broadcast(SPECIES, high);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
+      VectorMask<Byte> matchMask = inputVec.compare(EQ, lowVec).or(inputVec.compare(EQ, highVec));
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = pos + bit - anchorOffset;
+          if (Utf8InputScanner.candidatePrefixInBounds(candidatePos, start, length, prefixLen)
+              && Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
+            return candidatePos;
+          }
+          if (Utf8InputScanner.candidatePrefixInBounds(candidatePos, start, length, prefixLen)) {
+            verificationWork += prefixLen;
+            if (verificationWork >= workLimit) {
+              return VectorScanProvider.UNSUPPORTED;
+            }
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int limitScalar = length - prefixLen;
+    for (int p = Math.max(start, pos - anchorOffset); p <= limitScalar; p++) {
+      int b = bytes[offset + p + anchorOffset] & 0xFF;
+      if (b != (low & 0xFF) && b != (high & 0xFF)) {
+        continue;
+      }
+      if (Ascii.regionMatchesIgnoreCase(bytes, offset + p, prefix, prefixLen)) {
+        return p;
+      }
+      verificationWork += prefixLen;
+      if (verificationWork >= workLimit) {
         return VectorScanProvider.UNSUPPORTED;
       }
     }
-    if (prefixLen > 1) {
-      return VectorScanProvider.UNSUPPORTED;
-    }
-    char first = prefix.charAt(0);
-    byte low = (byte) Ascii.toLowerCase(first);
-    byte high = (byte) Ascii.toUpperCase(first);
-    if (low == high) {
-      int[] range = new int[] {low, low};
-      return indexOfAsciiClass(bytes, offset, length, range, start);
-    }
-    int[] ranges = new int[] {high, high, low, low};
-    return indexOfAsciiClass(bytes, offset, length, ranges, start);
+    return -1;
   }
 
   private ByteVectorScan() {}
