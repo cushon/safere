@@ -35,6 +35,11 @@ final class Ascii {
     return a == b || ((a ^ b) == 0x20 && isAlpha(a));
   }
 
+  /** Returns whether two code points or bytes are equal ignoring ASCII case. */
+  static boolean equalsIgnoreCase(int a, int b) {
+    return a == b || ((a ^ b) == 0x20 && isAlpha(a));
+  }
+
   /** Returns true if the code point is an ASCII uppercase letter. */
   static boolean isUpper(int r) {
     return r >= 'A' && r <= 'Z';
@@ -131,9 +136,7 @@ final class Ascii {
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
-      char c = text.charAt(offset + i);
-      char p = prefix.charAt(i);
-      if (c != p && ((c ^ p) != 0x20 || !isAlpha(c))) {
+      if (!equalsIgnoreCase(text.charAt(offset + i), prefix.charAt(i))) {
         return false;
       }
     }
@@ -143,9 +146,7 @@ final class Ascii {
   /** Returns whether a byte array matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(byte[] bytes, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
-      int c = bytes[offset + i] & 0xFF;
-      char p = prefix.charAt(i);
-      if (c != p && ((c ^ p) != 0x20 || !isAlpha(c))) {
+      if (!equalsIgnoreCase(bytes[offset + i] & 0xFF, prefix.charAt(i))) {
         return false;
       }
     }
