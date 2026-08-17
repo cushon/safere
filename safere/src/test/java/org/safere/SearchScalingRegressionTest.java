@@ -58,6 +58,33 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void caseInsensitiveDensePrefixFailureIsLinearForStringInput() {
+    Pattern pattern =
+        Pattern.compile("(?i)aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab");
+    String input = "a".repeat(10_000);
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+    assertThat(work)
+        .as("Dense false candidate prefix verification on String must remain linearly bounded")
+        .isLessThan(input.length() * 3L);
+  }
+
+  @Test
+  void caseInsensitiveDensePrefixFailureIsLinearForUtf8Input() {
+    Pattern pattern =
+        Pattern.compile("(?i)aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab");
+    String input = "a".repeat(10_000);
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(pattern.matcher(Utf8Input.trusted(input.getBytes(UTF_8))).find())
+                    .isFalse());
+    assertThat(work)
+        .as("Dense false candidate prefix verification on UTF-8 must remain linearly bounded")
+        .isLessThan(input.length() * 3L);
+  }
+
+  @Test
   void disjointRequiredLiteralOptimizationDoesNotAddRedundantUtf8Scans() {
     String regex = "(?:banana\\d|apple\\d)";
     Pattern defaultPattern = Pattern.compile(regex);
