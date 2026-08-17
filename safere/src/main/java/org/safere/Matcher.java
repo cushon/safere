@@ -95,15 +95,10 @@ public final class Matcher implements MatchResult {
 
   /**
    * Returns the OnePass text limit for standard Matcher operations based on whether the pattern
-   * declares capturing groups or inner captures have been observed.
+   * declares capturing groups.
    */
   int onePassTextLimit() {
-    return onePassTextLimit(requiresInnerCaptures());
-  }
-
-  /** Returns true if this matcher should assume inner captures may be accessed. */
-  boolean requiresInnerCaptures() {
-    return parentPattern.numGroups() > 0 || eagerFallbackCaptures;
+    return onePassTextLimit(parentPattern.numGroups() > 0);
   }
 
   /**
