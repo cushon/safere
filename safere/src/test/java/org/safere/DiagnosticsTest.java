@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -103,6 +104,22 @@ class DiagnosticsTest {
               assertThat(event.captureStrategy()).isEqualTo(MatchStrategy.ONE_PASS);
               assertThat(event.captureMode()).isEqualTo(CaptureMode.EAGER);
             });
+  }
+
+  @Test
+  void capturedLiteralRetainsEnginesNeededWhenLiteralRunnerIsIneligible() {
+    Pattern.setDiagnostics(diagnostics);
+
+    Pattern lookingAtPattern = Pattern.compile("(foo)");
+    assertThat(lookingAtPattern.matcher("foobar").lookingAt()).isTrue();
+    assertThat(operationsFor(lookingAtPattern).getLast().boundaryStrategy())
+        .isEqualTo(MatchStrategy.ONE_PASS);
+
+    Pattern foldedUtf8Pattern = Pattern.compile("(?i)foo");
+    assertThat(foldedUtf8Pattern.matcher(Utf8Input.validated("FOObar".getBytes(UTF_8))).lookingAt())
+        .isTrue();
+    assertThat(operationsFor(foldedUtf8Pattern).getLast().boundaryStrategy())
+        .isEqualTo(MatchStrategy.ONE_PASS);
   }
 
   @Test

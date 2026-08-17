@@ -60,28 +60,10 @@ public final class Pattern implements Serializable {
       MethodType.methodType(SafeReMatchDiagnostics.class);
   private static final MutableCallSite DIAGNOSTICS_SITE = new MutableCallSite(DIAGNOSTICS_TYPE);
   private static final MethodHandle DIAGNOSTICS_INVOKER = DIAGNOSTICS_SITE.dynamicInvoker();
-  private static final MethodType UTF8_FIND_TYPE =
-      MethodType.methodType(boolean.class, Pattern.class, Utf8InputScanner.class);
-  private static final MutableCallSite UTF8_FIND_SITE = new MutableCallSite(UTF8_FIND_TYPE);
-  private static final MethodHandle UTF8_FIND_INVOKER = UTF8_FIND_SITE.dynamicInvoker();
-  private static final MethodHandle UTF8_FIND_DISABLED = findUtf8Handle("findWithoutDiagnostics");
-  private static final MethodHandle UTF8_FIND_ENABLED = findUtf8Handle("findWithDiagnostics");
   private static final int MAX_DISJOINT_REQUIRED_LITERALS = 4;
 
   static {
     setDiagnosticsTarget(SafeReMatchDiagnostics.NONE);
-  }
-
-  private static MethodHandle findUtf8Handle(String methodName) {
-    try {
-      return MethodHandles.lookup()
-          .findVirtual(
-              Pattern.class,
-              methodName,
-              MethodType.methodType(boolean.class, Utf8InputScanner.class));
-    } catch (NoSuchMethodException | IllegalAccessException impossible) {
-      throw new ExceptionInInitializerError(impossible);
-    }
   }
 
   /**
@@ -343,9 +325,11 @@ public final class Pattern implements Serializable {
     this.regionPreparedMatchRunner = createPreparedRunner(true);
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
-    onePassAnalysis();
+    if (shouldEagerlyBuildOnePass()) {
+      onePassAnalysis();
+    }
     forwardDfaSetup();
-    if (!prog.anchorStart()) {
+    if (canUseReverseDfa()) {
       flatReverseDfaProg();
     }
 
@@ -391,7 +375,7 @@ public final class Pattern implements Serializable {
    */
   public static void setDiagnostics(SafeReMatchDiagnostics listener) {
     setDiagnosticsTarget(Objects.requireNonNull(listener, "listener"));
-    MutableCallSite.syncAll(new MutableCallSite[] {DIAGNOSTICS_SITE, UTF8_FIND_SITE});
+    MutableCallSite.syncAll(new MutableCallSite[] {DIAGNOSTICS_SITE});
   }
 
   /**
@@ -409,8 +393,6 @@ public final class Pattern implements Serializable {
 
   private static void setDiagnosticsTarget(SafeReMatchDiagnostics listener) {
     DIAGNOSTICS_SITE.setTarget(MethodHandles.constant(SafeReMatchDiagnostics.class, listener));
-    UTF8_FIND_SITE.setTarget(
-        SafeReMatchDiagnostics.isEnabled(listener) ? UTF8_FIND_ENABLED : UTF8_FIND_DISABLED);
   }
 
   /**
@@ -611,13 +593,11 @@ public final class Pattern implements Serializable {
   public boolean find(Utf8Input input) {
     ArrayUtf8Input arrayInput = (ArrayUtf8Input) Objects.requireNonNull(input, "input");
     Utf8InputScanner scanner = arrayInput.scanner();
-    try {
-      return (boolean) UTF8_FIND_INVOKER.invokeExact(this, scanner);
-    } catch (RuntimeException | Error e) {
-      throw e;
-    } catch (Throwable impossible) {
-      throw new AssertionError(impossible);
+    SafeReMatchDiagnostics listener = diagnostics();
+    if (SafeReMatchDiagnostics.isEnabled(listener)) {
+      return findWithDiagnostics(scanner);
     }
+    return findWithoutDiagnostics(scanner);
   }
 
   boolean findWithDiagnostics(Utf8InputScanner scanner) {
@@ -1269,6 +1249,18 @@ public final class Pattern implements Serializable {
   /** Returns whether this pattern contains any lazy quantifiers. */
   boolean hasLazyQuantifiers() {
     return hasLazy;
+  }
+
+  /**
+   * Returns true if this pattern can participate in reverse DFA matching (e.g. unanchored find or
+   * end-anchored reverse-first rejection).
+   */
+  boolean canUseReverseDfa() {
+    return !prog.anchorStart() && !matchDescriptor.hasFindFastPath();
+  }
+
+  private boolean shouldEagerlyBuildOnePass() {
+    return !hasLazy && !matchDescriptor.hasFindFastPath();
   }
 
   /**

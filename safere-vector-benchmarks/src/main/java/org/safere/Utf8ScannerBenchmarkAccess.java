@@ -22,7 +22,7 @@ public final class Utf8ScannerBenchmarkAccess {
 
   /** Returns the first byte position in the configured code-point ranges. */
   public int indexOfCodePointClass(int start) {
-    return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, start);
+    return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, start, scanner.length());
   }
 
   private static long asciiBitmap(int[] ranges, int first, int last) {

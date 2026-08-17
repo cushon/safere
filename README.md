@@ -604,6 +604,24 @@ development iteration or focused investigation; use
 ./run-java-memory-benchmarks.sh --declared
 ```
 
+For a controlled before/after comparison of two commits that share the same workload and benchmark
+harness definitions, use:
+
+```bash
+./safere-benchmarks/scripts/compare-branch.sh \
+  --baseline origin/main \
+  --current HEAD \
+  'RegexBenchmark\.emailFind@safere-string'
+```
+
+The command resolves both refs before switching revisions, rebuilds each revision, and prints a
+normalized comparison table. Each invocation must select exactly one SafeRE execution variant;
+run String and UTF-8 comparisons separately. Use `--vector` when both revisions should enable the
+experimental Vector provider, and use `--long` to confirm close, surprising, or important results.
+The command deliberately refuses comparisons when workload data, runner settings, harness code, or
+relevant build definitions differ. In those cases, construct a controlled baseline that uses the
+same benchmark definitions, or use the full collection workflow when preparing a published report.
+
 Use `BenchmarkCollectionPlan trials` to discover trial IDs by mode, timing
 unit, workload prefix, or execution variant. Benchmark regexes select generic
 JMH entry points, and arguments after `--` can select a specific trial or pass

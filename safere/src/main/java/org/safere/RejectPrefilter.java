@@ -168,7 +168,8 @@ sealed interface RejectPrefilter
       if (!options.charClassMatchFastPaths()) {
         return false;
       }
-      return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom) < 0;
+      return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
+          < 0;
     }
 
     @Override
@@ -176,7 +177,8 @@ sealed interface RejectPrefilter
       if (!options.charClassMatchFastPaths()) {
         return false;
       }
-      return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom) < 0;
+      return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
+          < 0;
     }
 
     @Override
