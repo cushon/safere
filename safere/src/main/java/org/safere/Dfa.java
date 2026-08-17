@@ -9,8 +9,6 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeSet;
 
 /**
  * Lazy DFA execution engine. Builds DFA states on demand from the compiled NFA program using the
@@ -352,7 +350,7 @@ final class Dfa {
    * current character is a word character.
    */
   private static int[] buildBoundaries(Prog prog) {
-    TreeSet<Integer> bounds = new TreeSet<>();
+    IntArrayList bounds = new IntArrayList();
     bounds.add(0);
     bounds.add(Utils.MAX_RUNE + 1);
     boolean hasWordBoundary = false;
@@ -408,11 +406,11 @@ final class Dfa {
       bounds.add(0x61); // 'a'
       bounds.add(0x7B); // 'z' + 1
     }
-    return bounds.stream().mapToInt(Integer::intValue).toArray();
+    return bounds.toSortedUniqueArray();
   }
 
   /** Adds boundaries for a [lo, hi] code point range. */
-  private static void addRangeBoundaries(NavigableSet<Integer> bounds, int lo, int hi) {
+  private static void addRangeBoundaries(IntArrayList bounds, int lo, int hi) {
     bounds.add(lo);
     if (hi < Utils.MAX_RUNE) {
       bounds.add(hi + 1);
@@ -425,7 +423,7 @@ final class Dfa {
    * have their own equivalence classes so the DFA doesn't conflate them with non-matching
    * characters in the same class.
    */
-  private static void addCaseFoldBoundaries(NavigableSet<Integer> bounds, int lo, int hi) {
+  private static void addCaseFoldBoundaries(IntArrayList bounds, int lo, int hi) {
     for (int cp = lo; cp <= hi; cp++) {
       int folded = Inst.simpleFold(cp);
       while (folded != cp) {
@@ -730,6 +728,7 @@ final class Dfa {
 
     int escapeCount = 0;
     int[] escapes = new int[4];
+    AsciiBitmap.Builder escapeBitmap = null;
     int[] seeds = new int[insts.length];
 
     for (int ch = 0; ch < 128; ch++) {
@@ -740,25 +739,19 @@ final class Dfa {
           seeds[seedCount++] = ip.out;
         }
       }
-      if (seedCount == 0) {
+      if (seedCount == 0 || !Arrays.equals(expand(seeds, seedCount, 0), insts)) {
         if (escapeCount < 4) {
           escapes[escapeCount] = ch;
+        } else if (escapeBitmap == null) {
+          escapeBitmap = new AsciiBitmap.Builder();
+          for (int i = 0; i < 4; i++) {
+            escapeBitmap.add(escapes[i]);
+          }
+        }
+        if (escapeBitmap != null) {
+          escapeBitmap.add(ch);
         }
         escapeCount++;
-        if (escapeCount == 4) {
-          return null;
-        }
-        continue;
-      }
-      int[] frontier = expand(seeds, seedCount, 0);
-      if (!Arrays.equals(frontier, insts)) {
-        if (escapeCount < 4) {
-          escapes[escapeCount] = ch;
-        }
-        escapeCount++;
-        if (escapeCount == 4) {
-          return null;
-        }
       }
     }
 
@@ -791,6 +784,13 @@ final class Dfa {
         return new StateAccelerator.AsciiTripleEscape(escapes[0], escapes[1], escapes[2]);
       }
     }
+    if (escapeBitmap != null && escapeCount < 128) {
+      AsciiBitmap bitmap = escapeBitmap.build();
+      int[] ranges = bitmap.toRanges();
+      if (ranges.length <= 8) {
+        return new StateAccelerator.CharClassEscape(ranges, bitmap.bitmap0(), bitmap.bitmap1());
+      }
+    }
     return null;
   }
 
@@ -805,34 +805,12 @@ final class Dfa {
   }
 
   private AcceleratorPolicy startAccelerationPolicy(InputScanner text) {
-    if (text instanceof Utf8InputScanner) {
-      return utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
-    }
-    if (text instanceof StringInputScanner) {
-      return stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
-    }
-    return null;
-  }
-
-  /**
-   * Fast-forwards to the next escape character in a self-loop state.
-   *
-   * <p>Direct sealed-type pattern matching avoids {@code invokeinterface} dispatch overhead on hot
-   * matching loops (see PR #693 and PR #695 review). HotSpot C2 does not automatically devirtualize
-   * megamorphic interface calls with &ge; 3 implementations across the JVM lifecycle; unwrapping
-   * the sealed record subtypes at this call site allows C2 to inline the underlying {@link
-   * InputScanner} search primitives directly into the caller.
-   */
-  private static int findSelfLoopEscape(
-      StateAccelerator accelerator, InputScanner text, int fromIndex, int limit) {
-    if (accelerator instanceof StateAccelerator.SingleAsciiEscape single) {
-      return text.indexOfAscii(single.escape(), fromIndex, limit);
-    } else if (accelerator instanceof StateAccelerator.AsciiPairEscape pair) {
-      return text.indexOfAsciiPair(pair.c1(), pair.c2(), fromIndex, limit);
-    } else if (accelerator instanceof StateAccelerator.AsciiTripleEscape triple) {
-      return text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
-    }
-    return accelerator.findEscape(text, fromIndex, limit);
+    return switch (text) {
+      case Utf8InputScanner unusedUtf8 ->
+          utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
+      case StringInputScanner unusedString ->
+          stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
+    };
   }
 
   private static boolean instMatches(Inst ip, int ch) {
@@ -1339,20 +1317,25 @@ final class Dfa {
    * state.
    */
   private int fastForward(InputScanner text, int pos, int posDepThreshold) {
-    if (text instanceof Utf8InputScanner utf8Scanner) {
-      if (utf8StartAccelerator != null) {
-        int idx = utf8StartAccelerator.findCandidate(utf8Scanner, pos);
-        if (idx >= 0) {
-          return Math.min(idx, posDepThreshold - 1);
+    return switch (text) {
+      case Utf8InputScanner utf8Scanner -> {
+        if (utf8StartAccelerator != null) {
+          int idx = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, utf8Scanner, pos);
+          if (idx >= 0) {
+            yield Math.min(idx, posDepThreshold - 1);
+          }
+          yield -1;
         }
-        return -1;
+        yield pos;
       }
-    } else if (text instanceof StringInputScanner stringScanner) {
-      if (stringStartAccelerator != null) {
-        return stringStartAccelerator.findCandidate(stringScanner.text(), pos, prog.unixLines());
+      case StringInputScanner stringScanner -> {
+        if (stringStartAccelerator != null) {
+          yield StringStartAccelerator.findNextCandidate(
+              stringStartAccelerator, stringScanner.text(), pos, prog.unixLines());
+        }
+        yield pos;
       }
-    }
-    return pos;
+    };
   }
 
   /**
@@ -1469,7 +1452,7 @@ final class Dfa {
       int sId = s.id * numClasses;
       while (pos < limit) {
         if (s.accelerator != null && !s.isStartState && (limit - pos >= 16)) {
-          int nextPos = findSelfLoopEscape(s.accelerator, text, pos, limit);
+          int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, limit);
           if (nextPos == -1) {
             pos = limit;
             break;
@@ -1588,7 +1571,7 @@ final class Dfa {
         }
       }
       if (s.accelerator != null && !s.isStartState && (textLen - pos >= 16)) {
-        int nextPos = findSelfLoopEscape(s.accelerator, text, pos, textLen);
+        int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, textLen);
         if (nextPos == -1) {
           pos = textLen;
         } else if (nextPos > pos) {

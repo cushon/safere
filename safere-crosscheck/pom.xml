@@ -115,6 +115,7 @@
                         <exclude name="GraphemeLinearTimeTest.java"/>
                         <exclude name="InstOpTest.java"/>
                         <exclude name="InstTest.java"/>
+                        <exclude name="IntArrayListTest.java"/>
                         <exclude name="InputScannerTest.java"/>
                         <exclude name="MatcherDeferredCaptureStateTest.java"/>
                         <exclude name="MatcherTransitionInventoryTest.java"/>

@@ -247,7 +247,15 @@ git diff <post-merge-pre-fix-head>..HEAD > <artifact-dir>/review-fixes.patch
 7. For optimization PRs only, reproduce benchmarks:
    - Baseline is current `origin/main`.
    - Experiment is the PR branch after merging current `origin/main`, plus any local review fixes.
-   - Use only `./run-java-benchmarks.sh`.
+   - For targeted SafeRE nanosecond workloads whose benchmark definitions are identical at both
+     revisions, prefer `safere-benchmarks/scripts/compare-branch.sh` with explicit immutable refs.
+     Run String and UTF-8 variants separately, add `--vector` only when the experimental provider is
+     part of the claim, and use `--long` for close, surprising, or important confirmation results.
+     The comparison script invokes `./run-java-benchmarks.sh`; otherwise use that wrapper directly.
+   - If the comparison script rejects changed workload data, harness code, runner settings, or build
+     definitions, do not bypass its comparability check. Build a controlled baseline with current
+     main production code plus the PR's benchmark-only declarations, record its exact commit, and
+     run paired wrapper commands in isolated clean worktrees.
    - Never run benchmarks in parallel.
    - Prefer benchmark filters claimed in the PR description or comments. If unclear, choose the
      smallest relevant benchmark set and state the inference.
@@ -284,9 +292,35 @@ git diff <post-merge-pre-fix-head>..HEAD > <artifact-dir>/review-fixes.patch
      author. When local fixes resolve the findings, assume the human will push those fixes to the PR
      branch before posting the review but that the author has not been told separately. Briefly
      state what was noticed, say "I've pushed a commit that fixes it" (or equivalent), summarize
-     verification, and end with "LGTM" when the fixed result satisfies the merge criteria. Do not
-     ask the author to apply a local scout commit or refer to a machine-local branch/path in the
-     copy/paste text. Keep unresolved concerns explicit and do not say "LGTM" when they remain.
+     only evidence material to the author's understanding or decision, and end with "LGTM" when
+     the fixed result satisfies the merge criteria. Do not ask the author to apply a local scout
+     commit or refer to a machine-local branch/path in the copy/paste text. Keep unresolved concerns
+     explicit and do not say "LGTM" when they remain.
+   - Keep all local validation bookkeeping in the report, not the copy/paste review. Required CI is
+     the merge gate, so never tell the author that local tests passed, give test counts, list local
+     test or shell commands, or mention review-fix-loop/Codex/agent passes or an "automated review."
+     It is useful to say that a pushed fix adds regression coverage, to report benchmark evidence,
+     or to explain an underlying problem discovered by a local check; do not report the status of
+     the local check itself.
+   - Use precise, concrete language in author-facing text. Standard technical terminology is useful
+     and encouraged when it accurately names the concept, such as SIMD, KMP, integer overflow,
+     register pressure, or linear time. Do not replace precise terms with vague labels that merely
+     sound technical. For example, do not call unrelated worst-case complexity and integer-overflow
+     bugs "boundary problems"; name each problem directly. Prefer "add tests covering these cases"
+     to "add systematic coverage," and describe the measurements wanted instead of asking for a
+     "threshold sweep." Avoid scout vocabulary, abstract process labels, invented umbrella terms,
+     and compressed wording that the author would need to decode. Define genuinely unfamiliar or
+     project-specific terms on first use. Before finalizing, rewrite any phrase that does not convey
+     a recognized technical concept or whose practical meaning is unclear.
+   - Keep review feedback respectful and collaborative. Describe the observed code behavior and its
+     impact without assigning blame. Ask genuine questions when the author may have context or when
+     more than one fix is reasonable; prefer phrasing such as "Could we...?", "It looks like...",
+     and "What do you think?" over commands or prosecutorial conclusions. Do not manufacture doubt
+     about a verified bug: state the fact calmly, explain why it matters, and invite the author to
+     choose or discuss the remedy. Reread line comments specifically for accusatory tone.
+   - For every suggested line comment, include the file path, current PR-head line number, and exact
+     source line the comment should attach to. Verify the quoted line and number against the PR head
+     before finalizing the report so the human can place the comment without guessing.
    - Base the prose on the public PR discussion, not scout chronology. Avoid phrases such as
      "yesterday's run", "the previous scout", "still", "remains", "new commits", "retained fix",
      or "refreshed against main" unless the public discussion makes that history meaningful to the
@@ -429,9 +463,13 @@ Human review focus:
 
 ```markdown
 <first-person review addressed to the author; for resolved scout fixes, explain the problem, say
-the reviewer pushed a fixing commit, summarize verification, and conclude LGTM. Make the text
-self-contained from the public discussion; never rely on the author knowing about earlier scout
-runs or unposted local work.>
+the reviewer pushed a fixing commit, include only author-relevant evidence, and conclude LGTM. Keep
+all local validation status, commands, test counts, shell checks, and internal automated-review
+status in the report rather than this comment. Use plain, concrete language and state requests in
+terms of the code, behavior, tests, or measurements wanted. Keep the tone respectful and
+collaborative: explain impact without blame and use genuine questions where design judgment is
+involved. Make the text self-contained from the public discussion; never rely on the author knowing
+about earlier scout runs or unposted local work.>
 ```
 ````
 
@@ -504,8 +542,10 @@ the post-merge/pre-fix HEAD to final HEAD so the patch contains only scout fixes
 changes.
 
 For optimization PRs, reproduce benchmark claims using current origin/main as baseline and the PR
-branch plus local review fixes as experiment. Use ./run-java-benchmarks.sh only. Never run tests or
-benchmarks concurrently. If benchmark results do not roughly reproduce the PR claim, check whether
+branch plus local review fixes as experiment. Prefer
+safere-benchmarks/scripts/compare-branch.sh for comparable targeted SafeRE nanosecond workloads;
+otherwise use ./run-java-benchmarks.sh directly. Never run tests or benchmarks concurrently. If
+benchmark results do not roughly reproduce the PR claim, check whether
 local correctness fixes caused the difference by running serial ablation benchmarks where
 applicable; if not, include a concrete hypothesis for the discrepancy such as baseline drift, PR
 revision drift, workload changes, stale PR numbers, command differences, or measurement variance.
