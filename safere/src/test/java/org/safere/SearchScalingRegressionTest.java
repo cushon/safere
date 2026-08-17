@@ -99,6 +99,36 @@ class SearchScalingRegressionTest {
         .isLessThan(input.length() * 5L);
   }
 
+  @Test
+  void fixedOffsetLiteralSelectsRareTokenToAvoidCandidateVerificationWork() {
+    // "____" has length 4 with common underscores.
+    // "zq" has length 2 with rare letters 'z' and 'q'.
+    Pattern pattern = Pattern.compile("[0-9]{2}____[a-z]zq[a-z]");
+    String input = "user_name_field_data____common_suffix\n".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    assertThat(work)
+        .as("RarityOracle selection must avoid false candidate verification work on common tokens")
+        .isLessThanOrEqualTo(input.length() + 100);
+  }
+
+  @Test
+  void requiredLiteralSelectsRareTokenToRejectNoiseWithMinimalWork() {
+    // "____________" has length 12 with common underscores.
+    // "404_ERR" has length 7 with high-rarity digits and uppercase letters.
+    Pattern pattern = Pattern.compile(".*(____________).*?(404_ERR).*");
+    String input = "log_entry_line_with____________separators_and_delimiters\n".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    assertThat(work)
+        .as("Required literal prefilter must reject on the selective token with minimal work")
+        .isLessThanOrEqualTo(input.length() + 100);
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);
