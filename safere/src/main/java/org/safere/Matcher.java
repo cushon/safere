@@ -73,7 +73,11 @@ public final class Matcher implements MatchResult {
    *       &gt;= 16 KB.
    * </ul>
    */
-  private static int onePassTextLimit(boolean requiresInnerCaptures) {
+  int onePassTextLimit() {
+    return onePassTextLimit(eagerFallbackCaptures);
+  }
+
+  static int onePassTextLimit(boolean requiresInnerCaptures) {
     return requiresInnerCaptures ? 65536 : 256;
   }
 
@@ -429,7 +433,6 @@ public final class Matcher implements MatchResult {
     resetSearchStateForInputStart();
     resetReplacementState();
     clearCurrentResult();
-    eagerFallbackCaptures = false;
   }
 
   private void resetStateForRegion(int start, int end) {
@@ -3957,7 +3960,34 @@ public final class Matcher implements MatchResult {
         if (c == '\\') {
           i += 2;
         } else if (c == '$') {
-          return true;
+          i++;
+          if (i >= len) {
+            continue;
+          }
+          char next = replacement.charAt(i);
+          if (next == '{') {
+            int close = replacement.indexOf('}', i + 1);
+            if (close > i + 1) {
+              String name = replacement.substring(i + 1, close);
+              if (!name.equals("0")) {
+                return true;
+              }
+              i = close + 1;
+            } else {
+              return true;
+            }
+          } else if (next >= '0' && next <= '9') {
+            int num = 0;
+            while (i < len && replacement.charAt(i) >= '0' && replacement.charAt(i) <= '9') {
+              num = num * 10 + (replacement.charAt(i) - '0');
+              i++;
+            }
+            if (num > 0) {
+              return true;
+            }
+          } else {
+            i++;
+          }
         } else {
           i++;
         }
@@ -4429,7 +4459,7 @@ public final class Matcher implements MatchResult {
     @Override
     public boolean find(Matcher matcher, boolean regionActive) {
       if (!matcher.parentPattern.canOnePassFind()
-          || matcher.activeScanner().length() > ONEPASS_ANCHORED_TEXT_LIMIT) {
+          || matcher.activeScanner().length() > matcher.onePassTextLimit()) {
         return matcher.doFindCore(regionActive);
       }
       matcher.diagnosticBoundary(MatchStrategy.ONE_PASS);
@@ -4452,7 +4482,7 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean matches(Matcher matcher) {
-      if (matcher.activeScanner().length() > ONEPASS_ANCHORED_TEXT_LIMIT) {
+      if (matcher.activeScanner().length() > matcher.onePassTextLimit()) {
         return matcher.matchesCore();
       }
       matcher.capturesResolved = true;
@@ -4475,7 +4505,7 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean lookingAt(Matcher matcher) {
-      if (matcher.activeScanner().length() > ONEPASS_ANCHORED_TEXT_LIMIT) {
+      if (matcher.activeScanner().length() > matcher.onePassTextLimit()) {
         return matcher.lookingAtCore();
       }
       matcher.capturesResolved = true;
