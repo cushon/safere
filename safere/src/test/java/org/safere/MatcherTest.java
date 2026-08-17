@@ -8,6 +8,7 @@
 package org.safere;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
@@ -3232,5 +3233,204 @@ class MatcherTest {
 
   private static void assertCompletesWithinPerformanceTimeout(Runnable task) {
     assertTimeoutPreemptively(PERFORMANCE_SCENARIO_TIMEOUT, task::run);
+  }
+
+  @Nested
+  @DisplayName("Tier 1 Trivial match specializations")
+  class TrivialMatchSpecializationTests {
+
+    @Test
+    @DisplayName("exact literal matches and lookingAt on String")
+    void literalStringMatches() {
+      Pattern p = Pattern.compile("hello");
+      Matcher m = p.matcher("hello");
+
+      assertThat(m.matches()).isTrue();
+      assertThat(m.group(0)).isEqualTo("hello");
+      assertThat(m.start(0)).isEqualTo(0);
+      assertThat(m.end(0)).isEqualTo(5);
+
+      assertThat(m.reset("hell").matches()).isFalse();
+      assertThat(m.reset("hello world").matches()).isFalse();
+      assertThat(m.reset("hello world").lookingAt()).isTrue();
+      assertThat(m.group(0)).isEqualTo("hello");
+      assertThat(m.start(0)).isEqualTo(0);
+      assertThat(m.end(0)).isEqualTo(5);
+
+      assertThat(m.reset("").matches()).isFalse();
+      assertThat(m.reset("").lookingAt()).isFalse();
+    }
+
+    @Test
+    @DisplayName("exact literal matches and lookingAt on Utf8Input")
+    void literalUtf8Matches() {
+      Pattern p = Pattern.compile("hello");
+      Utf8Input exact = Utf8Input.validated("hello".getBytes(UTF_8));
+      Utf8Input prefix = Utf8Input.validated("hello world".getBytes(UTF_8));
+      Utf8Input mismatch = Utf8Input.validated("world".getBytes(UTF_8));
+
+      Utf8Matcher mExact = p.matcher(exact);
+      assertThat(mExact.matches()).isTrue();
+      assertThat(mExact.start()).isEqualTo(0);
+      assertThat(mExact.end()).isEqualTo(5);
+
+      Utf8Matcher mPrefix = p.matcher(prefix);
+      assertThat(mPrefix.matches()).isFalse();
+      assertThat(mPrefix.lookingAt()).isTrue();
+      assertThat(mPrefix.start()).isEqualTo(0);
+      assertThat(mPrefix.end()).isEqualTo(5);
+
+      Utf8Matcher mMismatch = p.matcher(mismatch);
+      assertThat(mMismatch.matches()).isFalse();
+      assertThat(mMismatch.lookingAt()).isFalse();
+    }
+
+    @Test
+    @DisplayName("empty literal matches empty input")
+    void emptyLiteralMatches() {
+      Pattern p = Pattern.compile("");
+      Matcher m = p.matcher("");
+
+      assertThat(m.matches()).isTrue();
+      assertThat(m.group(0)).isEmpty();
+      assertThat(m.start(0)).isEqualTo(0);
+      assertThat(m.end(0)).isEqualTo(0);
+
+      assertThat(m.reset("a").matches()).isFalse();
+      assertThat(m.reset("a").lookingAt()).isTrue();
+    }
+
+    @Test
+    @DisplayName("single character class matches BMP characters")
+    void singleCharClassBmp() {
+      Pattern p = Pattern.compile("[a-z]");
+      Matcher m = p.matcher("a");
+
+      assertThat(m.matches()).isTrue();
+      assertThat(m.group(0)).isEqualTo("a");
+      assertThat(m.start(0)).isEqualTo(0);
+      assertThat(m.end(0)).isEqualTo(1);
+
+      assertThat(m.reset("z").matches()).isTrue();
+      assertThat(m.reset("A").matches()).isFalse();
+      assertThat(m.reset("").matches()).isFalse();
+      assertThat(m.reset("ab").matches()).isFalse();
+      assertThat(m.reset("ab").lookingAt()).isTrue();
+      assertThat(m.group(0)).isEqualTo("a");
+    }
+
+    @Test
+    @DisplayName("single character class matches supplementary surrogate pairs")
+    void singleCharClassSupplementary() {
+      Pattern p = Pattern.compile("[\\uD83D\\uDE00-\\uD83D\\uDE4F]");
+      String emoji = "\uD83D\uDE00";
+      Matcher m = p.matcher(emoji);
+
+      assertThat(m.matches()).isTrue();
+      assertThat(m.group(0)).isEqualTo(emoji);
+      assertThat(m.start(0)).isEqualTo(0);
+      assertThat(m.end(0)).isEqualTo(2);
+
+      assertThat(m.reset(emoji + " abc").matches()).isFalse();
+      assertThat(m.reset(emoji + " abc").lookingAt()).isTrue();
+      assertThat(m.group(0)).isEqualTo(emoji);
+
+      assertThat(m.reset("a").matches()).isFalse();
+      assertThat(m.reset("").matches()).isFalse();
+    }
+
+    @Test
+    @DisplayName("single character class on Utf8Input")
+    void singleCharClassUtf8() {
+      Pattern p = Pattern.compile("\\d");
+      Utf8Input digit = Utf8Input.validated("7".getBytes(UTF_8));
+      Utf8Input letter = Utf8Input.validated("x".getBytes(UTF_8));
+      Utf8Input multi = Utf8Input.validated("78".getBytes(UTF_8));
+
+      assertThat(p.matcher(digit).matches()).isTrue();
+      assertThat(p.matcher(letter).matches()).isFalse();
+      assertThat(p.matcher(multi).matches()).isFalse();
+      assertThat(p.matcher(multi).lookingAt()).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "a", "12", "abc"})
+    @DisplayName("rejects strings strictly shorter than minimum match length")
+    void rejectsShortStrings(String input) {
+      Pattern p = Pattern.compile("[0-9]{4,8}");
+      Matcher m = p.matcher(input);
+
+      assertThat(m.matches()).isFalse();
+      assertThat(m.lookingAt()).isFalse();
+      assertThat(m.find()).isFalse();
+      assertThatThrownBy(() -> m.group(0)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("accepts valid-length strings and matches correctly")
+    void acceptsValidLength() {
+      Pattern p = Pattern.compile("[0-9]{4,8}");
+      Matcher m = p.matcher("1234");
+
+      assertThat(m.matches()).isTrue();
+      assertThat(m.group(0)).isEqualTo("1234");
+      assertThat(m.start(0)).isEqualTo(0);
+      assertThat(m.end(0)).isEqualTo(4);
+
+      assertThat(m.reset("12345678").matches()).isTrue();
+      assertThat(m.reset("123456789").matches()).isFalse();
+      assertThat(m.reset("123456789").lookingAt()).isTrue();
+      assertThat(m.group(0)).isEqualTo("12345678");
+    }
+
+    @Test
+    @DisplayName("alternation minimum length lower bound is accurate")
+    void alternationMinLength() {
+      Pattern p = Pattern.compile("a{5}|b{10}");
+      Matcher m = p.matcher("aaaa");
+
+      assertThat(m.matches()).isFalse();
+      assertThat(m.lookingAt()).isFalse();
+      assertThat(m.find()).isFalse();
+
+      assertThat(m.reset("aaaaa").matches()).isTrue();
+      assertThat(m.reset("bbbbbbbbbb").matches()).isTrue();
+    }
+
+    @Test
+    @DisplayName("custom region boundaries work with fast paths")
+    void customRegions() {
+      Pattern p = Pattern.compile("hello");
+      Matcher m = p.matcher("---hello---");
+
+      m.region(3, 8);
+      assertThat(m.matches()).isTrue();
+      assertThat(m.start(0)).isEqualTo(3);
+      assertThat(m.end(0)).isEqualTo(8);
+      assertThat(m.group(0)).isEqualTo("hello");
+
+      m.region(0, 5);
+      assertThat(m.matches()).isFalse();
+    }
+
+    @Test
+    @DisplayName("chained matcher operations preserve state correctly")
+    void chainedOperations() {
+      Pattern p = Pattern.compile("\\d");
+      Matcher m = p.matcher("a1b2c");
+
+      assertThat(m.matches()).isFalse();
+      assertThat(m.find()).isTrue();
+      assertThat(m.group(0)).isEqualTo("1");
+      assertThat(m.start(0)).isEqualTo(1);
+
+      assertThat(m.find()).isTrue();
+      assertThat(m.group(0)).isEqualTo("2");
+      assertThat(m.start(0)).isEqualTo(3);
+
+      assertThat(m.find()).isFalse();
+
+      assertThat(m.replaceAll("X")).isEqualTo("aXbXc");
+    }
   }
 }
