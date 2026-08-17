@@ -58,27 +58,52 @@ public final class Matcher implements MatchResult {
    */
   private static final int MIN_REVERSE_FIRST_LEN = 1024;
 
+  /** Maximum text length for anchored OnePass when inner captures are not required. */
+  static final int ONEPASS_TEXT_LIMIT_NO_CAPTURES = 256;
+
+  /** Maximum text length for anchored OnePass when inner captures are required. */
+  static final int ONEPASS_TEXT_LIMIT_WITH_CAPTURES = 65536;
+
   /**
    * Returns the maximum input text length eligible for anchored OnePass execution based on whether
    * inner capture extraction is required.
    *
    * <ul>
    *   <li><b>No inner captures (&lt;= 256 bytes)</b>: For short strings, OnePass avoids the lazy
-   *       DFA initialization overhead (~50-80 ns). For larger texts without captures, Forward DFA's
-   *       direct transition table loop is ~3x faster in replacements and up to 32x faster in
-   *       matches.
+   *       DFA initialization overhead (~50-80 ns). For larger texts without captures (including
+   *       literal/group-0 replacements or boolean-only matching on patterns without groups),
+   *       Forward DFA's direct transition table loop and SIMD vector acceleration are 3x-10x+
+   *       faster.
    *   <li><b>With inner captures (&lt;= 65536 bytes)</b>: OnePass extracts capture group boundaries
    *       in a single linear pass, outperforming the multi-pass DFA + BitState/NFA submatch
    *       extraction sandwich (2x-28x speedup) and avoiding the Java NFA heap allocation cliff at
    *       &gt;= 16 KB.
    * </ul>
+   *
+   * <p><b>Tradeoff Note (pattern.matcher(input).matches() -&gt; group()):</b> In Java's stateful
+   * Matcher API, matches() is called before the engine knows whether the caller will subsequently
+   * call group(i). If a pattern contains capturing groups (prog.numCaptures() &gt; 0), defaulting to
+   * the 64 KB limit ensures one-shot matchers (e.g. pattern.matcher(input).matches() -&gt; group(1))
+   * record captures in a single pass without paying the severe (2.6x) multi-pass fallback submatch
+   * penalty on 256 B - 64 KB inputs.
    */
-  int onePassTextLimit() {
-    return onePassTextLimit(eagerFallbackCaptures);
+  static int onePassTextLimit(boolean requiresInnerCaptures) {
+    return requiresInnerCaptures
+        ? ONEPASS_TEXT_LIMIT_WITH_CAPTURES
+        : ONEPASS_TEXT_LIMIT_NO_CAPTURES;
   }
 
-  static int onePassTextLimit(boolean requiresInnerCaptures) {
-    return requiresInnerCaptures ? 65536 : 256;
+  /**
+   * Returns the OnePass text limit for standard Matcher operations based on whether the pattern
+   * declares capturing groups or inner captures have been observed.
+   */
+  int onePassTextLimit() {
+    return onePassTextLimit(requiresInnerCaptures());
+  }
+
+  /** Returns true if this matcher should assume inner captures may be accessed. */
+  boolean requiresInnerCaptures() {
+    return parentPattern.numGroups() > 0 || eagerFallbackCaptures;
   }
 
   /**
