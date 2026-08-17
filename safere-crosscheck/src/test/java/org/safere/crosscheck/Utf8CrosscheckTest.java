@@ -127,6 +127,12 @@ class Utf8CrosscheckTest {
     Pattern.compile("a").find(malformed);
   }
 
+  @Test
+  void graphemeClusterPatternDoesNotSplitUtf8MultibyteCodePointInUnanchoredFind() {
+    Utf8Matcher matcher = Pattern.compile(".\\X| /0? ?5-").matcher(input("\u1e99| 5  \u8ed6"));
+    while (matcher.find()) {}
+  }
+
   private static Utf8Input input(String text) {
     return Utf8Input.validated(text.getBytes(UTF_8));
   }
