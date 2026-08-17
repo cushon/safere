@@ -130,12 +130,17 @@ For each trusted open non-draft PR:
      post-merge/pre-fix `HEAD` to final `HEAD`.
 
 5. For optimization PRs, reproduce only new benchmark claims made since the last review/comment.
-   Use `./run-java-benchmarks.sh` only. Never run benchmarks in parallel.
+   For targeted SafeRE nanosecond workloads with identical benchmark definitions at both revisions,
+   prefer `safere-benchmarks/scripts/compare-branch.sh`; otherwise use
+   `./run-java-benchmarks.sh` directly. Never run benchmarks in parallel.
    - Baseline: current `origin/main`.
    - Experiment: PR branch after merging current `origin/main`, plus local review fixes.
+   - Pass explicit immutable refs to the comparison script, select one String or UTF-8 execution
+     variant per invocation, and use `--long` for close, surprising, or important confirmations.
    - Use `Speedup = main ns/op / PR ns/op`; values above `1.00x` mean the PR is faster.
-   - If new PR benchmark definitions are needed to benchmark current main, state exactly which
-     benchmark-only files were overlaid onto main-library code.
+   - If the comparison script rejects changed workload or harness definitions, do not bypass its
+     check. Construct a controlled baseline with current-main production code plus the PR's
+     benchmark-only declarations, and state exactly which files were overlaid.
    - If results do not roughly match the new claim, first check whether local correctness fixes
      plausibly affected the benchmarked path. If so, run serial ablation benchmarks. If not, write
      a concrete hypothesis: baseline drift, PR revision drift, workload change, stale numbers,

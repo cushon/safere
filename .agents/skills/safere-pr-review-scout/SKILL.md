@@ -247,7 +247,15 @@ git diff <post-merge-pre-fix-head>..HEAD > <artifact-dir>/review-fixes.patch
 7. For optimization PRs only, reproduce benchmarks:
    - Baseline is current `origin/main`.
    - Experiment is the PR branch after merging current `origin/main`, plus any local review fixes.
-   - Use only `./run-java-benchmarks.sh`.
+   - For targeted SafeRE nanosecond workloads whose benchmark definitions are identical at both
+     revisions, prefer `safere-benchmarks/scripts/compare-branch.sh` with explicit immutable refs.
+     Run String and UTF-8 variants separately, add `--vector` only when the experimental provider is
+     part of the claim, and use `--long` for close, surprising, or important confirmation results.
+     The comparison script invokes `./run-java-benchmarks.sh`; otherwise use that wrapper directly.
+   - If the comparison script rejects changed workload data, harness code, runner settings, or build
+     definitions, do not bypass its comparability check. Build a controlled baseline with current
+     main production code plus the PR's benchmark-only declarations, record its exact commit, and
+     run paired wrapper commands in isolated clean worktrees.
    - Never run benchmarks in parallel.
    - Prefer benchmark filters claimed in the PR description or comments. If unclear, choose the
      smallest relevant benchmark set and state the inference.
@@ -512,8 +520,10 @@ the post-merge/pre-fix HEAD to final HEAD so the patch contains only scout fixes
 changes.
 
 For optimization PRs, reproduce benchmark claims using current origin/main as baseline and the PR
-branch plus local review fixes as experiment. Use ./run-java-benchmarks.sh only. Never run tests or
-benchmarks concurrently. If benchmark results do not roughly reproduce the PR claim, check whether
+branch plus local review fixes as experiment. Prefer
+safere-benchmarks/scripts/compare-branch.sh for comparable targeted SafeRE nanosecond workloads;
+otherwise use ./run-java-benchmarks.sh directly. Never run tests or benchmarks concurrently. If
+benchmark results do not roughly reproduce the PR claim, check whether
 local correctness fixes caused the difference by running serial ablation benchmarks where
 applicable; if not, include a concrete hypothesis for the discrepancy such as baseline drift, PR
 revision drift, workload changes, stale PR numbers, command differences, or measurement variance.
