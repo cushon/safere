@@ -385,11 +385,11 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
           return result;
         }
       }
-      if (prefixLen == 1) {
-        if (anchorLow == anchorHigh) {
-          return indexOfByte(anchorLow, start);
-        }
-        return ByteSwarScan.indexOfBytePair(bytes, offset, length, anchorLow, anchorHigh, start);
+      int swarResult =
+          ByteSwarScan.indexOfIgnoreCase(
+              bytes, offset, length, prefix, prefixLen, anchorOffset, anchorLow, anchorHigh, start);
+      if (swarResult != VectorScanProvider.UNSUPPORTED) {
+        return swarResult;
       }
     }
     return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);

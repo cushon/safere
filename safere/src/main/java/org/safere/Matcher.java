@@ -2154,10 +2154,62 @@ public final class Matcher implements MatchResult {
     int pos = Math.max(0, fromIndex);
     long verificationWork = 0;
     long workLimit = WorkLimit.forRemaining(length - pos);
+    boolean hasLow = true;
+    boolean hasHigh = (low != high);
 
     while (pos <= length - prefixLen) {
-      int nextLow = text.indexOf(low, pos + anchorOffset);
-      int nextHigh = (low == high) ? -1 : text.indexOf(high, pos + anchorOffset);
+      // Short scalar search for nearby anchor (handles whitespace / short delimiters without indexOf overhead)
+      int scalarLimit = Math.min(length - prefixLen + 1, pos + 32);
+      int foundAnchor = -1;
+      for (; pos < scalarLimit; pos++) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        char c = text.charAt(pos + anchorOffset);
+        if (c == low || c == high) {
+          foundAnchor = pos;
+          break;
+        }
+      }
+      if (foundAnchor >= 0) {
+        if (Ascii.regionMatchesIgnoreCase(text, foundAnchor, prefix, prefixLen)) {
+          return foundAnchor;
+        }
+        verificationWork += prefixLen;
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return Ascii.indexOfLinearIgnoreCase(text, prefix, failure, foundAnchor + 1);
+        }
+        pos = foundAnchor + 1;
+        continue;
+      }
+
+      if (pos > length - prefixLen) {
+        return -1;
+      }
+
+      int searchFrom = pos + anchorOffset;
+      int nextLow = -1;
+      if (hasLow) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(Math.max(0, length - searchFrom));
+        }
+        nextLow = text.indexOf(low, searchFrom);
+        if (nextLow < 0) {
+          hasLow = false;
+        }
+      }
+
+      int nextHigh = -1;
+      if (hasHigh && nextLow != searchFrom) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(Math.max(0, length - searchFrom));
+        }
+        nextHigh = text.indexOf(high, searchFrom);
+        if (nextHigh < 0) {
+          hasHigh = false;
+        }
+      }
+
       int nextAnchor;
       if (nextLow < 0) {
         nextAnchor = nextHigh;

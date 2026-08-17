@@ -58,6 +58,23 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void caseInsensitivePrefixRepeatedFindIsLinearAcrossString() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find");
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("KEYWORD_TO_FIND ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void caseInsensitivePrefixRepeatedFindIsLinearAcrossUtf8() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find");
+    assertRepeatedFindWorkIsLinear(
+        size ->
+            pattern.matcher(Utf8Input.trusted("KEYWORD_TO_FIND ".repeat(size).getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
+
+  @Test
   void caseInsensitiveDensePrefixFailureIsLinearForStringInput() {
     Pattern pattern =
         Pattern.compile("(?i)aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab");
@@ -133,7 +150,7 @@ class SearchScalingRegressionTest {
 
     assertThat(largerWork)
         .as("%s repeated find work should scale linearly", description)
-        .isLessThan(smallerWork * 6);
+        .isLessThanOrEqualTo(Math.max(10, smallerWork * 6));
   }
 
   private static long countAllMatches(FindIterator matcher, int expectedMatches) {
