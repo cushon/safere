@@ -276,12 +276,50 @@ final class StringVectorScan {
     }
 
     int pos = Math.max(0, start);
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
+
+    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
+    char anchor = prefix.charAt(anchorOffset);
+    byte low = (byte) toLowerCase(anchor);
+    byte high = (byte) toUpperCase(anchor);
+
+    // Fast scalar prologue to catch immediate matches without SIMD setup
+    int scalarPrologueLimit = Math.min(length - prefixLen + 1, pos + Integer.BYTES);
+    for (; pos < scalarPrologueLimit; pos++) {
+      char c = text.charAt(pos + anchorOffset);
+      if ((c == (low & 0xFF) || c == (high & 0xFF))
+          && regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
+        return pos;
+      }
+      if (c == (low & 0xFF) || c == (high & 0xFF)) {
+        verificationWork += prefixLen;
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return VectorScanProvider.UNSUPPORTED;
+        }
+      }
+    }
+
     int vectorLen = BYTE_SPECIES.length();
     int limit = length - vectorLen;
+    if (pos > limit) {
+      int limitScalar = length - prefixLen;
+      for (int p = Math.max(start, pos - anchorOffset); p <= limitScalar; p++) {
+        char c = text.charAt(p + anchorOffset);
+        if (c != (low & 0xFF) && c != (high & 0xFF)) {
+          continue;
+        }
+        if (regionMatchesIgnoreCase(text, p, prefix, prefixLen)) {
+          return p;
+        }
+        verificationWork += prefixLen;
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return VectorScanProvider.UNSUPPORTED;
+        }
+      }
+      return -1;
+    }
 
-    char first = prefix.charAt(0);
-    byte low = (byte) toLowerCase(first);
-    byte high = (byte) toUpperCase(first);
     ByteVector lowVec = ByteVector.broadcast(BYTE_SPECIES, low);
     ByteVector highVec = ByteVector.broadcast(BYTE_SPECIES, high);
 
@@ -293,10 +331,16 @@ final class StringVectorScan {
         long activeLanes = matchMask.toLong();
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
-          int candidatePos = pos + bit;
-          if (candidatePos + prefixLen <= length
+          int candidatePos = pos + bit - anchorOffset;
+          if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)
               && regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)) {
             return candidatePos;
+          }
+          if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)) {
+            verificationWork += prefixLen;
+            if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+              return VectorScanProvider.UNSUPPORTED;
+            }
           }
           activeLanes &= activeLanes - 1;
         }
@@ -304,9 +348,17 @@ final class StringVectorScan {
     }
 
     int limitScalar = length - prefixLen;
-    for (; pos <= limitScalar; pos++) {
-      if (regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
-        return pos;
+    for (int p = Math.max(start, pos - anchorOffset); p <= limitScalar; p++) {
+      char c = text.charAt(p + anchorOffset);
+      if (c != (low & 0xFF) && c != (high & 0xFF)) {
+        continue;
+      }
+      if (regionMatchesIgnoreCase(text, p, prefix, prefixLen)) {
+        return p;
+      }
+      verificationWork += prefixLen;
+      if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+        return VectorScanProvider.UNSUPPORTED;
       }
     }
     return -1;
@@ -323,20 +375,39 @@ final class StringVectorScan {
         return VectorScanProvider.UNSUPPORTED;
       }
     }
-    if (prefixLen > 1) {
-      return VectorScanProvider.UNSUPPORTED;
-    }
     if (nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;
     }
 
     int pos = Math.max(0, start);
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
+
+    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
+    char anchor = prefix.charAt(anchorOffset);
+    short low = (short) toLowerCase(anchor);
+    short high = (short) toUpperCase(anchor);
+
     int vectorLen = SHORT_SPECIES.length();
     int limit = length - vectorLen;
+    if (pos > limit) {
+      int limitScalar = length - prefixLen;
+      for (int p = Math.max(start, pos - anchorOffset); p <= limitScalar; p++) {
+        char c = text.charAt(p + anchorOffset);
+        if (c != low && c != high) {
+          continue;
+        }
+        if (regionMatchesIgnoreCase(text, p, prefix, prefixLen)) {
+          return p;
+        }
+        verificationWork += prefixLen;
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return VectorScanProvider.UNSUPPORTED;
+        }
+      }
+      return -1;
+    }
 
-    char first = prefix.charAt(0);
-    short low = (short) toLowerCase(first);
-    short high = (short) toUpperCase(first);
     ShortVector lowVec = ShortVector.broadcast(SHORT_SPECIES, low);
     ShortVector highVec = ShortVector.broadcast(SHORT_SPECIES, high);
 
@@ -348,10 +419,16 @@ final class StringVectorScan {
         long activeLanes = matchMask.toLong();
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
-          int candidatePos = pos + bit;
-          if (candidatePos + prefixLen <= length
+          int candidatePos = pos + bit - anchorOffset;
+          if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)
               && regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)) {
             return candidatePos;
+          }
+          if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)) {
+            verificationWork += prefixLen;
+            if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+              return VectorScanProvider.UNSUPPORTED;
+            }
           }
           activeLanes &= activeLanes - 1;
         }
@@ -359,9 +436,17 @@ final class StringVectorScan {
     }
 
     int limitScalar = length - prefixLen;
-    for (; pos <= limitScalar; pos++) {
-      if (regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
-        return pos;
+    for (int p = Math.max(start, pos - anchorOffset); p <= limitScalar; p++) {
+      char c = text.charAt(p + anchorOffset);
+      if (c != low && c != high) {
+        continue;
+      }
+      if (regionMatchesIgnoreCase(text, p, prefix, prefixLen)) {
+        return p;
+      }
+      verificationWork += prefixLen;
+      if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+        return VectorScanProvider.UNSUPPORTED;
       }
     }
     return -1;
