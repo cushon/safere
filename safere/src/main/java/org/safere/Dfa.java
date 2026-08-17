@@ -9,8 +9,6 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeSet;
 
 /**
  * Lazy DFA execution engine. Builds DFA states on demand from the compiled NFA program using the
@@ -352,7 +350,7 @@ final class Dfa {
    * current character is a word character.
    */
   private static int[] buildBoundaries(Prog prog) {
-    TreeSet<Integer> bounds = new TreeSet<>();
+    IntArrayList bounds = new IntArrayList();
     bounds.add(0);
     bounds.add(Utils.MAX_RUNE + 1);
     boolean hasWordBoundary = false;
@@ -408,11 +406,11 @@ final class Dfa {
       bounds.add(0x61); // 'a'
       bounds.add(0x7B); // 'z' + 1
     }
-    return bounds.stream().mapToInt(Integer::intValue).toArray();
+    return bounds.toSortedUniqueArray();
   }
 
   /** Adds boundaries for a [lo, hi] code point range. */
-  private static void addRangeBoundaries(NavigableSet<Integer> bounds, int lo, int hi) {
+  private static void addRangeBoundaries(IntArrayList bounds, int lo, int hi) {
     bounds.add(lo);
     if (hi < Utils.MAX_RUNE) {
       bounds.add(hi + 1);
@@ -425,7 +423,7 @@ final class Dfa {
    * have their own equivalence classes so the DFA doesn't conflate them with non-matching
    * characters in the same class.
    */
-  private static void addCaseFoldBoundaries(NavigableSet<Integer> bounds, int lo, int hi) {
+  private static void addCaseFoldBoundaries(IntArrayList bounds, int lo, int hi) {
     for (int cp = lo; cp <= hi; cp++) {
       int folded = Inst.simpleFold(cp);
       while (folded != cp) {

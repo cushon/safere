@@ -340,6 +340,10 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return Math.max(1L, (long) remaining * 2);
   }
 
+  static boolean candidatePrefixInBounds(int candidate, int start, int length, int prefixLength) {
+    return candidate >= start && candidate <= length - prefixLength;
+  }
+
   static long addCandidateWork(long work, int candidateCount, int literalLength) {
     return work + (long) candidateCount * literalLength + Long.BYTES;
   }
@@ -370,29 +374,34 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
-  int indexOfIgnoreCase(String prefix, int[] failure, int start) {
+  int indexOfIgnoreCase(
+      String prefix, int[] failure, int anchorOffset, byte anchorLow, byte anchorHigh, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return start;
     }
     if (!WorkCounterConfig.ENABLED) {
       if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
-        int result = ByteVectorScan.indexOfIgnoreCase(bytes, offset, length, prefix, start);
+        int result =
+            ByteVectorScan.indexOfIgnoreCase(
+                bytes,
+                offset,
+                length,
+                prefix,
+                prefixLen,
+                anchorOffset,
+                anchorLow,
+                anchorHigh,
+                start);
         if (result != VectorScanProvider.UNSUPPORTED) {
           return result;
         }
       }
       if (prefixLen == 1) {
-        char first = prefix.charAt(0);
-        if (first <= 127) {
-          int low = Ascii.toLowerCase(first);
-          int high = Ascii.toUpperCase(first);
-          if (low == high) {
-            return indexOfByte((byte) low, start);
-          }
-          return ByteSwarScan.indexOfBytePair(
-              bytes, offset, length, (byte) low, (byte) high, start);
+        if (anchorLow == anchorHigh) {
+          return indexOfByte(anchorLow, start);
         }
+        return ByteSwarScan.indexOfBytePair(bytes, offset, length, anchorLow, anchorHigh, start);
       }
     }
     return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);

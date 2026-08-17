@@ -366,6 +366,27 @@ class Utf8MatcherStateMachineTest {
   }
 
   @Test
+  void graphemePatternDoesNotSplitMultibyteCodePointInUnanchoredFind() {
+    String input = "\u1e99| 5  \u8ed6";
+    Utf8Matcher utf8Matcher =
+        Pattern.compile(".\\X| /0? ?5-").matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+    List<List<Integer>> actualMatches = new ArrayList<>();
+    while (utf8Matcher.find()) {
+      actualMatches.add(List.of(utf8Matcher.start(), utf8Matcher.end()));
+    }
+
+    Matcher stringMatcher = Pattern.compile(".\\X| /0? ?5-").matcher(input);
+    List<List<Integer>> expectedMatches = new ArrayList<>();
+    while (stringMatcher.find()) {
+      expectedMatches.add(
+          List.of(
+              utf8Offset(input, stringMatcher.start()), utf8Offset(input, stringMatcher.end())));
+    }
+
+    assertThat(actualMatches).isEqualTo(expectedMatches);
+  }
+
+  @Test
   void graphemePatternsWorkAcrossUtf8Scalars() {
     for (String input : List.of("a\r\nb", "a\u0301b", "👩‍💻x", "🇺🇸x")) {
       assertGraphemePatternsWorkAcrossUtf8Scalars(input);
@@ -414,6 +435,39 @@ class Utf8MatcherStateMachineTest {
     assertThat(actualBoundaries)
         .as("grapheme boundaries for %s", input)
         .isEqualTo(expectedBoundaries);
+  }
+
+  @Test
+  void caseInsensitiveMultiCharPrefixMatchesAcrossVectorBoundaries() {
+    String pattern = "(?i)http_query";
+    String input =
+        "http_first http_second http_third "
+            + "HTTP_other HTTP_next "
+            + "hTtP_almost "
+            + "HTTP_QUERY_final";
+    Pattern p = Pattern.compile(pattern);
+    Utf8Matcher matcher = p.matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+
+    assertThat(matcher.find()).isTrue();
+    int expectedStart = input.indexOf("HTTP_QUERY");
+    assertThat(matcher.start()).isEqualTo(expectedStart);
+    assertThat(matcher.end()).isEqualTo(expectedStart + "http_query".length());
+    assertThat(matcher.find()).isFalse();
+  }
+
+  @Test
+  void caseInsensitivePrefixWithRareAnchorHandlesDenseFalseCandidates() {
+    // 't' is very common, 'z' is rare.
+    String pattern = "(?i)the_zone";
+    String noise = "the_alpha the_beta the_gamma the_delta ";
+    String input = noise.repeat(5) + "THE_ZONE";
+    Pattern p = Pattern.compile(pattern);
+    Utf8Matcher matcher = p.matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+
+    assertThat(matcher.find()).isTrue();
+    int expectedStart = input.indexOf("THE_ZONE");
+    assertThat(matcher.start()).isEqualTo(expectedStart);
+    assertThat(matcher.end()).isEqualTo(expectedStart + "the_zone".length());
   }
 
   private static Utf8Matcher matcher(String pattern, String input) {

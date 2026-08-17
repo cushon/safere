@@ -96,7 +96,9 @@ sealed interface Utf8StartAccelerator {
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record CaseInsensitiveLiteral(String prefix, int[] failure) implements Utf8StartAccelerator {
+  record CaseInsensitiveLiteral(
+      String prefix, int[] failure, int anchorOffset, byte anchorLow, byte anchorHigh)
+      implements Utf8StartAccelerator {
 
     static Utf8StartAccelerator create(String prefix) {
       for (int i = 0; i < prefix.length(); i++) {
@@ -104,7 +106,12 @@ sealed interface Utf8StartAccelerator {
           return null;
         }
       }
-      return new CaseInsensitiveLiteral(prefix, Ascii.ignoreCaseFailure(prefix));
+      int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefix.length());
+      char anchor = prefix.charAt(anchorOffset);
+      byte low = (byte) Ascii.toLowerCase(anchor);
+      byte high = (byte) Ascii.toUpperCase(anchor);
+      return new CaseInsensitiveLiteral(
+          prefix, Ascii.ignoreCaseFailure(prefix), anchorOffset, low, high);
     }
 
     @Override
@@ -114,7 +121,8 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      return scanner.indexOfIgnoreCase(prefix, failure, fromIndex);
+      return scanner.indexOfIgnoreCase(
+          prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }
   }
 

@@ -32,6 +32,7 @@ final class Utf8InputFuzzer {
     assertMultiOffsetLiteralOccurrencesMatchString(data);
     assertFinalLineTerminatorEndAnchorsMatchJdk(data);
     assertPositionDependentStartAccelerationMatchesJdk(data);
+    assertGraphemeSearchMatchesString(data);
     String repeatedLiteral =
         String.valueOf((char) data.consumeInt('A', 'Z')).repeat(data.consumeInt(2, 32));
     String suffix = new String(data.consumeBytes(data.consumeInt(0, 64)), StandardCharsets.UTF_8);
@@ -154,6 +155,33 @@ final class Utf8InputFuzzer {
       Utf8Input utf8 = Utf8Input.validated(input.getBytes(StandardCharsets.UTF_8));
       if (pattern.matcher(input).find() != expected || pattern.find(utf8) != expected) {
         throw new AssertionError("DFA-loop start acceleration differs from JDK anchor semantics");
+      }
+    }
+  }
+
+  private static void assertGraphemeSearchMatchesString(FuzzedDataProvider data) {
+    String regex = data.pickValue(List.of(".\\X|z", "(?:.\\X)|z", ".\\X| /0? ?5-", "(?:a|.)\\X|z"));
+    String input =
+        data.pickValue(List.of("é", "軖", "😀", "a\u0301", "👩‍💻", "🇺🇸"))
+            + data.pickValue(List.of("", "| 5  軖", "z", " β"));
+    Pattern pattern = Pattern.compile(regex);
+    org.safere.Matcher stringMatcher = pattern.matcher(input);
+    byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+    Utf8Matcher utf8Matcher = pattern.matcher(Utf8Input.validated(bytes));
+
+    while (true) {
+      boolean stringFound = stringMatcher.find();
+      boolean utf8Found = utf8Matcher.find();
+      if (utf8Found != stringFound) {
+        throw new AssertionError("UTF-8 grapheme search result differs from String search");
+      }
+      if (!stringFound) {
+        return;
+      }
+      if (utf8Matcher.start() != utf8Offset(input, stringMatcher.start())
+          || utf8Matcher.end() != utf8Offset(input, stringMatcher.end())
+          || !Objects.equals(stringMatcher.group(), decodeGroup(bytes, utf8Matcher))) {
+        throw new AssertionError("UTF-8 grapheme search bounds differ from String search");
       }
     }
   }

@@ -60,28 +60,10 @@ public final class Pattern implements Serializable {
       MethodType.methodType(SafeReMatchDiagnostics.class);
   private static final MutableCallSite DIAGNOSTICS_SITE = new MutableCallSite(DIAGNOSTICS_TYPE);
   private static final MethodHandle DIAGNOSTICS_INVOKER = DIAGNOSTICS_SITE.dynamicInvoker();
-  private static final MethodType UTF8_FIND_TYPE =
-      MethodType.methodType(boolean.class, Pattern.class, Utf8InputScanner.class);
-  private static final MutableCallSite UTF8_FIND_SITE = new MutableCallSite(UTF8_FIND_TYPE);
-  private static final MethodHandle UTF8_FIND_INVOKER = UTF8_FIND_SITE.dynamicInvoker();
-  private static final MethodHandle UTF8_FIND_DISABLED = findUtf8Handle("findWithoutDiagnostics");
-  private static final MethodHandle UTF8_FIND_ENABLED = findUtf8Handle("findWithDiagnostics");
   private static final int MAX_DISJOINT_REQUIRED_LITERALS = 4;
 
   static {
     setDiagnosticsTarget(SafeReMatchDiagnostics.NONE);
-  }
-
-  private static MethodHandle findUtf8Handle(String methodName) {
-    try {
-      return MethodHandles.lookup()
-          .findVirtual(
-              Pattern.class,
-              methodName,
-              MethodType.methodType(boolean.class, Utf8InputScanner.class));
-    } catch (NoSuchMethodException | IllegalAccessException impossible) {
-      throw new ExceptionInInitializerError(impossible);
-    }
   }
 
   /**
@@ -161,6 +143,8 @@ public final class Pattern implements Serializable {
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
   private final transient EnginePathOptions enginePathOptions;
+  private final transient Matcher.PreparedMatchRunner defaultPreparedMatchRunner;
+  private final transient Matcher.PreparedMatchRunner regionPreparedMatchRunner;
   private final long patternId;
   private transient volatile PatternAnalysis patternAnalysis;
   private transient volatile PatternDescriptor patternDescriptor;
@@ -337,11 +321,15 @@ public final class Pattern implements Serializable {
     this.enginePathOptions = enginePathOptions;
     this.rejectDescriptor = rejectDescriptor != null ? rejectDescriptor : RejectDescriptor.NONE;
     this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
+    this.defaultPreparedMatchRunner = createPreparedRunner(false);
+    this.regionPreparedMatchRunner = createPreparedRunner(true);
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
-    onePassAnalysis();
+    if (shouldEagerlyBuildOnePass()) {
+      onePassAnalysis();
+    }
     forwardDfaSetup();
-    if (!prog.anchorStart()) {
+    if (canUseReverseDfa()) {
       flatReverseDfaProg();
     }
 
@@ -351,18 +339,22 @@ public final class Pattern implements Serializable {
     }
   }
 
-  private static MatchDescriptor extractMatchDescriptor(Regexp metadataAst, int flags) {
+  private static MatchDescriptor extractMatchDescriptor(
+      Regexp metadataAst, Regexp sourceAst, int flags) {
     String literalMatch = extractLiteralMatch(metadataAst);
     CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
     KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
     CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
+    int minMatchLength = extractMinMatchLength(sourceAst);
     if (literalMatch == null
         && singleCharClass == null
         && keywordAlternation == null
-        && ccMatch == null) {
+        && ccMatch == null
+        && minMatchLength <= 0) {
       return MatchDescriptor.NONE;
     }
-    return new MatchDescriptor(literalMatch, singleCharClass, keywordAlternation, ccMatch);
+    return new MatchDescriptor(
+        literalMatch, singleCharClass, keywordAlternation, ccMatch, minMatchLength);
   }
 
   private static long nextPatternId() {
@@ -383,7 +375,7 @@ public final class Pattern implements Serializable {
    */
   public static void setDiagnostics(SafeReMatchDiagnostics listener) {
     setDiagnosticsTarget(Objects.requireNonNull(listener, "listener"));
-    MutableCallSite.syncAll(new MutableCallSite[] {DIAGNOSTICS_SITE, UTF8_FIND_SITE});
+    MutableCallSite.syncAll(new MutableCallSite[] {DIAGNOSTICS_SITE});
   }
 
   /**
@@ -401,8 +393,6 @@ public final class Pattern implements Serializable {
 
   private static void setDiagnosticsTarget(SafeReMatchDiagnostics listener) {
     DIAGNOSTICS_SITE.setTarget(MethodHandles.constant(SafeReMatchDiagnostics.class, listener));
-    UTF8_FIND_SITE.setTarget(
-        SafeReMatchDiagnostics.isEnabled(listener) ? UTF8_FIND_ENABLED : UTF8_FIND_DISABLED);
   }
 
   /**
@@ -451,7 +441,7 @@ public final class Pattern implements Serializable {
     }
     Map<String, Integer> named = extractNamedGroups(re);
     StartDescriptor startDescriptor = extractStartDescriptor(metadataAst);
-    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, flags);
+    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, re, flags);
     boolean hasLazy = hasLazyQuantifiers(re);
     boolean hasAlt = hasAlternation(re);
     boolean canMatchEmpty = canMatchEmpty(re);
@@ -603,13 +593,11 @@ public final class Pattern implements Serializable {
   public boolean find(Utf8Input input) {
     ArrayUtf8Input arrayInput = (ArrayUtf8Input) Objects.requireNonNull(input, "input");
     Utf8InputScanner scanner = arrayInput.scanner();
-    try {
-      return (boolean) UTF8_FIND_INVOKER.invokeExact(this, scanner);
-    } catch (RuntimeException | Error e) {
-      throw e;
-    } catch (Throwable impossible) {
-      throw new AssertionError(impossible);
+    SafeReMatchDiagnostics listener = diagnostics();
+    if (SafeReMatchDiagnostics.isEnabled(listener)) {
+      return findWithDiagnostics(scanner);
     }
+    return findWithoutDiagnostics(scanner);
   }
 
   boolean findWithDiagnostics(Utf8InputScanner scanner) {
@@ -627,6 +615,9 @@ public final class Pattern implements Serializable {
 
   boolean findWithoutDiagnostics(Utf8InputScanner scanner) {
     int length = scanner.length();
+    if (matchDescriptor.minMatchLength() > 0 && length < matchDescriptor.minMatchLength()) {
+      return false;
+    }
     if (literalMatchUtf8 != null && !prefixFoldCase) {
       return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
     }
@@ -1000,6 +991,76 @@ public final class Pattern implements Serializable {
     return enginePathOptions;
   }
 
+  Matcher.PreparedMatchRunner preparedMatchRunner(boolean regionActive) {
+    return regionActive ? regionPreparedMatchRunner : defaultPreparedMatchRunner;
+  }
+
+  private Matcher.PreparedMatchRunner createPreparedRunner(boolean regionActive) {
+    String literal = matchDescriptor.literalMatch();
+    if (enginePathOptions.literalFastPaths() && literal != null && numGroups() == 0) {
+      return new Matcher.LiteralPreparedRunner(
+          literal,
+          prefixFoldCase,
+          literalMatchUtf8,
+          literalMatchFailure,
+          literalMatchShifts,
+          prog.anchorStart(),
+          prefixFoldCase
+              ? createLiteralFallbackRunner(regionActive)
+              : Matcher.FallbackPreparedRunner.INSTANCE);
+    }
+
+    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
+    Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
+    if (enginePathOptions.charClassMatchFastPaths()
+        && (singleCharClass != null || charClassMatch != null)) {
+      return new Matcher.SingleCharClassPreparedRunner(
+          singleCharClass, charClassMatch, prog.anchorStart());
+    }
+
+    if (regionActive) {
+      return Matcher.FallbackPreparedRunner.INSTANCE;
+    }
+
+    Pattern.KeywordAlternation keywordAlternation = matchDescriptor.keywordAlternation();
+    if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
+      return new Matcher.KeywordAlternationPreparedRunner(
+          keywordAlternation, prog.numCaptures(), prog.anchorStart());
+    }
+
+    if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
+      return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
+    }
+
+    return Matcher.FallbackPreparedRunner.INSTANCE;
+  }
+
+  private Matcher.PreparedMatchRunner createLiteralFallbackRunner(boolean regionActive) {
+    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
+    Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
+    if (enginePathOptions.charClassMatchFastPaths()
+        && (singleCharClass != null || charClassMatch != null)) {
+      return new Matcher.SingleCharClassPreparedRunner(
+          singleCharClass, charClassMatch, prog.anchorStart());
+    }
+
+    if (regionActive) {
+      return Matcher.FallbackPreparedRunner.INSTANCE;
+    }
+
+    Pattern.KeywordAlternation keywordAlternation = matchDescriptor.keywordAlternation();
+    if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
+      return new Matcher.KeywordAlternationPreparedRunner(
+          keywordAlternation, prog.numCaptures(), prog.anchorStart());
+    }
+
+    if (enginePathOptions.onePass()) {
+      return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
+    }
+
+    return Matcher.FallbackPreparedRunner.INSTANCE;
+  }
+
   boolean innerCapturesObserved() {
     return innerCapturesObserved;
   }
@@ -1217,6 +1278,18 @@ public final class Pattern implements Serializable {
   /** Returns whether this pattern contains any lazy quantifiers. */
   boolean hasLazyQuantifiers() {
     return hasLazy;
+  }
+
+  /**
+   * Returns true if this pattern can participate in reverse DFA matching (e.g. unanchored find or
+   * end-anchored reverse-first rejection).
+   */
+  boolean canUseReverseDfa() {
+    return !prog.anchorStart() && !matchDescriptor.hasFindFastPath();
+  }
+
+  private boolean shouldEagerlyBuildOnePass() {
+    return !hasLazy && !matchDescriptor.hasFindFastPath();
   }
 
   /**
@@ -2967,6 +3040,19 @@ public final class Pattern implements Serializable {
       this.bitmap1 = bitmap1;
       this.isAscii = isAscii;
     }
+
+    boolean contains(int cp) {
+      if (cp < 64) {
+        return cp >= 0 && (bitmap0 & (1L << cp)) != 0;
+      }
+      if (cp < 128) {
+        return (bitmap1 & (1L << (cp - 64))) != 0;
+      }
+      if (isAscii) {
+        return false;
+      }
+      return Matcher.binarySearchRanges(ranges, cp);
+    }
   }
 
   static CharClassScanInfo buildAsciiClassScanInfo(AsciiBitmap asciiClass) {
@@ -3663,6 +3749,70 @@ public final class Pattern implements Serializable {
       return "";
     }
     return foldCase ? sb.toString().toLowerCase(Locale.ROOT) : sb.toString();
+  }
+
+  private static final class MinMatchLengthWalker extends Walker<Integer> {
+    @Override
+    protected Integer shortVisit(Regexp re, Integer parentArg) {
+      return 0;
+    }
+
+    @Override
+    protected Integer postVisit(
+        Regexp re, Integer parentArg, Integer preArg, List<Integer> childArgs) {
+      return switch (re.op) {
+        case NO_MATCH -> Integer.MAX_VALUE / 2;
+        case EMPTY_MATCH,
+            BEGIN_LINE,
+            END_LINE,
+            BEGIN_TEXT,
+            END_TEXT,
+            WORD_BOUNDARY,
+            NO_WORD_BOUNDARY,
+            GRAPHEME_CLUSTER_BOUNDARY,
+            HAVE_MATCH,
+            QUEST,
+            STAR ->
+            0;
+        case LITERAL -> Character.charCount(re.rune);
+        case LITERAL_STRING -> {
+          int count = 0;
+          if (re.runes != null) {
+            for (int r : re.runes) {
+              count += Character.charCount(r);
+            }
+          }
+          yield count;
+        }
+        case CHAR_CLASS, ANY_CHAR, ANY_BYTE, GRAPHEME_CLUSTER -> 1;
+        case CAPTURE, NON_CAPTURE, PLUS -> childArgs.isEmpty() ? 0 : childArgs.getFirst();
+        case REPEAT -> {
+          int subMin = childArgs.isEmpty() ? 0 : childArgs.getFirst();
+          yield (int) Math.min((long) subMin * Math.max(0, re.min), Integer.MAX_VALUE / 2);
+        }
+        case CONCAT -> {
+          long sum = 0;
+          for (int child : childArgs) {
+            sum += child;
+          }
+          yield (int) Math.min(sum, Integer.MAX_VALUE / 2);
+        }
+        case ALTERNATE -> {
+          int min = Integer.MAX_VALUE / 2;
+          for (int child : childArgs) {
+            min = Math.min(min, child);
+          }
+          yield min == Integer.MAX_VALUE / 2 ? 0 : min;
+        }
+      };
+    }
+  }
+
+  private static int extractMinMatchLength(Regexp re) {
+    if (re == null) {
+      return 0;
+    }
+    return new MinMatchLengthWalker().walk(re, 0);
   }
 
   /** Deserialization: recompile the pattern from the stored string and flags. */

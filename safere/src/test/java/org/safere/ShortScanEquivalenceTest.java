@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_16;
 import static java.nio.charset.StandardCharsets.UTF_16LE;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Arrays;
@@ -48,6 +49,32 @@ class ShortScanEquivalenceTest {
     } catch (Throwable t) {
       return false;
     }
+  }
+
+  @Test
+  void denseIgnoreCaseCandidatesFallBackBeforeReplayingLongPrefixes() {
+    if (!isVectorApiAvailable()) {
+      return;
+    }
+    String prefix = "z".repeat(64) + "y";
+    byte[] input = "z".repeat(4_096).getBytes(UTF_8);
+
+    assertThat(
+            ByteVectorScan.indexOfIgnoreCase(
+                input, 0, input.length, prefix, prefix.length(), 0, (byte) 'z', (byte) 'Z', 0))
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+  }
+
+  @Test
+  void vectorCandidateBoundsDoNotOverflow() {
+    assertThat(
+            Utf8InputScanner.candidatePrefixInBounds(
+                Integer.MAX_VALUE - 4, 0, Integer.MAX_VALUE, 8))
+        .isFalse();
+    assertThat(
+            Utf8InputScanner.candidatePrefixInBounds(
+                Integer.MAX_VALUE - 8, 0, Integer.MAX_VALUE, 8))
+        .isTrue();
   }
 
   @ParameterizedTest
