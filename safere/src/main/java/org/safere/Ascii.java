@@ -105,6 +105,29 @@ final class Ascii {
     return failure;
   }
 
+  /** Knuth-Morris-Pratt scan on String, strictly linear in text length regardless of pattern. */
+  static int indexOfLinearIgnoreCase(String text, String prefix, int[] failure, int start) {
+    int matched = 0;
+    int prefixLen = prefix.length();
+    int length = text.length();
+    for (int position = Math.max(0, start); position < length; position++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char current = text.charAt(position);
+      while (matched > 0 && !equalsIgnoreCase(current, prefix.charAt(matched))) {
+        matched = failure[matched - 1];
+      }
+      if (equalsIgnoreCase(current, prefix.charAt(matched))) {
+        matched++;
+        if (matched == prefixLen) {
+          return position - prefixLen + 1;
+        }
+      }
+    }
+    return -1;
+  }
+
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
