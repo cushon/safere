@@ -32,7 +32,7 @@ final class Ascii {
 
   /** Returns whether two characters are equal ignoring ASCII case. */
   static boolean equalsIgnoreCase(char a, char b) {
-    return a == b || toLowerCase(a) == toLowerCase(b);
+    return a == b || ((a ^ b) == 0x20 && isAlpha(a));
   }
 
   /** Returns true if the code point is an ASCII uppercase letter. */
@@ -133,7 +133,7 @@ final class Ascii {
     for (int i = 0; i < prefixLen; i++) {
       char c = text.charAt(offset + i);
       char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
+      if (c != p && ((c ^ p) != 0x20 || !isAlpha(c))) {
         return false;
       }
     }
@@ -145,7 +145,7 @@ final class Ascii {
     for (int i = 0; i < prefixLen; i++) {
       int c = bytes[offset + i] & 0xFF;
       char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
+      if (c != p && ((c ^ p) != 0x20 || !isAlpha(c))) {
         return false;
       }
     }

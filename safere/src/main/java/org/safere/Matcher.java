@@ -2152,13 +2152,17 @@ public final class Matcher implements MatchResult {
     }
     int length = text.length();
     int pos = Math.max(0, fromIndex);
+    if (pos <= length - prefixLen && Ascii.regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
+      return pos;
+    }
     long verificationWork = 0;
     long workLimit = WorkLimit.forRemaining(length - pos);
     boolean hasLow = true;
     boolean hasHigh = (low != high);
 
     while (pos <= length - prefixLen) {
-      // Short scalar search for nearby anchor (handles whitespace / short delimiters without indexOf overhead)
+      // Short scalar search for nearby anchor (handles whitespace / short delimiters without
+      // indexOf overhead)
       int scalarLimit = Math.min(length - prefixLen + 1, pos + 32);
       int foundAnchor = -1;
       for (; pos < scalarLimit; pos++) {

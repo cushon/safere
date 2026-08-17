@@ -106,6 +106,10 @@ abstract class ByteSwarScan {
       return Math.min(Math.max(0, start), length);
     }
     int pos = Math.max(0, start);
+    if (pos <= length - prefixLen
+        && Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+      return pos;
+    }
     long verificationWork = 0;
     long workLimit = WorkLimit.forRemaining(length - pos);
 
