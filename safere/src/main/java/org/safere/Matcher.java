@@ -82,10 +82,10 @@ public final class Matcher implements MatchResult {
    *
    * <p><b>Tradeoff Note (pattern.matcher(input).matches() -&gt; group()):</b> In Java's stateful
    * Matcher API, matches() is called before the engine knows whether the caller will subsequently
-   * call group(i). If a pattern contains capturing groups (prog.numCaptures() &gt; 0), defaulting to
-   * the 64 KB limit ensures one-shot matchers (e.g. pattern.matcher(input).matches() -&gt; group(1))
-   * record captures in a single pass without paying the severe (2.6x) multi-pass fallback submatch
-   * penalty on 256 B - 64 KB inputs.
+   * call group(i). If a pattern contains capturing groups (prog.numCaptures() &gt; 0), defaulting
+   * to the 64 KB limit ensures one-shot matchers (e.g. pattern.matcher(input).matches() -&gt;
+   * group(1)) record captures in a single pass without paying the severe (2.6x) multi-pass fallback
+   * submatch penalty on 256 B - 64 KB inputs.
    */
   static int onePassTextLimit(boolean requiresInnerCaptures) {
     return requiresInnerCaptures
