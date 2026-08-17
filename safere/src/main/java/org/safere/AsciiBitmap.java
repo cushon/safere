@@ -5,6 +5,8 @@
 
 package org.safere;
 
+import java.util.Arrays;
+
 /**
  * Immutable 128-bit bitmap representing a set of ASCII code points (0–127).
  *
@@ -66,6 +68,29 @@ record AsciiBitmap(long bitmap0, long bitmap1) {
       }
     }
     return array;
+  }
+
+  /** Returns inclusive [low0, high0, low1, high1, ...] range pairs representing this ASCII set. */
+  int[] toRanges() {
+    int[] temp = new int[256];
+    int count = 0;
+    int start = -1;
+    for (int i = 0; i < 128; i++) {
+      if (containsAscii(i)) {
+        if (start == -1) {
+          start = i;
+        }
+      } else if (start != -1) {
+        temp[count++] = start;
+        temp[count++] = i - 1;
+        start = -1;
+      }
+    }
+    if (start != -1) {
+      temp[count++] = start;
+      temp[count++] = 127;
+    }
+    return Arrays.copyOf(temp, count);
   }
 
   static final class Builder {

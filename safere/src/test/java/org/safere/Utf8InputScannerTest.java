@@ -137,7 +137,7 @@ class Utf8InputScannerTest {
           storage[offset + expected] = (byte) matchingByte;
           Utf8InputScanner scanner = new Utf8InputScanner(storage, offset, 40);
 
-          assertThat(scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, 0))
+          assertThat(scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, 0, scanner.length()))
               .as("ranges %s, offset %s, position %s", Arrays.toString(ranges), offset, expected)
               .isEqualTo(expected);
         }
@@ -166,10 +166,12 @@ class Utf8InputScannerTest {
           storage[offset + expected] = (byte) ranges[ranges.length - 1];
           Utf8InputScanner scanner = new Utf8InputScanner(storage, offset, length);
 
-          assertThat(scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, 0))
+          assertThat(scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, 0, scanner.length()))
               .as("ranges %s, offset %s, position %s", Arrays.toString(ranges), offset, expected)
               .isEqualTo(expected);
-          assertThat(scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, expected + 1))
+          assertThat(
+                  scanner.indexOfCodePointClass(
+                      ranges, bitmap0, bitmap1, expected + 1, scanner.length()))
               .as("absent tail for ranges %s, offset %s", Arrays.toString(ranges), offset)
               .isEqualTo(-1);
         }
@@ -228,9 +230,12 @@ class Utf8InputScannerTest {
 
     Utf8InputScanner scanner = new Utf8InputScanner(bytes);
 
-    assertThat(scanner.indexOfCodePointClass(digits, bitmap0, 0, -4)).isEqualTo(0);
-    assertThat(scanner.indexOfCodePointClass(digits, bitmap0, 0, 1)).isEqualTo(bytes.length - 1);
-    assertThat(scanner.indexOfCodePointClass(digits, bitmap0, 0, bytes.length)).isEqualTo(-1);
+    assertThat(scanner.indexOfCodePointClass(digits, bitmap0, 0, -4, scanner.length()))
+        .isEqualTo(0);
+    assertThat(scanner.indexOfCodePointClass(digits, bitmap0, 0, 1, scanner.length()))
+        .isEqualTo(bytes.length - 1);
+    assertThat(scanner.indexOfCodePointClass(digits, bitmap0, 0, bytes.length, scanner.length()))
+        .isEqualTo(-1);
   }
 
   @Test
@@ -252,7 +257,9 @@ class Utf8InputScannerTest {
             int clampedStart = Math.max(0, start);
             int expected = clampedStart <= high ? Math.max(clampedStart, low) : -1;
 
-            assertThat(scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, start))
+            assertThat(
+                    scanner.indexOfCodePointClass(
+                        ranges, bitmap0, bitmap1, start, scanner.length()))
                 .as("offset %s, range [%s, %s], start %s", offset, low, high, start)
                 .isEqualTo(expected);
           }

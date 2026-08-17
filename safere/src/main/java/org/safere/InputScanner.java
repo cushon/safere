@@ -5,7 +5,7 @@
 
 package org.safere;
 
-interface InputScanner {
+sealed interface InputScanner permits StringInputScanner, Utf8InputScanner {
   int END_OF_INPUT = -1;
 
   /** Returns the length of the input in index units (chars for String, bytes for byte[]). */
@@ -26,8 +26,11 @@ interface InputScanner {
    */
   int singleUnitCodePointBefore(int pos);
 
-  /** Returns the first position at or after {@code start} in the supplied code-point class. */
-  int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start);
+  /**
+   * Returns the first position in {@code [start, limit)} belonging to the supplied code-point
+   * class.
+   */
+  int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start, int limit);
 
   /**
    * Returns the first index in {@code [fromIndex, limit)} containing {@code ascii}, or {@code -1}

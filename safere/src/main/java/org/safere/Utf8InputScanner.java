@@ -169,17 +169,21 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   }
 
   @Override
-  public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start) {
+  public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start, int limit) {
     int position = Math.max(0, start);
+    int scanLen = Math.min(length, limit);
+    if (position >= scanLen) {
+      return -1;
+    }
     if (!WorkCounterConfig.ENABLED) {
       if (scanProvider == null
           && ranges.length >= 4
           && ranges.length <= 8
           && ranges[0] >= 0
           && ranges[ranges.length - 1] < 0x80
-          && length - position >= MULTI_RANGE_SWAR_MINIMUM_LENGTH
+          && scanLen - position >= MULTI_RANGE_SWAR_MINIMUM_LENGTH
           && (ranges.length != 4 || ranges[0] != ranges[1] || ranges[2] != ranges[3])) {
-        int scalarLimit = position + MULTI_RANGE_SWAR_SCALAR_PROLOGUE_LENGTH;
+        int scalarLimit = Math.min(scanLen, position + MULTI_RANGE_SWAR_SCALAR_PROLOGUE_LENGTH);
         for (; position < scalarLimit; position++) {
           int value = unsignedByteAt(position);
           if ((value < Long.SIZE && (bitmap0 & (1L << value)) != 0)
@@ -189,17 +193,21 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
             return position;
           }
         }
-        return indexOfMultipleByteRanges(ranges, bitmap0, bitmap1, position);
+        if (position >= scanLen) {
+          return -1;
+        }
+        return ByteSwarScan.indexOfMultipleByteRanges(
+            bytes, offset, scanLen, ranges, bitmap0, bitmap1, position);
       }
-      int asciiResult = indexOfAsciiRanges(ranges, bitmap0, bitmap1, position);
+      int asciiResult = indexOfAsciiRanges(ranges, bitmap0, bitmap1, position, scanLen);
       if (asciiResult >= -1) {
         return asciiResult;
       }
       if (bitmap0 == 0 && bitmap1 == 0) {
-        return indexOfNonAsciiCodePointClass(ranges, position);
+        return indexOfNonAsciiCodePointClass(ranges, position, scanLen);
       }
     }
-    while (position < length) {
+    while (position < scanLen) {
       int codePointPosition = position;
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
@@ -213,7 +221,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         position = InputScanner.position(decoded);
       }
       if (InputScanner.classContains(ranges, bitmap0, bitmap1, codePoint)) {
-        return codePointPosition;
+        return codePointPosition < scanLen ? codePointPosition : -1;
       }
     }
     return -1;
@@ -225,17 +233,17 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
    * @return the match position, {@code -1} when the class is absent, or {@code -2} when the class
    *     requires the general code-point scan
    */
-  private int indexOfAsciiRanges(int[] ranges, long bitmap0, long bitmap1, int start) {
+  private int indexOfAsciiRanges(int[] ranges, long bitmap0, long bitmap1, int start, int scanLen) {
     if (ranges.length >= 2 && ranges[0] >= 0 && ranges[ranges.length - 1] < 0x80) {
-      if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
+      if (scanProvider != null && scanLen - start >= scanProvider.minimumInputLength()) {
         int position = start;
-        int scalarLimit = Math.min(length, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
+        int scalarLimit = Math.min(scanLen, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
         for (; position < scalarLimit; position++) {
           if (InputScanner.classContains(ranges, bitmap0, bitmap1, unsignedByteAt(position))) {
             return position;
           }
         }
-        int result = scanProvider.indexOfAsciiClass(bytes, offset, length, ranges, position);
+        int result = scanProvider.indexOfAsciiClass(bytes, offset, scanLen, ranges, position);
         if (result != VectorScanProvider.UNSUPPORTED) {
           return result;
         }
@@ -245,12 +253,13 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       int low = ranges[0];
       int high = ranges[1];
       if (low == high) {
-        return indexOfByte((byte) low, start);
+        int res = indexOfByte((byte) low, start);
+        return (res >= 0 && res < scanLen) ? res : -1;
       }
       if (high == low + 1) {
-        return ByteSwarScan.indexOfBytePair(bytes, offset, length, (byte) low, (byte) high, start);
+        return ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, (byte) low, (byte) high, start);
       }
-      return ByteSwarScan.indexOfByteRange(bytes, offset, length, low, high, start);
+      return ByteSwarScan.indexOfByteRange(bytes, offset, scanLen, low, high, start);
     }
     if (ranges.length == 4
         && ranges[0] == ranges[1]
@@ -258,20 +267,15 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         && ranges[0] >= 0
         && ranges[3] < 0x80) {
       return ByteSwarScan.indexOfBytePair(
-          bytes, offset, length, (byte) ranges[0], (byte) ranges[2], start);
+          bytes, offset, scanLen, (byte) ranges[0], (byte) ranges[2], start);
     }
     return -2;
   }
 
-  private int indexOfMultipleByteRanges(int[] ranges, long bitmap0, long bitmap1, int start) {
-    return ByteSwarScan.indexOfMultipleByteRanges(
-        bytes, offset, length, ranges, bitmap0, bitmap1, start);
-  }
-
-  private int indexOfNonAsciiCodePointClass(int[] ranges, int start) {
+  private int indexOfNonAsciiCodePointClass(int[] ranges, int start, int scanLen) {
     int position = start;
-    int wordEnd = length - Long.BYTES;
-    while (position < length) {
+    int wordEnd = scanLen - Long.BYTES;
+    while (position < scanLen) {
       if (position <= wordEnd) {
         long word = (long) LONG_VIEW.get(bytes, offset + position);
         if ((word & BYTE_HIGH_BITS) == 0) {
@@ -289,7 +293,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       int codePoint = InputScanner.codePoint(decoded);
       position = InputScanner.position(decoded);
       if (InputScanner.classContains(ranges, 0, 0, codePoint)) {
-        return codePointPosition;
+        return codePointPosition < scanLen ? codePointPosition : -1;
       }
     }
     return -1;
@@ -677,6 +681,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
 
   @Override
   public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
-    return indexOfCodePointClass(scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, start);
+    return indexOfCodePointClass(
+        scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, start, length);
   }
 }

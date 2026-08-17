@@ -682,4 +682,13 @@ class DfaTest {
     assertThat(accelerated.matcher(input).find()).isTrue();
     assertThat(accelerated.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
   }
+
+  @Test
+  void wordBoundaryLongText() {
+    String regex = "(?:\\w(?:\\b))";
+    String input = "#".repeat(260) + "a";
+    Pattern pattern = Pattern.compile(regex);
+    assertThat(pattern.matcher(input).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
+  }
 }
