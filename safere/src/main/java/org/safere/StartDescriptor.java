@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 import org.safere.Pattern.StartAcceleration;
 
@@ -16,10 +17,10 @@ record StartDescriptor(
     String prefix,
     boolean prefixFoldCase,
     FixedOffsetLiteral fixedOffsetLiteral,
-    AsciiBitmap charClassPrefixAscii,
+    CharClassScanInfo charClassPrefix,
     StartAcceleration lineAnchor,
     String anchoredPrefix,
-    AsciiBitmap anchoredCharClassPrefixAscii) {
+    CharClassScanInfo anchoredCharClassPrefix) {
 
   static final StartDescriptor NONE =
       new StartDescriptor(null, false, null, null, null, null, null);
@@ -28,15 +29,16 @@ record StartDescriptor(
       String prefix,
       boolean prefixFoldCase,
       FixedOffsetLiteral fixedOffsetLiteral,
-      AsciiBitmap charClassPrefixAscii,
+      CharClassScanInfo charClassPrefix,
       StartAcceleration lineAnchor) {
-    this(prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefixAscii, lineAnchor, null, null);
+    this(prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, lineAnchor, null, null);
   }
 
   boolean hasStartAcceleration() {
     return prefix != null
         || fixedOffsetLiteral != null
-        || charClassPrefixAscii != null
+        || charClassPrefix != null
         || lineAnchor != null;
   }
 }
+

@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 import org.safere.Pattern.StartAcceleration;
 
@@ -26,10 +27,10 @@ sealed interface StringStartAccelerator {
       return new Literal(descriptor.prefix(), descriptor.prefixFoldCase());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
+      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
     }
-    if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      return new CharClass(descriptor.charClassPrefixAscii());
+    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
+      return new CharClass(descriptor.charClassPrefix());
     }
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {
       return new LineAnchor(descriptor.lineAnchor());
@@ -103,19 +104,19 @@ sealed interface StringStartAccelerator {
 
   final class FixedOffset implements StringStartAccelerator {
     private final FixedOffsetLiteral fixedOffset;
-    private final AsciiBitmap firstAscii;
+    private final CharClassScanInfo firstCharClass;
 
-    FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap firstAscii) {
+    FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo firstCharClass) {
       this.fixedOffset = fixedOffset;
-      this.firstAscii = firstAscii;
+      this.firstCharClass = firstCharClass;
     }
 
     public FixedOffsetLiteral fixedOffset() {
       return fixedOffset;
     }
 
-    public AsciiBitmap firstAscii() {
-      return firstAscii;
+    public CharClassScanInfo firstCharClass() {
+      return firstCharClass;
     }
 
     @Override
@@ -125,11 +126,14 @@ sealed interface StringStartAccelerator {
 
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return nextFixedOffsetCandidate(text, fixedOffset, firstAscii, fromIndex);
+      return nextFixedOffsetCandidate(text, fixedOffset, firstCharClass, fromIndex);
     }
 
     private static int nextFixedOffsetCandidate(
-        String text, FixedOffsetLiteral fixedOffsetLiteral, AsciiBitmap firstAscii, int fromIndex) {
+        String text,
+        FixedOffsetLiteral fixedOffsetLiteral,
+        CharClassScanInfo firstCharClass,
+        int fromIndex) {
       int minOffset = fixedOffsetLiteral.minOffset();
       if (minOffset > text.length() - fromIndex) {
         return -1;
@@ -149,14 +153,14 @@ sealed interface StringStartAccelerator {
         if (literalStart < 0) {
           return -1;
         }
-        if (discreteOffsets != null && discreteOffsets.length == 1 && firstAscii != null) {
+        if (discreteOffsets != null && discreteOffsets.length == 1 && firstCharClass != null) {
           boolean matchFound = false;
           int earliestValid = -1;
           for (int offset : discreteOffsets) {
             int candidateStart = literalStart - offset;
             if (candidateStart >= fromIndex) {
               int first = candidateStart < text.length() ? text.charAt(candidateStart) : -1;
-              if (first >= 0 && firstAscii.contains(first)) {
+              if (first >= 0 && firstCharClass.contains(first)) {
                 matchFound = true;
                 if (earliestValid < 0 || candidateStart < earliestValid) {
                   earliestValid = candidateStart;
@@ -193,16 +197,16 @@ sealed interface StringStartAccelerator {
   }
 
   final class CharClass implements StringStartAccelerator {
-    private final AsciiBitmap asciiMap;
+    private final CharClassScanInfo scanInfo;
     private final boolean[] asciiTable;
 
-    CharClass(AsciiBitmap asciiMap) {
-      this.asciiMap = asciiMap;
-      this.asciiTable = asciiMap.toBooleanArray();
+    CharClass(CharClassScanInfo scanInfo) {
+      this.scanInfo = scanInfo;
+      this.asciiTable = buildAsciiTable(scanInfo);
     }
 
-    public AsciiBitmap asciiMap() {
-      return asciiMap;
+    public CharClassScanInfo scanInfo() {
+      return scanInfo;
     }
 
     @Override
@@ -212,20 +216,36 @@ sealed interface StringStartAccelerator {
 
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return indexOfCharClass(text, asciiTable, fromIndex);
+      return indexOfCharClass(text, asciiTable, scanInfo.ranges, scanInfo.isAscii, fromIndex);
     }
 
-    private static int indexOfCharClass(String text, boolean[] asciiTable, int fromIndex) {
+    private static int indexOfCharClass(
+        String text, boolean[] asciiTable, int[] ranges, boolean isAscii, int fromIndex) {
       for (int i = fromIndex; i < text.length(); i++) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
         char ch = text.charAt(i);
-        if (ch < 128 && asciiTable[ch]) {
-          return i;
+        if (ch < 128) {
+          if (asciiTable[ch]) {
+            return i;
+          }
+        } else if (!isAscii) {
+          int cp = text.codePointAt(i);
+          if (Matcher.binarySearchRanges(ranges, cp)) {
+            return i;
+          }
         }
       }
       return -1;
+    }
+
+    private static boolean[] buildAsciiTable(CharClassScanInfo scanInfo) {
+      boolean[] table = new boolean[128];
+      for (int i = 0; i < 128; i++) {
+        table[i] = scanInfo.contains(i);
+      }
+      return table;
     }
   }
 
