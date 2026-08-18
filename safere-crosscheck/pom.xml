@@ -122,11 +122,13 @@
                         <exclude name="MatchDescriptorTest.java"/>
                         <exclude name="NfaTest.java"/>
                         <exclude name="OnePassTest.java"/>
+                        <exclude name="OnePassThresholdTest.java"/>
                         <exclude name="ParseFlagsTest.java"/>
                         <exclude name="ParserTest.java"/>
                         <exclude name="PatternInternalTest.java"/>
                         <exclude name="PatternSetTest.java"/>
                         <exclude name="ProgTest.java"/>
+                        <exclude name="RarityOracleTest.java"/>
                         <exclude name="RegexpOpTest.java"/>
                         <exclude name="RegexpTest.java"/>
                         <exclude name="RejectPrefilterTest.java"/>
