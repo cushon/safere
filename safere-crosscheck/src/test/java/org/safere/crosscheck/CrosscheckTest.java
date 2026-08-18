@@ -618,6 +618,19 @@ class CrosscheckTest {
     }
 
     @Test
+    @DisplayName("hasMatch() crosschecks matcher lifecycle state")
+    void hasMatch() {
+      Matcher m = Pattern.compile("abc").matcher("abc");
+      assertThat(m.hasMatch()).isFalse();
+      assertThat(m.find()).isTrue();
+      assertThat(m.hasMatch()).isTrue();
+      m.usePattern(Pattern.compile("xyz"));
+      assertThat(m.hasMatch()).isTrue();
+      m.reset();
+      assertThat(m.hasMatch()).isFalse();
+    }
+
+    @Test
     @DisplayName("namedGroups() returns group mapping")
     void namedGroupsMap() {
       Pattern p = Pattern.compile("(?<year>\\d{4})-(?<month>\\d{2})");

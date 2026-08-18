@@ -71,7 +71,8 @@ class MatcherDeferredCaptureStateTest {
     matcher.usePattern(Pattern.compile("name"));
 
     assertDeferredCaptureStateClear(matcher);
-    assertThatThrownBy(matcher::group).isInstanceOf(IllegalStateException.class);
+    assertThat(matcher.hasMatch()).isTrue();
+    assertThat(matcher.group()).isEqualTo("id");
   }
 
   @Test

@@ -69,4 +69,23 @@ class MatcherUsePatternTest {
     m.usePattern(p2);
     assertThat(m.pattern()).isSameAs(p2);
   }
+
+  @Test
+  @DisplayName("usePattern preserves match state and groupCount")
+  void usePatternPreservesMatchState() {
+    Pattern p1 = Pattern.compile("(a)(b)");
+    Pattern p2 = Pattern.compile("(x)(y)(z)");
+    Matcher m = p1.matcher("ab");
+    assertThat(m.find()).isTrue();
+    assertThat(m.hasMatch()).isTrue();
+    assertThat(m.group()).isEqualTo("ab");
+    assertThat(m.start()).isEqualTo(0);
+    assertThat(m.end()).isEqualTo(2);
+    assertThat(m.group(1)).isEqualTo("a");
+    assertThat(m.group(2)).isEqualTo("b");
+
+    m.usePattern(p2);
+    assertThat(m.hasMatch()).isTrue();
+    assertThat(m.groupCount()).isEqualTo(3);
+  }
 }

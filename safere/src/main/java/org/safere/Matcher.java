@@ -2538,6 +2538,17 @@ public final class Matcher implements MatchResult {
   }
 
   /**
+   * Returns {@code true} if this matcher has a match.
+   *
+   * @return {@code true} if this matcher has a match, {@code false} otherwise
+   * @since 20
+   */
+  @Override
+  public boolean hasMatch() {
+    return hasMatch;
+  }
+
+  /**
    * Returns the offset after the last character of the subsequence captured by the given named
    * group.
    *
@@ -3553,15 +3564,24 @@ public final class Matcher implements MatchResult {
       if (!groupZeroResolved) {
         resolveCaptures();
       }
-      searchFrom = groups[1];
-      if (groups[0] == groups[1] && searchFrom < regionEnd) {
+      int prevStart = groups[0];
+      int prevEnd = groups[1];
+      searchFrom = prevEnd;
+      if (prevStart == prevEnd && searchFrom < regionEnd) {
         searchFrom++;
       }
+      this.parentPattern = newPattern;
+      this.groups = new int[2 * newPattern.prog().numCaptures()];
+      Arrays.fill(this.groups, -1);
+      this.groups[0] = prevStart;
+      this.groups[1] = prevEnd;
+      clearDeferredCaptureState();
+    } else {
+      this.parentPattern = newPattern;
+      this.groups = new int[2 * newPattern.prog().numCaptures()];
+      clearCurrentResult();
     }
-    this.parentPattern = newPattern;
-    this.groups = new int[2 * newPattern.prog().numCaptures()];
     invalidatePatternCaches();
-    clearCurrentResult();
     eagerFallbackCaptures = false;
     return this;
   }
@@ -3826,6 +3846,11 @@ public final class Matcher implements MatchResult {
       this.groupCount = groupCount;
       this.namedGroups = Collections.unmodifiableMap(namedGroups);
       this.hasMatch = hasMatch;
+    }
+
+    @Override
+    public boolean hasMatch() {
+      return hasMatch;
     }
 
     @Override

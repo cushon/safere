@@ -297,10 +297,24 @@ final class FuzzSupport {
       return this;
     }
 
+    boolean hasMatch() {
+      boolean safeRe = safeReMatcher.hasMatch();
+      boolean jdk = runJdkOracle("hasMatch", safeRe, () -> jdkMatcher.hasMatch());
+      assertSame("hasMatch", safeRe, jdk);
+      return safeRe;
+    }
+
     int groupCount() {
       int safeRe = safeReMatcher.groupCount();
       int jdk = runJdkOracle("groupCount", safeRe, () -> jdkMatcher.groupCount());
       assertSame("groupCount", safeRe, jdk);
+      return safeRe;
+    }
+
+    String group() {
+      String safeRe = safeReMatcher.group();
+      String jdk = runJdkOracle("group", safeRe, () -> jdkMatcher.group());
+      assertSame("group", safeRe, jdk);
       return safeRe;
     }
 
@@ -318,6 +332,13 @@ final class FuzzSupport {
       return safeRe;
     }
 
+    int start() {
+      int safeRe = safeReMatcher.start();
+      int jdk = runJdkOracle("start", safeRe, () -> jdkMatcher.start());
+      assertSame("start", safeRe, jdk);
+      return safeRe;
+    }
+
     int start(int group) {
       int safeRe = safeReMatcher.start(group);
       int jdk = runJdkOracle("start(" + group + ")", safeRe, () -> jdkMatcher.start(group));
@@ -329,6 +350,13 @@ final class FuzzSupport {
       int safeRe = safeReMatcher.start(name);
       int jdk = runJdkOracle("start(" + name + ")", safeRe, () -> jdkMatcher.start(name));
       assertSame("start(" + name + ")", safeRe, jdk);
+      return safeRe;
+    }
+
+    int end() {
+      int safeRe = safeReMatcher.end();
+      int jdk = runJdkOracle("end", safeRe, () -> jdkMatcher.end());
+      assertSame("end", safeRe, jdk);
       return safeRe;
     }
 

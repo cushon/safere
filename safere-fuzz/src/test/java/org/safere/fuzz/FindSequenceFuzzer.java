@@ -92,26 +92,29 @@ final class FindSequenceFuzzer {
     }
 
     FuzzSupport.MatcherPair matcher = pattern.matcher(input);
-    boolean hasMatch = false;
+    boolean canReadGroups = false;
     int steps = data.consumeInt(1, 32);
     for (int i = 0; i < steps; i++) {
-      switch (data.consumeInt(0, 9)) {
-        case 0 -> hasMatch = matcher.matches();
-        case 1 -> hasMatch = matcher.lookingAt();
-        case 2 -> hasMatch = matcher.find();
-        case 3 -> hasMatch = matcher.find(FuzzSupport.consumeIndex(data, input));
+      switch (data.consumeInt(0, 10)) {
+        case 0 -> canReadGroups = matcher.matches();
+        case 1 -> canReadGroups = matcher.lookingAt();
+        case 2 -> canReadGroups = matcher.find();
+        case 3 -> canReadGroups = matcher.find(FuzzSupport.consumeIndex(data, input));
         case 4 -> {
           matcher.reset();
-          hasMatch = false;
+          canReadGroups = false;
         }
         case 5 -> {
           input = data.consumeString(2048);
           matcher.reset(input);
-          hasMatch = false;
+          canReadGroups = false;
         }
         case 6 -> matcher.groupCount();
         case 7 -> {
-          if (hasMatch) {
+          if (canReadGroups) {
+            matcher.group();
+            matcher.start();
+            matcher.end();
             int group = data.consumeInt(0, matcher.groupCount());
             matcher.group(group);
             matcher.start(group);
@@ -121,12 +124,13 @@ final class FindSequenceFuzzer {
         case 8 -> {
           int[] region = FuzzSupport.consumeRegion(data, input);
           matcher.region(region[0], region[1]);
-          hasMatch = false;
+          canReadGroups = false;
         }
         case 9 -> {
           matcher.useAnchoringBounds(data.consumeBoolean());
           matcher.useTransparentBounds(data.consumeBoolean());
         }
+        case 10 -> matcher.hasMatch();
         default -> throw new AssertionError();
       }
     }
