@@ -2143,6 +2143,8 @@ public final class Matcher implements MatchResult {
     long workLimit = WorkLimit.forRemaining(length - pos);
     boolean hasLow = true;
     boolean hasHigh = (low != high);
+    int nextLow = -1;
+    int nextHigh = -1;
 
     while (pos <= length - prefixLen) {
       // Short scalar search for nearby anchor (handles whitespace / short delimiters without
@@ -2160,6 +2162,13 @@ public final class Matcher implements MatchResult {
         }
       }
       if (foundAnchor >= 0) {
+        int anchorPosition = foundAnchor + anchorOffset;
+        if (nextLow >= 0 && nextLow <= anchorPosition) {
+          nextLow = -1;
+        }
+        if (nextHigh >= 0 && nextHigh <= anchorPosition) {
+          nextHigh = -1;
+        }
         if (Ascii.regionMatchesIgnoreCase(text, foundAnchor, prefix, prefixLen)) {
           return foundAnchor;
         }
@@ -2176,23 +2185,27 @@ public final class Matcher implements MatchResult {
       }
 
       int searchFrom = pos + anchorOffset;
-      int nextLow = -1;
-      if (hasLow) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(Math.max(0, length - searchFrom));
-        }
+      if (nextLow >= 0 && nextLow < searchFrom) {
+        nextLow = -1;
+      }
+      if (nextHigh >= 0 && nextHigh < searchFrom) {
+        nextHigh = -1;
+      }
+      if (hasLow && nextLow < 0) {
         nextLow = text.indexOf(low, searchFrom);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(nextLow < 0 ? length - searchFrom : nextLow - searchFrom + 1);
+        }
         if (nextLow < 0) {
           hasLow = false;
         }
       }
 
-      int nextHigh = -1;
-      if (hasHigh && nextLow != searchFrom) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(Math.max(0, length - searchFrom));
-        }
+      if (hasHigh && nextHigh < 0 && nextLow != searchFrom) {
         nextHigh = text.indexOf(high, searchFrom);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(nextHigh < 0 ? length - searchFrom : nextHigh - searchFrom + 1);
+        }
         if (nextHigh < 0) {
           hasHigh = false;
         }
@@ -2201,6 +2214,12 @@ public final class Matcher implements MatchResult {
       int nextAnchor = Ascii.minNonNegative(nextLow, nextHigh);
       if (nextAnchor < 0) {
         return -1;
+      }
+      if (nextLow == nextAnchor) {
+        nextLow = -1;
+      }
+      if (nextHigh == nextAnchor) {
+        nextHigh = -1;
       }
       int candidatePos = nextAnchor - anchorOffset;
       if (WorkLimit.candidateInBounds(candidatePos, pos, length, prefixLen)) {

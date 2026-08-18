@@ -65,6 +65,25 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void caseInsensitiveSingleCharacterRepeatedFindIsLinearAcrossString() {
+    Pattern pattern = Pattern.compile("(?i)z");
+    assertRepeatedFindWorkIsLinear(size -> pattern.matcher("z".repeat(size))::find, "String");
+  }
+
+  @Test
+  void caseInsensitiveSparseFalseCandidatesAreLinearAcrossString() {
+    Pattern pattern = Pattern.compile("(?i)zq");
+    IntFunction<String> input = size -> ("zX" + "a".repeat(32)).repeat(size) + "Zq";
+
+    long smallerWork = countAllMatches(pattern.matcher(input.apply(100))::find, 1);
+    long largerWork = countAllMatches(pattern.matcher(input.apply(400))::find, 1);
+
+    assertThat(largerWork)
+        .as("String sparse false-candidate work should scale linearly")
+        .isLessThanOrEqualTo(smallerWork * 6);
+  }
+
+  @Test
   void caseInsensitivePrefixRepeatedFindIsLinearAcrossUtf8() {
     Pattern pattern = Pattern.compile("(?i)keyword_to_find");
     assertRepeatedFindWorkIsLinear(

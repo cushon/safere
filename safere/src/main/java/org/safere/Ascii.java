@@ -143,7 +143,16 @@ final class Ascii {
     if (low == high) {
       return text.indexOf(low, fromIndex);
     }
-    return minNonNegative(text.indexOf(low, fromIndex), text.indexOf(high, fromIndex));
+    for (int i = Math.max(0, fromIndex); i < text.length(); i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char value = text.charAt(i);
+      if (value == low || value == high) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   /** Returns the minimum of two indices that is >= 0, or -1 if both are negative. */
