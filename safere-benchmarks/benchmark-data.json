@@ -2379,6 +2379,72 @@
         "suffix": ":8080",
         "length": "{size}"
       }
+    },
+    {
+      "id": "unicodePrefix.digitsAbsent.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "0123456789 9876543210 1357924680 ",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "unicodePrefix.alphabeticLate.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "0123456789 9876543210 1357924680 ",
+        "suffix": "é123",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "unicodePrefix.englishProseAbsent.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "The quick brown fox jumps over the lazy dog. Standard English prose without CJK characters. ",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "unicodePrefix.cjkLate.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "The quick brown fox jumps over the lazy dog. Standard English prose without CJK characters. ",
+        "suffix": "你好123",
+        "length": "{size}"
+      },
+      "shared": true
     }
   ],
   "workloads": [
@@ -9685,6 +9751,130 @@
         }
       },
       "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodePrefixBenchmark.alphabetic.absent.{size}",
+      "operation": "find",
+      "patterns": [
+        "[\\p{IsAlphabetic}]+\\d+"
+      ],
+      "inputs": [
+        "unicodePrefix.digitsAbsent.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures Unicode alphabetic prefix acceleration scanning over non-matching digits.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodePrefixBenchmark.alphabetic.late.{size}",
+      "operation": "find",
+      "patterns": [
+        "[\\p{IsAlphabetic}]+\\d+"
+      ],
+      "inputs": [
+        "unicodePrefix.alphabeticLate.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures Unicode alphabetic prefix acceleration scanning to a late non-ASCII match.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodePrefixBenchmark.cjk.absent.{size}",
+      "operation": "find",
+      "patterns": [
+        "[\\u4E00-\\u9FFF]+\\d+"
+      ],
+      "inputs": [
+        "unicodePrefix.englishProseAbsent.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures CJK prefix acceleration scanning over non-matching English prose.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodePrefixBenchmark.cjk.late.{size}",
+      "operation": "find",
+      "patterns": [
+        "[\\u4E00-\\u9FFF]+\\d+"
+      ],
+      "inputs": [
+        "unicodePrefix.cjkLate.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures CJK prefix acceleration scanning to a late CJK match.",
+      "requirements": [],
+      "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
