@@ -219,4 +219,143 @@ class SearchScalingRegressionTest {
         .as("%s should not scale with the prefix", description)
         .isLessThan(work2000 * 2);
   }
+
+  @Test
+  void stateAcceleratorEscapedQuoteScanIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\"[^\"]*\"");
+    String input2000 = "\"" + "a".repeat(2_000) + "\"";
+    String input10000 = "\"" + "a".repeat(10_000) + "\"";
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isTrue());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isTrue());
+
+    assertThat(work10000)
+        .as("DFA self-loop state accelerator on String should scale linearly with input size")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void stateAcceleratorEscapedQuoteScanIsLinearForUtf8Input() {
+    Pattern pattern = Pattern.compile("\"[^\"]*\"");
+    byte[] input2000 = ("\"" + "a".repeat(2_000) + "\"").getBytes(UTF_8);
+    byte[] input10000 = ("\"" + "a".repeat(10_000) + "\"").getBytes(UTF_8);
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input2000)).find()).isTrue());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input10000)).find()).isTrue());
+
+    assertThat(work10000)
+        .as("DFA self-loop state accelerator on UTF-8 should scale linearly with input size")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void stateAcceleratorEscapedNewlineScanIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("[^,\\n]*\\n");
+    String input2000 = "a".repeat(2_000) + "\n";
+    String input10000 = "a".repeat(10_000) + "\n";
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isTrue());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isTrue());
+
+    assertThat(work10000)
+        .as("DFA self-loop state accelerator with newline on String should scale linearly")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void singleCharClassFindFastPathIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\d");
+    String input2000 = "a".repeat(2_000);
+    String input10000 = "a".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Single character class find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void singleCharClassFindFastPathIsLinearForUtf8Input() {
+    Pattern pattern = Pattern.compile("\\d");
+    byte[] input2000 = "a".repeat(2_000).getBytes(UTF_8);
+    byte[] input10000 = "a".repeat(10_000).getBytes(UTF_8);
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input2000)).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input10000)).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Single character class find on UTF-8 should scale linearly")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void negatedSingleCharClassFindFastPathIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("[^a-z]");
+    String input2000 = "a".repeat(2_000);
+    String input10000 = "a".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Negated character class find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void searchScalingMaintainsParityAcrossLatin1Utf16AndUtf8() {
+    Pattern pattern = Pattern.compile("[0-9]{3}-[A-Z]{3}");
+    int size = 5_000;
+    String latin1 = "abc ".repeat(size / 4);
+    // Include a non-Latin1 character at the start so coder becomes UTF16
+    String utf16 = "\u4e2d" + latin1.substring(1);
+    byte[] utf8 = latin1.getBytes(UTF_8);
+
+    long workLatin1 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(latin1).find()).isFalse());
+    long workUtf16 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(utf16).find()).isFalse());
+    long workUtf8 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(utf8)).find()).isFalse());
+
+    assertThat(workLatin1).as("Latin-1 search work").isLessThan(size * 4L);
+    assertThat(workUtf16)
+        .as("UTF-16 search work should remain within a reasonable factor of Latin-1")
+        .isLessThan(workLatin1 * 4L + 100);
+    assertThat(workUtf8)
+        .as("UTF-8 search work should remain within a reasonable factor of Latin-1")
+        .isLessThan(workLatin1 * 4L + 100);
+  }
+
+  @Test
+  void vectorBoundarySweepMaintainsLinearWorkScalingAcrossChunkSizes() {
+    Pattern pattern = Pattern.compile("[0-9]");
+    for (int len = 1; len <= 65; len++) {
+      String text = "a".repeat(len);
+      long work =
+          WorkCounter.countForTesting(() -> assertThat(pattern.matcher(text).find()).isFalse());
+      assertThat(work)
+          .as("Work for length %d should be linearly bounded", len)
+          .isLessThanOrEqualTo(len * 4L + 100);
+    }
+  }
 }
