@@ -142,6 +142,7 @@ mvn -pl safere-benchmarks -am package \
   -q
 ./materialize-benchmark-inputs.sh --no-build
 
+RUNNER="CrossEngineBenchmark.run"
 TRIALS="$(java \
   -Dsafere.benchmark.corpus=safere-benchmarks/target/benchmark-corpus \
   -cp safere-benchmarks/target/benchmarks.jar \
@@ -149,6 +150,19 @@ TRIALS="$(java \
   | tr ',' '\n' \
   | grep -E "$FILTER" \
   | paste -sd, - || true)"
+
+if [ -z "$TRIALS" ]; then
+  TRIALS="$(java \
+    -Dsafere.benchmark.corpus=safere-benchmarks/target/benchmark-corpus \
+    -cp safere-benchmarks/target/benchmarks.jar \
+    org.safere.benchmark.CrossEngineBenchmarkPlan microseconds \
+    | tr ',' '\n' \
+    | grep -E "$FILTER" \
+    | paste -sd, - || true)"
+  if [ -n "$TRIALS" ]; then
+    RUNNER="CrossEngineScalingBenchmark.run"
+  fi
+fi
 
 if [ -z "$TRIALS" ]; then
   echo "Error: no baseline trials matched filter: $FILTER" >&2
@@ -192,7 +206,7 @@ fi
 # 2. Run Baseline
 echo "=== Running Baseline: $BASELINE_REF ==="
 git checkout -q --detach "$BASELINE_COMMIT"
-./run-java-benchmarks.sh "${MODE_ARGS[@]}" --fastbuild CrossEngineBenchmark.run -- \
+./run-java-benchmarks.sh "${MODE_ARGS[@]}" --fastbuild "$RUNNER" -- \
   -p crossEngineTrial="$TRIALS" \
   "${VECTOR_ARGS[@]}" | tee "$BASELINE_TXT"
 python3 "$COMPARE_PY" --jmh "$BASELINE_TXT" --output-jsonl "$BASELINE_JSONL"
@@ -203,7 +217,7 @@ echo "=== Running Current: $CURRENT_REF ==="
 mvn -pl safere-benchmarks -am clean -q
 git checkout -q --detach "$CURRENT_COMMIT"
 mvn -pl safere-benchmarks -am clean -q
-./run-java-benchmarks.sh "${MODE_ARGS[@]}" --fastbuild CrossEngineBenchmark.run -- \
+./run-java-benchmarks.sh "${MODE_ARGS[@]}" --fastbuild "$RUNNER" -- \
   -p crossEngineTrial="$TRIALS" \
   "${VECTOR_ARGS[@]}" | tee "$CURRENT_TXT"
 python3 "$COMPARE_PY" --jmh "$CURRENT_TXT" --output-jsonl "$CURRENT_JSONL"
