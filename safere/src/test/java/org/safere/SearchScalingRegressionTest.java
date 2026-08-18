@@ -129,6 +129,16 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(input.length() + 100);
   }
 
+  @Test
+  void literalSelectivityScoringIsLinearInPatternSize() {
+    long smallerWork = WorkCounter.countForTesting(() -> Pattern.compile(selectivityPattern(100)));
+    long largerWork = WorkCounter.countForTesting(() -> Pattern.compile(selectivityPattern(400)));
+
+    assertThat(largerWork)
+        .as("Literal selectivity scoring should scale linearly with pattern size")
+        .isLessThanOrEqualTo(smallerWork * 6);
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);
@@ -137,6 +147,14 @@ class SearchScalingRegressionTest {
     assertThat(largerWork)
         .as("%s repeated find work should scale linearly", description)
         .isLessThan(smallerWork * 6);
+  }
+
+  private static String selectivityPattern(int size) {
+    StringBuilder pattern = new StringBuilder("[0-9]").append("z".repeat(size));
+    for (int i = 0; i < size; i++) {
+      pattern.append("[0-9]aa");
+    }
+    return pattern.toString();
   }
 
   private static long countAllMatches(FindIterator matcher, int expectedMatches) {

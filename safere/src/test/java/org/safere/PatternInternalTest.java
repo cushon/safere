@@ -603,4 +603,12 @@ class PatternInternalTest {
     Pattern pattern = Pattern.compile(".*(____).*?(404_ERROR).*");
     assertThat(pattern.rejectDescriptor().requiredLiteral()).isEqualTo("404_ERROR");
   }
+
+  @Test
+  void requiredLiteralRetainsSelectivityFromLengthWhenCharactersAreCommon() {
+    String spaces = " ".repeat(32);
+    Pattern pattern = Pattern.compile(".*(" + spaces + ").*?(ee).*");
+
+    assertThat(pattern.rejectDescriptor().requiredLiteral()).isEqualTo(spaces);
+  }
 }

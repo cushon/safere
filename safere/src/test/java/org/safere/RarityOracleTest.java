@@ -47,4 +47,10 @@ class RarityOracleTest {
     int commonScore = RarityOracle.literalSelectivityScore("             ");
     assertThat(rareScore).isGreaterThan(commonScore * 3);
   }
+
+  @Test
+  void literalSelectivityRetainsLengthForTheMostCommonCharacter() {
+    assertThat(RarityOracle.literalSelectivityScore(" ".repeat(32)))
+        .isGreaterThan(RarityOracle.literalSelectivityScore("ee"));
+  }
 }

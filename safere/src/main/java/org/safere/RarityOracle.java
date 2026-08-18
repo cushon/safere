@@ -120,8 +120,11 @@ final class RarityOracle {
     int score = 0;
     int maxCharRarity = 0;
     for (int i = 0; i < s.length(); i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
       int r = byteRarity(s.charAt(i));
-      score += r;
+      score += r + 1;
       if (r > maxCharRarity) {
         maxCharRarity = r;
       }
