@@ -2342,6 +2342,43 @@
         "seed": 42,
         "length": "{size}"
       }
+    },
+    {
+      "id": "onePassScaling.noCaptures.{size}",
+      "axes": {
+        "size": [
+          64,
+          256,
+          512,
+          4096,
+          65536
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "valid_token_abc123-xyz.",
+        "length": "{size}"
+      }
+    },
+    {
+      "id": "onePassScaling.withCaptures.{size}",
+      "axes": {
+        "size": [
+          64,
+          256,
+          512,
+          4096,
+          65536,
+          262144
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "https://",
+        "unit": "a",
+        "suffix": ":8080",
+        "length": "{size}"
+      }
     }
   ],
   "workloads": [
@@ -9512,6 +9549,142 @@
       "inputRepresentationReason": "Measures single character class find fast-path throughput over non-matching input strings.",
       "requirements": [],
       "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "OnePassScalingBenchmark.noCaptures.{size}",
+      "axes": {
+        "size": [
+          64,
+          256,
+          512,
+          4096,
+          65536
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "^[a-zA-Z0-9_.-]+$"
+      ],
+      "inputs": [
+        "onePassScaling.noCaptures.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "OnePassScalingBenchmark.withCaptures.{size}",
+      "axes": {
+        "size": [
+          64,
+          256,
+          512,
+          4096,
+          65536,
+          262144
+        ]
+      },
+      "operation": "matchesGroupLengthSum",
+      "patterns": [
+        "^([a-zA-Z]+)://([^:/]+):([0-9]+)$"
+      ],
+      "inputs": [
+        "onePassScaling.withCaptures.{size}"
+      ],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "groups": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "id": "OnePassScalingBenchmark.replaceAllLiteral.{size}",
+      "axes": {
+        "size": [
+          64,
+          512,
+          4096,
+          65536
+        ]
+      },
+      "operation": "replaceAll",
+      "patterns": [
+        "^([a-zA-Z]+)://([^:/]+):([0-9]+)$"
+      ],
+      "inputs": [
+        "onePassScaling.withCaptures.{size}"
+      ],
+      "arguments": {
+        "replacement": {
+          "java": "[$0]",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "[\\0]",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
+      },
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "OnePassScalingBenchmark.replaceAllCaptures.{size}",
+      "axes": {
+        "size": [
+          64,
+          512,
+          4096,
+          65536
+        ]
+      },
+      "operation": "replaceAll",
+      "patterns": [
+        "^([a-zA-Z]+)://([^:/]+):([0-9]+)$"
+      ],
+      "inputs": [
+        "onePassScaling.withCaptures.{size}"
+      ],
+      "arguments": {
+        "replacement": {
+          "java": "[$1://$2-modified:$3]",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "[\\1://\\2-modified:\\3]",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
+      },
+      "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
