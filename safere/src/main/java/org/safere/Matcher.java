@@ -665,7 +665,7 @@ public final class Matcher implements MatchResult {
 
   private boolean literalRegionMatches(String literal, int offset, int length) {
     if (parentPattern.prefixFoldCase()) {
-      return regionMatchesAsciiIgnoreCase(text, offset, literal, 0, length);
+      return Ascii.regionMatchesIgnoreCase(text, offset, literal, length);
     }
     return text.regionMatches(false, offset, literal, 0, length);
   }
@@ -2090,7 +2090,7 @@ public final class Matcher implements MatchResult {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
           if (end <= text.length()
-              && regionMatchesAsciiIgnoreCase(text, i, keyword, 0, keyword.length())
+              && Ascii.regionMatchesIgnoreCase(text, i, keyword, keyword.length())
               && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
             int[] keywordGroups = new int[2 * ncap];
             Arrays.fill(keywordGroups, -1);
@@ -2125,7 +2125,7 @@ public final class Matcher implements MatchResult {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
           if (end <= text.length()
-              && regionMatchesAsciiIgnoreCase(text, i, keyword, 0, keyword.length())
+              && Ascii.regionMatchesIgnoreCase(text, i, keyword, keyword.length())
               && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
             int[] keywordGroups = new int[2 * ncap];
             Arrays.fill(keywordGroups, -1);
@@ -2287,26 +2287,6 @@ public final class Matcher implements MatchResult {
     return -1;
   }
 
-  private static boolean regionMatchesAsciiIgnoreCase(
-      String text, int textOffset, String prefix, int prefixOffset, int length) {
-    if (textOffset < 0
-        || prefixOffset < 0
-        || length < 0
-        || textOffset + length > text.length()
-        || prefixOffset + length > prefix.length()) {
-      return false;
-    }
-    for (int i = 0; i < length; i++) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      if (Ascii.toLowerCase(text.charAt(textOffset + i))
-          != Ascii.toLowerCase(prefix.charAt(prefixOffset + i))) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   /**
    * Tries BitState first (for small texts), falls back to NFA. This is the final capture-extraction

@@ -60,14 +60,30 @@ final class Ascii {
     return r >= '0' && r <= '9';
   }
 
+  private static final long WORD_LOW = 0x03FF000000000000L; // '0'-'9' (bits 48-57)
+  private static final long WORD_HIGH = 0x07FFFFFE87FFFFFEL; // 'A'-'Z' (bits 1-26), '_' (bit 31), 'a'-'z' (bits 33-58)
+  private static final long ALNUM_HIGH = 0x07FFFFFE07FFFFFEL; // 'A'-'Z' (bits 1-26), 'a'-'z' (bits 33-58)
+
   /** Returns true if the code point is an ASCII letter or digit. */
   static boolean isAlnum(int r) {
-    return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
+    if ((r & ~63) == 0) {
+      return ((WORD_LOW >>> r) & 1) != 0;
+    }
+    if ((r & ~127) == 0) {
+      return ((ALNUM_HIGH >>> (r - 64)) & 1) != 0;
+    }
+    return false;
   }
 
   /** Returns true if the code point is an ASCII word character (letter, digit, or underscore). */
   static boolean isWordChar(int r) {
-    return isAlnum(r) || r == '_';
+    if ((r & ~63) == 0) {
+      return ((WORD_LOW >>> r) & 1) != 0;
+    }
+    if ((r & ~127) == 0) {
+      return ((WORD_HIGH >>> (r - 64)) & 1) != 0;
+    }
+    return false;
   }
 
   /** Returns true if the code point is an ASCII hex digit. */
@@ -120,10 +136,11 @@ final class Ascii {
         WorkCounter.record();
       }
       char current = text.charAt(position);
-      while (matched > 0 && !equalsIgnoreCase(current, prefix.charAt(matched))) {
+      char lower = toLowerCase(current);
+      while (matched > 0 && lower != prefix.charAt(matched)) {
         matched = failure[matched - 1];
       }
-      if (equalsIgnoreCase(current, prefix.charAt(matched))) {
+      if (lower == prefix.charAt(matched)) {
         matched++;
         if (matched == prefixLen) {
           return position - prefixLen + 1;

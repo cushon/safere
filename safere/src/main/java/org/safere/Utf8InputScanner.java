@@ -404,10 +404,10 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         WorkCounter.record();
       }
       int current = Ascii.toLowerCase(bytes[offset + position] & 0xFF);
-      while (matched > 0 && current != Ascii.toLowerCase(prefix.charAt(matched))) {
+      while (matched > 0 && current != prefix.charAt(matched)) {
         matched = failure[matched - 1];
       }
-      if (current == Ascii.toLowerCase(prefix.charAt(matched))) {
+      if (current == prefix.charAt(matched)) {
         matched++;
         if (matched == prefixLen) {
           return position - prefixLen + 1;
