@@ -3260,19 +3260,27 @@ public final class Matcher implements MatchResult {
     char anchorHigh = 0;
     int[] failure = null;
     if (foldCase) {
-      int literalLen = literal.length();
-      if (literalLen == 1) {
-        anchorOffset = 0;
-        char c = literal.charAt(0);
-        anchorLow = Ascii.toLowerCase(c);
-        anchorHigh = Ascii.toUpperCase(c);
-        failure = null;
+      PreparedMatchRunner runner = parentPattern.preparedMatchRunner(false);
+      if (runner instanceof LiteralPreparedRunner literalRunner) {
+        anchorOffset = literalRunner.anchorOffset();
+        anchorLow = literalRunner.anchorLow();
+        anchorHigh = literalRunner.anchorHigh();
+        failure = literalRunner.ignoreCaseFailure();
       } else {
-        anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen);
-        char c = literal.charAt(anchorOffset);
-        anchorLow = Ascii.toLowerCase(c);
-        anchorHigh = Ascii.toUpperCase(c);
-        failure = Ascii.ignoreCaseFailure(literal);
+        int literalLen = literal.length();
+        if (literalLen == 1) {
+          anchorOffset = 0;
+          char c = literal.charAt(0);
+          anchorLow = Ascii.toLowerCase(c);
+          anchorHigh = Ascii.toUpperCase(c);
+          failure = null;
+        } else {
+          anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen);
+          char c = literal.charAt(anchorOffset);
+          anchorLow = Ascii.toLowerCase(c);
+          anchorHigh = Ascii.toUpperCase(c);
+          failure = Ascii.ignoreCaseFailure(literal);
+        }
       }
     }
 
@@ -4421,6 +4429,22 @@ public final class Matcher implements MatchResult {
       this.matchLengthBytes = literalUtf8 != null ? literalUtf8.length : 0;
       this.isStartAnchored = isStartAnchored;
       this.fallback = fallback;
+    }
+
+    int anchorOffset() {
+      return anchorOffset;
+    }
+
+    char anchorLow() {
+      return anchorLow;
+    }
+
+    char anchorHigh() {
+      return anchorHigh;
+    }
+
+    int[] ignoreCaseFailure() {
+      return ignoreCaseFailure;
     }
 
     @Override
