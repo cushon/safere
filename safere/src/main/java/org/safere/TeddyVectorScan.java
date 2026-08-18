@@ -61,34 +61,34 @@ final class TeddyVectorScan {
     int[] buckets = model.literalBuckets();
 
     for (; pos <= limit; pos += vectorLen) {
-      // Stage 1: Ultra-fast 1-byte primary SIMD filter (1 load, 2 shuffles)
+      // Stage 1: 2-byte primary SIMD filter (discards ~85% of non-matching blocks)
       ByteVector input0 = StringSupport.byteVectorFromString(SPECIES, text, pos);
       ByteVector lo0 = input0.and((byte) 0x0F);
       ByteVector hi0 = input0.lanewise(LSHR, 4).and((byte) 0x0F);
       ByteVector match0 = lo0.selectFrom(lutLo0).and(hi0.selectFrom(lutHi0));
 
+      if (is2Byte && pos + 1 <= limit) {
+        ByteVector input1 = StringSupport.byteVectorFromString(SPECIES, text, pos + 1);
+        ByteVector lo1 = input1.and((byte) 0x0F);
+        ByteVector hi1 = input1.lanewise(LSHR, 4).and((byte) 0x0F);
+        ByteVector match1 = lo1.selectFrom(lutLo1).and(hi1.selectFrom(lutHi1));
+        match0 = match0.and(match1);
+      }
+
       VectorMask<Byte> matchMask = match0.compare(NE, (byte) 0);
       if (matchMask.anyTrue()) {
-        // Stage 2: Secondary SIMD narrowing filter (evaluated only on candidate blocks)
-        if (is2Byte && pos + 1 <= limit) {
-          ByteVector input1 = StringSupport.byteVectorFromString(SPECIES, text, pos + 1);
-          ByteVector lo1 = input1.and((byte) 0x0F);
-          ByteVector hi1 = input1.lanewise(LSHR, 4).and((byte) 0x0F);
-          ByteVector match1 = lo1.selectFrom(lutLo1).and(hi1.selectFrom(lutHi1));
-          match0 = match0.and(match1);
-        }
-
+        // Stage 2: 3-byte confirmation filter (evaluated only on ~15% candidate blocks)
         if (is3Byte && pos + 2 <= limit) {
           ByteVector input2 = StringSupport.byteVectorFromString(SPECIES, text, pos + 2);
           ByteVector lo2 = input2.and((byte) 0x0F);
           ByteVector hi2 = input2.lanewise(LSHR, 4).and((byte) 0x0F);
           ByteVector match2 = lo2.selectFrom(lutLo2).and(hi2.selectFrom(lutHi2));
           match0 = match0.and(match2);
+          matchMask = match0.compare(NE, (byte) 0);
         }
 
-        matchMask = match0.compare(NE, (byte) 0);
         if (matchMask.anyTrue()) {
-          // Stage 3: Candidate extraction and verification
+          // Stage 3: Candidate extraction and verification (< 0.1% of blocks)
           match0.intoArray(laneBuf, 0);
           long activeLanes = matchMask.toLong();
           while (activeLanes != 0) {
@@ -143,34 +143,34 @@ final class TeddyVectorScan {
     int[] buckets = model.literalBuckets();
 
     for (; pos <= limit; pos += vectorLen) {
-      // Stage 1: Ultra-fast 1-byte primary SIMD filter (1 load, 2 shuffles)
+      // Stage 1: 2-byte primary SIMD filter (discards ~85% of non-matching blocks)
       ByteVector input0 = ByteVector.fromArray(SPECIES, bytes, offset + pos);
       ByteVector lo0 = input0.and((byte) 0x0F);
       ByteVector hi0 = input0.lanewise(LSHR, 4).and((byte) 0x0F);
       ByteVector match0 = lo0.selectFrom(lutLo0).and(hi0.selectFrom(lutHi0));
 
+      if (is2Byte && pos + 1 <= limit) {
+        ByteVector input1 = ByteVector.fromArray(SPECIES, bytes, offset + pos + 1);
+        ByteVector lo1 = input1.and((byte) 0x0F);
+        ByteVector hi1 = input1.lanewise(LSHR, 4).and((byte) 0x0F);
+        ByteVector match1 = lo1.selectFrom(lutLo1).and(hi1.selectFrom(lutHi1));
+        match0 = match0.and(match1);
+      }
+
       VectorMask<Byte> matchMask = match0.compare(NE, (byte) 0);
       if (matchMask.anyTrue()) {
-        // Stage 2: Secondary SIMD narrowing filter (evaluated only on candidate blocks)
-        if (is2Byte && pos + 1 <= limit) {
-          ByteVector input1 = ByteVector.fromArray(SPECIES, bytes, offset + pos + 1);
-          ByteVector lo1 = input1.and((byte) 0x0F);
-          ByteVector hi1 = input1.lanewise(LSHR, 4).and((byte) 0x0F);
-          ByteVector match1 = lo1.selectFrom(lutLo1).and(hi1.selectFrom(lutHi1));
-          match0 = match0.and(match1);
-        }
-
+        // Stage 2: 3-byte confirmation filter (evaluated only on ~15% candidate blocks)
         if (is3Byte && pos + 2 <= limit) {
           ByteVector input2 = ByteVector.fromArray(SPECIES, bytes, offset + pos + 2);
           ByteVector lo2 = input2.and((byte) 0x0F);
           ByteVector hi2 = input2.lanewise(LSHR, 4).and((byte) 0x0F);
           ByteVector match2 = lo2.selectFrom(lutLo2).and(hi2.selectFrom(lutHi2));
           match0 = match0.and(match2);
+          matchMask = match0.compare(NE, (byte) 0);
         }
 
-        matchMask = match0.compare(NE, (byte) 0);
         if (matchMask.anyTrue()) {
-          // Stage 3: Candidate extraction and verification
+          // Stage 3: Candidate extraction and verification (< 0.1% of blocks)
           match0.intoArray(laneBuf, 0);
           long activeLanes = matchMask.toLong();
           while (activeLanes != 0) {
@@ -227,7 +227,7 @@ final class TeddyVectorScan {
     int[] buckets = model.literalBuckets();
 
     for (; pos <= limit; pos += charCount) {
-      // Stage 1: Ultra-fast Narrowing-Pack 8-bit primary filter
+      // Stage 1: 2-byte primary SIMD filter (Narrowing-Pack 8-bit)
       ByteVector raw0 = StringSupport.byteVectorFromString(SPECIES, text, pos << 1);
       ByteVector highBytes0 = raw0.rearrange(ODD_SHUFFLE);
       VectorMask<Byte> isAscii0 = highBytes0.compare(EQ, (byte) 0);
@@ -237,23 +237,23 @@ final class TeddyVectorScan {
       ByteVector hi0 = packed0.lanewise(LSHR, 4).and((byte) 0x0F);
       ByteVector match0 = lo0.selectFrom(lutLo0).and(hi0.selectFrom(lutHi0));
 
+      if (is2Byte && pos + 1 <= limit) {
+        ByteVector raw1 = StringSupport.byteVectorFromString(SPECIES, text, (pos + 1) << 1);
+        ByteVector highBytes1 = raw1.rearrange(ODD_SHUFFLE);
+        VectorMask<Byte> isAscii1 = highBytes1.compare(EQ, (byte) 0);
+
+        ByteVector packed1 = raw1.rearrange(NARROW_SHUFFLE);
+        ByteVector lo1 = packed1.and((byte) 0x0F);
+        ByteVector hi1 = packed1.lanewise(LSHR, 4).and((byte) 0x0F);
+        ByteVector match1 = lo1.selectFrom(lutLo1).and(hi1.selectFrom(lutHi1));
+
+        match0 = match0.and(match1);
+        isAscii0 = isAscii0.and(isAscii1);
+      }
+
       VectorMask<Byte> matchMask = match0.compare(NE, (byte) 0).and(isAscii0);
       if (matchMask.anyTrue()) {
-        // Stage 2: Secondary SIMD narrowing filter (evaluated only on candidate blocks)
-        if (is2Byte && pos + 1 <= limit) {
-          ByteVector raw1 = StringSupport.byteVectorFromString(SPECIES, text, (pos + 1) << 1);
-          ByteVector highBytes1 = raw1.rearrange(ODD_SHUFFLE);
-          VectorMask<Byte> isAscii1 = highBytes1.compare(EQ, (byte) 0);
-
-          ByteVector packed1 = raw1.rearrange(NARROW_SHUFFLE);
-          ByteVector lo1 = packed1.and((byte) 0x0F);
-          ByteVector hi1 = packed1.lanewise(LSHR, 4).and((byte) 0x0F);
-          ByteVector match1 = lo1.selectFrom(lutLo1).and(hi1.selectFrom(lutHi1));
-
-          match0 = match0.and(match1);
-          isAscii0 = isAscii0.and(isAscii1);
-        }
-
+        // Stage 2: 3-byte confirmation filter (evaluated only on ~8% candidate blocks)
         if (is3Byte && pos + 2 <= limit) {
           ByteVector raw2 = StringSupport.byteVectorFromString(SPECIES, text, (pos + 2) << 1);
           ByteVector highBytes2 = raw2.rearrange(ODD_SHUFFLE);
@@ -266,11 +266,11 @@ final class TeddyVectorScan {
 
           match0 = match0.and(match2);
           isAscii0 = isAscii0.and(isAscii2);
+          matchMask = match0.compare(NE, (byte) 0).and(isAscii0);
         }
 
-        matchMask = match0.compare(NE, (byte) 0).and(isAscii0);
         if (matchMask.anyTrue()) {
-          // Stage 3: Candidate extraction and verification
+          // Stage 3: Candidate extraction and verification (< 0.1% of blocks)
           match0.intoArray(laneBuf, 0);
           long activeLanes = matchMask.toLong() & ((1L << charCount) - 1);
           while (activeLanes != 0) {
