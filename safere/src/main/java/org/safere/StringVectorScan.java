@@ -654,6 +654,9 @@ final class StringVectorScan {
     if (StringSupport.compatibleWith(text, ISO_8859_1)) {
       return TeddyVectorScan.indexOfTeddyLatin1(text, model, start);
     }
+    if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
+      return TeddyVectorScan.indexOfTeddyUtf16(text, model, start);
+    }
     return VectorScanProvider.UNSUPPORTED;
   }
 

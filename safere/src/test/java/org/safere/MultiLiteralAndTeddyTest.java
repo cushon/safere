@@ -220,4 +220,54 @@ class MultiLiteralAndTeddyTest {
       }
     }
   }
+
+  @Test
+  void teddyUtf16NonLatin1StringMatch() {
+    Pattern p = Pattern.compile("GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|TRACE");
+    // Non-Latin-1 string (UTF-16 coder = 1) containing Japanese text and emojis
+    String text = "リクエストログ: POST /api/v1/user 📦 レスポンス受信後に GET /api/v1/user 🚀 完了";
+
+    Matcher m = p.matcher(text);
+    List<String> matches = new ArrayList<>();
+    List<Integer> starts = new ArrayList<>();
+    while (m.find()) {
+      matches.add(m.group());
+      starts.add(m.start());
+    }
+
+    assertThat(matches).containsExactly("POST", "GET");
+    assertThat(starts).containsExactly(9, 40);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 1, 15, 16, 31, 32, 63, 64, 127, 128})
+  void teddyUtf16WithNonAsciiPadding(int padding) {
+    Pattern p = Pattern.compile(US_STATES);
+    String nonAsciiPad = "あ".repeat(padding);
+    String text = nonAsciiPad + "CA" + nonAsciiPad + "NY" + nonAsciiPad + "TX";
+
+    Matcher m = p.matcher(text);
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(padding);
+    assertThat(m.group()).isEqualTo("CA");
+
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(padding + 2 + padding);
+    assertThat(m.group()).isEqualTo("NY");
+
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(padding + 2 + padding + 2 + padding);
+    assertThat(m.group()).isEqualTo("TX");
+
+    assertThat(m.find()).isFalse();
+  }
+
+  @Test
+  void teddyUtf16AbsentWithNonAsciiText() {
+    Pattern p = Pattern.compile(US_STATES);
+    String text = "こんにちは世界！これは日本語のテキストです。".repeat(50);
+
+    Matcher m = p.matcher(text);
+    assertThat(m.find()).isFalse();
+  }
 }

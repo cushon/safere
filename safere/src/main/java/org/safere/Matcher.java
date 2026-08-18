@@ -1631,8 +1631,7 @@ public final class Matcher implements MatchResult {
     if (options.startAcceleration() && !prog.anchorStart()) {
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         Utf8StartAccelerator accelerator = parentPattern.utf8StartAccelerator();
-        if (accelerator != null
-            && utf8Scanner.length() - searchFrom >= accelerator.policy().minProfitableSkip()) {
+        if (accelerator != null) {
           AcceleratorPolicy policy = accelerator.policy();
           MatchStrategy strategy = policy.strategy();
           if (strategy != null) {
@@ -1650,8 +1649,7 @@ public final class Matcher implements MatchResult {
         }
       } else if (text != null) {
         StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
-        if (accelerator != null
-            && text.length() - searchFrom >= accelerator.policy().minProfitableSkip()) {
+        if (accelerator != null) {
           AcceleratorPolicy policy = accelerator.policy();
           MatchStrategy strategy = policy.strategy();
           if (strategy != null) {
@@ -4221,8 +4219,7 @@ public final class Matcher implements MatchResult {
     int effectiveStart = fromIndex;
     if (options.startAcceleration() && text != null) {
       StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
-      if (accelerator != null
-          && text.length() - fromIndex >= accelerator.policy().minProfitableSkip()) {
+      if (accelerator != null) {
         int idx = accelerator.findCandidate(text, fromIndex, prog.unixLines());
         if (idx < 0) {
           return -1L;
