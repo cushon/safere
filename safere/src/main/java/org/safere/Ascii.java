@@ -140,6 +140,11 @@ final class Ascii {
     }
     char low = toLowerCase(ch);
     char high = toUpperCase(ch);
+    return indexOfIgnoreCase(text, low, high, fromIndex);
+  }
+
+  /** Returns the first index of character matching {@code low} or {@code high}, or -1 if not found. */
+  static int indexOfIgnoreCase(String text, char low, char high, int fromIndex) {
     if (low == high) {
       return text.indexOf(low, fromIndex);
     }
