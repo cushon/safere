@@ -2191,11 +2191,12 @@ public final class Matcher implements MatchResult {
     int length = text.length();
     int pos = Math.max(0, fromIndex);
     long verificationWork = 0;
-    long workLimit = WorkLimit.forRemaining(length - pos);
+    long workLimit = -1;
     boolean hasLow = true;
     boolean hasHigh = (low != high);
     int nextLow = -1;
     int nextHigh = -1;
+    int startFrom = anchorOffset == 0 ? 1 : 0;
 
     while (pos <= length - prefixLen) {
       // Short scalar search for nearby anchor (handles whitespace / short delimiters without
@@ -2206,11 +2207,14 @@ public final class Matcher implements MatchResult {
           WorkCounter.record();
         }
         char c = text.charAt(pos + anchorOffset);
-        if (c == low || c == high) {
-          if (Ascii.regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
+        if (hasHigh ? (c | 0x20) == low : c == low) {
+          if (Ascii.regionMatchesIgnoreCase(text, pos, prefix, startFrom, prefixLen)) {
             return pos;
           }
           verificationWork += prefixLen;
+          if (workLimit < 0) {
+            workLimit = WorkLimit.forRemaining(length - pos);
+          }
           if (WorkLimit.isExhausted(verificationWork, workLimit)) {
             return Ascii.indexOfLinearIgnoreCase(text, prefix, failure, pos + 1);
           }
@@ -2219,6 +2223,10 @@ public final class Matcher implements MatchResult {
 
       if (pos > length - prefixLen) {
         return -1;
+      }
+
+      if (workLimit < 0) {
+        workLimit = WorkLimit.forRemaining(length - pos);
       }
 
       int searchFrom = pos + anchorOffset;

@@ -190,7 +190,15 @@ final class Ascii {
 
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
+    return regionMatchesIgnoreCase(text, offset, prefix, 0, prefixLen);
+  }
+
+  /**
+   * Returns whether a string matches a pattern prefix ignoring ASCII case, starting from startFrom.
+   */
+  static boolean regionMatchesIgnoreCase(
+      String text, int offset, String prefix, int startFrom, int prefixLen) {
+    for (int i = startFrom; i < prefixLen; i++) {
       char c = text.charAt(offset + i);
       char p = prefix.charAt(i);
       if (c != p && toLowerCase(c) != p) {
