@@ -202,6 +202,48 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(smallerWork * 6);
   }
 
+  @Test
+  void caseInsensitiveSingleCharRejectionIsSinglePass() {
+    Pattern pattern = Pattern.compile("(?i)z");
+    int size = 10_000;
+    String input = "a".repeat(size);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    assertThat(work)
+        .as("Case-insensitive single char search must inspect text in a single pass")
+        .isEqualTo(size);
+  }
+
+  @Test
+  void caseInsensitiveDenseFalseCandidatesScaleLinearly() {
+    // Pattern has anchor 'a' matching every position, but candidate fails on second char 'b'
+    Pattern pattern = Pattern.compile("(?i)ab");
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher("a".repeat(2_000)).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher("a".repeat(10_000)).find()).isFalse());
+
+    // Without KMP fallback, work would be 2 * N. With KMP fallback after work exhaustion,
+    // it must remain strictly linear (work(10000) <= work(2000) * 6).
+    assertThat(work10000)
+        .as("Dense false candidate verification must fall back to linear KMP")
+        .isLessThanOrEqualTo(work2000 * 6);
+  }
+
+  @Test
+  void caseInsensitiveLiteralFindWorkIsLinear() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find");
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("KEYWORD_TO_FIND ".repeat(size))::find,
+        "Case-insensitive literal find");
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);
