@@ -3967,6 +3967,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.alternationScaled.1024",
+      "operation": "find",
+      "patterns": [
+        "foo|bar|baz|qux|quux|corge|grault|garply"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.searchEasyFail.10240",
       "operation": "find",
       "patterns": [
@@ -4048,6 +4066,24 @@
         "searchScaling.prose.10240"
       ],
       "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.alternationScaled.10240",
+      "operation": "find",
+      "patterns": [
+        "foo|bar|baz|qux|quux|corge|grault|garply"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "microseconds",
@@ -4147,6 +4183,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.alternationScaled.102400",
+      "operation": "find",
+      "patterns": [
+        "foo|bar|baz|qux|quux|corge|grault|garply"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.searchEasyFail.1048576",
       "operation": "find",
       "patterns": [
@@ -4228,6 +4282,24 @@
         "searchScaling.prose.1048576"
       ],
       "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.alternationScaled.1048576",
+      "operation": "find",
+      "patterns": [
+        "foo|bar|baz|qux|quux|corge|grault|garply"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "microseconds",
