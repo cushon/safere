@@ -279,7 +279,7 @@ final class StringVectorScan {
     long verificationWork = 0;
     long workLimit = WorkLimit.forRemaining(length - pos);
 
-    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
+    int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen);
     char anchor = prefix.charAt(anchorOffset);
     byte low = (byte) toLowerCase(anchor);
     byte high = (byte) toUpperCase(anchor);
@@ -383,7 +383,7 @@ final class StringVectorScan {
     long verificationWork = 0;
     long workLimit = WorkLimit.forRemaining(length - pos);
 
-    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
+    int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen);
     char anchor = prefix.charAt(anchorOffset);
     short low = (short) toLowerCase(anchor);
     short high = (short) toUpperCase(anchor);

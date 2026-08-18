@@ -46,8 +46,10 @@ class MatcherResultsStreamTest {
     assertThat(results).hasSize(2);
     assertThat(results.get(0).start()).isEqualTo(4);
     assertThat(results.get(0).end()).isEqualTo(7);
+    assertThat(results.get(0).hasMatch()).isTrue();
     assertThat(results.get(1).start()).isEqualTo(12);
     assertThat(results.get(1).end()).isEqualTo(15);
+    assertThat(results.get(1).hasMatch()).isTrue();
   }
 
   @Test

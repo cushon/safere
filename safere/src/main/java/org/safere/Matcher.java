@@ -58,13 +58,48 @@ public final class Matcher implements MatchResult {
    */
   private static final int MIN_REVERSE_FIRST_LEN = 1024;
 
+  /** Maximum text length for anchored OnePass when inner captures are not required. */
+  static final int ONEPASS_TEXT_LIMIT_NO_CAPTURES = 256;
+
+  /** Maximum text length for anchored OnePass when inner captures are required. */
+  static final int ONEPASS_TEXT_LIMIT_WITH_CAPTURES = 65536;
+
   /**
-   * Maximum text length for the anchored OnePass fast path. For anchored patterns where the OnePass
-   * DFA built successfully, skip the DFA sandwich entirely and use OnePass as the primary engine.
-   * Matches C++ RE2's threshold (re2.cc line 838). For larger texts, the DFA's cached state
-   * transitions are more efficient.
+   * Returns the maximum input text length eligible for anchored OnePass execution based on whether
+   * inner capture extraction is required.
+   *
+   * <ul>
+   *   <li><b>No inner captures (&lt;= 256 bytes)</b>: For short strings, OnePass avoids the lazy
+   *       DFA initialization overhead (~50-80 ns). For larger texts without captures (including
+   *       literal/group-0 replacements or boolean-only matching on patterns without groups),
+   *       Forward DFA's direct transition table loop and SIMD vector acceleration are 3x-10x+
+   *       faster.
+   *   <li><b>With inner captures (&lt;= 65536 bytes)</b>: OnePass extracts capture group boundaries
+   *       in a single linear pass, outperforming the multi-pass DFA + BitState/NFA submatch
+   *       extraction sandwich (2x-28x speedup) and avoiding the Java NFA heap allocation cliff at
+   *       &gt;= 16 KB.
+   * </ul>
+   *
+   * <p><b>Tradeoff Note (pattern.matcher(input).matches() -&gt; group()):</b> In Java's stateful
+   * Matcher API, matches() is called before the engine knows whether the caller will subsequently
+   * call group(i). If a pattern contains capturing groups (prog.numCaptures() &gt; 0), defaulting
+   * to the 64 KB limit ensures one-shot matchers (e.g. pattern.matcher(input).matches() -&gt;
+   * group(1)) record captures in a single pass without paying the severe (2.6x) multi-pass fallback
+   * submatch penalty on 256 B - 64 KB inputs.
    */
-  private static final int ONEPASS_ANCHORED_TEXT_LIMIT = 4096;
+  static int onePassTextLimit(boolean requiresInnerCaptures) {
+    return requiresInnerCaptures
+        ? ONEPASS_TEXT_LIMIT_WITH_CAPTURES
+        : ONEPASS_TEXT_LIMIT_NO_CAPTURES;
+  }
+
+  /**
+   * Returns the OnePass text limit for standard Matcher operations based on whether the pattern
+   * declares capturing groups.
+   */
+  int onePassTextLimit() {
+    return onePassTextLimit(parentPattern.numGroups() > 0);
+  }
 
   /**
    * Maximum number of submatches (including group 0) for lazy fallback capture extraction.
@@ -418,7 +453,6 @@ public final class Matcher implements MatchResult {
     resetSearchStateForInputStart();
     resetReplacementState();
     clearCurrentResult();
-    eagerFallbackCaptures = false;
   }
 
   private void resetStateForRegion(int start, int end) {
@@ -2137,7 +2171,7 @@ public final class Matcher implements MatchResult {
         return Math.min(pos1, pos2);
       }
     }
-    int anchorOffset = Ascii.rarestAsciiOffset(prefix, prefixLen);
+    int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen);
     char anchor = prefix.charAt(anchorOffset);
     char low = Ascii.toLowerCase(anchor);
     char high = Ascii.toUpperCase(anchor);
@@ -2609,6 +2643,17 @@ public final class Matcher implements MatchResult {
   }
 
   /**
+   * Returns {@code true} if this matcher has a match.
+   *
+   * @return {@code true} if this matcher has a match, {@code false} otherwise
+   * @since 20
+   */
+  @Override
+  public boolean hasMatch() {
+    return hasMatch;
+  }
+
+  /**
    * Returns the offset after the last character of the subsequence captured by the given named
    * group.
    *
@@ -2729,10 +2774,11 @@ public final class Matcher implements MatchResult {
         parentPattern.prog().anchorStart()
             && (parentPattern.prog().anchorEnd() || parentPattern.prog().dollarAnchorEnd());
 
+    boolean requiresCaptures = template.needsCaptures();
     if (!enginePathOptions().onePass()
         || !parentPattern.canOnePassFind()
         || !isFullAnchored
-        || text.length() > ONEPASS_ANCHORED_TEXT_LIMIT
+        || text.length() > onePassTextLimit(requiresCaptures)
         || regionActive
         || searchFrom != 0) {
       return null;
@@ -3624,15 +3670,24 @@ public final class Matcher implements MatchResult {
       if (!groupZeroResolved) {
         resolveCaptures();
       }
-      searchFrom = groups[1];
-      if (groups[0] == groups[1] && searchFrom < regionEnd) {
+      int prevStart = groups[0];
+      int prevEnd = groups[1];
+      searchFrom = prevEnd;
+      if (prevStart == prevEnd && searchFrom < regionEnd) {
         searchFrom++;
       }
+      this.parentPattern = newPattern;
+      this.groups = new int[2 * newPattern.prog().numCaptures()];
+      Arrays.fill(this.groups, -1);
+      this.groups[0] = prevStart;
+      this.groups[1] = prevEnd;
+      clearDeferredCaptureState();
+    } else {
+      this.parentPattern = newPattern;
+      this.groups = new int[2 * newPattern.prog().numCaptures()];
+      clearCurrentResult();
     }
-    this.parentPattern = newPattern;
-    this.groups = new int[2 * newPattern.prog().numCaptures()];
     invalidatePatternCaches();
-    clearCurrentResult();
     eagerFallbackCaptures = false;
     return this;
   }
@@ -3900,6 +3955,11 @@ public final class Matcher implements MatchResult {
     }
 
     @Override
+    public boolean hasMatch() {
+      return hasMatch;
+    }
+
+    @Override
     public int start() {
       return start(0);
     }
@@ -4016,7 +4076,22 @@ public final class Matcher implements MatchResult {
         if (c == '\\') {
           i += 2;
         } else if (c == '$') {
-          return true;
+          i++;
+          if (i >= len) {
+            continue;
+          }
+          char next = replacement.charAt(i);
+          if (next == '{') {
+            return true;
+          } else if (next >= '0' && next <= '9') {
+            NumericGroupReference groupRef = parseNumericGroupReference(replacement, i, maxGroup);
+            if (groupRef.groupNum() > 0) {
+              return true;
+            }
+            i = groupRef.end();
+          } else {
+            i++;
+          }
         } else {
           i++;
         }
@@ -4488,7 +4563,7 @@ public final class Matcher implements MatchResult {
     @Override
     public boolean find(Matcher matcher, boolean regionActive) {
       if (!matcher.parentPattern.canOnePassFind()
-          || matcher.activeScanner().length() > ONEPASS_ANCHORED_TEXT_LIMIT) {
+          || matcher.activeScanner().length() > matcher.onePassTextLimit()) {
         return matcher.doFindCore(regionActive);
       }
       matcher.diagnosticBoundary(MatchStrategy.ONE_PASS);
@@ -4511,7 +4586,7 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean matches(Matcher matcher) {
-      if (matcher.activeScanner().length() > ONEPASS_ANCHORED_TEXT_LIMIT) {
+      if (matcher.activeScanner().length() > matcher.onePassTextLimit()) {
         return matcher.matchesCore();
       }
       matcher.capturesResolved = true;
@@ -4534,7 +4609,7 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean lookingAt(Matcher matcher) {
-      if (matcher.activeScanner().length() > ONEPASS_ANCHORED_TEXT_LIMIT) {
+      if (matcher.activeScanner().length() > matcher.onePassTextLimit()) {
         return matcher.lookingAtCore();
       }
       matcher.capturesResolved = true;

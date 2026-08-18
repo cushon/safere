@@ -222,6 +222,15 @@ public final class Matcher implements MatchResult {
     return sr;
   }
 
+  /** Returns whether this matcher has a match. */
+  @Override
+  public boolean hasMatch() {
+    boolean sr = safereMatcher.hasMatch();
+    boolean jr = jdkMatcher.hasMatch();
+    checkBoolean("hasMatch", "", sr, jr);
+    return sr;
+  }
+
   // ---------------------------------------------------------------------------
   // Replacement
   // ---------------------------------------------------------------------------
