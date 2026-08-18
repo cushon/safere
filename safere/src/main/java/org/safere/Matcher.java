@@ -2201,34 +2201,20 @@ public final class Matcher implements MatchResult {
       // Short scalar search for nearby anchor (handles whitespace / short delimiters without
       // indexOf overhead)
       int scalarLimit = Math.min(length - prefixLen + 1, pos + 32);
-      int foundAnchor = -1;
       for (; pos < scalarLimit; pos++) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
         char c = text.charAt(pos + anchorOffset);
         if (c == low || c == high) {
-          foundAnchor = pos;
-          break;
+          if (Ascii.regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
+            return pos;
+          }
+          verificationWork += prefixLen;
+          if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+            return Ascii.indexOfLinearIgnoreCase(text, prefix, failure, pos + 1);
+          }
         }
-      }
-      if (foundAnchor >= 0) {
-        int anchorPosition = foundAnchor + anchorOffset;
-        if (nextLow >= 0 && nextLow <= anchorPosition) {
-          nextLow = -1;
-        }
-        if (nextHigh >= 0 && nextHigh <= anchorPosition) {
-          nextHigh = -1;
-        }
-        if (Ascii.regionMatchesIgnoreCase(text, foundAnchor, prefix, prefixLen)) {
-          return foundAnchor;
-        }
-        verificationWork += prefixLen;
-        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
-          return Ascii.indexOfLinearIgnoreCase(text, prefix, failure, foundAnchor + 1);
-        }
-        pos = foundAnchor + 1;
-        continue;
       }
 
       if (pos > length - prefixLen) {
