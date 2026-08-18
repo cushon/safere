@@ -2281,7 +2281,6 @@ public final class Matcher implements MatchResult {
     return -1;
   }
 
-
   /**
    * Tries BitState first (for small texts), falls back to NFA. This is the final capture-extraction
    * step after DFA/OnePass have been tried or are not applicable.

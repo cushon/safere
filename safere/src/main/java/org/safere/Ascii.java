@@ -61,8 +61,10 @@ final class Ascii {
   }
 
   private static final long WORD_LOW = 0x03FF000000000000L; // '0'-'9' (bits 48-57)
-  private static final long WORD_HIGH = 0x07FFFFFE87FFFFFEL; // 'A'-'Z' (bits 1-26), '_' (bit 31), 'a'-'z' (bits 33-58)
-  private static final long ALNUM_HIGH = 0x07FFFFFE07FFFFFEL; // 'A'-'Z' (bits 1-26), 'a'-'z' (bits 33-58)
+  private static final long WORD_HIGH =
+      0x07FFFFFE87FFFFFEL; // 'A'-'Z' (bits 1-26), '_' (bit 31), 'a'-'z' (bits 33-58)
+  private static final long ALNUM_HIGH =
+      0x07FFFFFE07FFFFFEL; // 'A'-'Z' (bits 1-26), 'a'-'z' (bits 33-58)
 
   /** Returns true if the code point is an ASCII letter or digit. */
   static boolean isAlnum(int r) {
@@ -160,7 +162,9 @@ final class Ascii {
     return indexOfIgnoreCase(text, low, high, fromIndex);
   }
 
-  /** Returns the first index of character matching {@code low} or {@code high}, or -1 if not found. */
+  /**
+   * Returns the first index of character matching {@code low} or {@code high}, or -1 if not found.
+   */
   static int indexOfIgnoreCase(String text, char low, char high, int fromIndex) {
     if (low == high) {
       return text.indexOf(low, fromIndex);

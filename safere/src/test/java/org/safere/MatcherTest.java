@@ -1919,7 +1919,8 @@ class MatcherTest {
       Matcher m = p.matcher(input);
       assertThat(m.replaceAll("FOUND")).isEqualTo("FOUND and FOUND and FOUND");
       m.reset();
-      assertThat(m.replaceFirst("FOUND")).isEqualTo("FOUND and keyword_to_find and KeyWord_To_Find");
+      assertThat(m.replaceFirst("FOUND"))
+          .isEqualTo("FOUND and keyword_to_find and KeyWord_To_Find");
       assertThat(m.start()).isEqualTo(0);
       assertThat(m.end()).isEqualTo(15);
       assertThat(m.group()).isEqualTo("KEYWORD_TO_FIND");
@@ -1945,7 +1946,8 @@ class MatcherTest {
       java.util.regex.Pattern jdkP = java.util.regex.Pattern.compile(regex);
 
       assertThat(p.matcher(input).replaceAll("")).isEqualTo(jdkP.matcher(input).replaceAll(""));
-      assertThat(p.matcher(input).replaceFirst("X")).isEqualTo(jdkP.matcher(input).replaceFirst("X"));
+      assertThat(p.matcher(input).replaceFirst("X"))
+          .isEqualTo(jdkP.matcher(input).replaceFirst("X"));
     }
   }
 
