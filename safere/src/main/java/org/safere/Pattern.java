@@ -2732,6 +2732,21 @@ public final class Pattern implements Serializable {
     return buildCharClassScanInfo(cc);
   }
 
+  private static boolean addAsciiCharClass(CharClass cc, AsciiBitmap.Builder bitmap) {
+    if (cc == null || cc.isEmpty()) {
+      return false;
+    }
+    for (int i = 0; i < cc.numRanges(); i++) {
+      if (cc.hi(i) >= 128) {
+        return false;
+      }
+    }
+    for (int i = 0; i < cc.numRanges(); i++) {
+      bitmap.addRange(cc.lo(i), cc.hi(i));
+    }
+    return true;
+  }
+
   private static StartAcceleration extractStartAcceleration(Regexp re) {
     Regexp node = unwrapCaptures(re);
     if (node == null) {
@@ -3332,21 +3347,6 @@ public final class Pattern implements Serializable {
       return new EndAnchoredCharClassInfo(builder.build(), wasDollar, unixLines);
     }
     return null;
-  }
-
-  private static boolean addAsciiCharClass(CharClass cc, AsciiBitmap.Builder bitmap) {
-    if (cc == null || cc.isEmpty()) {
-      return false;
-    }
-    for (int i = 0; i < cc.numRanges(); i++) {
-      if (cc.hi(i) >= 128) {
-        return false;
-      }
-    }
-    for (int i = 0; i < cc.numRanges(); i++) {
-      bitmap.addRange(cc.lo(i), cc.hi(i));
-    }
-    return true;
   }
 
   /**
