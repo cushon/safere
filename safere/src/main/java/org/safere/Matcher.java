@@ -2190,9 +2190,6 @@ public final class Matcher implements MatchResult {
     }
     int length = text.length();
     int pos = Math.max(0, fromIndex);
-    if (pos <= length - prefixLen && Ascii.regionMatchesIgnoreCase(text, pos, prefix, prefixLen)) {
-      return pos;
-    }
     long verificationWork = 0;
     long workLimit = WorkLimit.forRemaining(length - pos);
     boolean hasLow = true;

@@ -32,12 +32,12 @@ final class Ascii {
 
   /** Returns whether two characters are equal ignoring ASCII case. */
   static boolean equalsIgnoreCase(char a, char b) {
-    return a == b || ((a ^ b) == 0x20 && isAlpha(a));
+    return a == b || toLowerCase(a) == toLowerCase(b);
   }
 
   /** Returns whether two code points or bytes are equal ignoring ASCII case. */
   static boolean equalsIgnoreCase(int a, int b) {
-    return a == b || ((a ^ b) == 0x20 && isAlpha(a));
+    return a == b || toLowerCase(a) == toLowerCase(b);
   }
 
   /** Returns true if the code point is an ASCII uppercase letter. */
