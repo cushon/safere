@@ -239,6 +239,9 @@ class PatternProfilesTest {
     assertThat(replacements.select("re2-cpp", "$2$1ay")).isEqualTo("\\2\\1ay");
     assertThat(replacements.select("re2-cpp", "$1=REDACTED")).isEqualTo("\\1=REDACTED");
     assertThat(replacements.select("re2-cpp", "$1")).isEqualTo("\\1");
+    assertThat(replacements.select("re2-cpp", "[$0]")).isEqualTo("[\\0]");
+    assertThat(replacements.select("re2-cpp", "[$1://$2-modified:$3]"))
+        .isEqualTo("[\\1://\\2-modified:\\3]");
     assertThat(replacements.select("go-regexp", "$2$1ay")).isEqualTo("${2}${1}ay");
     assertThat(replacements.select("pcre2", "$1")).isEqualTo("$1");
     assertThat(replacements.select("rust-regex", "$2$1ay")).isEqualTo("${2}${1}ay");

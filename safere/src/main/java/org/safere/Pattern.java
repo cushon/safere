@@ -2256,6 +2256,7 @@ public final class Pattern implements Serializable {
       return null;
     }
     FixedOffsetLiteral best = null;
+    int bestScore = 0;
     AsciiWidthRange prefixWidth = AsciiWidthRange.ZERO;
 
     for (int index = 0; index < node.subs.size(); ) {
@@ -2273,14 +2274,17 @@ public final class Pattern implements Serializable {
         }
         if (index > 0 && (prefixWidth.minWidth > 0 || prefixWidth.maxWidth > 0)) {
           int minimumLiteralLength = prefixWidth.discreteWidths != null ? 1 : 2;
-          if (literal.length() >= minimumLiteralLength
-              && (best == null || literal.length() > best.literal().length())) {
-            best =
-                new FixedOffsetLiteral(
-                    literal.toString(),
-                    prefixWidth.minWidth,
-                    prefixWidth.maxWidth,
-                    prefixWidth.discreteWidths);
+          if (literal.length() >= minimumLiteralLength) {
+            int candidateScore = RarityOracle.literalSelectivityScore(literal);
+            if (best == null || candidateScore > bestScore) {
+              best =
+                  new FixedOffsetLiteral(
+                      literal.toString(),
+                      prefixWidth.minWidth,
+                      prefixWidth.maxWidth,
+                      prefixWidth.discreteWidths);
+              bestScore = candidateScore;
+            }
           }
         }
         prefixWidth = concatenateWidths(prefixWidth, AsciiWidthRange.exact(literal.length()));
@@ -3462,6 +3466,7 @@ public final class Pattern implements Serializable {
    */
   private static String extractRequiredLiteral(Regexp re) {
     String longest = null;
+    int longestScore = 0;
     Deque<Regexp> pending = new ArrayDeque<>();
     pending.addLast(re);
     while (!pending.isEmpty()) {
@@ -3483,10 +3488,13 @@ public final class Pattern implements Serializable {
         case LITERAL_STRING -> {
           if ((node.flags & ParseFlags.FOLD_CASE) == 0
               && node.runes != null
-              && node.runes.length >= 2
-              && (longest == null
-                  || node.runes.length > longest.codePointCount(0, longest.length()))) {
-            longest = new String(node.runes, 0, node.runes.length);
+              && node.runes.length >= 2) {
+            String candidate = new String(node.runes, 0, node.runes.length);
+            int candidateScore = RarityOracle.literalSelectivityScore(candidate);
+            if (longest == null || candidateScore > longestScore) {
+              longest = candidate;
+              longestScore = candidateScore;
+            }
           }
         }
         default -> {}

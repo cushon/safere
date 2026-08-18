@@ -208,7 +208,7 @@ final class MatcherTransitionInventory {
           observer(signature("toString")),
           transition(
               signature("usePattern", Pattern.class),
-              ResultEffect.RESET_NO_ATTEMPT,
+              ResultEffect.PRESERVE,
               DeferredCaptureEffect.CLEAR,
               CursorEffect.DERIVE_FROM_PREVIOUS_RESULT_THEN_SEARCH,
               ReplacementEffect.PRESERVE,
@@ -219,6 +219,7 @@ final class MatcherTransitionInventory {
           observer(signature("hasTransparentBounds")),
           boundsChange(signature("useAnchoringBounds", boolean.class)),
           observer(signature("hasAnchoringBounds")),
+          observer(signature("hasMatch")),
           transition(
               signature("toMatchResult"),
               ResultEffect.REQUIRES_MATCH,
