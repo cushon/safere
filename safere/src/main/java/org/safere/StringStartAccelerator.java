@@ -28,6 +28,12 @@ sealed interface StringStartAccelerator {
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
+    if (descriptor.multiLiteral() != null && !hasWordBoundary) {
+      return new MultiLiteral(descriptor.multiLiteral());
+    }
+    if (descriptor.teddyModel() != null && !hasWordBoundary) {
+      return new Teddy(descriptor.teddyModel(), descriptor.charClassPrefixAscii());
+    }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
       return new CharClass(descriptor.charClassPrefixAscii());
     }
@@ -59,6 +65,8 @@ sealed interface StringStartAccelerator {
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
+      case MultiLiteral ml -> ml.findCandidate(text, fromIndex, unixLines);
+      case Teddy t -> t.findCandidate(text, fromIndex, unixLines);
     };
   }
 
@@ -333,6 +341,129 @@ sealed interface StringStartAccelerator {
           || prev == '\u2028'
           || prev == '\u2029'
           || (prev == '\r' && text.charAt(pos) != '\n');
+    }
+  }
+
+  final class MultiLiteral implements StringStartAccelerator {
+    private final MultiLiteralInfo info;
+
+    MultiLiteral(MultiLiteralInfo info) {
+      this.info = info;
+    }
+
+    public MultiLiteralInfo info() {
+      return info;
+    }
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
+    }
+
+    @Override
+    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+      VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
+      if (provider != null) {
+        int idx =
+            provider.indexOfMultiLiteral(
+                text,
+                info.literals(),
+                info.anchorChars(),
+                info.anchorOffsets(),
+                info.minLength(),
+                fromIndex);
+        if (idx != VectorScanProvider.UNSUPPORTED) {
+          return idx;
+        }
+      }
+      return findScalar(text, fromIndex);
+    }
+
+    private int findScalar(String text, int fromIndex) {
+      int len = text.length();
+      int minLen = info.minLength();
+      String[] literals = info.literals();
+      for (int i = fromIndex; i <= len - minLen; i++) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        for (String lit : literals) {
+          if (i + lit.length() <= len && text.startsWith(lit, i)) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    }
+  }
+
+  final class Teddy implements StringStartAccelerator {
+    private final TeddyModel model;
+    private final AsciiBitmap ccPrefixAscii;
+    private final boolean[] asciiTable;
+
+    Teddy(TeddyModel model, AsciiBitmap ccPrefixAscii) {
+      this.model = model;
+      this.ccPrefixAscii = ccPrefixAscii;
+      this.asciiTable = ccPrefixAscii != null ? ccPrefixAscii.toBooleanArray() : null;
+    }
+
+    public TeddyModel model() {
+      return model;
+    }
+
+    public AsciiBitmap ccPrefixAscii() {
+      return ccPrefixAscii;
+    }
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
+    }
+
+    @Override
+    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+      VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
+      if (provider != null) {
+        int idx = provider.indexOfTeddy(text, model, fromIndex);
+        if (idx != VectorScanProvider.UNSUPPORTED) {
+          return idx;
+        }
+      }
+      if (asciiTable != null) {
+        return indexOfCharClass(text, asciiTable, fromIndex);
+      }
+      return findScalar(text, fromIndex);
+    }
+
+    private int findScalar(String text, int fromIndex) {
+      int len = text.length();
+      int minLen = model.minLength();
+      String[] literals = model.literals();
+      for (int i = fromIndex; i <= len - minLen; i++) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        for (String lit : literals) {
+          if (i + lit.length() <= len && text.startsWith(lit, i)) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    }
+
+    private static int indexOfCharClass(String text, boolean[] asciiTable, int fromIndex) {
+      for (int i = fromIndex; i < text.length(); i++) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        char ch = text.charAt(i);
+        if (ch < 128 && asciiTable[ch]) {
+          return i;
+        }
+      }
+      return -1;
     }
   }
 }

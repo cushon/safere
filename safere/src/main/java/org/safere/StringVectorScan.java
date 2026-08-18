@@ -477,5 +477,185 @@ final class StringVectorScan {
     return clamped;
   }
 
+  static int indexOfMultiLiteral(
+      String text,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    if (text == null || literals == null || literals.length == 0 || text.length() < minLength) {
+      return -1;
+    }
+    if (!StringSupport.hasAccess()) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return indexOfMultiLiteralLatin1(text, literals, anchorChars, anchorOffsets, minLength, start);
+    }
+    if (StringSupport.compatibleWith(text, UTF_16)) {
+      return indexOfMultiLiteralUtf16(text, literals, anchorChars, anchorOffsets, minLength, start);
+    }
+    return VectorScanProvider.UNSUPPORTED;
+  }
+
+  private static int indexOfMultiLiteralLatin1(
+      String text,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    int numLits = literals.length;
+    int length = text.length();
+    int pos = Math.max(0, start);
+    int vectorLen = BYTE_SPECIES.length();
+    int limit = length - vectorLen;
+
+    ByteVector v0 = ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[0]);
+    ByteVector v1 = numLits >= 2 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[1]) : null;
+    ByteVector v2 = numLits >= 3 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[2]) : null;
+    ByteVector v3 = numLits >= 4 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[3]) : null;
+    ByteVector v4 = numLits >= 5 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[4]) : null;
+    ByteVector v5 = numLits >= 6 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[5]) : null;
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = StringSupport.byteVectorFromString(BYTE_SPECIES, text, pos);
+      VectorMask<Byte> matchMask = inputVec.compare(EQ, v0);
+      if (numLits >= 2) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v1));
+      }
+      if (numLits >= 3) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v2));
+      }
+      if (numLits >= 4) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v3));
+      }
+      if (numLits >= 5) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v4));
+      }
+      if (numLits >= 6) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v5));
+      }
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int matchIndex = pos + bit;
+          for (int i = 0; i < numLits; i++) {
+            int candidatePos = matchIndex - anchorOffsets[i];
+            String lit = literals[i];
+            if (candidatePos >= start
+                && candidatePos + lit.length() <= length
+                && text.charAt(matchIndex) == anchorChars[i]
+                && text.startsWith(lit, candidatePos)) {
+              return candidatePos;
+            }
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int scalarLimit = length - minLength;
+    for (; pos <= scalarLimit; pos++) {
+      for (int i = 0; i < numLits; i++) {
+        String lit = literals[i];
+        if (pos + lit.length() <= length && text.startsWith(lit, pos)) {
+          return pos;
+        }
+      }
+    }
+    return -1;
+  }
+
+  private static int indexOfMultiLiteralUtf16(
+      String text,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    if (nativeOrder() == BIG_ENDIAN) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    int numLits = literals.length;
+    int length = text.length();
+    int pos = Math.max(0, start);
+    int vectorLen = SHORT_SPECIES.length();
+    int limit = length - vectorLen;
+
+    ShortVector v0 = ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[0]);
+    ShortVector v1 = numLits >= 2 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[1]) : null;
+    ShortVector v2 = numLits >= 3 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[2]) : null;
+    ShortVector v3 = numLits >= 4 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[3]) : null;
+    ShortVector v4 = numLits >= 5 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[4]) : null;
+    ShortVector v5 = numLits >= 6 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[5]) : null;
+
+    for (; pos <= limit; pos += vectorLen) {
+      ShortVector inputVec = StringSupport.shortVectorFromString(SHORT_SPECIES, text, pos);
+      VectorMask<Short> matchMask = inputVec.compare(EQ, v0);
+      if (numLits >= 2) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v1));
+      }
+      if (numLits >= 3) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v2));
+      }
+      if (numLits >= 4) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v3));
+      }
+      if (numLits >= 5) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v4));
+      }
+      if (numLits >= 6) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v5));
+      }
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int matchIndex = pos + bit;
+          for (int i = 0; i < numLits; i++) {
+            int candidatePos = matchIndex - anchorOffsets[i];
+            String lit = literals[i];
+            if (candidatePos >= start
+                && candidatePos + lit.length() <= length
+                && text.charAt(matchIndex) == anchorChars[i]
+                && text.startsWith(lit, candidatePos)) {
+              return candidatePos;
+            }
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int scalarLimit = length - minLength;
+    for (; pos <= scalarLimit; pos++) {
+      for (int i = 0; i < numLits; i++) {
+        String lit = literals[i];
+        if (pos + lit.length() <= length && text.startsWith(lit, pos)) {
+          return pos;
+        }
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfTeddy(String text, TeddyModel model, int start) {
+    if (text == null || model == null || text.length() < model.minLength()) {
+      return -1;
+    }
+    if (!StringSupport.hasAccess()) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+      return TeddyVectorScan.indexOfTeddyLatin1(text, model, start);
+    }
+    return VectorScanProvider.UNSUPPORTED;
+  }
+
   private StringVectorScan() {}
 }

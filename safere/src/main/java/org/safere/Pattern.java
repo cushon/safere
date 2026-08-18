@@ -477,8 +477,22 @@ public final class Pattern implements Serializable {
     FixedOffsetLiteral fixedOffsetLiteral =
         prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
     AsciiBitmap ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
+    String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
+    MultiLiteralInfo multiLiteral = null;
+    TeddyModel teddyModel = null;
+    if (altLiterals != null) {
+      if (altLiterals.length >= 2 && altLiterals.length <= 6) {
+        multiLiteral = MultiLiteralInfo.create(altLiterals);
+      } else if (altLiterals.length >= 8 && altLiterals.length <= 32) {
+        teddyModel = TeddyModel.compile(altLiterals, 32);
+      }
+    }
     StartAcceleration startAcceleration =
-        (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
+        (prefix == null
+                && ccPrefixAscii == null
+                && fixedOffsetLiteral == null
+                && multiLiteral == null
+                && teddyModel == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
@@ -496,7 +510,9 @@ public final class Pattern implements Serializable {
         && ccPrefixAscii == null
         && startAcceleration == null
         && anchoredPrefix == null
-        && anchoredCharClassPrefixAscii == null) {
+        && anchoredCharClassPrefixAscii == null
+        && multiLiteral == null
+        && teddyModel == null) {
       return StartDescriptor.NONE;
     }
     return new StartDescriptor(
@@ -506,7 +522,9 @@ public final class Pattern implements Serializable {
         ccPrefixAscii,
         startAcceleration,
         anchoredPrefix,
-        anchoredCharClassPrefixAscii);
+        anchoredCharClassPrefixAscii,
+        multiLiteral,
+        teddyModel);
   }
 
   /**
@@ -2758,6 +2776,67 @@ public final class Pattern implements Serializable {
       bitmap.addRange(cc.lo(i), cc.hi(i));
     }
     return true;
+  }
+
+  private static String[] extractLiteralAlternation(Regexp re) {
+    if (re == null) {
+      return null;
+    }
+    re = unwrapCaptures(re);
+    if (re == null || re.op != RegexpOp.ALTERNATE || re.nsub() < 2) {
+      return null;
+    }
+    String[] literals = new String[re.nsub()];
+    for (int i = 0; i < re.nsub(); i++) {
+      Regexp sub = unwrapCaptures(re.subs.get(i));
+      if (sub == null) {
+        return null;
+      }
+      String lit = extractExactLiteral(sub);
+      if (lit == null || lit.isEmpty()) {
+        return null;
+      }
+      literals[i] = lit;
+    }
+    return literals;
+  }
+
+  private static String extractExactLiteral(Regexp node) {
+    if (node == null) {
+      return null;
+    }
+    if (node.op == RegexpOp.LITERAL) {
+      if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.rune > 127) {
+        return null;
+      }
+      return String.valueOf((char) node.rune);
+    }
+    if (node.op == RegexpOp.LITERAL_STRING) {
+      if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.runes == null) {
+        return null;
+      }
+      char[] chars = new char[node.runes.length];
+      for (int i = 0; i < node.runes.length; i++) {
+        int r = node.runes[i];
+        if (r > 127) {
+          return null;
+        }
+        chars[i] = (char) r;
+      }
+      return new String(chars);
+    }
+    if (node.op == RegexpOp.CONCAT) {
+      StringBuilder sb = new StringBuilder();
+      for (Regexp sub : node.subs) {
+        String s = extractExactLiteral(sub);
+        if (s == null) {
+          return null;
+        }
+        sb.append(s);
+      }
+      return sb.toString();
+    }
+    return null;
   }
 
   private static StartAcceleration extractStartAcceleration(Regexp re) {

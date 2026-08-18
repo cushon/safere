@@ -33,4 +33,40 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   public int indexOfIgnoreCase(String text, String prefix, int start) {
     return StringVectorScan.indexOfIgnoreCase(text, prefix, start);
   }
+
+  @Override
+  public int indexOfMultiLiteral(
+      String text,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    return StringVectorScan.indexOfMultiLiteral(
+        text, literals, anchorChars, anchorOffsets, minLength, start);
+  }
+
+  @Override
+  public int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    return ByteVectorScan.indexOfMultiLiteral(
+        bytes, offset, length, literals, anchorChars, anchorOffsets, minLength, start);
+  }
+
+  @Override
+  public int indexOfTeddy(String text, TeddyModel model, int start) {
+    return StringVectorScan.indexOfTeddy(text, model, start);
+  }
+
+  @Override
+  public int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start) {
+    return TeddyVectorScan.indexOfTeddyUtf8(bytes, offset, length, model, start);
+  }
 }
