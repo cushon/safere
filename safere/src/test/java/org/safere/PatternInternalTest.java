@@ -94,8 +94,7 @@ class PatternInternalTest {
 
   @Test
   void asciiPrefixScanInfoPreservesMembersAcrossBitmapBoundary() {
-    CharClassScanInfo info =
-        assertAsciiScanInfo(new int[] {62, 63, 64, 65}, new int[] {62, 65});
+    CharClassScanInfo info = assertAsciiScanInfo(new int[] {62, 63, 64, 65}, new int[] {62, 65});
 
     assertThat(info.bitmap0).isEqualTo((1L << 62) | (1L << 63));
     assertThat(info.bitmap1).isEqualTo((1L << 0) | (1L << 1));

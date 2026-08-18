@@ -41,4 +41,3 @@ record StartDescriptor(
         || lineAnchor != null;
   }
 }
-

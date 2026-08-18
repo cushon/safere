@@ -152,14 +152,13 @@ sealed interface Utf8StartAccelerator {
         if (literalStart < 0) {
           return -1;
         }
-        if (discreteOffsets != null
-            && discreteOffsets.length == 1
-            && charClassPrefix != null) {
+        if (discreteOffsets != null && discreteOffsets.length == 1 && charClassPrefix != null) {
           int earliestValid = -1;
           for (int offset : discreteOffsets) {
             int candidateStart = literalStart - offset;
             if (candidateStart >= searchFrom) {
-              int first = candidateStart < scanner.length() ? scanner.codePointAt(candidateStart) : -1;
+              int first =
+                  candidateStart < scanner.length() ? scanner.codePointAt(candidateStart) : -1;
               if (first >= 0
                   && charClassPrefix.contains(first)
                   && (earliestValid < 0 || candidateStart < earliestValid)) {
