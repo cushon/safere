@@ -3986,25 +3986,13 @@ public final class Matcher implements MatchResult {
           }
           char next = replacement.charAt(i);
           if (next == '{') {
-            int close = replacement.indexOf('}', i + 1);
-            if (close > i + 1) {
-              String name = replacement.substring(i + 1, close);
-              if (!name.equals("0")) {
-                return true;
-              }
-              i = close + 1;
-            } else {
-              return true;
-            }
+            return true;
           } else if (next >= '0' && next <= '9') {
-            int num = 0;
-            while (i < len && replacement.charAt(i) >= '0' && replacement.charAt(i) <= '9') {
-              num = num * 10 + (replacement.charAt(i) - '0');
-              i++;
-            }
-            if (num > 0) {
+            NumericGroupReference groupRef = parseNumericGroupReference(replacement, i, maxGroup);
+            if (groupRef.groupNum() > 0) {
               return true;
             }
+            i = groupRef.end();
           } else {
             i++;
           }

@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.api.parallel.Isolated;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @Isolated
 @Execution(ExecutionMode.SAME_THREAD)
@@ -97,6 +99,17 @@ class OnePassThresholdTest {
     // $0 does not need inner captures, so input > 256 B routes to DFA even with declared groups
     OperationDiagnostics op = lastOperationFor(pattern);
     assertThat(op.boundaryStrategy()).isNotEqualTo(MatchStrategy.ONE_PASS);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"$01", "$09", "$099999999999999999999999999999999999999"})
+  void replaceAll_groupZeroFollowedByDigits_staysInGroupZeroTier(String replacement) {
+    Pattern pattern = Pattern.compile("^[a-z]+$");
+    String input = "a".repeat(1_000);
+
+    assertThat(pattern.matcher(input).replaceAll(replacement))
+        .isEqualTo(input + replacement.substring(2));
+    assertThat(lastOperationFor(pattern).boundaryStrategy()).isNotEqualTo(MatchStrategy.ONE_PASS);
   }
 
   @Test

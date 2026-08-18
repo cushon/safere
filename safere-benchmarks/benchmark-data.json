@@ -9637,7 +9637,15 @@
         "onePassScaling.withCaptures.{size}"
       ],
       "arguments": {
-        "replacement": "[$0]"
+        "replacement": {
+          "java": "[$0]",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "[\\0]",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
       },
       "resultConsumption": "string",
       "measurement": {
@@ -9666,7 +9674,15 @@
         "onePassScaling.withCaptures.{size}"
       ],
       "arguments": {
-        "replacement": "[$1://$2-modified:$3]"
+        "replacement": {
+          "java": "[$1://$2-modified:$3]",
+          "alternates": {
+            "re2-cpp": {
+              "replacement": "[\\1://\\2-modified:\\3]",
+              "reason": "C++ RE2 uses backslash-number capture references"
+            }
+          }
+        }
       },
       "resultConsumption": "string",
       "measurement": {
