@@ -123,14 +123,14 @@ class CrossEngineBenchmarkPlanTest {
             second.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(1124);
+        .hasSize(1144);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
             second.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(598);
+        .hasSize(578);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MILLISECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(

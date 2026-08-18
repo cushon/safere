@@ -3978,7 +3978,7 @@
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
-        "timingUnit": "microseconds",
+        "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
         ]
@@ -4086,7 +4086,7 @@
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
-        "timingUnit": "microseconds",
+        "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
         ]
@@ -4194,7 +4194,7 @@
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
-        "timingUnit": "microseconds",
+        "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
         ]
@@ -4302,7 +4302,7 @@
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
-        "timingUnit": "microseconds",
+        "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
         ]
