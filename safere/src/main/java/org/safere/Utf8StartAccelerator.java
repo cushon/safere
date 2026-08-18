@@ -32,10 +32,14 @@ sealed interface Utf8StartAccelerator {
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
-    if (descriptor.multiLiteral() != null && !hasWordBoundary) {
+    if (descriptor.multiLiteral() != null
+        && !hasWordBoundary
+        && VectorScanProviders.providerForLength(64) != null) {
       return new MultiLiteral(descriptor.multiLiteral());
     }
-    if (descriptor.teddyModel() != null && !hasWordBoundary) {
+    if (descriptor.teddyModel() != null
+        && !hasWordBoundary
+        && VectorScanProviders.providerForLength(64) != null) {
       return new Teddy(descriptor.teddyModel());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
@@ -212,7 +216,7 @@ sealed interface Utf8StartAccelerator {
   record MultiLiteral(MultiLiteralInfo info) implements Utf8StartAccelerator {
     @Override
     public AcceleratorPolicy policy() {
-      return AcceleratorPolicy.LITERAL;
+      return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
     }
 
     @Override
@@ -253,7 +257,7 @@ sealed interface Utf8StartAccelerator {
   record Teddy(TeddyModel model) implements Utf8StartAccelerator {
     @Override
     public AcceleratorPolicy policy() {
-      return AcceleratorPolicy.LITERAL;
+      return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
     }
 
     @Override
