@@ -174,7 +174,9 @@ final class Ascii {
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
-      if (!equalsIgnoreCase(text.charAt(offset + i), prefix.charAt(i))) {
+      char c = text.charAt(offset + i);
+      char p = prefix.charAt(i);
+      if (c != p && toLowerCase(c) != p) {
         return false;
       }
     }
@@ -184,7 +186,9 @@ final class Ascii {
   /** Returns whether a byte array matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(byte[] bytes, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
-      if (!equalsIgnoreCase(bytes[offset + i] & 0xFF, prefix.charAt(i))) {
+      int b = bytes[offset + i] & 0xFF;
+      char p = prefix.charAt(i);
+      if (b != p && toLowerCase(b) != p) {
         return false;
       }
     }
