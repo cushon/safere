@@ -26,28 +26,37 @@ final class TeddyModel implements Serializable {
   private final byte[] lutHi;
   private final byte[] lutLo1;
   private final byte[] lutHi1;
+  private final byte[] lutLo2;
+  private final byte[] lutHi2;
   private final String[] literals;
   private final int[] literalBuckets;
   private final int minLength;
   private final boolean is2Byte;
+  private final boolean is3Byte;
 
   private TeddyModel(
       byte[] lutLo,
       byte[] lutHi,
       byte[] lutLo1,
       byte[] lutHi1,
+      byte[] lutLo2,
+      byte[] lutHi2,
       String[] literals,
       int[] literalBuckets,
       int minLength,
-      boolean is2Byte) {
+      boolean is2Byte,
+      boolean is3Byte) {
     this.lutLo = lutLo;
     this.lutHi = lutHi;
     this.lutLo1 = lutLo1;
     this.lutHi1 = lutHi1;
+    this.lutLo2 = lutLo2;
+    this.lutHi2 = lutHi2;
     this.literals = literals;
     this.literalBuckets = literalBuckets;
     this.minLength = minLength;
     this.is2Byte = is2Byte;
+    this.is3Byte = is3Byte;
   }
 
   byte[] lutLo() {
@@ -66,6 +75,14 @@ final class TeddyModel implements Serializable {
     return lutHi1;
   }
 
+  byte[] lutLo2() {
+    return lutLo2;
+  }
+
+  byte[] lutHi2() {
+    return lutHi2;
+  }
+
   String[] literals() {
     return literals;
   }
@@ -80,6 +97,10 @@ final class TeddyModel implements Serializable {
 
   boolean is2Byte() {
     return is2Byte;
+  }
+
+  boolean is3Byte() {
+    return is3Byte;
   }
 
   /**
@@ -140,21 +161,43 @@ final class TeddyModel implements Serializable {
       }
     }
 
+    boolean is3Byte = minLen >= 3;
+    byte[] baseLutLo2 = is3Byte ? new byte[NIBBLE_TABLE_SIZE] : null;
+    byte[] baseLutHi2 = is3Byte ? new byte[NIBBLE_TABLE_SIZE] : null;
+
+    if (is3Byte) {
+      for (int i = 0; i < literals.length; i++) {
+        int bucket = literalBuckets[i];
+        byte mask = (byte) (1 << bucket);
+
+        char c2 = literals[i].charAt(2);
+        int lo2 = c2 & 0x0F;
+        int hi2 = (c2 >> 4) & 0x0F;
+        baseLutLo2[lo2] |= mask;
+        baseLutHi2[hi2] |= mask;
+      }
+    }
+
     int tableSize = Math.max(NIBBLE_TABLE_SIZE, vectorLength);
     byte[] repeatedLo0 = repeatTable(baseLutLo0, tableSize);
     byte[] repeatedHi0 = repeatTable(baseLutHi0, tableSize);
     byte[] repeatedLo1 = is2Byte ? repeatTable(baseLutLo1, tableSize) : null;
     byte[] repeatedHi1 = is2Byte ? repeatTable(baseLutHi1, tableSize) : null;
+    byte[] repeatedLo2 = is3Byte ? repeatTable(baseLutLo2, tableSize) : null;
+    byte[] repeatedHi2 = is3Byte ? repeatTable(baseLutHi2, tableSize) : null;
 
     return new TeddyModel(
         repeatedLo0,
         repeatedHi0,
         repeatedLo1,
         repeatedHi1,
+        repeatedLo2,
+        repeatedHi2,
         Arrays.copyOf(literals, literals.length),
         literalBuckets,
         minLen,
-        is2Byte);
+        is2Byte,
+        is3Byte);
   }
 
   private static byte[] repeatTable(byte[] base16, int totalSize) {

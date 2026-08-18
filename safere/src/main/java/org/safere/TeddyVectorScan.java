@@ -52,6 +52,10 @@ final class TeddyVectorScan {
     boolean is2Byte = model.is2Byte();
     ByteVector lutLo1 = is2Byte ? ByteVector.fromArray(SPECIES, model.lutLo1(), 0) : null;
     ByteVector lutHi1 = is2Byte ? ByteVector.fromArray(SPECIES, model.lutHi1(), 0) : null;
+    boolean is3Byte = model.is3Byte();
+    ByteVector lutLo2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutLo2(), 0) : null;
+    ByteVector lutHi2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutHi2(), 0) : null;
+    byte[] laneBuf = new byte[vectorLen];
 
     String[] literals = model.literals();
     int[] buckets = model.literalBuckets();
@@ -70,13 +74,22 @@ final class TeddyVectorScan {
         match0 = match0.and(match1);
       }
 
+      if (is3Byte && pos + 2 <= limit) {
+        ByteVector input2 = StringSupport.byteVectorFromString(SPECIES, text, pos + 2);
+        ByteVector lo2 = input2.and((byte) 0x0F);
+        ByteVector hi2 = input2.lanewise(LSHR, 4).and((byte) 0x0F);
+        ByteVector match2 = lo2.selectFrom(lutLo2).and(hi2.selectFrom(lutHi2));
+        match0 = match0.and(match2);
+      }
+
       VectorMask<Byte> matchMask = match0.compare(NE, (byte) 0);
       if (matchMask.anyTrue()) {
+        match0.intoArray(laneBuf, 0);
         long activeLanes = matchMask.toLong();
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit;
-          byte bucketMask = match0.lane(bit);
+          byte bucketMask = laneBuf[bit];
 
           for (int litIdx = 0; litIdx < literals.length; litIdx++) {
             int b = buckets[litIdx];
@@ -115,6 +128,10 @@ final class TeddyVectorScan {
     boolean is2Byte = model.is2Byte();
     ByteVector lutLo1 = is2Byte ? ByteVector.fromArray(SPECIES, model.lutLo1(), 0) : null;
     ByteVector lutHi1 = is2Byte ? ByteVector.fromArray(SPECIES, model.lutHi1(), 0) : null;
+    boolean is3Byte = model.is3Byte();
+    ByteVector lutLo2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutLo2(), 0) : null;
+    ByteVector lutHi2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutHi2(), 0) : null;
+    byte[] laneBuf = new byte[vectorLen];
 
     String[] literals = model.literals();
     int[] buckets = model.literalBuckets();
@@ -133,13 +150,22 @@ final class TeddyVectorScan {
         match0 = match0.and(match1);
       }
 
+      if (is3Byte && pos + 2 <= limit) {
+        ByteVector input2 = ByteVector.fromArray(SPECIES, bytes, offset + pos + 2);
+        ByteVector lo2 = input2.and((byte) 0x0F);
+        ByteVector hi2 = input2.lanewise(LSHR, 4).and((byte) 0x0F);
+        ByteVector match2 = lo2.selectFrom(lutLo2).and(hi2.selectFrom(lutHi2));
+        match0 = match0.and(match2);
+      }
+
       VectorMask<Byte> matchMask = match0.compare(NE, (byte) 0);
       if (matchMask.anyTrue()) {
+        match0.intoArray(laneBuf, 0);
         long activeLanes = matchMask.toLong();
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit;
-          byte bucketMask = match0.lane(bit);
+          byte bucketMask = laneBuf[bit];
 
           for (int litIdx = 0; litIdx < literals.length; litIdx++) {
             int b = buckets[litIdx];
@@ -180,6 +206,10 @@ final class TeddyVectorScan {
     boolean is2Byte = model.is2Byte();
     ByteVector lutLo1 = is2Byte ? ByteVector.fromArray(SPECIES, model.lutLo1(), 0) : null;
     ByteVector lutHi1 = is2Byte ? ByteVector.fromArray(SPECIES, model.lutHi1(), 0) : null;
+    boolean is3Byte = model.is3Byte();
+    ByteVector lutLo2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutLo2(), 0) : null;
+    ByteVector lutHi2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutHi2(), 0) : null;
+    byte[] laneBuf = new byte[SPECIES.length()];
 
     String[] literals = model.literals();
     int[] buckets = model.literalBuckets();
@@ -208,13 +238,28 @@ final class TeddyVectorScan {
         isAscii0 = isAscii0.and(isAscii1);
       }
 
+      if (is3Byte && pos + 2 <= limit) {
+        ByteVector raw2 = StringSupport.byteVectorFromString(SPECIES, text, (pos + 2) << 1);
+        ByteVector highBytes2 = raw2.rearrange(ODD_SHUFFLE);
+        VectorMask<Byte> isAscii2 = highBytes2.compare(EQ, (byte) 0);
+
+        ByteVector packed2 = raw2.rearrange(NARROW_SHUFFLE);
+        ByteVector lo2 = packed2.and((byte) 0x0F);
+        ByteVector hi2 = packed2.lanewise(LSHR, 4).and((byte) 0x0F);
+        ByteVector match2 = lo2.selectFrom(lutLo2).and(hi2.selectFrom(lutHi2));
+
+        match0 = match0.and(match2);
+        isAscii0 = isAscii0.and(isAscii2);
+      }
+
       VectorMask<Byte> matchMask = match0.compare(NE, (byte) 0).and(isAscii0);
       if (matchMask.anyTrue()) {
+        match0.intoArray(laneBuf, 0);
         long activeLanes = matchMask.toLong() & ((1L << charCount) - 1);
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit;
-          byte bucketMask = match0.lane(bit);
+          byte bucketMask = laneBuf[bit];
 
           for (int litIdx = 0; litIdx < literals.length; litIdx++) {
             int b = buckets[litIdx];
