@@ -89,7 +89,9 @@ class SearchScalingRegressionTest {
             });
 
     assertThat(work)
-        .as("Literal replacement with group zero reference should execute on fast path without DFA work")
+        .as(
+            "Literal replacement with group zero reference should execute on fast path without DFA"
+                + " work")
         .isEqualTo(0);
   }
 

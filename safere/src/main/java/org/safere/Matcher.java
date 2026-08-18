@@ -4049,7 +4049,6 @@ public final class Matcher implements MatchResult {
       return false;
     }
 
-
     ReplacementSegment[] get() {
       if (value == null) {
         value = compileReplacementTemplate(replacement, maxGroup);
