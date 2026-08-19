@@ -144,6 +144,32 @@ class TeddyTest {
     assertThat(matches).containsExactly("POST", "GET");
   }
 
+  @Test
+  void sevenAlternationsMatch() {
+    Pattern p = Pattern.compile("MON|TUE|WED|THU|FRI|SAT|SUN");
+    String text = "Schedule: MON at 9am, WED at 2pm, and SUN at 8pm";
+
+    Matcher m = p.matcher(text);
+    List<String> matches = new ArrayList<>();
+    List<Integer> starts = new ArrayList<>();
+    while (m.find()) {
+      matches.add(m.group());
+      starts.add(m.start());
+    }
+
+    assertThat(matches).containsExactly("MON", "WED", "SUN");
+    assertThat(starts).containsExactly(10, 22, 38);
+
+    byte[] bytes = text.getBytes(UTF_8);
+    Utf8Matcher utf8Matcher = p.matcher(Utf8Input.validated(bytes));
+    List<String> utf8Matches = new ArrayList<>();
+    while (utf8Matcher.find()) {
+      utf8Matches.add(
+          new String(bytes, utf8Matcher.start(), utf8Matcher.end() - utf8Matcher.start(), UTF_8));
+    }
+    assertThat(utf8Matches).containsExactly("MON", "WED", "SUN");
+  }
+
   @ParameterizedTest
   @ValueSource(ints = {0, 1, 15, 16, 31, 32, 63, 64, 127, 128, 255})
   void teddyMatchAtVariableOffsets(int padding) {
