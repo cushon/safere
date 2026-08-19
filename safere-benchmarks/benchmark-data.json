@@ -3985,6 +3985,78 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.startAnchoredLiteralFail.1024",
+      "operation": "find",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.random.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredLiteralSuccess.1024",
+      "operation": "find",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredCharClassFail.1024",
+      "operation": "find",
+      "patterns": [
+        "^[0-9]"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredFindAll.1024",
+      "operation": "findAllCount",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.1024"
+      ],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.searchEasyFail.10240",
       "operation": "find",
       "patterns": [
@@ -4084,6 +4156,78 @@
         "searchScaling.prose.10240"
       ],
       "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredLiteralFail.10240",
+      "operation": "find",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.random.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredLiteralSuccess.10240",
+      "operation": "find",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredCharClassFail.10240",
+      "operation": "find",
+      "patterns": [
+        "^[0-9]"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredFindAll.10240",
+      "operation": "findAllCount",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.10240"
+      ],
+      "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
@@ -4201,6 +4345,78 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.startAnchoredLiteralFail.102400",
+      "operation": "find",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.random.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredLiteralSuccess.102400",
+      "operation": "find",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredCharClassFail.102400",
+      "operation": "find",
+      "patterns": [
+        "^[0-9]"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredFindAll.102400",
+      "operation": "findAllCount",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.102400"
+      ],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.searchEasyFail.1048576",
       "operation": "find",
       "patterns": [
@@ -4300,6 +4516,78 @@
         "searchScaling.prose.1048576"
       ],
       "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredLiteralFail.1048576",
+      "operation": "find",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.random.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredLiteralSuccess.1048576",
+      "operation": "find",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredCharClassFail.1048576",
+      "operation": "find",
+      "patterns": [
+        "^[0-9]"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.startAnchoredFindAll.1048576",
+      "operation": "findAllCount",
+      "patterns": [
+        "^ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.1048576"
+      ],
+      "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",

@@ -341,7 +341,9 @@ public final class Pattern implements Serializable {
 
   private static MatchDescriptor extractMatchDescriptor(
       Regexp metadataAst, Regexp sourceAst, int flags) {
-    String literalMatch = extractLiteralMatch(metadataAst);
+    LiteralResult literalMatchResult = extractLiteralMatch(metadataAst);
+    String literalMatch = literalMatchResult.literal();
+    boolean literalFoldCase = literalMatchResult.foldCase();
     CharClassScanInfo singleCharClass = extractSingleCharClass(metadataAst);
     KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
     CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
@@ -354,7 +356,12 @@ public final class Pattern implements Serializable {
       return MatchDescriptor.NONE;
     }
     return new MatchDescriptor(
-        literalMatch, singleCharClass, keywordAlternation, ccMatch, minMatchLength);
+        literalMatch,
+        literalFoldCase,
+        singleCharClass,
+        keywordAlternation,
+        ccMatch,
+        minMatchLength);
   }
 
   private static long nextPatternId() {
@@ -628,7 +635,10 @@ public final class Pattern implements Serializable {
     if (matchDescriptor.minMatchLength() > 0 && length < matchDescriptor.minMatchLength()) {
       return false;
     }
-    if (literalMatchUtf8 != null && !prefixFoldCase) {
+    if (literalMatchUtf8 != null && !literalFoldCase()) {
+      if (prog.anchorStart()) {
+        return scanner.startsWith(literalMatchUtf8, 0);
+      }
       return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
     }
     if (enginePathOptions.keywordAlternationFastPath()
@@ -684,9 +694,11 @@ public final class Pattern implements Serializable {
 
   private boolean findWithDiagnostics(Utf8InputScanner scanner, DiagnosticAccumulator diagnostics) {
     int length = scanner.length();
-    if (literalMatchUtf8 != null && !prefixFoldCase) {
+    if (literalMatchUtf8 != null && !literalFoldCase()) {
       boolean matched =
-          scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
+          prog.anchorStart()
+              ? scanner.startsWith(literalMatchUtf8, 0)
+              : scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }
@@ -1010,12 +1022,12 @@ public final class Pattern implements Serializable {
     if (enginePathOptions.literalFastPaths() && literal != null && numGroups() == 0) {
       return new Matcher.LiteralPreparedRunner(
           literal,
-          prefixFoldCase,
+          matchDescriptor.literalFoldCase(),
           literalMatchUtf8,
           literalMatchFailure,
           literalMatchShifts,
           prog.anchorStart(),
-          prefixFoldCase
+          matchDescriptor.literalFoldCase()
               ? createLiteralFallbackRunner(regionActive)
               : Matcher.FallbackPreparedRunner.INSTANCE);
     }
@@ -1457,6 +1469,10 @@ public final class Pattern implements Serializable {
    */
   String literalMatch() {
     return matchDescriptor.literalMatch();
+  }
+
+  boolean literalFoldCase() {
+    return matchDescriptor.literalFoldCase();
   }
 
   byte[] literalMatchUtf8() {
@@ -2204,7 +2220,7 @@ public final class Pattern implements Serializable {
       return -1;
     }
 
-    private long matchAt(InputScanner scanner, int position) {
+    long matchAt(InputScanner scanner, int position) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }
@@ -3713,14 +3729,18 @@ public final class Pattern implements Serializable {
     return false;
   }
 
+  private record LiteralResult(String literal, boolean foldCase) {
+    static final LiteralResult NONE = new LiteralResult(null, false);
+  }
+
   /**
-   * Extracts a literal match string from the AST if the pattern is entirely literal (no
-   * metacharacters, no quantifiers, no alternation). Sees through CAPTURE wrappers (group 0 is
-   * implicit) and handles LITERAL, LITERAL_STRING, and CONCAT of literals.
+   * Extracts the full literal string if this pattern is entirely literal (no metacharacters, no
+   * quantifiers, no alternation). Transparent groups (e.g. non-capturing groups) are unwrapped.
    *
-   * @return the literal string to match, or {@code null} if the pattern is not fully literal
+   * <p>Returns {@link LiteralResult#NONE} if the pattern is not fully literal. For case-insensitive
+   * patterns, returns the lowercase version and foldCase=true.
    */
-  private static String extractLiteralMatch(Regexp re) {
+  private static LiteralResult extractLiteralMatch(Regexp re) {
     Regexp node = re;
 
     // Unwrap outer CAPTURE (group 0).
@@ -3728,15 +3748,20 @@ public final class Pattern implements Serializable {
       node = node.sub();
     }
     if (node == null) {
-      return null;
+      return LiteralResult.NONE;
     }
 
-    boolean foldCase = (node.flags & ParseFlags.FOLD_CASE) != 0;
+    boolean foldCase = false;
+    boolean foldCaseInitialized = false;
     StringBuilder sb = new StringBuilder();
 
     switch (node.op) {
-      case LITERAL -> sb.appendCodePoint(node.rune);
+      case LITERAL -> {
+        foldCase = (node.flags & ParseFlags.FOLD_CASE) != 0;
+        sb.appendCodePoint(node.rune);
+      }
       case LITERAL_STRING -> {
+        foldCase = (node.flags & ParseFlags.FOLD_CASE) != 0;
         if (node.runes != null) {
           for (int r : node.runes) {
             sb.appendCodePoint(r);
@@ -3747,15 +3772,24 @@ public final class Pattern implements Serializable {
         for (Regexp child : node.subs) {
           // Each child must be LITERAL or LITERAL_STRING (not wrapped in CAPTURE etc.)
           Regexp c = child;
-          while (c != null && c.op == RegexpOp.CAPTURE) {
+          while (c != null && (c.op == RegexpOp.CAPTURE || c.op == RegexpOp.NON_CAPTURE)) {
             c = c.sub();
           }
           if (c == null) {
-            return null;
+            return LiteralResult.NONE;
+          }
+          if (c.op == RegexpOp.BEGIN_TEXT) {
+            if (sb.length() > 0) {
+              return LiteralResult.NONE;
+            }
+            continue;
           }
           boolean childFoldCase = (c.flags & ParseFlags.FOLD_CASE) != 0;
-          if (childFoldCase != foldCase) {
-            return null;
+          if (!foldCaseInitialized) {
+            foldCase = childFoldCase;
+            foldCaseInitialized = true;
+          } else if (childFoldCase != foldCase) {
+            return LiteralResult.NONE;
           }
           if (c.op == RegexpOp.LITERAL) {
             sb.appendCodePoint(c.rune);
@@ -3764,23 +3798,24 @@ public final class Pattern implements Serializable {
               sb.appendCodePoint(r);
             }
           } else {
-            return null;
+            return LiteralResult.NONE;
           }
         }
       }
       case EMPTY_MATCH -> {
         // Empty pattern matches empty string.
-        return "";
+        return new LiteralResult("", false);
       }
       default -> {
-        return null;
+        return LiteralResult.NONE;
       }
     }
 
     if (sb.isEmpty()) {
-      return "";
+      return new LiteralResult("", false);
     }
-    return foldCase ? sb.toString().toLowerCase(Locale.ROOT) : sb.toString();
+    return new LiteralResult(
+        foldCase ? sb.toString().toLowerCase(Locale.ROOT) : sb.toString(), foldCase);
   }
 
   private static final class MinMatchLengthWalker extends Walker<Integer> {

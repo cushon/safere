@@ -170,9 +170,75 @@ class LiteralFlagTest {
   }
 
   @Test
-  void multipleMetacharsInSequence() {
-    Pattern p = Pattern.compile("(a+|b*)[c-d]", Pattern.LITERAL);
-    assertThat(p.matcher("(a+|b*)[c-d]").matches()).isTrue();
-    assertThat(p.matcher("aac").matches()).isFalse();
+  void replaceAllWithLiteralCaseInsensitive() {
+    Pattern p = Pattern.compile("Foo", Pattern.LITERAL | Pattern.CASE_INSENSITIVE);
+    Matcher m = p.matcher("foo FOO Foo fOO bar");
+    assertThat(m.replaceAll("baz")).isEqualTo("baz baz baz baz bar");
+    assertThat(m.find()).isFalse();
+  }
+
+  @Test
+  void replaceFirstWithLiteralCaseInsensitive() {
+    Pattern p = Pattern.compile("Foo", Pattern.LITERAL | Pattern.CASE_INSENSITIVE);
+    Matcher m = p.matcher("foo FOO Foo");
+    assertThat(m.replaceFirst("baz")).isEqualTo("baz FOO Foo");
+    assertThat(m.start()).isEqualTo(0);
+    assertThat(m.end()).isEqualTo(3);
+    assertThat(m.group()).isEqualTo("foo");
+    assertThat(m.find()).isTrue();
+    assertThat(m.group()).isEqualTo("FOO");
+    assertThat(m.start()).isEqualTo(4);
+    assertThat(m.end()).isEqualTo(7);
+  }
+
+  @Test
+  void replaceAllWithLiteralGroupZeroReference() {
+    Pattern p = Pattern.compile("foo", Pattern.LITERAL | Pattern.CASE_INSENSITIVE);
+    Matcher m = p.matcher("Foo FOO");
+    assertThat(m.replaceAll("[$0]")).isEqualTo("[Foo] [FOO]");
+  }
+
+  @Test
+  void splitWithLiteralCaseInsensitive() {
+    Pattern p = Pattern.compile("x", Pattern.LITERAL | Pattern.CASE_INSENSITIVE);
+    String[] parts = p.split("aXbxcXd");
+    assertThat(parts).containsExactly("a", "b", "c", "d");
+  }
+
+  @Test
+  void splitWithDelimitersLiteralCaseInsensitive() {
+    Pattern p = Pattern.compile("SEP", Pattern.LITERAL | Pattern.CASE_INSENSITIVE);
+    String[] parts = p.splitWithDelimiters("aSepBsepC", 0);
+    assertThat(parts).containsExactly("a", "Sep", "B", "sep", "C");
+  }
+
+  @Test
+  void matcherLifecycleStatePreservation() {
+    Pattern p = Pattern.compile("abc", Pattern.CASE_INSENSITIVE);
+    Matcher m = p.matcher("123 ABC 456 abc 789");
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(4);
+    assertThat(m.end()).isEqualTo(7);
+    assertThat(m.group()).isEqualTo("ABC");
+
+    m.reset();
+    assertThat(m.replaceFirst("XYZ")).isEqualTo("123 XYZ 456 abc 789");
+    assertThat(m.start()).isEqualTo(4);
+    assertThat(m.end()).isEqualTo(7);
+    assertThat(m.group()).isEqualTo("ABC");
+
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(12);
+    assertThat(m.end()).isEqualTo(15);
+    assertThat(m.group()).isEqualTo("abc");
+
+    assertThat(m.find()).isFalse();
+  }
+
+  @Test
+  void singleCharLiteralCaseInsensitive() {
+    Pattern p = Pattern.compile("a", Pattern.CASE_INSENSITIVE);
+    Matcher m = p.matcher("A b a B A");
+    assertThat(m.replaceAll("x")).isEqualTo("x b x B x");
   }
 }

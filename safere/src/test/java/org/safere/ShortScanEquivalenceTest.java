@@ -65,13 +65,9 @@ class ShortScanEquivalenceTest {
 
   @Test
   void vectorCandidateBoundsDoNotOverflow() {
-    assertThat(
-            Utf8InputScanner.candidatePrefixInBounds(
-                Integer.MAX_VALUE - 4, 0, Integer.MAX_VALUE, 8))
+    assertThat(WorkLimit.candidateInBounds(Integer.MAX_VALUE - 4, 0, Integer.MAX_VALUE, 8))
         .isFalse();
-    assertThat(
-            Utf8InputScanner.candidatePrefixInBounds(
-                Integer.MAX_VALUE - 8, 0, Integer.MAX_VALUE, 8))
+    assertThat(WorkLimit.candidateInBounds(Integer.MAX_VALUE - 8, 0, Integer.MAX_VALUE, 8))
         .isTrue();
   }
 
