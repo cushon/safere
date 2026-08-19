@@ -2269,7 +2269,7 @@ public final class Pattern implements Serializable {
 
   /** Finds the longest case-sensitive ASCII literal after a bounded-width match prefix. */
   private static FixedOffsetLiteral extractFixedOffsetLiteral(Regexp re) {
-    Regexp node = unwrapFixedOffsetNode(re);
+    Regexp node = unwrapCaptures(re);
     if (node.op != RegexpOp.CONCAT || node.subs == null) {
       return null;
     }
@@ -2278,12 +2278,12 @@ public final class Pattern implements Serializable {
     AsciiWidthRange prefixWidth = AsciiWidthRange.ZERO;
 
     for (int index = 0; index < node.subs.size(); ) {
-      String literalPart = fixedOffsetAsciiLiteral(node.subs.get(index));
+      String literalPart = extractExactAsciiLiteral(node.subs.get(index));
       if (literalPart != null) {
         StringBuilder literal = new StringBuilder(literalPart);
         int next = index + 1;
         while (next < node.subs.size()) {
-          String nextPart = fixedOffsetAsciiLiteral(node.subs.get(next));
+          String nextPart = extractExactAsciiLiteral(node.subs.get(next));
           if (nextPart == null) {
             break;
           }
@@ -2322,21 +2322,16 @@ public final class Pattern implements Serializable {
     return best;
   }
 
-  private static Regexp unwrapFixedOffsetNode(Regexp re) {
-    Regexp node = re;
-    while (node.op == RegexpOp.CAPTURE || node.op == RegexpOp.NON_CAPTURE) {
-      node = node.sub();
+  private static String extractExactAsciiLiteral(Regexp re) {
+    if (re == null) {
+      return null;
     }
-    return node;
-  }
-
-  private static String fixedOffsetAsciiLiteral(Regexp re) {
     StringBuilder literal = new StringBuilder();
     Deque<Regexp> pending = new ArrayDeque<>();
     pending.push(re);
     while (!pending.isEmpty()) {
-      Regexp node = unwrapFixedOffsetNode(pending.pop());
-      if ((node.flags & ParseFlags.FOLD_CASE) != 0) {
+      Regexp node = unwrapCaptures(pending.pop());
+      if (node == null || (node.flags & ParseFlags.FOLD_CASE) != 0) {
         return null;
       }
       if (node.op == RegexpOp.LITERAL && node.rune >= 0 && node.rune < 128) {
@@ -2788,55 +2783,13 @@ public final class Pattern implements Serializable {
     }
     String[] literals = new String[re.nsub()];
     for (int i = 0; i < re.nsub(); i++) {
-      Regexp sub = unwrapCaptures(re.subs.get(i));
-      if (sub == null) {
-        return null;
-      }
-      String lit = extractExactLiteral(sub);
+      String lit = extractExactAsciiLiteral(re.subs.get(i));
       if (lit == null || lit.isEmpty()) {
         return null;
       }
       literals[i] = lit;
     }
     return literals;
-  }
-
-  private static String extractExactLiteral(Regexp node) {
-    if (node == null) {
-      return null;
-    }
-    if (node.op == RegexpOp.LITERAL) {
-      if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.rune > 127) {
-        return null;
-      }
-      return String.valueOf((char) node.rune);
-    }
-    if (node.op == RegexpOp.LITERAL_STRING) {
-      if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.runes == null) {
-        return null;
-      }
-      char[] chars = new char[node.runes.length];
-      for (int i = 0; i < node.runes.length; i++) {
-        int r = node.runes[i];
-        if (r > 127) {
-          return null;
-        }
-        chars[i] = (char) r;
-      }
-      return new String(chars);
-    }
-    if (node.op == RegexpOp.CONCAT) {
-      StringBuilder sb = new StringBuilder();
-      for (Regexp sub : node.subs) {
-        String s = extractExactLiteral(sub);
-        if (s == null) {
-          return null;
-        }
-        sb.append(s);
-      }
-      return sb.toString();
-    }
-    return null;
   }
 
   private static StartAcceleration extractStartAcceleration(Regexp re) {

@@ -55,7 +55,6 @@ final class TeddyVectorScan {
     boolean is3Byte = model.is3Byte();
     ByteVector lutLo2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutLo2(), 0) : null;
     ByteVector lutHi2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutHi2(), 0) : null;
-    byte[] laneBuf = new byte[vectorLen];
 
     String[] literals = model.literals();
     int[] buckets = model.literalBuckets();
@@ -89,12 +88,11 @@ final class TeddyVectorScan {
 
         if (matchMask.anyTrue()) {
           // Stage 3: Candidate extraction and verification (< 0.1% of blocks)
-          match0.intoArray(laneBuf, 0);
           long activeLanes = matchMask.toLong();
           while (activeLanes != 0) {
             int bit = Long.numberOfTrailingZeros(activeLanes);
             int candidatePos = pos + bit;
-            byte bucketMask = laneBuf[bit];
+            byte bucketMask = match0.lane(bit);
 
             for (int litIdx = 0; litIdx < literals.length; litIdx++) {
               int b = buckets[litIdx];
@@ -137,7 +135,6 @@ final class TeddyVectorScan {
     boolean is3Byte = model.is3Byte();
     ByteVector lutLo2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutLo2(), 0) : null;
     ByteVector lutHi2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutHi2(), 0) : null;
-    byte[] laneBuf = new byte[vectorLen];
 
     String[] literals = model.literals();
     int[] buckets = model.literalBuckets();
@@ -171,12 +168,11 @@ final class TeddyVectorScan {
 
         if (matchMask.anyTrue()) {
           // Stage 3: Candidate extraction and verification (< 0.1% of blocks)
-          match0.intoArray(laneBuf, 0);
           long activeLanes = matchMask.toLong();
           while (activeLanes != 0) {
             int bit = Long.numberOfTrailingZeros(activeLanes);
             int candidatePos = pos + bit;
-            byte bucketMask = laneBuf[bit];
+            byte bucketMask = match0.lane(bit);
 
             for (int litIdx = 0; litIdx < literals.length; litIdx++) {
               int b = buckets[litIdx];
@@ -221,7 +217,6 @@ final class TeddyVectorScan {
     boolean is3Byte = model.is3Byte();
     ByteVector lutLo2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutLo2(), 0) : null;
     ByteVector lutHi2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutHi2(), 0) : null;
-    byte[] laneBuf = new byte[SPECIES.length()];
 
     String[] literals = model.literals();
     int[] buckets = model.literalBuckets();
@@ -271,12 +266,11 @@ final class TeddyVectorScan {
 
         if (matchMask.anyTrue()) {
           // Stage 3: Candidate extraction and verification (< 0.1% of blocks)
-          match0.intoArray(laneBuf, 0);
           long activeLanes = matchMask.toLong() & ((1L << charCount) - 1);
           while (activeLanes != 0) {
             int bit = Long.numberOfTrailingZeros(activeLanes);
             int candidatePos = pos + bit;
-            byte bucketMask = laneBuf[bit];
+            byte bucketMask = match0.lane(bit);
 
             for (int litIdx = 0; litIdx < literals.length; litIdx++) {
               int b = buckets[litIdx];
