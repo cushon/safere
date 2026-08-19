@@ -491,7 +491,7 @@ public final class Pattern implements Serializable {
       if (altLiterals.length >= 2 && altLiterals.length <= 4) {
         multiLiteral = MultiLiteralInfo.create(altLiterals);
       } else if (altLiterals.length >= 5 && altLiterals.length <= 32) {
-        teddyModel = TeddyModel.compile(altLiterals, 32);
+        teddyModel = TeddyModel.compile(altLiterals, 64);
       }
     }
     StartAcceleration startAcceleration =

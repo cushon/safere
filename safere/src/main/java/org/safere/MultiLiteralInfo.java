@@ -49,9 +49,8 @@ record MultiLiteralInfo(String[] literals, char[] anchorChars, int[] anchorOffse
           return null;
         }
       }
-      int offset = RarityOracle.rarestAsciiOffset(lit, lit.length());
-      anchorOffsets[i] = offset;
-      anchorChars[i] = lit.charAt(offset);
+      anchorOffsets[i] = 0;
+      anchorChars[i] = lit.charAt(0);
       minLen = Math.min(minLen, lit.length());
     }
 

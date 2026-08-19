@@ -178,7 +178,7 @@ final class TeddyModel implements Serializable {
       }
     }
 
-    int tableSize = Math.max(NIBBLE_TABLE_SIZE, vectorLength);
+    int tableSize = Math.max(64, Math.max(NIBBLE_TABLE_SIZE, vectorLength));
     byte[] repeatedLo0 = repeatTable(baseLutLo0, tableSize);
     byte[] repeatedHi0 = repeatTable(baseLutHi0, tableSize);
     byte[] repeatedLo1 = is2Byte ? repeatTable(baseLutLo1, tableSize) : null;
