@@ -32,6 +32,11 @@ sealed interface Utf8StartAccelerator {
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
+    if (descriptor.teddyModel() != null
+        && !hasWordBoundary
+        && VectorScanProviders.providerForLength(64) != null) {
+      return new Teddy(descriptor.teddyModel());
+    }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
       CharClassScanInfo scanInfo =
           Pattern.buildAsciiClassScanInfo(descriptor.charClassPrefixAscii());
@@ -64,6 +69,7 @@ sealed interface Utf8StartAccelerator {
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
       case CharClass cc -> cc.findCandidate(scanner, pos);
+      case Teddy t -> t.findCandidate(scanner, pos);
     };
   }
 
@@ -197,6 +203,44 @@ sealed interface Utf8StartAccelerator {
             scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex, scanner.length());
       }
       return fromIndex;
+    }
+  }
+
+  @SuppressWarnings("ArrayRecordComponent")
+  record Teddy(TeddyModel model) implements Utf8StartAccelerator {
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
+    }
+
+    @Override
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      VectorScanProvider provider = VectorScanProviders.providerForLength(scanner.length());
+      if (provider != null) {
+        int idx =
+            provider.indexOfTeddy(
+                scanner.bytes(),
+                scanner.offset(),
+                scanner.length(),
+                model,
+                fromIndex);
+        if (idx != VectorScanProvider.UNSUPPORTED) {
+          return idx;
+        }
+      }
+      int len = scanner.length();
+      int minLen = model.minLength();
+      byte[] bytes = scanner.bytes();
+      int offset = scanner.offset();
+      for (int i = fromIndex; i <= len - minLen; i++) {
+        for (String lit : model.literals()) {
+          if (i + lit.length() <= len
+              && Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
+            return i;
+          }
+        }
+      }
+      return -1;
     }
   }
 }

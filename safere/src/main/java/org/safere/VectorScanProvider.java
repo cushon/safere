@@ -13,4 +13,7 @@ interface VectorScanProvider {
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
+
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start);
 }

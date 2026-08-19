@@ -477,8 +477,16 @@ public final class Pattern implements Serializable {
     FixedOffsetLiteral fixedOffsetLiteral =
         prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
     AsciiBitmap ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
+    String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
+    TeddyModel teddyModel = null;
+    if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
+      teddyModel = TeddyModel.compile(altLiterals, 32);
+    }
     StartAcceleration startAcceleration =
-        (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null)
+        (prefix == null
+                && ccPrefixAscii == null
+                && fixedOffsetLiteral == null
+                && teddyModel == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
@@ -496,7 +504,8 @@ public final class Pattern implements Serializable {
         && ccPrefixAscii == null
         && startAcceleration == null
         && anchoredPrefix == null
-        && anchoredCharClassPrefixAscii == null) {
+        && anchoredCharClassPrefixAscii == null
+        && teddyModel == null) {
       return StartDescriptor.NONE;
     }
     return new StartDescriptor(
@@ -506,7 +515,8 @@ public final class Pattern implements Serializable {
         ccPrefixAscii,
         startAcceleration,
         anchoredPrefix,
-        anchoredCharClassPrefixAscii);
+        anchoredCharClassPrefixAscii,
+        teddyModel);
   }
 
   /**
@@ -2251,8 +2261,8 @@ public final class Pattern implements Serializable {
 
   /** Finds the longest case-sensitive ASCII literal after a bounded-width match prefix. */
   private static FixedOffsetLiteral extractFixedOffsetLiteral(Regexp re) {
-    Regexp node = unwrapFixedOffsetNode(re);
-    if (node.op != RegexpOp.CONCAT || node.subs == null) {
+    Regexp node = unwrapCaptures(re);
+    if (node == null || node.op != RegexpOp.CONCAT || node.subs == null) {
       return null;
     }
     FixedOffsetLiteral best = null;
@@ -2260,12 +2270,12 @@ public final class Pattern implements Serializable {
     AsciiWidthRange prefixWidth = AsciiWidthRange.ZERO;
 
     for (int index = 0; index < node.subs.size(); ) {
-      String literalPart = fixedOffsetAsciiLiteral(node.subs.get(index));
+      String literalPart = extractExactAsciiLiteral(node.subs.get(index));
       if (literalPart != null) {
         StringBuilder literal = new StringBuilder(literalPart);
         int next = index + 1;
         while (next < node.subs.size()) {
-          String nextPart = fixedOffsetAsciiLiteral(node.subs.get(next));
+          String nextPart = extractExactAsciiLiteral(node.subs.get(next));
           if (nextPart == null) {
             break;
           }
@@ -2304,21 +2314,16 @@ public final class Pattern implements Serializable {
     return best;
   }
 
-  private static Regexp unwrapFixedOffsetNode(Regexp re) {
-    Regexp node = re;
-    while (node.op == RegexpOp.CAPTURE || node.op == RegexpOp.NON_CAPTURE) {
-      node = node.sub();
+  private static String extractExactAsciiLiteral(Regexp re) {
+    if (re == null) {
+      return null;
     }
-    return node;
-  }
-
-  private static String fixedOffsetAsciiLiteral(Regexp re) {
     StringBuilder literal = new StringBuilder();
     Deque<Regexp> pending = new ArrayDeque<>();
     pending.push(re);
     while (!pending.isEmpty()) {
-      Regexp node = unwrapFixedOffsetNode(pending.pop());
-      if ((node.flags & ParseFlags.FOLD_CASE) != 0) {
+      Regexp node = unwrapCaptures(pending.pop());
+      if (node == null || (node.flags & ParseFlags.FOLD_CASE) != 0) {
         return null;
       }
       if (node.op == RegexpOp.LITERAL && node.rune >= 0 && node.rune < 128) {
@@ -2758,6 +2763,25 @@ public final class Pattern implements Serializable {
       bitmap.addRange(cc.lo(i), cc.hi(i));
     }
     return true;
+  }
+
+  private static String[] extractLiteralAlternation(Regexp re) {
+    if (re == null) {
+      return null;
+    }
+    re = unwrapCaptures(re);
+    if (re == null || re.op != RegexpOp.ALTERNATE || re.nsub() < 2) {
+      return null;
+    }
+    String[] literals = new String[re.nsub()];
+    for (int i = 0; i < re.nsub(); i++) {
+      String lit = extractExactAsciiLiteral(re.subs.get(i));
+      if (lit == null || lit.isEmpty()) {
+        return null;
+      }
+      literals[i] = lit;
+    }
+    return literals;
   }
 
   private static StartAcceleration extractStartAcceleration(Regexp re) {
