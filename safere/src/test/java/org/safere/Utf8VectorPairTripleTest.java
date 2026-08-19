@@ -120,8 +120,7 @@ class Utf8VectorPairTripleTest {
         .isInstanceOf(Utf8StartAccelerator.AsciiPair.class);
 
     Pattern pPairAlt = Pattern.compile("Y|Z");
-    assertThat(pPairAlt.utf8StartAccelerator())
-        .isInstanceOf(Utf8StartAccelerator.AsciiPair.class);
+    assertThat(pPairAlt.utf8StartAccelerator()).isInstanceOf(Utf8StartAccelerator.AsciiPair.class);
 
     Pattern pConsecutivePair = Pattern.compile("[ab]");
     assertThat(pConsecutivePair.utf8StartAccelerator())

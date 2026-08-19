@@ -502,8 +502,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       return indexOfByte((byte) first, start);
     }
     if (last == second) {
-      return scanBytePair(
-          length, (byte) first, (byte) second, start);
+      return scanBytePair(length, (byte) first, (byte) second, start);
     }
     return contiguous
         ? ByteSwarScan.indexOfByteRange(bytes, offset, length, first, last, start)
