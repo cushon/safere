@@ -58,6 +58,73 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void replaceAllWithoutCaptureReferencesSkipsCaptureResolutionWork() {
+    Pattern pattern = Pattern.compile("x(a+)y([0-9]+)z");
+    String input = "xay1z xay2z";
+
+    assertThat(pattern.innerCapturesObserved()).isFalse();
+    String replacedLiteral = pattern.matcher(input).replaceAll("REPLACED");
+    assertThat(replacedLiteral).isEqualTo("REPLACED REPLACED");
+    assertThat(pattern.innerCapturesObserved())
+        .as("Literal replacement must not mark inner captures as observed")
+        .isFalse();
+
+    String replacedWithCaptures = pattern.matcher(input).replaceAll("$1-$2");
+    assertThat(replacedWithCaptures).isEqualTo("a-1 a-2");
+    assertThat(pattern.innerCapturesObserved())
+        .as("Replacement with capture references must mark inner captures as observed")
+        .isTrue();
+  }
+
+  @Test
+  void literalReplaceWithGroupZeroReferenceUsesFastPathWithLinearWork() {
+    Pattern pattern = Pattern.compile("(abc)");
+    String input = "abc ".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              String replaced = pattern.matcher(input).replaceAll("[$0]");
+              assertThat(replaced).isNotNull();
+            });
+
+    assertThat(work)
+        .as("Literal replacement with group zero reference must scan the input only once")
+        .isLessThanOrEqualTo(input.length());
+  }
+
+  @Test
+  void literalReplaceFirstReusesLatePreflightMatch() {
+    Pattern pattern = Pattern.compile("(needle)");
+    String input = "x".repeat(10_000) + "needle";
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(input).replaceFirst("[$0]")).endsWith("[needle]"));
+
+    assertThat(work)
+        .as("Literal replaceFirst must not rescan the prefix after finding the first match")
+        .isLessThanOrEqualTo(input.length());
+  }
+
+  @Test
+  void literalSplitWithParenthesesUsesFastPathWithoutDfaWork() {
+    Pattern pattern = Pattern.compile("(delim)");
+    String input = "item delim ".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              String[] parts = pattern.split(input);
+              assertThat(parts).hasSize(1_001);
+            });
+
+    assertThat(work)
+        .as("Literal split on parenthesized pattern should execute on fast path without DFA work")
+        .isEqualTo(0);
+  }
+
+  @Test
   void caseInsensitivePrefixRepeatedFindIsLinearAcrossString() {
     Pattern pattern = Pattern.compile("(?i)keyword_to_find");
     assertRepeatedFindWorkIsLinear(

@@ -2791,13 +2791,22 @@ public final class Matcher implements MatchResult {
       return sb.toString();
     }
     ReplacementSegment[] compiledTemplate = template.get();
+    boolean needsCaptures = template.needsCaptures();
     do {
-      if (!groupZeroResolved) {
+      if (needsCaptures && !groupZeroResolved) {
         resolveCaptures();
       }
-      sb.append(text, appendPos, groups[0]);
-      applyReplacementTemplate(sb, compiledTemplate);
-      appendPos = groups[1];
+      int matchStart = groupZeroResolved ? groups[0] : deferredMatchStart;
+      int matchEnd = groupZeroResolved ? groups[1] : deferredMatchEnd;
+      sb.append(text, appendPos, matchStart);
+      if (needsCaptures) {
+        applyReplacementTemplate(sb, compiledTemplate);
+      } else {
+        groups[0] = matchStart;
+        groups[1] = matchEnd;
+        applyReplacementTemplate(sb, compiledTemplate);
+      }
+      appendPos = matchEnd;
     } while (findAndRecordReplacementMatch());
     appendTail(sb);
     return sb.toString();
@@ -2920,6 +2929,9 @@ public final class Matcher implements MatchResult {
     ReplacementSegment[] compiledTemplate = template.get();
 
     boolean needsCaptures = template.needsCaptures();
+    if (needsCaptures) {
+      parentPattern.recordInnerCaptureAccess();
+    }
     boolean useOnePass =
         needsCaptures
             && enginePathOptions().onePass()
@@ -3250,8 +3262,8 @@ public final class Matcher implements MatchResult {
 
     String replacement = template.replacement;
     boolean simpleReplacement = isSimpleReplacement(replacement);
-    if (!simpleReplacement && groupCount() > 0) {
-      return null; // Cannot handle complex replacements with captures yet
+    if (!simpleReplacement && template.needsCaptures()) {
+      return null; // Cannot handle replacements that reference inner captures yet
     }
 
     DiagnosticOperation activeDiagnostics = diagnosticOperation;
@@ -3294,7 +3306,18 @@ public final class Matcher implements MatchResult {
     StringBuilder sb = null;
     int appendPosition = 0;
     int searchFrom = 0;
-    int matchStart;
+    int matchStart =
+        foldCase
+            ? indexOfIgnoreCase(
+                text, literal, failure, anchorOffset, anchorLow, anchorHigh, searchFrom)
+            : indexOfReplacementLiteral(literal, searchFrom);
+    if (matchStart == -1) {
+      if (accumulator != null) {
+        accumulator.boundary(MatchStrategy.LITERAL);
+      }
+      applyFailedMatchResult();
+      return text;
+    }
     int matchesFound = 0;
 
     int firstMatchStart = -1;
@@ -3302,15 +3325,7 @@ public final class Matcher implements MatchResult {
 
     ReplacementSegment[] compiledTemplate = null;
 
-    while (matchesFound < limit) {
-      matchStart =
-          foldCase
-              ? indexOfIgnoreCase(
-                  text, literal, failure, anchorOffset, anchorLow, anchorHigh, searchFrom)
-              : text.indexOf(literal, searchFrom);
-      if (matchStart == -1) {
-        break;
-      }
+    do {
       if (sb == null) {
         sb = new StringBuilder(text.length());
       }
@@ -3320,7 +3335,8 @@ public final class Matcher implements MatchResult {
         firstMatchStart = matchStart;
         firstMatchEnd = matchStart + literal.length();
         if (!simpleReplacement) {
-          applyGroupZeroMatchResult(firstMatchStart, firstMatchEnd);
+          applyDeferredMatchResult(
+              firstMatchStart, firstMatchEnd, parentPattern.prog().numCaptures(), true, false);
           compiledTemplate = template.get();
         }
       }
@@ -3336,7 +3352,15 @@ public final class Matcher implements MatchResult {
       appendPosition = matchStart + literal.length();
       searchFrom = appendPosition;
       matchesFound++;
-    }
+      if (matchesFound >= limit) {
+        break;
+      }
+      matchStart =
+          foldCase
+              ? indexOfIgnoreCase(
+                  text, literal, failure, anchorOffset, anchorLow, anchorHigh, searchFrom)
+              : indexOfReplacementLiteral(literal, searchFrom);
+    } while (matchStart != -1);
 
     if (sb == null) {
       if (accumulator != null) {
@@ -3355,7 +3379,6 @@ public final class Matcher implements MatchResult {
       } else {
         applyDeferredMatchResult(
             firstMatchStart, firstMatchEnd, parentPattern.prog().numCaptures(), true, false);
-        resolveCaptures();
       }
     } else {
       this.searchFrom = regionEnd;
@@ -3368,6 +3391,15 @@ public final class Matcher implements MatchResult {
     }
 
     return sb.toString();
+  }
+
+  private int indexOfReplacementLiteral(String literal, int fromIndex) {
+    int matchStart = text.indexOf(literal, fromIndex);
+    if (WorkCounterConfig.ENABLED) {
+      int examinedEnd = matchStart >= 0 ? matchStart + literal.length() : text.length();
+      WorkCounter.record(Math.max(0, examinedEnd - fromIndex));
+    }
+    return matchStart;
   }
 
   private String charClassReplaceFastPath(LazyTemplate template, int limit) {
@@ -4254,7 +4286,7 @@ public final class Matcher implements MatchResult {
 
     // Literal fast path
     String literal = parentPattern.literalMatch();
-    if (options.literalFastPaths() && literal != null && parentPattern.numGroups() == 0) {
+    if (options.literalFastPaths() && literal != null) {
       int idx =
           parentPattern.prefixFoldCase()
               ? indexOfIgnoreCase(text, literal, fromIndex)
