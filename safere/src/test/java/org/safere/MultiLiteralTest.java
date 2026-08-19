@@ -23,8 +23,8 @@ class MultiLiteralTest {
     assertThat(info).isNotNull();
     assertThat(info.literals()).containsExactly("apple", "banana", "cherry");
     assertThat(info.minLength()).isEqualTo(5);
-    assertThat(info.anchorChars()).hasSize(3);
-    assertThat(info.anchorOffsets()).hasSize(3);
+    assertThat(info.anchorChars()).containsExactly('a', 'b', 'c');
+    assertThat(info.anchorOffsets()).containsExactly(0, 0, 0);
 
     assertThat(MultiLiteralInfo.create(new String[] {"single"})).isNull();
     assertThat(MultiLiteralInfo.create(new String[] {"1", "2", "3", "4", "5"})).isNull();

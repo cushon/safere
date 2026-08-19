@@ -9,8 +9,11 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * Metadata for small multi-literal alternation acceleration (2 &le; N &le; 4) using
- * rarest-character multi-vector SIMD matching.
+ * Metadata for small multi-literal alternation acceleration (2 &le; N &le; 4) using multi-vector
+ * SIMD matching on initial prefix characters.
+ *
+ * <p>All literals anchor on their first character (offset 0) to strictly preserve leftmost-first
+ * matching semantics during left-to-right vector scanning.
  *
  * <p>The upper bound of 4 literals is chosen based on empirical vector performance and hardware
  * constraints:
@@ -49,9 +52,8 @@ record MultiLiteralInfo(String[] literals, char[] anchorChars, int[] anchorOffse
           return null;
         }
       }
-      int offset = RarityOracle.rarestAsciiOffset(lit, lit.length());
-      anchorOffsets[i] = offset;
-      anchorChars[i] = lit.charAt(offset);
+      anchorOffsets[i] = 0;
+      anchorChars[i] = lit.charAt(0);
       minLen = Math.min(minLen, lit.length());
     }
 
