@@ -162,9 +162,9 @@ class BenchmarkInputMaterializerTest {
         .hasSize(38);
     JsonObject executionPlan = manifest.getAsJsonObject("executionPlan");
     assertThat(executionPlan.get("version").getAsInt()).isEqualTo(1);
-    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(575);
+    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(591);
     assertThat(executionPlan.get("engineCount").getAsInt()).isEqualTo(10);
-    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(5_750);
+    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(5_910);
     assertThat(
             executionEntry(
                     executionPlan, "UnicodeCompileBenchmark.compile.word.0@dotnet_nonbacktracking")
@@ -192,7 +192,7 @@ class BenchmarkInputMaterializerTest {
                           Set.of("runnable", "excluded")
                               .contains(planEntry.get("status").getAsString())))
           .as(engineId)
-          .hasSize(575);
+          .hasSize(591);
     }
     assertThat(
             executionPlan.getAsJsonArray("entries").asList().stream()

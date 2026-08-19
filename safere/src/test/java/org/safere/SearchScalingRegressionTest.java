@@ -217,6 +217,93 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void startAnchoredLiteralFindRejectionIsConstantWorkForStringInput() {
+    Pattern pattern = Pattern.compile("^target");
+    assertConstantRejectionWork(
+        size -> pattern.matcher("x".repeat(size) + "target").find(), "String literal");
+  }
+
+  @Test
+  void startAnchoredLiteralFindRejectionIsConstantWorkForUtf8Input() {
+    Pattern pattern = Pattern.compile("^target");
+    assertConstantRejectionWork(
+        size ->
+            pattern
+                .matcher(Utf8Input.trusted(("x".repeat(size) + "target").getBytes(UTF_8)))
+                .find(),
+        "UTF-8 literal");
+  }
+
+  @Test
+  void startAnchoredCharClassFindRejectionIsConstantWorkForStringInput() {
+    Pattern pattern = Pattern.compile("^[a-z]");
+    assertConstantRejectionWork(
+        size -> pattern.matcher("9".repeat(size) + "a").find(), "String char-class");
+  }
+
+  @Test
+  void startAnchoredCharClassFindRejectionIsConstantWorkForUtf8Input() {
+    Pattern pattern = Pattern.compile("^[a-z]");
+    assertConstantRejectionWork(
+        size -> pattern.matcher(Utf8Input.trusted(("9".repeat(size) + "a").getBytes(UTF_8))).find(),
+        "UTF-8 char-class");
+  }
+
+  @Test
+  void startAnchoredKeywordAlternationFindRejectionIsConstantWorkForStringInput() {
+    Pattern pattern = Pattern.compile("(?i)^(?:apple|banana)");
+    assertConstantRejectionWork(
+        size -> pattern.matcher("x".repeat(size) + "apple").find(), "String keyword");
+  }
+
+  @Test
+  void startAnchoredKeywordAlternationFindRejectionIsConstantWorkForUtf8Input() {
+    Pattern pattern = Pattern.compile("(?i)^(?:apple|banana)");
+    assertConstantRejectionWork(
+        size ->
+            pattern.matcher(Utf8Input.trusted(("x".repeat(size) + "apple").getBytes(UTF_8))).find(),
+        "UTF-8 keyword");
+  }
+
+  @Test
+  void startAnchoredFindFromNonZeroIsConstantWork() {
+    Pattern pattern = Pattern.compile("^abc");
+    assertConstantRejectionWork(
+        size -> pattern.matcher("abc" + "x".repeat(size)).find(1), "find(1) on ^abc");
+  }
+
+  @Test
+  void startAnchoredRepeatedFindTerminatesInConstantWork() {
+    Pattern pattern = Pattern.compile("^abc");
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> {
+              Matcher m = pattern.matcher("abc" + "x".repeat(2_000));
+              int matches = 0;
+              while (m.find()) {
+                matches++;
+              }
+              assertThat(matches).isEqualTo(1);
+            });
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> {
+              Matcher m = pattern.matcher("abc" + "x".repeat(10_000));
+              int matches = 0;
+              while (m.find()) {
+                matches++;
+              }
+              assertThat(matches).isEqualTo(1);
+            });
+
+    assertThat(work2000).as("Short input repeated find work").isLessThan(50);
+    assertThat(work10000).as("Long input repeated find work").isLessThan(50);
+    assertThat(work10000)
+        .as("Subsequent find() on start-anchored pattern must not scale with input size")
+        .isLessThanOrEqualTo(Math.max(10, work2000 * 2));
+  }
+
+  @Test
   void disjointRequiredLiteralCandidateIsScannedOnlyOnce() {
     Pattern pattern = Pattern.compile(".*(?:apple|banana|cherry).*");
     String input = "x".repeat(32_768) + "cherry";
@@ -267,6 +354,17 @@ class SearchScalingRegressionTest {
     assertThat(largerWork)
         .as("Literal selectivity scoring should scale linearly with pattern size")
         .isLessThanOrEqualTo(smallerWork * 6);
+  }
+
+  private static void assertConstantRejectionWork(IntPredicate find, String description) {
+    long work2000 = WorkCounter.countForTesting(() -> assertThat(find.test(2_000)).isFalse());
+    long work10000 = WorkCounter.countForTesting(() -> assertThat(find.test(10_000)).isFalse());
+
+    assertThat(work2000).as("%s rejection on short input", description).isLessThan(100);
+    assertThat(work10000).as("%s rejection on long input", description).isLessThan(100);
+    assertThat(work10000)
+        .as("%s rejection work should not scale with trailing input size", description)
+        .isLessThanOrEqualTo(Math.max(10, work2000 * 2));
   }
 
   @Test

@@ -652,6 +652,30 @@ class DiagnosticsTest {
   }
 
   @Test
+  void startAnchoredRejectionReportsPrefilterStrategy() {
+    Pattern.setDiagnostics(diagnostics);
+    Map<String, MatchStrategy> cases =
+        Map.of("^target", MatchStrategy.LITERAL, "^[a-z]", MatchStrategy.CHARACTER_CLASS);
+
+    cases.forEach(
+        (regex, expectedStrategy) -> {
+          Pattern pattern = Pattern.compile(regex);
+
+          assertThat(pattern.matcher("9target").find()).isFalse();
+          assertThat(operationsFor(pattern))
+              .singleElement()
+              .satisfies(
+                  event -> {
+                    assertThat(event.boundaryStrategy()).isEqualTo(expectedStrategy);
+                    assertThat(event.auxiliaryStrategies())
+                        .containsExactly(
+                            new StrategyParticipation(
+                                expectedStrategy, StrategyRole.REJECT_PREFILTER));
+                  });
+        });
+  }
+
+  @Test
   void listenerCanAggregateStrategiesWithLongAdders() {
     Pattern pattern = Pattern.compile("abc");
     Map<MatchStrategy, LongAdder> counts = new ConcurrentHashMap<>();
