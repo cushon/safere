@@ -20,5 +20,11 @@ final class StringChunkBuffer {
     return BUFFER.get();
   }
 
+  static int copyChunk(String text, int pos, int scanLimit, char[] buffer) {
+    int chunkSize = Math.min(CHUNK_SIZE, scanLimit - pos);
+    text.getChars(pos, pos + chunkSize, buffer, 0);
+    return chunkSize;
+  }
+
   private StringChunkBuffer() {}
 }

@@ -38,12 +38,7 @@ final class StringVectorScan {
       }
     }
     if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
-      return searchChunked(
-          text,
-          start,
-          text.length(),
-          0,
-          (buf, off, len, st) -> ShortVectorScan.indexOfCharClass(buf, off, len, ranges, st));
+      return indexOfCharClassChunked(text, ranges, start, text.length());
     }
     return VectorScanProvider.UNSUPPORTED;
   }
@@ -66,12 +61,7 @@ final class StringVectorScan {
       }
     }
     if (limit - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
-      return searchChunked(
-          text,
-          start,
-          limit,
-          0,
-          (buf, off, len, st) -> ShortVectorScan.indexOfCharClass(buf, off, len, ranges, st));
+      return indexOfCharClassChunked(text, ranges, start, limit);
     }
     return VectorScanProvider.UNSUPPORTED;
   }
@@ -86,12 +76,7 @@ final class StringVectorScan {
       }
     }
     if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
-      return searchChunked(
-          text,
-          start,
-          text.length(),
-          prefix.length() - 1,
-          (buf, off, len, st) -> ShortVectorScan.indexOfIgnoreCase(buf, off, len, prefix, st));
+      return indexOfIgnoreCaseChunked(text, prefix, start);
     }
     return VectorScanProvider.UNSUPPORTED;
   }
@@ -106,12 +91,7 @@ final class StringVectorScan {
       }
     }
     if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
-      return searchChunked(
-          text,
-          fromIndex,
-          limit,
-          0,
-          (buf, off, len, st) -> ShortVectorScan.indexOfAsciiPair(buf, off, len, c1, c2, st));
+      return indexOfAsciiPairChunked(text, c1, c2, fromIndex, limit);
     }
     return -1;
   }
@@ -126,12 +106,7 @@ final class StringVectorScan {
       }
     }
     if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
-      return searchChunked(
-          text,
-          fromIndex,
-          limit,
-          0,
-          (buf, off, len, st) -> ShortVectorScan.indexOfAsciiTriple(buf, off, len, c1, c2, c3, st));
+      return indexOfAsciiTripleChunked(text, c1, c2, c3, fromIndex, limit);
     }
     return -1;
   }
@@ -533,14 +508,8 @@ final class StringVectorScan {
       }
     }
     if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
-      return searchChunked(
-          text,
-          start,
-          text.length(),
-          minLength - 1,
-          (buf, off, len, st) ->
-              ShortVectorScan.indexOfMultiLiteral(
-                  buf, off, len, literals, anchorChars, anchorOffsets, minLength, st));
+      return indexOfMultiLiteralChunked(
+          text, literals, anchorChars, anchorOffsets, minLength, start);
     }
     return VectorScanProvider.UNSUPPORTED;
   }
@@ -693,28 +662,43 @@ final class StringVectorScan {
     return VectorScanProvider.UNSUPPORTED;
   }
 
-  @FunctionalInterface
-  interface ChunkSearcher {
-    int search(char[] buffer, int offset, int length, int start);
-  }
-
-  private static int searchChunked(
-      String text, int start, int limit, int overlap, ChunkSearcher searcher) {
+  private static int indexOfCharClassChunked(String text, int[] ranges, int start, int limit) {
+    if (!Swar.supportsBmpCodeUnitRanges(ranges, 4)) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
     int scanLimit = Math.min(limit, text.length());
     int pos = Math.max(0, start);
     char[] chunk = StringChunkBuffer.get();
 
     while (pos < scanLimit) {
-      int chunkSize = Math.min(StringChunkBuffer.CHUNK_SIZE, scanLimit - pos);
-      text.getChars(pos, pos + chunkSize, chunk, 0);
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk = scanChunkCharClass(chunk, chunkSize, ranges);
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize;
+    }
+    return -1;
+  }
 
-      int found = searcher.search(chunk, 0, chunkSize, 0);
-      if (found == VectorScanProvider.UNSUPPORTED) {
+  private static int indexOfIgnoreCaseChunked(String text, String prefix, int start) {
+    int prefixLen = prefix.length();
+    int scanLimit = text.length();
+    int pos = Math.max(0, start);
+    char[] chunk = StringChunkBuffer.get();
+    int overlap = prefixLen - 1;
+
+    while (pos < scanLimit) {
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk = scanChunkIgnoreCase(chunk, chunkSize, prefix);
+      if (matchInChunk == VectorScanProvider.UNSUPPORTED) {
         return VectorScanProvider.UNSUPPORTED;
       }
-      if (found >= 0) {
-        int matchPos = pos + found;
-        return matchPos < scanLimit ? matchPos : -1;
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
       }
       if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
         break;
@@ -722,6 +706,257 @@ final class StringVectorScan {
       pos += chunkSize - overlap;
     }
     return -1;
+  }
+
+  private static int indexOfAsciiPairChunked(
+      String text, int c1, int c2, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    char[] chunk = StringChunkBuffer.get();
+
+    while (pos < scanLimit) {
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk = scanChunkAsciiPair(chunk, chunkSize, c1, c2);
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize;
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiTripleChunked(
+      String text, int c1, int c2, int c3, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    char[] chunk = StringChunkBuffer.get();
+
+    while (pos < scanLimit) {
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk = scanChunkAsciiTriple(chunk, chunkSize, c1, c2, c3);
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize;
+    }
+    return -1;
+  }
+
+  private static int indexOfMultiLiteralChunked(
+      String text,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    int scanLimit = text.length();
+    int pos = Math.max(0, start);
+    char[] chunk = StringChunkBuffer.get();
+    int overlap = minLength - 1;
+
+    while (pos < scanLimit) {
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk =
+          scanChunkMultiLiteral(chunk, chunkSize, literals, anchorChars, anchorOffsets, minLength);
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize - overlap;
+    }
+    return -1;
+  }
+
+  private static int scanChunkCharClass(char[] chunk, int chunkSize, int[] ranges) {
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector v = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> m = ShortVectorScan.matches(v, ranges);
+      if (m.anyTrue()) {
+        return p + m.firstTrue();
+      }
+    }
+    for (; p < chunkSize; p++) {
+      if (ShortVectorScan.matches(chunk[p], ranges)) {
+        return p;
+      }
+    }
+    return -1;
+  }
+
+  private static int scanChunkIgnoreCase(char[] chunk, int chunkSize, String prefix) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return 0;
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+    if (prefixLen > 1) {
+      return Utf16.indexOfIgnoreCase(chunk, 0, chunkSize, prefix, 0);
+    }
+
+    char first = prefix.charAt(0);
+    short low = (short) toLowerCase(first);
+    short high = (short) toUpperCase(first);
+    ShortVector lowVec = ShortVector.broadcast(SHORT_SPECIES, low);
+    ShortVector highVec = ShortVector.broadcast(SHORT_SPECIES, high);
+
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector inputVec = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> matchMask = inputVec.compare(EQ, lowVec).or(inputVec.compare(EQ, highVec));
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = p + bit;
+          if (candidatePos + prefixLen <= chunkSize
+              && Utf16.regionMatchesIgnoreCase(chunk, candidatePos, prefix, prefixLen)) {
+            return candidatePos;
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+    for (; p < chunkSize; p++) {
+      if (Utf16.regionMatchesIgnoreCase(chunk, p, prefix, prefixLen)) {
+        return p;
+      }
+    }
+    return -1;
+  }
+
+  private static int scanChunkAsciiPair(char[] chunk, int chunkSize, int c1, int c2) {
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+    ShortVector v1 = ShortVector.broadcast(SHORT_SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SHORT_SPECIES, (short) c2);
+
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector inputVec = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> matchMask = inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2));
+      if (matchMask.anyTrue()) {
+        return p + matchMask.firstTrue();
+      }
+    }
+    for (; p < chunkSize; p++) {
+      char c = chunk[p];
+      if (c == c1 || c == c2) {
+        return p;
+      }
+    }
+    return -1;
+  }
+
+  private static int scanChunkAsciiTriple(char[] chunk, int chunkSize, int c1, int c2, int c3) {
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+    ShortVector v1 = ShortVector.broadcast(SHORT_SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SHORT_SPECIES, (short) c2);
+    ShortVector v3 = ShortVector.broadcast(SHORT_SPECIES, (short) c3);
+
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector inputVec = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> matchMask =
+          inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2)).or(inputVec.compare(EQ, v3));
+      if (matchMask.anyTrue()) {
+        return p + matchMask.firstTrue();
+      }
+    }
+    for (; p < chunkSize; p++) {
+      char c = chunk[p];
+      if (c == c1 || c == c2 || c == c3) {
+        return p;
+      }
+    }
+    return -1;
+  }
+
+  private static int scanChunkMultiLiteral(
+      char[] chunk,
+      int chunkSize,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength) {
+    int numLits = literals.length;
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+
+    ShortVector v0 = ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[0]);
+    ShortVector v1 =
+        numLits >= 2 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[1]) : null;
+    ShortVector v2 =
+        numLits >= 3 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[2]) : null;
+    ShortVector v3 =
+        numLits >= 4 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[3]) : null;
+
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector inputVec = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> matchMask = inputVec.compare(EQ, v0);
+      if (numLits >= 2) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v1));
+      }
+      if (numLits >= 3) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v2));
+      }
+      if (numLits >= 4) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v3));
+      }
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int matchIndex = p + bit;
+          for (int i = 0; i < numLits; i++) {
+            int candidatePos = matchIndex - anchorOffsets[i];
+            String lit = literals[i];
+            if (candidatePos >= 0
+                && candidatePos + lit.length() <= chunkSize
+                && chunk[matchIndex] == anchorChars[i]
+                && regionMatches(chunk, candidatePos, lit)) {
+              return candidatePos;
+            }
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int scalarLimit = chunkSize - minLength;
+    for (; p <= scalarLimit; p++) {
+      for (int i = 0; i < numLits; i++) {
+        String lit = literals[i];
+        if (p + lit.length() <= chunkSize && regionMatches(chunk, p, lit)) {
+          return p;
+        }
+      }
+    }
+    return -1;
+  }
+
+  private static boolean regionMatches(char[] chars, int offset, String str) {
+    int len = str.length();
+    for (int i = 0; i < len; i++) {
+      if (chars[offset + i] != str.charAt(i)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private StringVectorScan() {}
