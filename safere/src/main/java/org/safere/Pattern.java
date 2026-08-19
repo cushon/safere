@@ -488,7 +488,7 @@ public final class Pattern implements Serializable {
     AsciiBitmap ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
     String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
     MultiLiteralInfo multiLiteral =
-        altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 6
+        altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 4
             ? MultiLiteralInfo.create(altLiterals)
             : null;
     StartAcceleration startAcceleration =

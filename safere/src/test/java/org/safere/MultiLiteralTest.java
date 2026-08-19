@@ -26,7 +26,7 @@ class MultiLiteralTest {
     assertThat(info.anchorOffsets()).hasSize(3);
 
     assertThat(MultiLiteralInfo.create(new String[] {"single"})).isNull();
-    assertThat(MultiLiteralInfo.create(new String[] {"1", "2", "3", "4", "5", "6", "7"})).isNull();
+    assertThat(MultiLiteralInfo.create(new String[] {"1", "2", "3", "4", "5"})).isNull();
     assertThat(MultiLiteralInfo.create(new String[] {"valid", "café"})).isNull();
   }
 
@@ -35,9 +35,7 @@ class MultiLiteralTest {
       strings = {
         "foo|bar",
         "foo|bar|baz",
-        "cat|dog|bird|fish",
-        "apple|banana|cherry|date|fig",
-        "alpha|beta|gamma|delta|epsilon|zeta"
+        "cat|dog|bird|fish"
       })
   void testBasicMatching(String regex) {
     Pattern pattern = Pattern.compile(regex);
@@ -60,8 +58,20 @@ class MultiLiteralTest {
   }
 
   @Test
+  void testFivePlusLiteralsFallbackToCharClass() {
+    Pattern pattern = Pattern.compile("apple|banana|cherry|date|fig");
+    assertThat(pattern.multiLiteral()).isNull();
+
+    String haystack = "prefix date suffix";
+    Utf8Matcher m = pattern.matcher(Utf8Input.validated(haystack.getBytes(UTF_8)));
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(7);
+    assertThat(m.end()).isEqualTo(11);
+  }
+
+  @Test
   void testLongHaystackWithMultipleMatches() {
-    Pattern pattern = Pattern.compile("apple|banana|cherry|durian|elderberry");
+    Pattern pattern = Pattern.compile("apple|banana|cherry|durian");
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < 200; i++) {
       sb.append("some padding text ");
