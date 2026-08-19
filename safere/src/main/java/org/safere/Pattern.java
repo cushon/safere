@@ -492,7 +492,10 @@ public final class Pattern implements Serializable {
             ? MultiLiteralInfo.create(altLiterals)
             : null;
     StartAcceleration startAcceleration =
-        (prefix == null && ccPrefixAscii == null && fixedOffsetLiteral == null && multiLiteral == null)
+        (prefix == null
+                && ccPrefixAscii == null
+                && fixedOffsetLiteral == null
+                && multiLiteral == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);

@@ -31,12 +31,7 @@ class MultiLiteralTest {
   }
 
   @ParameterizedTest
-  @ValueSource(
-      strings = {
-        "foo|bar",
-        "foo|bar|baz",
-        "cat|dog|bird|fish"
-      })
+  @ValueSource(strings = {"foo|bar", "foo|bar|baz", "cat|dog|bird|fish"})
   void testBasicMatching(String regex) {
     Pattern pattern = Pattern.compile(regex);
     assertThat(pattern.multiLiteral()).isNotNull();
