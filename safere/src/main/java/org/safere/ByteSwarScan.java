@@ -84,16 +84,93 @@ abstract class ByteSwarScan {
         return -2;
       }
     }
-    if (prefixLen > 1) {
-      return -2;
+    int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen);
+    char anchor = prefix.charAt(anchorOffset);
+    byte low = (byte) Ascii.toLowerCase(anchor);
+    byte high = (byte) Ascii.toUpperCase(anchor);
+    return indexOfIgnoreCase(
+        bytes, offset, length, prefix, prefixLen, anchorOffset, low, high, start);
+  }
+
+  static int indexOfIgnoreCase(
+      byte[] bytes,
+      int offset,
+      int length,
+      String prefix,
+      int prefixLen,
+      int anchorOffset,
+      byte low,
+      byte high,
+      int start) {
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
     }
-    char first = prefix.charAt(0);
-    byte low = (byte) Ascii.toLowerCase(first);
-    byte high = (byte) Ascii.toUpperCase(first);
-    if (low == high) {
-      return indexOfByte(bytes, offset, length, low, start);
+    int pos = Math.max(0, start);
+    if (pos <= length - prefixLen
+        && Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+      return pos;
     }
-    return indexOfBytePair(bytes, offset, length, low, high, start);
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
+
+    int wordEnd = length - prefixLen - Long.BYTES + 1;
+    long repeatedLow = (low & 0xFFL) * BYTE_ONES;
+    long repeatedHigh = (high & 0xFFL) * BYTE_ONES;
+
+    while (pos <= wordEnd) {
+      // Tier 0: Immediate anchor check in 1 CPU cycle
+      byte currentAnchor = bytes[offset + pos + anchorOffset];
+      if (currentAnchor == low || currentAnchor == high) {
+        if (Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+          return pos;
+        }
+        verificationWork += prefixLen;
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return VectorScanProvider.UNSUPPORTED;
+        }
+        pos++;
+        continue;
+      }
+
+      long word = (long) LONG_VIEW.get(bytes, offset + pos + anchorOffset);
+      long lowDiff = word ^ repeatedLow;
+      long highDiff = word ^ repeatedHigh;
+      if (((((lowDiff - BYTE_ONES) & ~lowDiff) | ((highDiff - BYTE_ONES) & ~highDiff))
+              & BYTE_HIGH_BITS)
+          != 0) {
+        for (int index = 0; index < Long.BYTES; index++) {
+          byte value = bytes[offset + pos + anchorOffset + index];
+          if (value == low || value == high) {
+            int candidatePos = pos + index;
+            if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)) {
+              if (Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
+                return candidatePos;
+              }
+              verificationWork += prefixLen;
+              if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+                return VectorScanProvider.UNSUPPORTED;
+              }
+            }
+          }
+        }
+      }
+      pos += Long.BYTES;
+    }
+
+    int limitScalar = length - prefixLen;
+    for (; pos <= limitScalar; pos++) {
+      byte value = bytes[offset + pos + anchorOffset];
+      if (value == low || value == high) {
+        if (Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+          return pos;
+        }
+        verificationWork += prefixLen;
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return VectorScanProvider.UNSUPPORTED;
+        }
+      }
+    }
+    return -1;
   }
 
   static int indexOfBytePair(
@@ -234,7 +311,7 @@ abstract class ByteSwarScan {
     long repeatedLast = (literal[last] & 0xFFL) * BYTE_ONES;
     int wordEnd = length - last - Long.BYTES;
     long work = 0;
-    long workLimit = Utf8InputScanner.workLimit(length - start);
+    long workLimit = WorkLimit.forRemaining(length - start);
     int position = start;
     while (position <= wordEnd) {
       long firstDifference = (long) LONG_VIEW.get(bytes, offset + position) ^ repeatedFirst;
@@ -258,11 +335,11 @@ abstract class ByteSwarScan {
             candidateCount++;
           }
         }
-        work = Utf8InputScanner.addCandidateWork(work, candidateCount, literal.length);
+        work = WorkLimit.addCandidateWork(work, candidateCount, literal.length);
       }
       position += Long.BYTES;
       work++;
-      if (work >= workLimit) {
+      if (WorkLimit.isExhausted(work, workLimit)) {
         return -2;
       }
     }

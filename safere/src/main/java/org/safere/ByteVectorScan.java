@@ -90,7 +90,7 @@ final class ByteVectorScan {
     }
     int pos = Math.max(0, start);
     long verificationWork = 0;
-    long workLimit = Utf8InputScanner.workLimit(length - pos);
+    long workLimit = WorkLimit.forRemaining(length - pos);
 
     // Fast scalar prologue to catch immediate matches without SIMD setup
     int scalarPrologueLimit = Math.min(length - prefixLen + 1, pos + Integer.BYTES);
@@ -102,7 +102,7 @@ final class ByteVectorScan {
       }
       if (b == (low & 0xFF) || b == (high & 0xFF)) {
         verificationWork += prefixLen;
-        if (verificationWork >= workLimit) {
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
           return VectorScanProvider.UNSUPPORTED;
         }
       }
@@ -121,7 +121,7 @@ final class ByteVectorScan {
           return p;
         }
         verificationWork += prefixLen;
-        if (verificationWork >= workLimit) {
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
           return VectorScanProvider.UNSUPPORTED;
         }
       }
@@ -140,13 +140,13 @@ final class ByteVectorScan {
         while (activeLanes != 0) {
           int bit = Long.numberOfTrailingZeros(activeLanes);
           int candidatePos = pos + bit - anchorOffset;
-          if (Utf8InputScanner.candidatePrefixInBounds(candidatePos, start, length, prefixLen)
+          if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)
               && Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
             return candidatePos;
           }
-          if (Utf8InputScanner.candidatePrefixInBounds(candidatePos, start, length, prefixLen)) {
+          if (WorkLimit.candidateInBounds(candidatePos, start, length, prefixLen)) {
             verificationWork += prefixLen;
-            if (verificationWork >= workLimit) {
+            if (WorkLimit.isExhausted(verificationWork, workLimit)) {
               return VectorScanProvider.UNSUPPORTED;
             }
           }
@@ -165,7 +165,7 @@ final class ByteVectorScan {
         return p;
       }
       verificationWork += prefixLen;
-      if (verificationWork >= workLimit) {
+      if (WorkLimit.isExhausted(verificationWork, workLimit)) {
         return VectorScanProvider.UNSUPPORTED;
       }
     }

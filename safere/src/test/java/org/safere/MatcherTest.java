@@ -1898,6 +1898,57 @@ class MatcherTest {
       }
       assertThat(m.find()).isFalse();
     }
+
+    @Test
+    @DisplayName("case-insensitive single-character replaceAll() and replaceFirst()")
+    void caseInsensitiveSingleCharacterReplace() {
+      Pattern p = Pattern.compile("(?i)a");
+      Matcher m = p.matcher("aAbBaA");
+      assertThat(m.replaceAll("X")).isEqualTo("XXbBXX");
+      m.reset();
+      assertThat(m.replaceFirst("X")).isEqualTo("XAbBaA");
+      assertThat(m.start()).isEqualTo(0);
+      assertThat(m.end()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("case-insensitive multi-character literal replaceAll() and replaceFirst()")
+    void caseInsensitiveLiteralReplace() {
+      Pattern p = Pattern.compile("(?i)keyword_to_find");
+      String input = "KEYWORD_TO_FIND and keyword_to_find and KeyWord_To_Find";
+      Matcher m = p.matcher(input);
+      assertThat(m.replaceAll("FOUND")).isEqualTo("FOUND and FOUND and FOUND");
+      m.reset();
+      assertThat(m.replaceFirst("FOUND"))
+          .isEqualTo("FOUND and keyword_to_find and KeyWord_To_Find");
+      assertThat(m.start()).isEqualTo(0);
+      assertThat(m.end()).isEqualTo(15);
+      assertThat(m.group()).isEqualTo("KEYWORD_TO_FIND");
+    }
+
+    @Test
+    @DisplayName("case-insensitive literal replaceAll() with $0 backreference")
+    void caseInsensitiveLiteralReplaceWithGroupZero() {
+      Pattern p = Pattern.compile("(?i)abc");
+      Matcher m = p.matcher("ABC abc AbC");
+      assertThat(m.replaceAll("[$0]")).isEqualTo("[ABC] [abc] [AbC]");
+      m.reset();
+      assertThat(m.replaceFirst("[$0]")).isEqualTo("[ABC] abc AbC");
+      assertThat(m.group()).isEqualTo("ABC");
+    }
+
+    @Test
+    @DisplayName("case-insensitive literal replaceAll() on large repeated input matches JDK")
+    void caseInsensitiveLiteralReplaceAllLargeInputMatchesJdk() {
+      String regex = "(?i)keyword_to_find";
+      String input = "KEYWORD_TO_FIND ".repeat(200);
+      Pattern p = Pattern.compile(regex);
+      java.util.regex.Pattern jdkP = java.util.regex.Pattern.compile(regex);
+
+      assertThat(p.matcher(input).replaceAll("")).isEqualTo(jdkP.matcher(input).replaceAll(""));
+      assertThat(p.matcher(input).replaceFirst("X"))
+          .isEqualTo(jdkP.matcher(input).replaceFirst("X"));
+    }
   }
 
   @Nested
@@ -3545,6 +3596,54 @@ class MatcherTest {
       Pattern p = Pattern.compile("(delim)");
       String[] parts = p.split("one delim two delim three");
       assertThat(parts).containsExactly("one ", " two ", " three");
+    }
+
+    @Test
+    @DisplayName(
+        "case-insensitive multi-character prefix matches across String and handles dense false"
+            + " candidates")
+    void caseInsensitiveMultiCharPrefixStringMatchesAndDenseCandidates() {
+      String pattern = "(?i)http_query";
+      String input =
+          "http_first http_second http_third "
+              + "HTTP_other HTTP_next "
+              + "hTtP_almost "
+              + "HTTP_QUERY_final";
+      Pattern p = Pattern.compile(pattern);
+      Matcher m = p.matcher(input);
+
+      assertThat(m.find()).isTrue();
+      int expectedStart = input.indexOf("HTTP_QUERY");
+      assertThat(m.start()).isEqualTo(expectedStart);
+      assertThat(m.end()).isEqualTo(expectedStart + "http_query".length());
+      assertThat(m.find()).isFalse();
+
+      // Dense repetitive candidate noise falling back to KMP
+      String noisePattern = "(?i)the_zone";
+      String noise = "the_alpha the_beta the_gamma the_delta ";
+      String denseInput = noise.repeat(5) + "THE_ZONE";
+      Pattern p2 = Pattern.compile(noisePattern);
+      Matcher m2 = p2.matcher(denseInput);
+
+      assertThat(m2.find()).isTrue();
+      int expectedDenseStart = denseInput.indexOf("THE_ZONE");
+      assertThat(m2.start()).isEqualTo(expectedDenseStart);
+      assertThat(m2.end()).isEqualTo(expectedDenseStart + "the_zone".length());
+    }
+
+    @Test
+    @DisplayName("case-insensitive single char prefix matches correctly")
+    void caseInsensitiveSingleCharPrefix() {
+      Pattern p = Pattern.compile("(?i)a");
+      Matcher m = p.matcher("---A---");
+      assertThat(m.find()).isTrue();
+      assertThat(m.start()).isEqualTo(3);
+      assertThat(m.end()).isEqualTo(4);
+
+      Pattern p2 = Pattern.compile("(?i)z");
+      Matcher m2 = p2.matcher("xxxZxxx");
+      assertThat(m2.find()).isTrue();
+      assertThat(m2.start()).isEqualTo(3);
     }
   }
 }
