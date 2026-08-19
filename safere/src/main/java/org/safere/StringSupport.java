@@ -50,7 +50,7 @@ final class StringSupport {
   }
 
   public static boolean hasAccess() {
-    return HAS_ACCESS;
+    return HAS_ACCESS && !Boolean.getBoolean("org.safere.experimental.forceStringChunking");
   }
 
   public static boolean compatibleWith(String str, Charset charset) {
