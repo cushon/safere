@@ -172,5 +172,81 @@ final class ByteVectorScan {
     return -1;
   }
 
+  static int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    int numLits = literals.length;
+    if (numLits == 0 || length < minLength) {
+      return -1;
+    }
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    ByteVector v0 = ByteVector.broadcast(SPECIES, (byte) anchorChars[0]);
+    ByteVector v1 = numLits >= 2 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[1]) : null;
+    ByteVector v2 = numLits >= 3 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[2]) : null;
+    ByteVector v3 = numLits >= 4 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[3]) : null;
+    ByteVector v4 = numLits >= 5 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[4]) : null;
+    ByteVector v5 = numLits >= 6 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[5]) : null;
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
+      VectorMask<Byte> matchMask = inputVec.compare(EQ, v0);
+      if (numLits >= 2) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v1));
+      }
+      if (numLits >= 3) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v2));
+      }
+      if (numLits >= 4) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v3));
+      }
+      if (numLits >= 5) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v4));
+      }
+      if (numLits >= 6) {
+        matchMask = matchMask.or(inputVec.compare(EQ, v5));
+      }
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int matchIndex = pos + bit;
+          for (int i = 0; i < numLits; i++) {
+            int candidatePos = matchIndex - anchorOffsets[i];
+            String lit = literals[i];
+            if (candidatePos >= start
+                && candidatePos + lit.length() <= length
+                && (bytes[offset + matchIndex] & 0xFF) == (anchorChars[i] & 0xFF)
+                && Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
+              return candidatePos;
+            }
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int scalarLimit = length - minLength;
+    for (; pos <= scalarLimit; pos++) {
+      for (int i = 0; i < numLits; i++) {
+        String lit = literals[i];
+        if (pos + lit.length() <= length
+            && Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
+          return pos;
+        }
+      }
+    }
+    return -1;
+  }
+
   private ByteVectorScan() {}
 }

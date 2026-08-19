@@ -223,4 +223,14 @@ final class Ascii {
     }
     return true;
   }
+
+  /** Returns whether a byte array matches a pattern prefix exactly. */
+  static boolean regionMatches(byte[] bytes, int offset, String prefix, int prefixLen) {
+    for (int i = 0; i < prefixLen; i++) {
+      if ((bytes[offset + i] & 0xFF) != prefix.charAt(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
 }

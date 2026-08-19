@@ -32,6 +32,11 @@ sealed interface Utf8StartAccelerator {
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
+    if (descriptor.multiLiteral() != null
+        && !hasWordBoundary
+        && VectorScanProviders.providerForLength(64) != null) {
+      return new MultiLiteral(descriptor.multiLiteral());
+    }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
       CharClassScanInfo scanInfo =
           Pattern.buildAsciiClassScanInfo(descriptor.charClassPrefixAscii());
@@ -64,6 +69,7 @@ sealed interface Utf8StartAccelerator {
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
       case CharClass cc -> cc.findCandidate(scanner, pos);
+      case MultiLiteral ml -> ml.findCandidate(scanner, pos);
     };
   }
 
@@ -197,6 +203,55 @@ sealed interface Utf8StartAccelerator {
             scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex, scanner.length());
       }
       return fromIndex;
+    }
+  }
+
+  record MultiLiteral(MultiLiteralInfo info) implements Utf8StartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
+    }
+
+    @Override
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      VectorScanProvider provider = VectorScanProviders.providerForLength(scanner.length);
+      if (provider != null) {
+        int idx =
+            provider.indexOfMultiLiteral(
+                scanner.bytes,
+                scanner.offset,
+                scanner.length,
+                info.literals(),
+                info.anchorChars(),
+                info.anchorOffsets(),
+                info.minLength(),
+                fromIndex);
+        if (idx != VectorScanProvider.UNSUPPORTED) {
+          return idx;
+        }
+      }
+      return findScalar(scanner, fromIndex);
+    }
+
+    private int findScalar(Utf8InputScanner scanner, int fromIndex) {
+      int len = scanner.length;
+      int minLen = info.minLength();
+      String[] literals = info.literals();
+      byte[] bytes = scanner.bytes;
+      int offset = scanner.offset;
+      for (int i = fromIndex; i <= len - minLen; i++) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        for (String lit : literals) {
+          if (i + lit.length() <= len
+              && Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
+            return i;
+          }
+        }
+      }
+      return -1;
     }
   }
 }

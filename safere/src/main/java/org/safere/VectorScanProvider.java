@@ -13,4 +13,17 @@ interface VectorScanProvider {
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
+
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  default int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    return UNSUPPORTED;
+  }
 }

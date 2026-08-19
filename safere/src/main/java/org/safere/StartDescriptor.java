@@ -19,24 +19,17 @@ record StartDescriptor(
     AsciiBitmap charClassPrefixAscii,
     StartAcceleration lineAnchor,
     String anchoredPrefix,
-    AsciiBitmap anchoredCharClassPrefixAscii) {
+    AsciiBitmap anchoredCharClassPrefixAscii,
+    MultiLiteralInfo multiLiteral) {
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null);
-
-  StartDescriptor(
-      String prefix,
-      boolean prefixFoldCase,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      AsciiBitmap charClassPrefixAscii,
-      StartAcceleration lineAnchor) {
-    this(prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefixAscii, lineAnchor, null, null);
-  }
+      new StartDescriptor(null, false, null, null, null, null, null, null);
 
   boolean hasStartAcceleration() {
     return prefix != null
         || fixedOffsetLiteral != null
         || charClassPrefixAscii != null
-        || lineAnchor != null;
+        || lineAnchor != null
+        || multiLiteral != null;
   }
 }

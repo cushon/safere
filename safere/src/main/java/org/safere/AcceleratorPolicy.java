@@ -39,6 +39,10 @@ record AcceleratorPolicy(
   /** Policy for line anchor ('^', '$') boundary acceleration. */
   static final AcceleratorPolicy LINE_ANCHOR = new AcceleratorPolicy(16, 3, false, null);
 
+  /** Policy for vectorized multi-literal and Teddy multi-keyword scans. */
+  static final AcceleratorPolicy VECTOR_MULTI_LITERAL =
+      new AcceleratorPolicy(64, 4, true, MatchStrategy.LITERAL);
+
   /** Default fallback policy for generic or composite accelerators. */
   static final AcceleratorPolicy DEFAULT = new AcceleratorPolicy(32, 3, false, null);
 }
