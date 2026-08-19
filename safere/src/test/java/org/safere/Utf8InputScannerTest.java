@@ -326,13 +326,12 @@ class Utf8InputScannerTest {
   @Test
   void literalSearchSizeArithmeticDoesNotOverflowForLargeArrays() {
     assertThat(ByteSwarScan.filterThreshold(Integer.MAX_VALUE)).isEqualTo(85_899_345_880L);
-    assertThat(Utf8InputScanner.workLimit(Integer.MAX_VALUE)).isEqualTo(4_294_967_294L);
+    assertThat(WorkLimit.forRemaining(Integer.MAX_VALUE)).isEqualTo(4_294_967_294L);
   }
 
   @Test
   void candidateVerificationWorkDoesNotWrapPastIntegerMaximum() {
-    assertThat(Utf8InputScanner.addCandidateWork(2_100_000_000L, 8, 20_000_000))
-        .isEqualTo(2_260_000_008L);
+    assertThat(WorkLimit.addCandidateWork(2_100_000_000L, 8, 20_000_000)).isEqualTo(2_260_000_008L);
   }
 
   @Test

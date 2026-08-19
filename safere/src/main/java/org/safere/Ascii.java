@@ -35,6 +35,11 @@ final class Ascii {
     return a == b || toLowerCase(a) == toLowerCase(b);
   }
 
+  /** Returns whether two code points or bytes are equal ignoring ASCII case. */
+  static boolean equalsIgnoreCase(int a, int b) {
+    return a == b || toLowerCase(a) == toLowerCase(b);
+  }
+
   /** Returns true if the code point is an ASCII uppercase letter. */
   static boolean isUpper(int r) {
     return r >= 'A' && r <= 'Z';
@@ -55,14 +60,32 @@ final class Ascii {
     return r >= '0' && r <= '9';
   }
 
+  private static final long WORD_LOW = 0x03FF000000000000L; // '0'-'9' (bits 48-57)
+  private static final long WORD_HIGH =
+      0x07FFFFFE87FFFFFEL; // 'A'-'Z' (bits 1-26), '_' (bit 31), 'a'-'z' (bits 33-58)
+  private static final long ALNUM_HIGH =
+      0x07FFFFFE07FFFFFEL; // 'A'-'Z' (bits 1-26), 'a'-'z' (bits 33-58)
+
   /** Returns true if the code point is an ASCII letter or digit. */
   static boolean isAlnum(int r) {
-    return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
+    if ((r & ~63) == 0) {
+      return ((WORD_LOW >>> r) & 1) != 0;
+    }
+    if ((r & ~127) == 0) {
+      return ((ALNUM_HIGH >>> (r - 64)) & 1) != 0;
+    }
+    return false;
   }
 
   /** Returns true if the code point is an ASCII word character (letter, digit, or underscore). */
   static boolean isWordChar(int r) {
-    return isAlnum(r) || r == '_';
+    if ((r & ~63) == 0) {
+      return ((WORD_LOW >>> r) & 1) != 0;
+    }
+    if ((r & ~127) == 0) {
+      return ((WORD_HIGH >>> (r - 64)) & 1) != 0;
+    }
+    return false;
   }
 
   /** Returns true if the code point is an ASCII hex digit. */
@@ -105,12 +128,84 @@ final class Ascii {
     return failure;
   }
 
+  /** Knuth-Morris-Pratt scan on String, strictly linear in text length regardless of pattern. */
+  static int indexOfLinearIgnoreCase(String text, String prefix, int[] failure, int start) {
+    int matched = 0;
+    int prefixLen = prefix.length();
+    int length = text.length();
+    for (int position = Math.max(0, start); position < length; position++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char current = text.charAt(position);
+      char lower = toLowerCase(current);
+      while (matched > 0 && lower != prefix.charAt(matched)) {
+        matched = failure[matched - 1];
+      }
+      if (lower == prefix.charAt(matched)) {
+        matched++;
+        if (matched == prefixLen) {
+          return position - prefixLen + 1;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /** Returns the first index of character {@code ch} ignoring ASCII case, or -1 if not found. */
+  static int indexOfIgnoreCase(String text, char ch, int fromIndex) {
+    if (ch > 127) {
+      return text.indexOf(ch, fromIndex);
+    }
+    char low = toLowerCase(ch);
+    char high = toUpperCase(ch);
+    return indexOfIgnoreCase(text, low, high, fromIndex);
+  }
+
+  /**
+   * Returns the first index of character matching {@code low} or {@code high}, or -1 if not found.
+   */
+  static int indexOfIgnoreCase(String text, char low, char high, int fromIndex) {
+    if (low == high) {
+      return text.indexOf(low, fromIndex);
+    }
+    for (int i = Math.max(0, fromIndex); i < text.length(); i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char value = text.charAt(i);
+      if (value == low || value == high) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /** Returns the minimum of two indices that is >= 0, or -1 if both are negative. */
+  static int minNonNegative(int a, int b) {
+    if (a < 0) {
+      return b;
+    }
+    if (b < 0) {
+      return a;
+    }
+    return Math.min(a, b);
+  }
+
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
+    return regionMatchesIgnoreCase(text, offset, prefix, 0, prefixLen);
+  }
+
+  /**
+   * Returns whether a string matches a pattern prefix ignoring ASCII case, starting from startFrom.
+   */
+  static boolean regionMatchesIgnoreCase(
+      String text, int offset, String prefix, int startFrom, int prefixLen) {
+    for (int i = startFrom; i < prefixLen; i++) {
       char c = text.charAt(offset + i);
       char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
+      if (c != p && toLowerCase(c) != p) {
         return false;
       }
     }
@@ -120,9 +215,9 @@ final class Ascii {
   /** Returns whether a byte array matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(byte[] bytes, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
-      int c = bytes[offset + i] & 0xFF;
+      int b = bytes[offset + i] & 0xFF;
       char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
+      if (b != p && toLowerCase(b) != p) {
         return false;
       }
     }

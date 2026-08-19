@@ -126,4 +126,24 @@ class AsciiTest {
     assertThat(Ascii.ignoreCaseFailure("aA")).containsExactly(0, 1);
     assertThat(Ascii.ignoreCaseFailure("abAb")).containsExactly(0, 0, 1, 2);
   }
+
+  @Test
+  void indexOfIgnoreCase() {
+    assertThat(Ascii.indexOfIgnoreCase("hello World", 'w', 0)).isEqualTo(6);
+    assertThat(Ascii.indexOfIgnoreCase("hello World", 'W', 0)).isEqualTo(6);
+    assertThat(Ascii.indexOfIgnoreCase("hello World", 'o', 0)).isEqualTo(4);
+    assertThat(Ascii.indexOfIgnoreCase("hello World", 'o', 5)).isEqualTo(7);
+    assertThat(Ascii.indexOfIgnoreCase("hello World", 'z', 0)).isEqualTo(-1);
+    assertThat(Ascii.indexOfIgnoreCase("hello 123", '1', 0)).isEqualTo(6);
+    assertThat(Ascii.indexOfIgnoreCase("hello é", 'é', 0)).isEqualTo(6);
+  }
+
+  @Test
+  void minNonNegative() {
+    assertThat(Ascii.minNonNegative(-1, -1)).isEqualTo(-1);
+    assertThat(Ascii.minNonNegative(-1, 5)).isEqualTo(5);
+    assertThat(Ascii.minNonNegative(3, -1)).isEqualTo(3);
+    assertThat(Ascii.minNonNegative(10, 4)).isEqualTo(4);
+    assertThat(Ascii.minNonNegative(2, 7)).isEqualTo(2);
+  }
 }

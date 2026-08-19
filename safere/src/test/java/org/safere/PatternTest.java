@@ -1306,6 +1306,16 @@ class PatternTest {
   @DisplayName("start-anchored prefix and char class fast paths")
   class StartAnchoredPrefixTests {
 
+    @ParameterizedTest
+    @ValueSource(strings = {"^target", "\\Atarget"})
+    @DisplayName("start-anchored literal rejects a later UTF-8 occurrence")
+    void startAnchoredLiteralRejectsLaterUtf8Occurrence(String regex) {
+      Pattern pattern = Pattern.compile(regex);
+
+      assertThat(pattern.find(Utf8Input.trusted("prefix target".getBytes(UTF_8)))).isFalse();
+      assertThat(pattern.find(Utf8Input.trusted("target suffix".getBytes(UTF_8)))).isTrue();
+    }
+
     @Test
     @DisplayName("start-anchored character class rejects empty UTF-8 input safely")
     void startAnchoredCharacterClassRejectsEmptyUtf8InputSafely() {
