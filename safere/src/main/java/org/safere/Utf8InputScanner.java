@@ -336,18 +336,6 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return length - start;
   }
 
-  static long workLimit(int remaining) {
-    return Math.max(1L, (long) remaining * 2);
-  }
-
-  static boolean candidatePrefixInBounds(int candidate, int start, int length, int prefixLength) {
-    return candidate >= start && candidate <= length - prefixLength;
-  }
-
-  static long addCandidateWork(long work, int candidateCount, int literalLength) {
-    return work + (long) candidateCount * literalLength + Long.BYTES;
-  }
-
   /** Knuth-Morris-Pratt scan, linear in the input length regardless of the literal. */
   private int indexOfLinear(byte[] literal, int[] failure, int start) {
     return indexOfLinear(bytes, offset, length, literal, failure, start);
@@ -397,11 +385,11 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
           return result;
         }
       }
-      if (prefixLen == 1) {
-        if (anchorLow == anchorHigh) {
-          return indexOfByte(anchorLow, start);
-        }
-        return ByteSwarScan.indexOfBytePair(bytes, offset, length, anchorLow, anchorHigh, start);
+      int swarResult =
+          ByteSwarScan.indexOfIgnoreCase(
+              bytes, offset, length, prefix, prefixLen, anchorOffset, anchorLow, anchorHigh, start);
+      if (swarResult != VectorScanProvider.UNSUPPORTED) {
+        return swarResult;
       }
     }
     return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
@@ -416,10 +404,10 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         WorkCounter.record();
       }
       int current = Ascii.toLowerCase(bytes[offset + position] & 0xFF);
-      while (matched > 0 && current != Ascii.toLowerCase(prefix.charAt(matched))) {
+      while (matched > 0 && current != prefix.charAt(matched)) {
         matched = failure[matched - 1];
       }
-      if (current == Ascii.toLowerCase(prefix.charAt(matched))) {
+      if (current == prefix.charAt(matched)) {
         matched++;
         if (matched == prefixLen) {
           return position - prefixLen + 1;
@@ -477,7 +465,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     int last = literal.length - 1;
     int position = start + last;
     long work = 0;
-    long workLimit = workLimit(remaining(start));
+    long workLimit = WorkLimit.forRemaining(remaining(start));
     while (position < length) {
       // Keep two dependent skip steps under one outer backedge. C2 otherwise leaves this loop
       // scalar when it is compiled alongside the candidate-filter path, adding a backedge and
@@ -486,7 +474,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         int literalPosition = last;
         int inputPosition = position;
         while (literalPosition >= 0 && bytes[offset + inputPosition] == literal[literalPosition]) {
-          if (work >= workLimit) {
+          if (WorkLimit.isExhausted(work, workLimit)) {
             return -2;
           }
           work++;
@@ -496,7 +484,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         if (literalPosition < 0) {
           return inputPosition + 1;
         }
-        if (work >= workLimit) {
+        if (WorkLimit.isExhausted(work, workLimit)) {
           return -2;
         }
         position += shifts[bytes[offset + position] & 0xFF];
