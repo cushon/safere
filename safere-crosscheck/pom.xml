@@ -147,6 +147,7 @@
                         <exclude name="Utf8InputTest.java"/>
                         <exclude name="Utf8LinearTimeTest.java"/>
                         <exclude name="UtilsTest.java"/>
+                        <exclude name="VectorSpeciesSimulationTest.java"/>
                         <exclude name="WalkerTest.java"/>
                         <exclude name="WorkCounterTest.java"/>
                         <exclude name="WorkLimitTest.java"/>
