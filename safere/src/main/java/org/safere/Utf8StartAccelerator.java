@@ -219,11 +219,7 @@ sealed interface Utf8StartAccelerator {
       if (provider != null) {
         int idx =
             provider.indexOfTeddy(
-                scanner.bytes(),
-                scanner.offset(),
-                scanner.length(),
-                model,
-                fromIndex);
+                scanner.bytes(), scanner.offset(), scanner.length(), model, fromIndex);
         if (idx != VectorScanProvider.UNSUPPORTED) {
           return idx;
         }

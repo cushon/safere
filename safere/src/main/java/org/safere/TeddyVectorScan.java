@@ -12,9 +12,7 @@ import jdk.incubator.vector.ByteVector;
 import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorSpecies;
 
-/**
- * Stateless SIMD Teddy multi-keyword vector-shuffle scanning kernels using the Vector API.
- */
+/** Stateless SIMD Teddy multi-keyword vector-shuffle scanning kernels using the Vector API. */
 final class TeddyVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
