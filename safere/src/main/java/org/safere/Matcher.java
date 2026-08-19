@@ -396,6 +396,23 @@ public final class Matcher implements MatchResult {
     return hasMatch;
   }
 
+  private boolean applyGroupZeroMatchResult(int start, int end) {
+    findExhaustedAfterTerminalEmptyMatch = false;
+    groups[0] = start;
+    groups[1] = end;
+    if (groups.length > 2) {
+      Arrays.fill(groups, 2, groups.length, -1);
+    }
+    deferredMatchStart = start;
+    deferredMatchEnd = end;
+    deferredEndMatch = false;
+    capturesResolved = true;
+    groupZeroResolved = true;
+    hasMatch = true;
+    resultStatus = ResultStatus.MATCHED;
+    return true;
+  }
+
   private boolean applyDeferredMatchResult(
       int start, int end, int ncap, boolean groupZeroResolved, boolean endMatch) {
     findExhaustedAfterTerminalEmptyMatch = false;
@@ -648,7 +665,7 @@ public final class Matcher implements MatchResult {
 
   private boolean literalRegionMatches(String literal, int offset, int length) {
     if (parentPattern.prefixFoldCase()) {
-      return regionMatchesAsciiIgnoreCase(text, offset, literal, 0, length);
+      return Ascii.regionMatchesIgnoreCase(text, offset, literal, length);
     }
     return text.regionMatches(false, offset, literal, 0, length);
   }
@@ -2073,7 +2090,7 @@ public final class Matcher implements MatchResult {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
           if (end <= text.length()
-              && regionMatchesAsciiIgnoreCase(text, i, keyword, 0, keyword.length())
+              && Ascii.regionMatchesIgnoreCase(text, i, keyword, keyword.length())
               && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
             int[] keywordGroups = new int[2 * ncap];
             Arrays.fill(keywordGroups, -1);
@@ -2108,7 +2125,7 @@ public final class Matcher implements MatchResult {
         for (String keyword : keywordAlternation.keywords) {
           int end = i + keyword.length();
           if (end <= text.length()
-              && regionMatchesAsciiIgnoreCase(text, i, keyword, 0, keyword.length())
+              && Ascii.regionMatchesIgnoreCase(text, i, keyword, keyword.length())
               && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
             int[] keywordGroups = new int[2 * ncap];
             Arrays.fill(keywordGroups, -1);
@@ -2153,23 +2170,7 @@ public final class Matcher implements MatchResult {
       return Math.min(Math.max(0, fromIndex), text.length());
     }
     if (prefixLen == 1) {
-      char first = prefix.charAt(0);
-      if (first <= 127) {
-        char low = Ascii.toLowerCase(first);
-        char high = Ascii.toUpperCase(first);
-        if (low == high) {
-          return text.indexOf(low, fromIndex);
-        }
-        int pos1 = text.indexOf(low, fromIndex);
-        int pos2 = text.indexOf(high, fromIndex);
-        if (pos1 < 0) {
-          return pos2;
-        }
-        if (pos2 < 0) {
-          return pos1;
-        }
-        return Math.min(pos1, pos2);
-      }
+      return Ascii.indexOfIgnoreCase(text, prefix.charAt(0), fromIndex);
     }
     int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen);
     char anchor = prefix.charAt(anchorOffset);
@@ -2191,24 +2192,86 @@ public final class Matcher implements MatchResult {
     if (prefixLen == 0) {
       return Math.min(Math.max(0, fromIndex), text.length());
     }
+    if (prefixLen == 1) {
+      return Ascii.indexOfIgnoreCase(text, low, high, fromIndex);
+    }
     int length = text.length();
     int pos = Math.max(0, fromIndex);
     long verificationWork = 0;
-    long workLimit = WorkLimit.forRemaining(length - pos);
+    long workLimit = -1;
+    boolean hasLow = true;
+    boolean hasHigh = (low != high);
+    int nextLow = -1;
+    int nextHigh = -1;
+    int startFrom = anchorOffset == 0 ? 1 : 0;
 
     while (pos <= length - prefixLen) {
-      int nextLow = text.indexOf(low, pos + anchorOffset);
-      int nextHigh = (low == high) ? -1 : text.indexOf(high, pos + anchorOffset);
-      int nextAnchor;
-      if (nextLow < 0) {
-        nextAnchor = nextHigh;
-      } else if (nextHigh < 0) {
-        nextAnchor = nextLow;
-      } else {
-        nextAnchor = Math.min(nextLow, nextHigh);
+      // Short scalar search for nearby anchor (handles whitespace / short delimiters without
+      // indexOf overhead)
+      int scalarLimit = Math.min(length - prefixLen + 1, pos + 32);
+      for (; pos < scalarLimit; pos++) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        char c = text.charAt(pos + anchorOffset);
+        if (hasHigh ? (c | 0x20) == low : c == low) {
+          if (Ascii.regionMatchesIgnoreCase(text, pos, prefix, startFrom, prefixLen)) {
+            return pos;
+          }
+          verificationWork += prefixLen;
+          if (workLimit < 0) {
+            workLimit = WorkLimit.forRemaining(length - pos);
+          }
+          if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+            return Ascii.indexOfLinearIgnoreCase(text, prefix, failure, pos + 1);
+          }
+        }
       }
+
+      if (pos > length - prefixLen) {
+        return -1;
+      }
+
+      if (workLimit < 0) {
+        workLimit = WorkLimit.forRemaining(length - pos);
+      }
+
+      int searchFrom = pos + anchorOffset;
+      if (nextLow >= 0 && nextLow < searchFrom) {
+        nextLow = -1;
+      }
+      if (nextHigh >= 0 && nextHigh < searchFrom) {
+        nextHigh = -1;
+      }
+      if (hasLow && nextLow < 0) {
+        nextLow = text.indexOf(low, searchFrom);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(nextLow < 0 ? length - searchFrom : nextLow - searchFrom + 1);
+        }
+        if (nextLow < 0) {
+          hasLow = false;
+        }
+      }
+
+      if (hasHigh && nextHigh < 0 && nextLow != searchFrom) {
+        nextHigh = text.indexOf(high, searchFrom);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(nextHigh < 0 ? length - searchFrom : nextHigh - searchFrom + 1);
+        }
+        if (nextHigh < 0) {
+          hasHigh = false;
+        }
+      }
+
+      int nextAnchor = Ascii.minNonNegative(nextLow, nextHigh);
       if (nextAnchor < 0) {
         return -1;
+      }
+      if (nextLow == nextAnchor) {
+        nextLow = -1;
+      }
+      if (nextHigh == nextAnchor) {
+        nextHigh = -1;
       }
       int candidatePos = nextAnchor - anchorOffset;
       if (WorkLimit.candidateInBounds(candidatePos, pos, length, prefixLen)) {
@@ -2223,27 +2286,6 @@ public final class Matcher implements MatchResult {
       pos = candidatePos + 1;
     }
     return -1;
-  }
-
-  private static boolean regionMatchesAsciiIgnoreCase(
-      String text, int textOffset, String prefix, int prefixOffset, int length) {
-    if (textOffset < 0
-        || prefixOffset < 0
-        || length < 0
-        || textOffset + length > text.length()
-        || prefixOffset + length > prefix.length()) {
-      return false;
-    }
-    for (int i = 0; i < length; i++) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      if (Ascii.toLowerCase(text.charAt(textOffset + i))
-          != Ascii.toLowerCase(prefix.charAt(prefixOffset + i))) {
-        return false;
-      }
-    }
-    return true;
   }
 
   /**
@@ -2756,13 +2798,22 @@ public final class Matcher implements MatchResult {
       return sb.toString();
     }
     ReplacementSegment[] compiledTemplate = template.get();
+    boolean needsCaptures = template.needsCaptures();
     do {
-      if (!groupZeroResolved) {
+      if (needsCaptures && !groupZeroResolved) {
         resolveCaptures();
       }
-      sb.append(text, appendPos, groups[0]);
-      applyReplacementTemplate(sb, compiledTemplate);
-      appendPos = groups[1];
+      int matchStart = groupZeroResolved ? groups[0] : deferredMatchStart;
+      int matchEnd = groupZeroResolved ? groups[1] : deferredMatchEnd;
+      sb.append(text, appendPos, matchStart);
+      if (needsCaptures) {
+        applyReplacementTemplate(sb, compiledTemplate);
+      } else {
+        groups[0] = matchStart;
+        groups[1] = matchEnd;
+        applyReplacementTemplate(sb, compiledTemplate);
+      }
+      appendPos = matchEnd;
     } while (findAndRecordReplacementMatch());
     appendTail(sb);
     return sb.toString();
@@ -2885,6 +2936,9 @@ public final class Matcher implements MatchResult {
     ReplacementSegment[] compiledTemplate = template.get();
 
     boolean needsCaptures = template.needsCaptures();
+    if (needsCaptures) {
+      parentPattern.recordInnerCaptureAccess();
+    }
     boolean useOnePass =
         needsCaptures
             && enginePathOptions().onePass()
@@ -3209,14 +3263,14 @@ public final class Matcher implements MatchResult {
     }
 
     String literal = parentPattern.literalMatch();
-    if (literal == null || literal.isEmpty() || text == null || parentPattern.prefixFoldCase()) {
+    if (literal == null || literal.isEmpty() || text == null) {
       return null;
     }
 
     String replacement = template.replacement;
     boolean simpleReplacement = isSimpleReplacement(replacement);
-    if (!simpleReplacement && groupCount() > 0) {
-      return null; // Cannot handle complex replacements with captures yet
+    if (!simpleReplacement && template.needsCaptures()) {
+      return null; // Cannot handle replacements that reference inner captures yet
     }
 
     DiagnosticOperation activeDiagnostics = diagnosticOperation;
@@ -3226,10 +3280,51 @@ public final class Matcher implements MatchResult {
       accumulator.participate(MatchStrategy.LITERAL, StrategyRole.CANDIDATE_VERIFICATION);
     }
 
+    boolean foldCase = parentPattern.prefixFoldCase();
+    int anchorOffset = 0;
+    char anchorLow = 0;
+    char anchorHigh = 0;
+    int[] failure = null;
+    if (foldCase) {
+      PreparedMatchRunner runner = parentPattern.preparedMatchRunner(false);
+      if (runner instanceof LiteralPreparedRunner literalRunner) {
+        anchorOffset = literalRunner.anchorOffset();
+        anchorLow = literalRunner.anchorLow();
+        anchorHigh = literalRunner.anchorHigh();
+        failure = literalRunner.ignoreCaseFailure();
+      } else {
+        int literalLen = literal.length();
+        if (literalLen == 1) {
+          anchorOffset = 0;
+          char c = literal.charAt(0);
+          anchorLow = Ascii.toLowerCase(c);
+          anchorHigh = Ascii.toUpperCase(c);
+          failure = null;
+        } else {
+          anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen);
+          char c = literal.charAt(anchorOffset);
+          anchorLow = Ascii.toLowerCase(c);
+          anchorHigh = Ascii.toUpperCase(c);
+          failure = Ascii.ignoreCaseFailure(literal);
+        }
+      }
+    }
+
     StringBuilder sb = null;
     int appendPosition = 0;
     int searchFrom = 0;
-    int matchStart;
+    int matchStart =
+        foldCase
+            ? indexOfIgnoreCase(
+                text, literal, failure, anchorOffset, anchorLow, anchorHigh, searchFrom)
+            : indexOfReplacementLiteral(literal, searchFrom);
+    if (matchStart == -1) {
+      if (accumulator != null) {
+        accumulator.boundary(MatchStrategy.LITERAL);
+      }
+      applyFailedMatchResult();
+      return text;
+    }
     int matchesFound = 0;
 
     int firstMatchStart = -1;
@@ -3237,7 +3332,7 @@ public final class Matcher implements MatchResult {
 
     ReplacementSegment[] compiledTemplate = null;
 
-    while (matchesFound < limit && (matchStart = text.indexOf(literal, searchFrom)) != -1) {
+    do {
       if (sb == null) {
         sb = new StringBuilder(text.length());
       }
@@ -3247,7 +3342,8 @@ public final class Matcher implements MatchResult {
         firstMatchStart = matchStart;
         firstMatchEnd = matchStart + literal.length();
         if (!simpleReplacement) {
-          applyFullMatchResult(new int[] {firstMatchStart, firstMatchEnd});
+          applyDeferredMatchResult(
+              firstMatchStart, firstMatchEnd, parentPattern.prog().numCaptures(), true, false);
           compiledTemplate = template.get();
         }
       }
@@ -3263,7 +3359,15 @@ public final class Matcher implements MatchResult {
       appendPosition = matchStart + literal.length();
       searchFrom = appendPosition;
       matchesFound++;
-    }
+      if (matchesFound >= limit) {
+        break;
+      }
+      matchStart =
+          foldCase
+              ? indexOfIgnoreCase(
+                  text, literal, failure, anchorOffset, anchorLow, anchorHigh, searchFrom)
+              : indexOfReplacementLiteral(literal, searchFrom);
+    } while (matchStart != -1);
 
     if (sb == null) {
       if (accumulator != null) {
@@ -3278,11 +3382,10 @@ public final class Matcher implements MatchResult {
 
     if (limit == 1) {
       if (groupCount() == 0) {
-        applyFullMatchResult(new int[] {firstMatchStart, firstMatchEnd});
+        applyGroupZeroMatchResult(firstMatchStart, firstMatchEnd);
       } else {
         applyDeferredMatchResult(
             firstMatchStart, firstMatchEnd, parentPattern.prog().numCaptures(), true, false);
-        resolveCaptures();
       }
     } else {
       this.searchFrom = regionEnd;
@@ -3295,6 +3398,15 @@ public final class Matcher implements MatchResult {
     }
 
     return sb.toString();
+  }
+
+  private int indexOfReplacementLiteral(String literal, int fromIndex) {
+    int matchStart = text.indexOf(literal, fromIndex);
+    if (WorkCounterConfig.ENABLED) {
+      int examinedEnd = matchStart >= 0 ? matchStart + literal.length() : text.length();
+      WorkCounter.record(Math.max(0, examinedEnd - fromIndex));
+    }
+    return matchStart;
   }
 
   private String charClassReplaceFastPath(LazyTemplate template, int limit) {
@@ -4181,7 +4293,7 @@ public final class Matcher implements MatchResult {
 
     // Literal fast path
     String literal = parentPattern.literalMatch();
-    if (options.literalFastPaths() && literal != null && parentPattern.numGroups() == 0) {
+    if (options.literalFastPaths() && literal != null) {
       int idx =
           parentPattern.prefixFoldCase()
               ? indexOfIgnoreCase(text, literal, fromIndex)
@@ -4316,6 +4428,10 @@ public final class Matcher implements MatchResult {
     private final byte[] literalUtf8;
     private final int[] failure;
     private final int[] shifts;
+    private final int anchorOffset;
+    private final char anchorLow;
+    private final char anchorHigh;
+    private final int[] ignoreCaseFailure;
     private final int matchLengthChars;
     private final int matchLengthBytes;
     private final boolean isStartAnchored;
@@ -4334,10 +4450,47 @@ public final class Matcher implements MatchResult {
       this.literalUtf8 = literalUtf8;
       this.failure = failure;
       this.shifts = shifts;
-      this.matchLengthChars = literal != null ? literal.length() : 0;
+      int literalLen = literal != null ? literal.length() : 0;
+      if (foldCase && literalLen > 0) {
+        if (literalLen == 1) {
+          this.anchorOffset = 0;
+          char c = literal.charAt(0);
+          this.anchorLow = Ascii.toLowerCase(c);
+          this.anchorHigh = Ascii.toUpperCase(c);
+          this.ignoreCaseFailure = null;
+        } else {
+          this.anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen);
+          char c = literal.charAt(this.anchorOffset);
+          this.anchorLow = Ascii.toLowerCase(c);
+          this.anchorHigh = Ascii.toUpperCase(c);
+          this.ignoreCaseFailure = Ascii.ignoreCaseFailure(literal);
+        }
+      } else {
+        this.anchorOffset = 0;
+        this.anchorLow = 0;
+        this.anchorHigh = 0;
+        this.ignoreCaseFailure = null;
+      }
+      this.matchLengthChars = literalLen;
       this.matchLengthBytes = literalUtf8 != null ? literalUtf8.length : 0;
       this.isStartAnchored = isStartAnchored;
       this.fallback = fallback;
+    }
+
+    int anchorOffset() {
+      return anchorOffset;
+    }
+
+    char anchorLow() {
+      return anchorLow;
+    }
+
+    char anchorHigh() {
+      return anchorHigh;
+    }
+
+    int[] ignoreCaseFailure() {
+      return ignoreCaseFailure;
     }
 
     @Override
@@ -4352,7 +4505,15 @@ public final class Matcher implements MatchResult {
       int idx;
       int matchLength;
       if (foldCase) {
-        idx = indexOfIgnoreCase(matcher.text, literal, matcher.searchFrom);
+        idx =
+            indexOfIgnoreCase(
+                matcher.text,
+                literal,
+                ignoreCaseFailure,
+                anchorOffset,
+                anchorLow,
+                anchorHigh,
+                matcher.searchFrom);
         matchLength = matchLengthChars;
       } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
         idx = utf8Scanner.indexOf(literalUtf8, failure, shifts, matcher.searchFrom);
@@ -4370,7 +4531,7 @@ public final class Matcher implements MatchResult {
         matcher.diagnosticBoundary(MatchStrategy.LITERAL);
         return matcher.applyFailedMatchResult();
       }
-      return matcher.applyFullMatchResult(new int[] {idx, idx + matchLength});
+      return matcher.applyGroupZeroMatchResult(idx, idx + matchLength);
     }
 
     @Override

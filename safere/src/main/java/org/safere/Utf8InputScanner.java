@@ -59,6 +59,15 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     if (start >= scanLen) {
       return -1;
     }
+    if (WorkCounterConfig.ENABLED) {
+      for (int i = start; i < scanLen; i++) {
+        WorkCounter.record();
+        if (unsignedByteAt(i) == ascii) {
+          return i;
+        }
+      }
+      return -1;
+    }
     int res = indexOfByte((byte) ascii, start);
     return (res >= 0 && res < limit) ? res : -1;
   }
@@ -70,6 +79,16 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     if (start >= scanLen) {
       return -1;
     }
+    if (WorkCounterConfig.ENABLED) {
+      for (int i = start; i < scanLen; i++) {
+        WorkCounter.record();
+        int value = unsignedByteAt(i);
+        if (value == c1 || value == c2) {
+          return i;
+        }
+      }
+      return -1;
+    }
     int res = ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, (byte) c1, (byte) c2, start);
     return (res >= 0 && res < limit) ? res : -1;
   }
@@ -79,6 +98,16 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     int start = Math.max(0, fromIndex);
     int scanLen = Math.min(length, limit);
     if (start >= scanLen) {
+      return -1;
+    }
+    if (WorkCounterConfig.ENABLED) {
+      for (int i = start; i < scanLen; i++) {
+        WorkCounter.record();
+        int value = unsignedByteAt(i);
+        if (value == c1 || value == c2 || value == c3) {
+          return i;
+        }
+      }
       return -1;
     }
     int res =
@@ -385,11 +414,11 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
           return result;
         }
       }
-      if (prefixLen == 1) {
-        if (anchorLow == anchorHigh) {
-          return indexOfByte(anchorLow, start);
-        }
-        return ByteSwarScan.indexOfBytePair(bytes, offset, length, anchorLow, anchorHigh, start);
+      int swarResult =
+          ByteSwarScan.indexOfIgnoreCase(
+              bytes, offset, length, prefix, prefixLen, anchorOffset, anchorLow, anchorHigh, start);
+      if (swarResult != VectorScanProvider.UNSUPPORTED) {
+        return swarResult;
       }
     }
     return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
@@ -404,10 +433,10 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         WorkCounter.record();
       }
       int current = Ascii.toLowerCase(bytes[offset + position] & 0xFF);
-      while (matched > 0 && current != Ascii.toLowerCase(prefix.charAt(matched))) {
+      while (matched > 0 && current != prefix.charAt(matched)) {
         matched = failure[matched - 1];
       }
-      if (current == Ascii.toLowerCase(prefix.charAt(matched))) {
+      if (current == prefix.charAt(matched)) {
         matched++;
         if (matched == prefixLen) {
           return position - prefixLen + 1;

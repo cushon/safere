@@ -31,6 +31,16 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAscii(int ascii, int fromIndex, int limit) {
+    if (WorkCounterConfig.ENABLED) {
+      int end = Math.min(limit, text.length());
+      for (int i = Math.max(0, fromIndex); i < end; i++) {
+        WorkCounter.record();
+        if (text.charAt(i) == ascii) {
+          return i;
+        }
+      }
+      return -1;
+    }
     int idx = text.indexOf(ascii, fromIndex);
     return (idx >= 0 && idx < limit) ? idx : -1;
   }
@@ -49,6 +59,9 @@ final class StringInputScanner implements InputScanner {
   private int scalarIndexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
       char ch = text.charAt(i);
       if (ch == c1 || ch == c2) {
         return i;
@@ -71,6 +84,9 @@ final class StringInputScanner implements InputScanner {
   private int scalarIndexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
       char ch = text.charAt(i);
       if (ch == c1 || ch == c2 || ch == c3) {
         return i;

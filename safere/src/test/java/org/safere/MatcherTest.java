@@ -1898,6 +1898,57 @@ class MatcherTest {
       }
       assertThat(m.find()).isFalse();
     }
+
+    @Test
+    @DisplayName("case-insensitive single-character replaceAll() and replaceFirst()")
+    void caseInsensitiveSingleCharacterReplace() {
+      Pattern p = Pattern.compile("(?i)a");
+      Matcher m = p.matcher("aAbBaA");
+      assertThat(m.replaceAll("X")).isEqualTo("XXbBXX");
+      m.reset();
+      assertThat(m.replaceFirst("X")).isEqualTo("XAbBaA");
+      assertThat(m.start()).isEqualTo(0);
+      assertThat(m.end()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("case-insensitive multi-character literal replaceAll() and replaceFirst()")
+    void caseInsensitiveLiteralReplace() {
+      Pattern p = Pattern.compile("(?i)keyword_to_find");
+      String input = "KEYWORD_TO_FIND and keyword_to_find and KeyWord_To_Find";
+      Matcher m = p.matcher(input);
+      assertThat(m.replaceAll("FOUND")).isEqualTo("FOUND and FOUND and FOUND");
+      m.reset();
+      assertThat(m.replaceFirst("FOUND"))
+          .isEqualTo("FOUND and keyword_to_find and KeyWord_To_Find");
+      assertThat(m.start()).isEqualTo(0);
+      assertThat(m.end()).isEqualTo(15);
+      assertThat(m.group()).isEqualTo("KEYWORD_TO_FIND");
+    }
+
+    @Test
+    @DisplayName("case-insensitive literal replaceAll() with $0 backreference")
+    void caseInsensitiveLiteralReplaceWithGroupZero() {
+      Pattern p = Pattern.compile("(?i)abc");
+      Matcher m = p.matcher("ABC abc AbC");
+      assertThat(m.replaceAll("[$0]")).isEqualTo("[ABC] [abc] [AbC]");
+      m.reset();
+      assertThat(m.replaceFirst("[$0]")).isEqualTo("[ABC] abc AbC");
+      assertThat(m.group()).isEqualTo("ABC");
+    }
+
+    @Test
+    @DisplayName("case-insensitive literal replaceAll() on large repeated input matches JDK")
+    void caseInsensitiveLiteralReplaceAllLargeInputMatchesJdk() {
+      String regex = "(?i)keyword_to_find";
+      String input = "KEYWORD_TO_FIND ".repeat(200);
+      Pattern p = Pattern.compile(regex);
+      java.util.regex.Pattern jdkP = java.util.regex.Pattern.compile(regex);
+
+      assertThat(p.matcher(input).replaceAll("")).isEqualTo(jdkP.matcher(input).replaceAll(""));
+      assertThat(p.matcher(input).replaceFirst("X"))
+          .isEqualTo(jdkP.matcher(input).replaceFirst("X"));
+    }
   }
 
   @Nested
@@ -3506,6 +3557,45 @@ class MatcherTest {
       assertThat(m.find()).isFalse();
 
       assertThat(m.replaceAll("X")).isEqualTo("aXbXc");
+    }
+
+    @Test
+    @DisplayName("replaceAll and replaceFirst with unused captures produce identical results")
+    void replaceWithUnusedCaptures() {
+      Pattern p = Pattern.compile("x([a-z]+?)y([0-9]+?)z");
+      Matcher m = p.matcher("xabcdey123z and xghy456z");
+
+      assertThat(m.replaceAll("REPLACED")).isEqualTo("REPLACED and REPLACED");
+      assertThat(m.replaceFirst("FIRST")).isEqualTo("FIRST and xghy456z");
+      assertThat(p.matcher("xabcdey123z and xghy456z").replaceAll("[$0]"))
+          .isEqualTo("[xabcdey123z] and [xghy456z]");
+      assertThat(p.matcher("xabcdey123z and xghy456z").replaceAll("[$1-$2]"))
+          .isEqualTo("[abcde-123] and [gh-456]");
+    }
+
+    @Test
+    @DisplayName("replaceFirst preserves deferred capture resolution for subsequent group queries")
+    void replaceFirstPreservesDeferredCapturesForSubsequentGroupInspection() {
+      Pattern p = Pattern.compile("x([a-z]+)y([0-9]+)z");
+      Matcher m = p.matcher("xabcdey123z and other");
+
+      String result = m.replaceFirst("FIRST");
+      assertThat(result).isEqualTo("FIRST and other");
+
+      // Invariant: group(1) and group(2) must still resolve accurately on the same Matcher instance
+      assertThat(m.group(0)).isEqualTo("xabcdey123z");
+      assertThat(m.group(1)).isEqualTo("abcde");
+      assertThat(m.group(2)).isEqualTo("123");
+      assertThat(m.start(1)).isEqualTo(1);
+      assertThat(m.end(1)).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("split with parenthesized literal delimiters matches correctly")
+    void splitWithParenthesizedLiteralDelimiters() {
+      Pattern p = Pattern.compile("(delim)");
+      String[] parts = p.split("one delim two delim three");
+      assertThat(parts).containsExactly("one ", " two ", " three");
     }
 
     @Test
