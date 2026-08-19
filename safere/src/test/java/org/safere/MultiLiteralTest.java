@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+@DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
 class MultiLiteralTest {
 
   @Test

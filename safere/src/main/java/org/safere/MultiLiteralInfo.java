@@ -16,10 +16,10 @@ import java.util.Arrays;
  * constraints:
  *
  * <ul>
- *   <li><b>Register allocation & unrolling:</b> AVX2 provides 16 YMM vector registers. 2–4 literals
- *       require 2–4 broadcast registers plus input and comparison masks (6 registers total),
- *       leaving 10+ free YMM registers for HotSpot C2 to unroll the vector loop across 64–128 byte
- *       strides without stack spilling.
+ *   <li><b>Register allocation &amp; unrolling:</b> AVX2 provides 16 YMM vector registers. 2–4
+ *       literals require 2–4 broadcast registers plus input and comparison masks (6 registers
+ *       total), leaving 10+ free YMM registers for HotSpot C2 to unroll the vector loop across
+ *       64–128 byte strides without stack spilling.
  *   <li><b>Candidate false-positive density:</b> For 2–4 literals, the probability of
  *       false-positive candidate hits remains low (&lt; 5% in natural text), allowing the scanner
  *       to stay on the fast SIMD path &gt; 95% of the time and delivering 4x–11x speedups. Beyond 4
