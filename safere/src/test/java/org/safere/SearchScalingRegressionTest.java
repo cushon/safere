@@ -87,6 +87,20 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void literalReplaceFirstReusesLatePreflightMatch() {
+    Pattern pattern = Pattern.compile("(needle)");
+    String input = "x".repeat(10_000) + "needle";
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(input).replaceFirst("[$0]")).endsWith("[needle]"));
+
+    assertThat(work)
+        .as("Literal replaceFirst must not rescan the prefix after finding the first match")
+        .isLessThanOrEqualTo(input.length());
+  }
+
+  @Test
   void startAnchoredLiteralFindRejectionIsConstantWorkForStringInput() {
     Pattern pattern = Pattern.compile("^target");
     assertConstantRejectionWork(

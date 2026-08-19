@@ -626,6 +626,9 @@ public final class Pattern implements Serializable {
       return false;
     }
     if (literalMatchUtf8 != null && !literalFoldCase()) {
+      if (prog.anchorStart()) {
+        return scanner.startsWith(literalMatchUtf8, 0);
+      }
       return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
     }
     if (enginePathOptions.keywordAlternationFastPath()
@@ -683,7 +686,9 @@ public final class Pattern implements Serializable {
     int length = scanner.length();
     if (literalMatchUtf8 != null && !literalFoldCase()) {
       boolean matched =
-          scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
+          prog.anchorStart()
+              ? scanner.startsWith(literalMatchUtf8, 0)
+              : scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }

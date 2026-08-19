@@ -1397,7 +1397,16 @@ public final class Matcher implements MatchResult {
       return doFindRegion(regionActive);
     }
     if (parentPattern.prog().anchorStart()) {
-      if (searchFrom > 0 || anchoredPrefixOrCharClassCannotMatch(0)) {
+      if (searchFrom > 0) {
+        return applyFailedMatchResult();
+      }
+      if (anchoredPrefixOrCharClassCannotMatch(0)) {
+        MatchStrategy strategy =
+            parentPattern.anchoredPrefix() != null
+                ? MatchStrategy.LITERAL
+                : MatchStrategy.CHARACTER_CLASS;
+        diagnosticParticipation(strategy, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(strategy);
         return applyFailedMatchResult();
       }
     }
@@ -3264,7 +3273,8 @@ public final class Matcher implements MatchResult {
       return sb.toString();
     }
 
-    int firstIdx = text.indexOf(literal, searchFrom);
+    int searchFrom = 0;
+    int firstIdx = indexOfReplacementLiteral(literal, searchFrom);
     if (firstIdx < 0) {
       if (accumulator != null) {
         accumulator.boundary(MatchStrategy.LITERAL);
@@ -3275,8 +3285,7 @@ public final class Matcher implements MatchResult {
 
     StringBuilder sb = null;
     int appendPosition = 0;
-    int searchFrom = 0;
-    int matchStart;
+    int matchStart = firstIdx;
     int matchesFound = 0;
 
     int firstMatchStart = -1;
@@ -3284,7 +3293,7 @@ public final class Matcher implements MatchResult {
 
     ReplacementSegment[] compiledTemplate = null;
 
-    while (matchesFound < limit && (matchStart = text.indexOf(literal, searchFrom)) != -1) {
+    do {
       if (sb == null) {
         sb = new StringBuilder(text.length());
       }
@@ -3316,7 +3325,11 @@ public final class Matcher implements MatchResult {
       appendPosition = matchStart + literal.length();
       searchFrom = appendPosition;
       matchesFound++;
-    }
+      if (matchesFound >= limit) {
+        break;
+      }
+      matchStart = indexOfReplacementLiteral(literal, searchFrom);
+    } while (matchStart != -1);
 
     if (sb == null) {
       if (accumulator != null) {
@@ -3348,6 +3361,15 @@ public final class Matcher implements MatchResult {
     }
 
     return sb.toString();
+  }
+
+  private int indexOfReplacementLiteral(String literal, int fromIndex) {
+    int matchStart = text.indexOf(literal, fromIndex);
+    if (WorkCounterConfig.ENABLED) {
+      int examinedEnd = matchStart >= 0 ? matchStart + literal.length() : text.length();
+      WorkCounter.record(Math.max(0, examinedEnd - fromIndex));
+    }
+    return matchStart;
   }
 
   private String charClassReplaceFastPath(LazyTemplate template, int limit) {
