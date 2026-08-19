@@ -3560,6 +3560,45 @@ class MatcherTest {
     }
 
     @Test
+    @DisplayName("replaceAll and replaceFirst with unused captures produce identical results")
+    void replaceWithUnusedCaptures() {
+      Pattern p = Pattern.compile("x([a-z]+?)y([0-9]+?)z");
+      Matcher m = p.matcher("xabcdey123z and xghy456z");
+
+      assertThat(m.replaceAll("REPLACED")).isEqualTo("REPLACED and REPLACED");
+      assertThat(m.replaceFirst("FIRST")).isEqualTo("FIRST and xghy456z");
+      assertThat(p.matcher("xabcdey123z and xghy456z").replaceAll("[$0]"))
+          .isEqualTo("[xabcdey123z] and [xghy456z]");
+      assertThat(p.matcher("xabcdey123z and xghy456z").replaceAll("[$1-$2]"))
+          .isEqualTo("[abcde-123] and [gh-456]");
+    }
+
+    @Test
+    @DisplayName("replaceFirst preserves deferred capture resolution for subsequent group queries")
+    void replaceFirstPreservesDeferredCapturesForSubsequentGroupInspection() {
+      Pattern p = Pattern.compile("x([a-z]+)y([0-9]+)z");
+      Matcher m = p.matcher("xabcdey123z and other");
+
+      String result = m.replaceFirst("FIRST");
+      assertThat(result).isEqualTo("FIRST and other");
+
+      // Invariant: group(1) and group(2) must still resolve accurately on the same Matcher instance
+      assertThat(m.group(0)).isEqualTo("xabcdey123z");
+      assertThat(m.group(1)).isEqualTo("abcde");
+      assertThat(m.group(2)).isEqualTo("123");
+      assertThat(m.start(1)).isEqualTo(1);
+      assertThat(m.end(1)).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("split with parenthesized literal delimiters matches correctly")
+    void splitWithParenthesizedLiteralDelimiters() {
+      Pattern p = Pattern.compile("(delim)");
+      String[] parts = p.split("one delim two delim three");
+      assertThat(parts).containsExactly("one ", " two ", " three");
+    }
+
+    @Test
     @DisplayName(
         "case-insensitive multi-character prefix matches across String and handles dense false"
             + " candidates")
