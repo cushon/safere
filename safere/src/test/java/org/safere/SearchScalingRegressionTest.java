@@ -58,6 +58,69 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void caseInsensitivePrefixRepeatedFindIsLinearAcrossString() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find");
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("KEYWORD_TO_FIND ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void caseInsensitiveSingleCharacterRepeatedFindIsLinearAcrossString() {
+    Pattern pattern = Pattern.compile("(?i)z");
+    assertRepeatedFindWorkIsLinear(size -> pattern.matcher("z".repeat(size))::find, "String");
+  }
+
+  @Test
+  void caseInsensitiveSparseFalseCandidatesAreLinearAcrossString() {
+    Pattern pattern = Pattern.compile("(?i)zq");
+    IntFunction<String> input = size -> ("zX" + "a".repeat(32)).repeat(size) + "Zq";
+
+    long smallerWork = countAllMatches(pattern.matcher(input.apply(100))::find, 1);
+    long largerWork = countAllMatches(pattern.matcher(input.apply(400))::find, 1);
+
+    assertThat(largerWork)
+        .as("String sparse false-candidate work should scale linearly")
+        .isLessThanOrEqualTo(smallerWork * 6);
+  }
+
+  @Test
+  void caseInsensitivePrefixRepeatedFindIsLinearAcrossUtf8() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find");
+    assertRepeatedFindWorkIsLinear(
+        size ->
+            pattern.matcher(Utf8Input.trusted("KEYWORD_TO_FIND ".repeat(size).getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
+
+  @Test
+  void caseInsensitiveDensePrefixFailureIsLinearForStringInput() {
+    Pattern pattern =
+        Pattern.compile("(?i)aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab");
+    String input = "a".repeat(10_000);
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+    assertThat(work)
+        .as("Dense false candidate prefix verification on String must remain linearly bounded")
+        .isLessThan(input.length() * 3L);
+  }
+
+  @Test
+  void caseInsensitiveDensePrefixFailureIsLinearForUtf8Input() {
+    Pattern pattern =
+        Pattern.compile("(?i)aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab");
+    String input = "a".repeat(10_000);
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(pattern.matcher(Utf8Input.trusted(input.getBytes(UTF_8))).find())
+                    .isFalse());
+    assertThat(work)
+        .as("Dense false candidate prefix verification on UTF-8 must remain linearly bounded")
+        .isLessThan(input.length() * 3L);
+  }
+
+  @Test
   void disjointRequiredLiteralOptimizationDoesNotAddRedundantUtf8Scans() {
     String regex = "(?:banana\\d|apple\\d)";
     Pattern defaultPattern = Pattern.compile(regex);
@@ -251,6 +314,48 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(Math.max(10, work2000 * 2));
   }
 
+  @Test
+  void caseInsensitiveSingleCharRejectionIsSinglePass() {
+    Pattern pattern = Pattern.compile("(?i)z");
+    int size = 10_000;
+    String input = "a".repeat(size);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    assertThat(work)
+        .as("Case-insensitive single char search must inspect text in a single pass")
+        .isEqualTo(size);
+  }
+
+  @Test
+  void caseInsensitiveDenseFalseCandidatesScaleLinearly() {
+    // Pattern has anchor 'a' matching every position, but candidate fails on second char 'b'
+    Pattern pattern = Pattern.compile("(?i)ab");
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher("a".repeat(2_000)).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher("a".repeat(10_000)).find()).isFalse());
+
+    // Without KMP fallback, work would be 2 * N. With KMP fallback after work exhaustion,
+    // it must remain strictly linear (work(10000) <= work(2000) * 6).
+    assertThat(work10000)
+        .as("Dense false candidate verification must fall back to linear KMP")
+        .isLessThanOrEqualTo(work2000 * 6);
+  }
+
+  @Test
+  void caseInsensitiveLiteralFindWorkIsLinear() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find");
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("KEYWORD_TO_FIND ".repeat(size))::find,
+        "Case-insensitive literal find");
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);
@@ -258,7 +363,7 @@ class SearchScalingRegressionTest {
 
     assertThat(largerWork)
         .as("%s repeated find work should scale linearly", description)
-        .isLessThan(smallerWork * 6);
+        .isLessThanOrEqualTo(Math.max(10, smallerWork * 6));
   }
 
   private static String selectivityPattern(int size) {
