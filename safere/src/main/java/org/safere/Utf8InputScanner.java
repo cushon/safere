@@ -89,7 +89,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       }
       return -1;
     }
-    int res = ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, (byte) c1, (byte) c2, start);
+    int res = scanBytePair(scanLen, (byte) c1, (byte) c2, start);
     return (res >= 0 && res < limit) ? res : -1;
   }
 
@@ -110,10 +110,28 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       }
       return -1;
     }
-    int res =
-        ByteSwarScan.indexOfByteTriple(
-            bytes, offset, scanLen, (byte) c1, (byte) c2, (byte) c3, start);
+    int res = scanByteTriple(scanLen, (byte) c1, (byte) c2, (byte) c3, start);
     return (res >= 0 && res < limit) ? res : -1;
+  }
+
+  private int scanBytePair(int scanLen, byte b0, byte b1, int start) {
+    if (scanProvider != null) {
+      int idx = scanProvider.indexOfAsciiPair(bytes, offset, scanLen, b0, b1, start);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
+      }
+    }
+    return ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, b0, b1, start);
+  }
+
+  private int scanByteTriple(int scanLen, byte b0, byte b1, byte b2, int start) {
+    if (scanProvider != null) {
+      int idx = scanProvider.indexOfAsciiTriple(bytes, offset, scanLen, b0, b1, b2, start);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
+      }
+    }
+    return ByteSwarScan.indexOfByteTriple(bytes, offset, scanLen, b0, b1, b2, start);
   }
 
   Utf8InputScanner slice(int start, int end) {
@@ -286,7 +304,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         return (res >= 0 && res < scanLen) ? res : -1;
       }
       if (high == low + 1) {
-        return ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, (byte) low, (byte) high, start);
+        return scanBytePair(scanLen, (byte) low, (byte) high, start);
       }
       return ByteSwarScan.indexOfByteRange(bytes, offset, scanLen, low, high, start);
     }
@@ -295,8 +313,8 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         && ranges[2] == ranges[3]
         && ranges[0] >= 0
         && ranges[3] < 0x80) {
-      return ByteSwarScan.indexOfBytePair(
-          bytes, offset, scanLen, (byte) ranges[0], (byte) ranges[2], start);
+      return scanBytePair(
+          scanLen, (byte) ranges[0], (byte) ranges[2], start);
     }
     return -2;
   }
@@ -475,8 +493,8 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       return indexOfByte((byte) first, start);
     }
     if (last == second) {
-      return ByteSwarScan.indexOfBytePair(
-          bytes, offset, length, (byte) first, (byte) second, start);
+      return scanBytePair(
+          length, (byte) first, (byte) second, start);
     }
     return contiguous
         ? ByteSwarScan.indexOfByteRange(bytes, offset, length, first, last, start)

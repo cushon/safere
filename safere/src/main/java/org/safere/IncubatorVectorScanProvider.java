@@ -7,7 +7,7 @@ package org.safere;
 
 /** Experimental scan operations implemented with the incubating Vector API. */
 final class IncubatorVectorScanProvider implements VectorScanProvider {
-  private static final int MINIMUM_INPUT_LENGTH = 1024;
+  private static final int MINIMUM_INPUT_LENGTH = 64;
 
   @Override
   public int minimumInputLength() {
@@ -17,5 +17,16 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   @Override
   public int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
     return ByteVectorScan.indexOfAsciiClass(bytes, offset, length, ranges, start);
+  }
+
+  @Override
+  public int indexOfAsciiPair(byte[] bytes, int offset, int length, byte b0, byte b1, int start) {
+    return ByteVectorScan.indexOfAsciiPair(bytes, offset, length, b0, b1, start);
+  }
+
+  @Override
+  public int indexOfAsciiTriple(
+      byte[] bytes, int offset, int length, byte b0, byte b1, byte b2, int start) {
+    return ByteVectorScan.indexOfAsciiTriple(bytes, offset, length, b0, b1, b2, start);
   }
 }
