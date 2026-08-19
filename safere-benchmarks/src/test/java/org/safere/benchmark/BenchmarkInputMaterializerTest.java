@@ -162,9 +162,9 @@ class BenchmarkInputMaterializerTest {
         .hasSize(38);
     JsonObject executionPlan = manifest.getAsJsonObject("executionPlan");
     assertThat(executionPlan.get("version").getAsInt()).isEqualTo(1);
-    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(591);
+    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(639);
     assertThat(executionPlan.get("engineCount").getAsInt()).isEqualTo(10);
-    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(5_910);
+    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(6_390);
     assertThat(
             executionEntry(
                     executionPlan, "UnicodeCompileBenchmark.compile.word.0@dotnet_nonbacktracking")
@@ -175,12 +175,13 @@ class BenchmarkInputMaterializerTest {
     assertThat(
             executionEntry(
                     executionPlan,
-                    "UnicodeCompileBenchmark.compile.word."
-                        + "CASE_INSENSITIVE_UNICODE_CHARACTER_CLASS@dotnet_nonbacktracking")
-                .getAsJsonArray("patterns")
-                .get(0)
+                    "RealWorldRegexBenchmark.runBenchmark.fruitSearchQuery.match.1000@dotnet_nonbacktracking")
+                .get("exclusion")
+                .getAsJsonObject()
+                .get("kind")
                 .getAsString())
-        .isEqualTo("\\w+");
+        .isEqualTo("unsupportedSyntax");
+    assertThat(resolvedData.getAsJsonArray("workloads")).hasSize(328);
     for (JsonElement engineElement : executionPlan.getAsJsonArray("engines")) {
       String engineId = engineElement.getAsJsonObject().get("id").getAsString();
       assertThat(
@@ -192,7 +193,7 @@ class BenchmarkInputMaterializerTest {
                           Set.of("runnable", "excluded")
                               .contains(planEntry.get("status").getAsString())))
           .as(engineId)
-          .hasSize(591);
+          .hasSize(639);
     }
     assertThat(
             executionPlan.getAsJsonArray("entries").asList().stream()
