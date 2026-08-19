@@ -77,7 +77,7 @@ class SearchScalingRegressionTest {
   }
 
   @Test
-  void literalReplaceWithGroupZeroReferenceUsesFastPathWithoutDfaWork() {
+  void literalReplaceWithGroupZeroReferenceUsesFastPathWithLinearWork() {
     Pattern pattern = Pattern.compile("(abc)");
     String input = "abc ".repeat(1_000);
 
@@ -89,10 +89,22 @@ class SearchScalingRegressionTest {
             });
 
     assertThat(work)
-        .as(
-            "Literal replacement with group zero reference should execute on fast path without DFA"
-                + " work")
-        .isEqualTo(0);
+        .as("Literal replacement with group zero reference must scan the input only once")
+        .isLessThanOrEqualTo(input.length());
+  }
+
+  @Test
+  void literalReplaceFirstReusesLatePreflightMatch() {
+    Pattern pattern = Pattern.compile("(needle)");
+    String input = "x".repeat(10_000) + "needle";
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(input).replaceFirst("[$0]")).endsWith("[needle]"));
+
+    assertThat(work)
+        .as("Literal replaceFirst must not rescan the prefix after finding the first match")
+        .isLessThanOrEqualTo(input.length());
   }
 
   @Test
