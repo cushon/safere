@@ -664,7 +664,7 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean literalRegionMatches(String literal, int offset, int length) {
-    if (parentPattern.prefixFoldCase()) {
+    if (parentPattern.literalFoldCase() || parentPattern.prefixFoldCase()) {
       return Ascii.regionMatchesIgnoreCase(text, offset, literal, length);
     }
     return text.regionMatches(false, offset, literal, 0, length);
@@ -1413,8 +1413,19 @@ public final class Matcher implements MatchResult {
     if (regionActive) {
       return doFindRegion(regionActive);
     }
-    if (parentPattern.prog().anchorStart() && searchFrom > 0) {
-      return applyFailedMatchResult();
+    if (parentPattern.prog().anchorStart()) {
+      if (searchFrom > 0) {
+        return applyFailedMatchResult();
+      }
+      if (anchoredPrefixOrCharClassCannotMatch(0)) {
+        MatchStrategy strategy =
+            parentPattern.anchoredPrefix() != null
+                ? MatchStrategy.LITERAL
+                : MatchStrategy.CHARACTER_CLASS;
+        diagnosticParticipation(strategy, StrategyRole.REJECT_PREFILTER);
+        diagnosticBoundary(strategy);
+        return applyFailedMatchResult();
+      }
     }
     return parentPattern.preparedMatchRunner(false).find(this, false);
   }
@@ -1835,7 +1846,7 @@ public final class Matcher implements MatchResult {
       fwdResult = null;
     } else {
       diagnosticParticipation(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
-      fwdResult = searchForwardDfa(dfa(false), scanner, effectiveStart, false, false);
+      fwdResult = searchForwardDfa(dfa(false), scanner, effectiveStart, prog.anchorStart(), false);
       if (fwdResult != null && !fwdResult.matched()) {
         diagnosticBoundary(MatchStrategy.DFA);
         return applyFailedMatchResult();
@@ -2050,6 +2061,63 @@ public final class Matcher implements MatchResult {
     } else {
       return applyDeferredMatchResult(result[0], result[1], prog.numCaptures(), true, false);
     }
+  }
+
+  private boolean matchUtf8KeywordAlternationAt(
+      Pattern.KeywordAlternation keywordAlternation, int pos, int ncap) {
+    InputScanner scanner = activeScanner();
+    if (pos >= scanner.length()) {
+      return applyFailedMatchResult();
+    }
+    long match = keywordAlternation.matchAt(scanner, pos);
+    if (match < 0) {
+      return applyFailedMatchResult();
+    }
+    int keywordStart = Pattern.KeywordAlternation.matchStart(match);
+    int keywordEnd = Pattern.KeywordAlternation.matchEnd(match);
+    int[] keywordGroups = new int[2 * ncap];
+    Arrays.fill(keywordGroups, -1);
+    keywordGroups[0] = keywordAlternation.greedyWholeInput ? pos : keywordStart;
+    keywordGroups[1] = keywordAlternation.greedyWholeInput ? scanner.length() : keywordEnd;
+    if (keywordAlternation.captureGroup > 0) {
+      int group = keywordAlternation.captureGroup;
+      keywordGroups[2 * group] = keywordStart;
+      keywordGroups[2 * group + 1] = keywordEnd;
+    }
+    return applyFullMatchResult(keywordGroups);
+  }
+
+  private boolean matchKeywordAlternationAt(
+      Pattern.KeywordAlternation keywordAlternation, int pos, int ncap) {
+    if (pos >= text.length()) {
+      return applyFailedMatchResult();
+    }
+    if (WorkCounterConfig.ENABLED) {
+      WorkCounter.record();
+    }
+    char ch = text.charAt(pos);
+    if (ch < 128
+        && keywordAlternation.firstAsciiTable[Ascii.toLowerCase(ch)]
+        && isWordBoundaryAt(pos, keywordAlternation.unicodeWordBoundary)) {
+      for (String keyword : keywordAlternation.keywords) {
+        int end = pos + keyword.length();
+        if (end <= text.length()
+            && Ascii.regionMatchesIgnoreCase(text, pos, keyword, keyword.length())
+            && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
+          int[] keywordGroups = new int[2 * ncap];
+          Arrays.fill(keywordGroups, -1);
+          keywordGroups[0] = pos;
+          keywordGroups[1] = keywordAlternation.greedyWholeInput ? text.length() : end;
+          if (keywordAlternation.captureGroup > 0) {
+            int group = keywordAlternation.captureGroup;
+            keywordGroups[2 * group] = pos;
+            keywordGroups[2 * group + 1] = end;
+          }
+          return applyFullMatchResult(keywordGroups);
+        }
+      }
+    }
+    return applyFailedMatchResult();
   }
 
   private boolean findUtf8KeywordAlternation(
@@ -2780,7 +2848,7 @@ public final class Matcher implements MatchResult {
       return result;
     }
 
-    if (template.needsCaptures()) {
+    if (replacement.indexOf('$') >= 0) {
       eagerFallbackCaptures = true;
     }
 
@@ -2895,7 +2963,8 @@ public final class Matcher implements MatchResult {
     boolean isStartAnchored = parentPattern.prog().anchorStart();
     String prefix = parentPattern.prefix();
     boolean foldCase = parentPattern.prefixFoldCase();
-    boolean hasStartAcceleration = enginePathOptions().startAcceleration() && prefix != null;
+    boolean hasStartAcceleration =
+        enginePathOptions().startAcceleration() && prefix != null && !isStartAnchored;
     int startPos = searchFrom;
     if (hasStartAcceleration) {
       diagnosticParticipation(MatchStrategy.LITERAL, StrategyRole.START_ACCELERATION);
@@ -3069,7 +3138,7 @@ public final class Matcher implements MatchResult {
         pos = idx;
       }
 
-      Dfa.SearchResult fwdResult = searchForwardDfa(fwdDfa, scanner, pos, false, false);
+      Dfa.SearchResult fwdResult = searchForwardDfa(fwdDfa, scanner, pos, isStartAnchored, false);
       if (fwdResult == null || !fwdResult.matched()) {
         break;
       }
@@ -3280,7 +3349,50 @@ public final class Matcher implements MatchResult {
       accumulator.participate(MatchStrategy.LITERAL, StrategyRole.CANDIDATE_VERIFICATION);
     }
 
-    boolean foldCase = parentPattern.prefixFoldCase();
+    boolean isStartAnchored = parentPattern.prog().anchorStart();
+    if (isStartAnchored) {
+      if (searchFrom > 0 || !literalRegionMatches(literal, 0, literal.length())) {
+        if (accumulator != null) {
+          accumulator.boundary(MatchStrategy.LITERAL);
+        }
+        applyFailedMatchResult();
+        return text;
+      }
+      int matchStart = 0;
+      int matchEnd = literal.length();
+      StringBuilder sb = new StringBuilder(text.length());
+      if (!simpleReplacement) {
+        applyGroupZeroMatchResult(matchStart, matchEnd);
+        ReplacementSegment[] compiledTemplate = template.get();
+        groups[0] = matchStart;
+        groups[1] = matchEnd;
+        applyReplacementTemplate(sb, compiledTemplate);
+      } else {
+        sb.append(replacement);
+      }
+      int appendPosition = matchEnd;
+      this.appendPos = appendPosition;
+      sb.append(text, appendPosition, text.length());
+      if (limit == 1) {
+        if (groupCount() == 0) {
+          applyGroupZeroMatchResult(matchStart, matchEnd);
+        } else {
+          applyDeferredMatchResult(
+              matchStart, matchEnd, parentPattern.prog().numCaptures(), true, false);
+          resolveCaptures();
+        }
+      } else {
+        this.searchFrom = regionEnd;
+        applyFailedMatchResult();
+      }
+      if (accumulator != null) {
+        accumulator.boundary(MatchStrategy.LITERAL);
+        accumulator.matchCount(1);
+      }
+      return sb.toString();
+    }
+
+    boolean foldCase = parentPattern.literalFoldCase();
     int anchorOffset = 0;
     char anchorLow = 0;
     char anchorHigh = 0;
@@ -4294,10 +4406,19 @@ public final class Matcher implements MatchResult {
     // Literal fast path
     String literal = parentPattern.literalMatch();
     if (options.literalFastPaths() && literal != null) {
-      int idx =
-          parentPattern.prefixFoldCase()
-              ? indexOfIgnoreCase(text, literal, fromIndex)
-              : text.indexOf(literal, fromIndex);
+      int idx;
+      if (prog.anchorStart()) {
+        if (parentPattern.literalFoldCase()) {
+          idx = Ascii.regionMatchesIgnoreCase(text, 0, literal, literal.length()) ? 0 : -1;
+        } else {
+          idx = text.startsWith(literal) ? 0 : -1;
+        }
+      } else {
+        idx =
+            parentPattern.literalFoldCase()
+                ? indexOfIgnoreCase(text, literal, fromIndex)
+                : text.indexOf(literal, fromIndex);
+      }
       if (idx < 0) {
         return -1L;
       }
@@ -4307,6 +4428,19 @@ public final class Matcher implements MatchResult {
     // Char class fast path
     Pattern.CharClassScanInfo singleCharClass = parentPattern.matchDescriptor().singleCharClass();
     if (options.charClassMatchFastPaths() && singleCharClass != null) {
+      if (prog.anchorStart() && fromIndex > 0) {
+        return -1L;
+      }
+      if (prog.anchorStart()) {
+        if (scanner.length() == 0) {
+          return -1L;
+        }
+        int cp = scanner.codePointAt(0);
+        if (singleCharClass.contains(cp)) {
+          return packPositions(0, Character.charCount(cp));
+        }
+        return -1L;
+      }
       if (singleCharClass.isAscii) {
         int idx = scanner.indexOfCharClass(singleCharClass, fromIndex);
         if (idx < 0) {
@@ -4329,7 +4463,7 @@ public final class Matcher implements MatchResult {
     }
 
     int effectiveStart = fromIndex;
-    if (options.startAcceleration() && text != null) {
+    if (options.startAcceleration() && text != null && !prog.anchorStart()) {
       StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
       if (accelerator != null) {
         int idx = accelerator.findCandidate(text, fromIndex, prog.unixLines());
@@ -4342,7 +4476,7 @@ public final class Matcher implements MatchResult {
 
     Dfa.SearchResult fwdResult = null;
     if (canUseForwardDfa()) {
-      fwdResult = dfa(false).doSearch(scanner, effectiveStart, false, false);
+      fwdResult = dfa(false).doSearch(scanner, effectiveStart, prog.anchorStart(), false);
       if (fwdResult != null && !fwdResult.matched()) {
         return -1L;
       }
@@ -4498,6 +4632,9 @@ public final class Matcher implements MatchResult {
       if (isStartAnchored && matcher.searchFrom > 0) {
         return matcher.applyFailedMatchResult();
       }
+      if (isStartAnchored) {
+        return matchLiteral(matcher, false);
+      }
       if (foldCase && matcher.text == null) {
         return fallback.find(matcher, regionActive);
       }
@@ -4618,6 +4755,9 @@ public final class Matcher implements MatchResult {
       if (singleCharClass == null) {
         return matcher.doFindCore(regionActive);
       }
+      if (isStartAnchored) {
+        return matchSingleCharClass(matcher, false);
+      }
       matcher.diagnosticBoundary(MatchStrategy.CHARACTER_CLASS);
       return matcher.singleCharClassFindFastPath(singleCharClass, matcher.searchFrom);
     }
@@ -4694,6 +4834,15 @@ public final class Matcher implements MatchResult {
       if (isStartAnchored && matcher.searchFrom > 0) {
         return matcher.applyFailedMatchResult();
       }
+      if (isStartAnchored) {
+        matcher.diagnosticBoundary(MatchStrategy.KEYWORD);
+        if (keywordAlternation.captureGroup > 0) {
+          matcher.diagnosticCapture(MatchStrategy.KEYWORD);
+        }
+        return matcher.text != null
+            ? matcher.matchKeywordAlternationAt(keywordAlternation, 0, numCaptures)
+            : matcher.matchUtf8KeywordAlternationAt(keywordAlternation, 0, numCaptures);
+      }
       matcher.diagnosticBoundary(MatchStrategy.KEYWORD);
       if (keywordAlternation.captureGroup > 0) {
         matcher.diagnosticCapture(MatchStrategy.KEYWORD);
@@ -4727,6 +4876,9 @@ public final class Matcher implements MatchResult {
           || matcher.activeScanner().length() > matcher.onePassTextLimit()) {
         return matcher.doFindCore(regionActive);
       }
+      if (matcher.searchFrom > 0 || matcher.anchoredPrefixOrCharClassCannotMatch(0)) {
+        return matcher.applyFailedMatchResult();
+      }
       matcher.diagnosticBoundary(MatchStrategy.ONE_PASS);
       if (matcher.parentPattern.numGroups() > 0) {
         matcher.diagnosticCapture(MatchStrategy.ONE_PASS);
@@ -4737,7 +4889,7 @@ public final class Matcher implements MatchResult {
               .onePass()
               .search(
                   matcher.activeScanner(),
-                  matcher.searchFrom,
+                  0,
                   matcher.activeScanner().length(),
                   false,
                   numCaptures,

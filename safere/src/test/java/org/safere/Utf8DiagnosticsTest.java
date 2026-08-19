@@ -154,6 +154,18 @@ class Utf8DiagnosticsTest {
   }
 
   @Test
+  void startAnchoredLiteralFindWithDiagnosticsRejectsLaterOccurrence() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile("^target");
+
+    assertThat(pattern.find(input("prefix target"))).isFalse();
+
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(event -> assertThat(event.outcome()).isEqualTo(MatchOutcome.NO_MATCH));
+  }
+
+  @Test
   void patternBooleanFindReportsAccelerationAndDfaSearch() {
     Pattern.setDiagnostics(diagnostics);
     Pattern pattern = Pattern.compile("é[ab]+c");

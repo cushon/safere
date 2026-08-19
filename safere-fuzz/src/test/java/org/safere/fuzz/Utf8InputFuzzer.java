@@ -26,6 +26,7 @@ final class Utf8InputFuzzer {
   @FuzzTest(maxDuration = "30s")
   void arbitraryWindow(FuzzedDataProvider data) {
     assertLiteralSearchMatchesString("XXXXXX", "..XXXXXX");
+    assertLiteralSearchMatchesString(data.consumeBoolean() ? "^XXXXXX" : "\\AXXXXXX", "..XXXXXX");
     assertBoundarySensitiveRegionCaptures();
     assertKeywordAlternationMatchesString(data);
     assertFixedOffsetAccelerationMatchesString(data);

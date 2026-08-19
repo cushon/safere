@@ -26,12 +26,13 @@ import org.safere.Pattern.KeywordAlternation;
  */
 record MatchDescriptor(
     String literalMatch,
+    boolean literalFoldCase,
     CharClassScanInfo singleCharClass,
     KeywordAlternation keywordAlternation,
     CharClassMatchInfo charClassMatch,
     int minMatchLength) {
 
-  static final MatchDescriptor NONE = new MatchDescriptor(null, null, null, null, 0);
+  static final MatchDescriptor NONE = new MatchDescriptor(null, false, null, null, null, 0);
 
   boolean hasFastPath() {
     return literalMatch != null
