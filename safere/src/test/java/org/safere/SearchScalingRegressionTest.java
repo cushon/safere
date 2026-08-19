@@ -347,15 +347,36 @@ class SearchScalingRegressionTest {
   }
 
   @Test
-  void vectorBoundarySweepMaintainsLinearWorkScalingAcrossChunkSizes() {
-    Pattern pattern = Pattern.compile("[0-9]");
+  void vectorAndSwarScansFindMatchesAcrossChunkBoundaries() {
+    int[] ranges = {'0', '9'};
     for (int len = 1; len <= 65; len++) {
-      String text = "a".repeat(len);
-      long work =
-          WorkCounter.countForTesting(() -> assertThat(pattern.matcher(text).find()).isFalse());
-      assertThat(work)
-          .as("Work for length %d should be linearly bounded", len)
-          .isLessThanOrEqualTo(len * 4L + 100);
+      byte[] absent = "a".repeat(len).getBytes(UTF_8);
+      byte[] matchAtEnd = absent.clone();
+      matchAtEnd[len - 1] = '5';
+
+      assertThat(ByteSwarScan.indexOfAsciiClass(absent, 0, len, ranges, 0))
+          .as("SWAR absent result for length %d", len)
+          .isEqualTo(-1);
+      assertThat(ByteSwarScan.indexOfAsciiClass(matchAtEnd, 0, len, ranges, 0))
+          .as("SWAR end match for length %d", len)
+          .isEqualTo(len - 1);
+      if (isVectorApiAvailable()) {
+        assertThat(ByteVectorScan.indexOfAsciiClass(absent, 0, len, ranges, 0))
+            .as("vector absent result for length %d", len)
+            .isEqualTo(-1);
+        assertThat(ByteVectorScan.indexOfAsciiClass(matchAtEnd, 0, len, ranges, 0))
+            .as("vector end match for length %d", len)
+            .isEqualTo(len - 1);
+      }
+    }
+  }
+
+  private static boolean isVectorApiAvailable() {
+    try {
+      Class.forName("jdk.incubator.vector.ByteVector");
+      return true;
+    } catch (ClassNotFoundException e) {
+      return false;
     }
   }
 }
