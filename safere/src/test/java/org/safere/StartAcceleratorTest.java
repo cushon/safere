@@ -132,6 +132,17 @@ class StartAcceleratorTest {
   }
 
   @Test
+  void unicodeCharClassPrefixResumesAsciiScanningAfterNonAsciiCodePoints() {
+    StringStartAccelerator accelerator =
+        Pattern.compile("[\\p{IsAlphabetic}]+").stringStartAccelerator();
+
+    assertThat(accelerator.findCandidate("000©000", 0, false)).isEqualTo(-1);
+    assertThat(accelerator.findCandidate("000©000Ā", 0, false)).isEqualTo(7);
+    assertThat(accelerator.findCandidate("000😀000a", 0, false)).isEqualTo(8);
+    assertThat(accelerator.findCandidate("000😀000a", 4, false)).isEqualTo(8);
+  }
+
+  @Test
   void compiledPatternAcceleratorsInSync() {
     String[] testPatterns = {
       "(?i)needle.*", "(?i)a.*", "(?i)HTTP://.*", "needle.*", "[a-z].*", "[0-9].*", "ab+c.*"

@@ -221,23 +221,51 @@ sealed interface StringStartAccelerator {
 
     private static int indexOfCharClass(
         String text, boolean[] asciiTable, int[] ranges, boolean isAscii, int fromIndex) {
-      for (int i = fromIndex; i < text.length(); i++) {
+      int length = text.length();
+      int index = fromIndex;
+      while (index < length) {
+        int asciiResult = scanAsciiRun(text, asciiTable, index);
+        if (asciiResult >= 0) {
+          return asciiResult;
+        }
+        index = ~asciiResult;
+        if (index >= length) {
+          return -1;
+        }
+
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        int cp = text.codePointAt(index);
+        if (!isAscii && Matcher.binarySearchRanges(ranges, cp)) {
+          return index;
+        }
+        index += Character.charCount(cp);
+      }
+      return -1;
+    }
+
+    /**
+     * Scans one contiguous ASCII run. A nonnegative result is a matching position; a negative
+     * result is the complement of either the first non-ASCII position or the text length. Keeping
+     * Unicode decoding and range lookup outside this loop allows HotSpot to optimize the common
+     * ASCII path independently.
+     */
+    private static int scanAsciiRun(String text, boolean[] asciiTable, int fromIndex) {
+      int length = text.length();
+      for (int i = fromIndex; i < length; i++) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
         char ch = text.charAt(i);
-        if (ch < 128) {
-          if (asciiTable[ch]) {
-            return i;
-          }
-        } else if (!isAscii) {
-          int cp = text.codePointAt(i);
-          if (Matcher.binarySearchRanges(ranges, cp)) {
-            return i;
-          }
+        if (ch >= 128) {
+          return ~i;
+        }
+        if (asciiTable[ch]) {
+          return i;
         }
       }
-      return -1;
+      return ~length;
     }
 
     private static boolean[] buildAsciiTable(CharClassScanInfo scanInfo) {
