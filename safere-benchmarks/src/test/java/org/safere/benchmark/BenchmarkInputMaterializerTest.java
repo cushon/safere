@@ -159,7 +159,7 @@ class BenchmarkInputMaterializerTest {
     assertThat(resolvedData.getAsJsonObject("replacementProfiles").getAsJsonArray("rust-regex"))
         .hasSize(1);
     assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("dotnet"))
-        .hasSize(38);
+        .hasSize(39);
     JsonObject executionPlan = manifest.getAsJsonObject("executionPlan");
     assertThat(executionPlan.get("version").getAsInt()).isEqualTo(1);
     assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(587);
@@ -181,6 +181,15 @@ class BenchmarkInputMaterializerTest {
                 .get(0)
                 .getAsString())
         .isEqualTo("\\w+");
+    for (String input : new String[] {"absent", "late"}) {
+      JsonObject dotnetAlphabetic =
+          executionEntry(
+              executionPlan,
+              "UnicodePrefixBenchmark.alphabetic." + input + ".1024@dotnet_nonbacktracking");
+      assertThat(dotnetAlphabetic.get("status").getAsString()).isEqualTo("excluded");
+      assertThat(dotnetAlphabetic.getAsJsonObject("exclusion").get("reason").getAsString())
+          .contains("IsAlphabetic Unicode property");
+    }
     for (JsonElement engineElement : executionPlan.getAsJsonArray("engines")) {
       String engineId = engineElement.getAsJsonObject().get("id").getAsString();
       assertThat(

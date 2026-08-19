@@ -9763,7 +9763,15 @@
       "id": "UnicodePrefixBenchmark.alphabetic.absent.{size}",
       "operation": "find",
       "patterns": [
-        "[\\p{IsAlphabetic}]+\\d+"
+        {
+          "java": "[\\p{IsAlphabetic}]+\\d+",
+          "alternates": {
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET does not expose Java's IsAlphabetic Unicode property"
+            }
+          }
+        }
       ],
       "inputs": [
         "unicodePrefix.digitsAbsent.{size}"
@@ -9794,7 +9802,15 @@
       "id": "UnicodePrefixBenchmark.alphabetic.late.{size}",
       "operation": "find",
       "patterns": [
-        "[\\p{IsAlphabetic}]+\\d+"
+        {
+          "java": "[\\p{IsAlphabetic}]+\\d+",
+          "alternates": {
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET does not expose Java's IsAlphabetic Unicode property"
+            }
+          }
+        }
       ],
       "inputs": [
         "unicodePrefix.alphabeticLate.{size}"
