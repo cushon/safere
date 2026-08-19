@@ -33,8 +33,39 @@ sealed interface Utf8StartAccelerator {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      CharClassScanInfo scanInfo =
-          Pattern.buildAsciiClassScanInfo(descriptor.charClassPrefixAscii());
+      AsciiBitmap bitmap = descriptor.charClassPrefixAscii();
+      int card = bitmap.cardinality();
+      if (card == 2) {
+        int b0 = -1, b1 = -1;
+        for (int i = 0; i < 128; i++) {
+          if (bitmap.containsAscii(i)) {
+            if (b0 == -1) {
+              b0 = i;
+            } else {
+              b1 = i;
+              break;
+            }
+          }
+        }
+        return new AsciiPair((byte) b0, (byte) b1);
+      }
+      if (card == 3) {
+        int b0 = -1, b1 = -1, b2 = -1;
+        for (int i = 0; i < 128; i++) {
+          if (bitmap.containsAscii(i)) {
+            if (b0 == -1) {
+              b0 = i;
+            } else if (b1 == -1) {
+              b1 = i;
+            } else {
+              b2 = i;
+              break;
+            }
+          }
+        }
+        return new AsciiTriple((byte) b0, (byte) b1, (byte) b2);
+      }
+      CharClassScanInfo scanInfo = Pattern.buildAsciiClassScanInfo(bitmap);
       if (scanInfo != null) {
         return new CharClass(scanInfo);
       }
@@ -63,6 +94,9 @@ sealed interface Utf8StartAccelerator {
       case Literal lit -> lit.findCandidate(scanner, pos);
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
+      case AsciiPair pair -> scanner.indexOfAsciiPair(pair.b0(), pair.b1(), pos, scanner.length());
+      case AsciiTriple triple ->
+          scanner.indexOfAsciiTriple(triple.b0(), triple.b1(), triple.b2(), pos, scanner.length());
       case CharClass cc -> cc.findCandidate(scanner, pos);
     };
   }
@@ -180,6 +214,32 @@ sealed interface Utf8StartAccelerator {
             searchFrom, scanner.retreatByCodePoints(literalStart, fixedOffsetLiteral.maxOffset()));
       }
       return -1;
+    }
+  }
+
+  record AsciiPair(byte b0, byte b1) implements Utf8StartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.CHAR_CLASS;
+    }
+
+    @Override
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      return scanner.indexOfAsciiPair(b0, b1, fromIndex, scanner.length());
+    }
+  }
+
+  record AsciiTriple(byte b0, byte b1, byte b2) implements Utf8StartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.CHAR_CLASS;
+    }
+
+    @Override
+    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      return scanner.indexOfAsciiTriple(b0, b1, b2, fromIndex, scanner.length());
     }
   }
 

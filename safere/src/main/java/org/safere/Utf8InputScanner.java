@@ -281,40 +281,49 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
    *     requires the general code-point scan
    */
   private int indexOfAsciiRanges(int[] ranges, long bitmap0, long bitmap1, int start, int scanLen) {
-    if (ranges.length >= 2 && ranges[0] >= 0 && ranges[ranges.length - 1] < 0x80) {
-      if (scanProvider != null && scanLen - start >= scanProvider.minimumInputLength()) {
-        int position = start;
-        int scalarLimit = Math.min(scanLen, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
-        for (; position < scalarLimit; position++) {
-          if (InputScanner.classContains(ranges, bitmap0, bitmap1, unsignedByteAt(position))) {
-            return position;
-          }
+    if (ranges.length < 2 || ranges[0] < 0 || ranges[ranges.length - 1] >= 0x80) {
+      return -2;
+    }
+    switch (ranges.length) {
+      case 2 -> {
+        int low = ranges[0];
+        int high = ranges[1];
+        if (low == high) {
+          int res = indexOfByte((byte) low, start);
+          return (res >= 0 && res < scanLen) ? res : -1;
         }
-        int result = scanProvider.indexOfAsciiClass(bytes, offset, scanLen, ranges, position);
-        if (result != VectorScanProvider.UNSUPPORTED) {
-          return result;
+        if (high == low + 1) {
+          return scanBytePair(scanLen, (byte) low, (byte) high, start);
         }
+      }
+      case 4 -> {
+        if (ranges[0] == ranges[1] && ranges[2] == ranges[3]) {
+          return scanBytePair(scanLen, (byte) ranges[0], (byte) ranges[2], start);
+        }
+      }
+      case 6 -> {
+        if (ranges[0] == ranges[1] && ranges[2] == ranges[3] && ranges[4] == ranges[5]) {
+          return scanByteTriple(
+              scanLen, (byte) ranges[0], (byte) ranges[2], (byte) ranges[4], start);
+        }
+      }
+      default -> {}
+    }
+    if (scanProvider != null && scanLen - start >= scanProvider.minimumInputLength()) {
+      int position = start;
+      int scalarLimit = Math.min(scanLen, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
+      for (; position < scalarLimit; position++) {
+        if (InputScanner.classContains(ranges, bitmap0, bitmap1, unsignedByteAt(position))) {
+          return position;
+        }
+      }
+      int result = scanProvider.indexOfAsciiClass(bytes, offset, scanLen, ranges, position);
+      if (result != VectorScanProvider.UNSUPPORTED) {
+        return result;
       }
     }
-    if (ranges.length == 2 && ranges[0] >= 0 && ranges[1] < 0x80) {
-      int low = ranges[0];
-      int high = ranges[1];
-      if (low == high) {
-        int res = indexOfByte((byte) low, start);
-        return (res >= 0 && res < scanLen) ? res : -1;
-      }
-      if (high == low + 1) {
-        return scanBytePair(scanLen, (byte) low, (byte) high, start);
-      }
-      return ByteSwarScan.indexOfByteRange(bytes, offset, scanLen, low, high, start);
-    }
-    if (ranges.length == 4
-        && ranges[0] == ranges[1]
-        && ranges[2] == ranges[3]
-        && ranges[0] >= 0
-        && ranges[3] < 0x80) {
-      return scanBytePair(
-          scanLen, (byte) ranges[0], (byte) ranges[2], start);
+    if (ranges.length == 2) {
+      return ByteSwarScan.indexOfByteRange(bytes, offset, scanLen, ranges[0], ranges[1], start);
     }
     return -2;
   }

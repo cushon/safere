@@ -630,6 +630,13 @@ class SearchScalingRegressionTest {
       assertThat(ByteSwarScan.indexOfAsciiClass(matchAtEnd, 0, len, ranges, 0))
           .as("SWAR end match for length %d", len)
           .isEqualTo(len - 1);
+      assertThat(ByteSwarScan.indexOfBytePair(absent, 0, len, (byte) 'y', (byte) 'z', 0))
+          .as("SWAR pair absent result for length %d", len)
+          .isEqualTo(-1);
+      assertThat(ByteSwarScan.indexOfByteTriple(absent, 0, len, (byte) 'x', (byte) 'y', (byte) 'z', 0))
+          .as("SWAR triple absent result for length %d", len)
+          .isEqualTo(-1);
+
       if (isVectorApiAvailable()) {
         assertThat(ByteVectorScan.indexOfAsciiClass(absent, 0, len, ranges, 0))
             .as("vector absent result for length %d", len)
@@ -637,6 +644,12 @@ class SearchScalingRegressionTest {
         assertThat(ByteVectorScan.indexOfAsciiClass(matchAtEnd, 0, len, ranges, 0))
             .as("vector end match for length %d", len)
             .isEqualTo(len - 1);
+        assertThat(ByteVectorScan.indexOfAsciiPair(absent, 0, len, (byte) 'y', (byte) 'z', 0))
+            .as("vector pair absent result for length %d", len)
+            .isEqualTo(-1);
+        assertThat(ByteVectorScan.indexOfAsciiTriple(absent, 0, len, (byte) 'x', (byte) 'y', (byte) 'z', 0))
+            .as("vector triple absent result for length %d", len)
+            .isEqualTo(-1);
       }
     }
   }

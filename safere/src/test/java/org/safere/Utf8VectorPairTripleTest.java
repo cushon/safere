@@ -112,4 +112,59 @@ class Utf8VectorPairTripleTest {
     assertThat(scanner.indexOfAsciiTriple('b', 'm', 'Z', 23, 61)).isEqualTo(-1);
     assertThat(scanner.indexOfAsciiTriple('b', 'm', 'Z', 23, 62)).isEqualTo(61);
   }
+
+  @Test
+  void testStartAcceleratorSelection() {
+    Pattern pPairClass = Pattern.compile("[YZ]");
+    assertThat(pPairClass.utf8StartAccelerator())
+        .isInstanceOf(Utf8StartAccelerator.AsciiPair.class);
+
+    Pattern pPairAlt = Pattern.compile("Y|Z");
+    assertThat(pPairAlt.utf8StartAccelerator())
+        .isInstanceOf(Utf8StartAccelerator.AsciiPair.class);
+
+    Pattern pConsecutivePair = Pattern.compile("[ab]");
+    assertThat(pConsecutivePair.utf8StartAccelerator())
+        .isInstanceOf(Utf8StartAccelerator.AsciiPair.class);
+
+    Pattern pTripleClass = Pattern.compile("[XYZ]");
+    assertThat(pTripleClass.utf8StartAccelerator())
+        .isInstanceOf(Utf8StartAccelerator.AsciiTriple.class);
+
+    Pattern pTripleAlt = Pattern.compile("X|Y|Z");
+    assertThat(pTripleAlt.utf8StartAccelerator())
+        .isInstanceOf(Utf8StartAccelerator.AsciiTriple.class);
+  }
+
+  @Test
+  void testPatternMatchingWithPairAndTriple() {
+    byte[] input = "the quick brown fox jumps over the lazy dog".getBytes(UTF_8);
+    Utf8Input utf8 = Utf8Input.trusted(input);
+
+    Pattern pPair = Pattern.compile("[jx]");
+    Utf8Matcher mPair = pPair.matcher(utf8);
+    assertThat(mPair.find()).isTrue();
+    assertThat(mPair.start()).isEqualTo(18); // 'j' in jumps
+
+    Pattern pTriple = Pattern.compile("[xyz]");
+    Utf8Matcher mTriple = pTriple.matcher(utf8);
+    assertThat(mTriple.find()).isTrue();
+    assertThat(mTriple.start()).isEqualTo(18); // 'x' in fox is at 18? No, 'x' is at 18
+  }
+
+  @Test
+  void testDfaSelfLoopPairAndTriple() {
+    byte[] input = "START some arbitrary payload with delimiters Y and Z".getBytes(UTF_8);
+    Utf8Input utf8 = Utf8Input.trusted(input);
+
+    Pattern pPair = Pattern.compile("(?s)START.*?[YZ]");
+    Utf8Matcher mPair = pPair.matcher(utf8);
+    assertThat(mPair.find()).isTrue();
+    assertThat(mPair.end()).isEqualTo(46); // index after 'Y'
+
+    Pattern pTriple = Pattern.compile("(?s)START.*?[XYZ]");
+    Utf8Matcher mTriple = pTriple.matcher(utf8);
+    assertThat(mTriple.find()).isTrue();
+    assertThat(mTriple.end()).isEqualTo(46);
+  }
 }
