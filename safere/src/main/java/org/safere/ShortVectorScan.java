@@ -227,6 +227,139 @@ final class ShortVectorScan {
     return biasedValues.compare(GE, biasedLow).and(biasedValues.compare(LE, biasedHigh));
   }
 
+  static int indexOfAsciiPair(char[] chars, int offset, int length, int c1, int c2, int start) {
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    ShortVector v1 = ShortVector.broadcast(SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SPECIES, (short) c2);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ShortVector inputVec = ShortVector.fromCharArray(SPECIES, chars, offset + pos);
+      VectorMask<Short> matchMask =
+          inputVec.compare(VectorOperators.EQ, v1).or(inputVec.compare(VectorOperators.EQ, v2));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < length ? found : -1;
+      }
+    }
+    for (; pos < length; pos++) {
+      char c = chars[offset + pos];
+      if (c == c1 || c == c2) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiTriple(
+      char[] chars, int offset, int length, int c1, int c2, int c3, int start) {
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    ShortVector v1 = ShortVector.broadcast(SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SPECIES, (short) c2);
+    ShortVector v3 = ShortVector.broadcast(SPECIES, (short) c3);
+
+    for (; pos <= limit; pos += vectorLen) {
+      ShortVector inputVec = ShortVector.fromCharArray(SPECIES, chars, offset + pos);
+      VectorMask<Short> matchMask =
+          inputVec
+              .compare(VectorOperators.EQ, v1)
+              .or(inputVec.compare(VectorOperators.EQ, v2))
+              .or(inputVec.compare(VectorOperators.EQ, v3));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < length ? found : -1;
+      }
+    }
+    for (; pos < length; pos++) {
+      char c = chars[offset + pos];
+      if (c == c1 || c == c2 || c == c3) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfMultiLiteral(
+      char[] chars,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    int numLits = literals.length;
+    int pos = Math.max(0, start);
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    ShortVector v0 = ShortVector.broadcast(SPECIES, (short) anchorChars[0]);
+    ShortVector v1 = numLits >= 2 ? ShortVector.broadcast(SPECIES, (short) anchorChars[1]) : null;
+    ShortVector v2 = numLits >= 3 ? ShortVector.broadcast(SPECIES, (short) anchorChars[2]) : null;
+    ShortVector v3 = numLits >= 4 ? ShortVector.broadcast(SPECIES, (short) anchorChars[3]) : null;
+
+    for (; pos <= limit; pos += vectorLen) {
+      ShortVector inputVec = ShortVector.fromCharArray(SPECIES, chars, offset + pos);
+      VectorMask<Short> matchMask = inputVec.compare(VectorOperators.EQ, v0);
+      if (numLits >= 2) {
+        matchMask = matchMask.or(inputVec.compare(VectorOperators.EQ, v1));
+      }
+      if (numLits >= 3) {
+        matchMask = matchMask.or(inputVec.compare(VectorOperators.EQ, v2));
+      }
+      if (numLits >= 4) {
+        matchMask = matchMask.or(inputVec.compare(VectorOperators.EQ, v3));
+      }
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int matchIndex = pos + bit;
+          for (int i = 0; i < numLits; i++) {
+            int candidatePos = matchIndex - anchorOffsets[i];
+            String lit = literals[i];
+            if (candidatePos >= start
+                && candidatePos + lit.length() <= length
+                && chars[offset + matchIndex] == anchorChars[i]
+                && regionMatches(chars, offset + candidatePos, lit)) {
+              return candidatePos;
+            }
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int scalarLimit = length - minLength;
+    for (; pos <= scalarLimit; pos++) {
+      for (int i = 0; i < numLits; i++) {
+        String lit = literals[i];
+        if (pos + lit.length() <= length && regionMatches(chars, offset + pos, lit)) {
+          return pos;
+        }
+      }
+    }
+    return -1;
+  }
+
+  private static boolean regionMatches(char[] chars, int offset, String str) {
+    int len = str.length();
+    for (int i = 0; i < len; i++) {
+      if (chars[offset + i] != str.charAt(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   static boolean matches(char value, int[] ranges) {
     for (int index = 0; index < ranges.length; index += 2) {
       if (value >= ranges[index] && value <= ranges[index + 1]) {

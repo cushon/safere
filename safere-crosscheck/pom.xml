@@ -138,6 +138,7 @@
                         <exclude name="SimplifierTest.java"/>
                         <exclude name="StartAcceleratorDifferentialTest.java"/>
                         <exclude name="StartAcceleratorTest.java"/>
+                        <exclude name="StringChunkedVectorFallbackTest.java"/>
                         <exclude name="UnicodeJdkConsistencyTest.java"/>
                         <exclude name="UnicodeTablesTest.java"/>
                         <exclude name="Utf8AllocationScalingTest.java"/>

@@ -29,14 +29,21 @@ final class StringVectorScan {
   private static final VectorSpecies<Short> SHORT_SPECIES = ShortVectorScan.SPECIES;
 
   static int indexOfAsciiClass(String text, int[] ranges, int start) {
-    if (!StringSupport.hasAccess() || !Swar.supportsAsciiRanges(ranges, 4)) {
-      return VectorScanProvider.UNSUPPORTED;
+    if (StringSupport.hasAccess() && Swar.supportsAsciiRanges(ranges, 4)) {
+      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+        return indexOfLatin1Class(text, ranges, start, text.length());
+      }
+      if (StringSupport.compatibleWith(text, UTF_16)) {
+        return indexOfUtf16Class(text, ranges, start, text.length());
+      }
     }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return indexOfLatin1Class(text, ranges, start, text.length());
-    }
-    if (StringSupport.compatibleWith(text, UTF_16)) {
-      return indexOfUtf16Class(text, ranges, start, text.length());
+    if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return searchChunked(
+          text,
+          start,
+          text.length(),
+          0,
+          (buf, off, len, st) -> ShortVectorScan.indexOfCharClass(buf, off, len, ranges, st));
     }
     return VectorScanProvider.UNSUPPORTED;
   }
@@ -46,57 +53,85 @@ final class StringVectorScan {
   }
 
   static int indexOfCharClass(String text, int[] ranges, int start, int limit) {
-    if (!StringSupport.hasAccess()) {
-      return VectorScanProvider.UNSUPPORTED;
-    }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      int[] clamped = clampRangesForLatin1(ranges);
-      if (clamped != null) {
-        return indexOfLatin1Class(text, clamped, start, limit);
+    if (StringSupport.hasAccess()) {
+      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+        int[] clamped = clampRangesForLatin1(ranges);
+        if (clamped != null) {
+          return indexOfLatin1Class(text, clamped, start, limit);
+        }
+        return VectorScanProvider.UNSUPPORTED;
       }
-      return VectorScanProvider.UNSUPPORTED;
+      if (StringSupport.compatibleWith(text, UTF_16)) {
+        return indexOfUtf16Class(text, ranges, start, limit);
+      }
     }
-    if (StringSupport.compatibleWith(text, UTF_16)) {
-      return indexOfUtf16Class(text, ranges, start, limit);
+    if (limit - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return searchChunked(
+          text,
+          start,
+          limit,
+          0,
+          (buf, off, len, st) -> ShortVectorScan.indexOfCharClass(buf, off, len, ranges, st));
     }
     return VectorScanProvider.UNSUPPORTED;
   }
 
   static int indexOfIgnoreCase(String text, String prefix, int start) {
-    if (!StringSupport.hasAccess()) {
-      return VectorScanProvider.UNSUPPORTED;
+    if (StringSupport.hasAccess()) {
+      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+        return indexOfIgnoreCaseLatin1(text, prefix, start);
+      }
+      if (StringSupport.compatibleWith(text, UTF_16)) {
+        return indexOfIgnoreCaseUtf16(text, prefix, start);
+      }
     }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return indexOfIgnoreCaseLatin1(text, prefix, start);
-    }
-    if (StringSupport.compatibleWith(text, UTF_16)) {
-      return indexOfIgnoreCaseUtf16(text, prefix, start);
+    if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return searchChunked(
+          text,
+          start,
+          text.length(),
+          prefix.length() - 1,
+          (buf, off, len, st) -> ShortVectorScan.indexOfIgnoreCase(buf, off, len, prefix, st));
     }
     return VectorScanProvider.UNSUPPORTED;
   }
 
   static int indexOfAsciiPair(String text, int c1, int c2, int fromIndex, int limit) {
-    if (!StringSupport.hasAccess()) {
-      return -1;
+    if (StringSupport.hasAccess()) {
+      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+        return indexOfAsciiPairLatin1(text, c1, c2, fromIndex, limit);
+      }
+      if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
+        return indexOfAsciiPairUtf16(text, c1, c2, fromIndex, limit);
+      }
     }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return indexOfAsciiPairLatin1(text, c1, c2, fromIndex, limit);
-    }
-    if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
-      return indexOfAsciiPairUtf16(text, c1, c2, fromIndex, limit);
+    if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return searchChunked(
+          text,
+          fromIndex,
+          limit,
+          0,
+          (buf, off, len, st) -> ShortVectorScan.indexOfAsciiPair(buf, off, len, c1, c2, st));
     }
     return -1;
   }
 
   static int indexOfAsciiTriple(String text, int c1, int c2, int c3, int fromIndex, int limit) {
-    if (!StringSupport.hasAccess()) {
-      return -1;
+    if (StringSupport.hasAccess()) {
+      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+        return indexOfAsciiTripleLatin1(text, c1, c2, c3, fromIndex, limit);
+      }
+      if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
+        return indexOfAsciiTripleUtf16(text, c1, c2, c3, fromIndex, limit);
+      }
     }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return indexOfAsciiTripleLatin1(text, c1, c2, c3, fromIndex, limit);
-    }
-    if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
-      return indexOfAsciiTripleUtf16(text, c1, c2, c3, fromIndex, limit);
+    if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return searchChunked(
+          text,
+          fromIndex,
+          limit,
+          0,
+          (buf, off, len, st) -> ShortVectorScan.indexOfAsciiTriple(buf, off, len, c1, c2, c3, st));
     }
     return -1;
   }
@@ -487,15 +522,25 @@ final class StringVectorScan {
     if (text == null || literals == null || literals.length == 0 || text.length() < minLength) {
       return -1;
     }
-    if (!StringSupport.hasAccess()) {
-      return VectorScanProvider.UNSUPPORTED;
+    if (StringSupport.hasAccess()) {
+      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
+        return indexOfMultiLiteralLatin1(
+            text, literals, anchorChars, anchorOffsets, minLength, start);
+      }
+      if (StringSupport.compatibleWith(text, UTF_16)) {
+        return indexOfMultiLiteralUtf16(
+            text, literals, anchorChars, anchorOffsets, minLength, start);
+      }
     }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return indexOfMultiLiteralLatin1(
-          text, literals, anchorChars, anchorOffsets, minLength, start);
-    }
-    if (StringSupport.compatibleWith(text, UTF_16)) {
-      return indexOfMultiLiteralUtf16(text, literals, anchorChars, anchorOffsets, minLength, start);
+    if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return searchChunked(
+          text,
+          start,
+          text.length(),
+          minLength - 1,
+          (buf, off, len, st) ->
+              ShortVectorScan.indexOfMultiLiteral(
+                  buf, off, len, literals, anchorChars, anchorOffsets, minLength, st));
     }
     return VectorScanProvider.UNSUPPORTED;
   }
@@ -646,6 +691,37 @@ final class StringVectorScan {
       return TeddyVectorScan.indexOfTeddyUtf16(text, model, start);
     }
     return VectorScanProvider.UNSUPPORTED;
+  }
+
+  @FunctionalInterface
+  interface ChunkSearcher {
+    int search(char[] buffer, int offset, int length, int start);
+  }
+
+  private static int searchChunked(
+      String text, int start, int limit, int overlap, ChunkSearcher searcher) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, start);
+    char[] chunk = StringChunkBuffer.get();
+
+    while (pos < scanLimit) {
+      int chunkSize = Math.min(StringChunkBuffer.CHUNK_SIZE, scanLimit - pos);
+      text.getChars(pos, pos + chunkSize, chunk, 0);
+
+      int found = searcher.search(chunk, 0, chunkSize, 0);
+      if (found == VectorScanProvider.UNSUPPORTED) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+      if (found >= 0) {
+        int matchPos = pos + found;
+        return matchPos < scanLimit ? matchPos : -1;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize - overlap;
+    }
+    return -1;
   }
 
   private StringVectorScan() {}
