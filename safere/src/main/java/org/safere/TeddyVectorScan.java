@@ -14,9 +14,7 @@ import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorShuffle;
 import jdk.incubator.vector.VectorSpecies;
 
-/**
- * Stateless SIMD Teddy multi-keyword vector-shuffle scanning kernels using the Vector API.
- */
+/** Stateless SIMD Teddy multi-keyword vector-shuffle scanning kernels using the Vector API. */
 final class TeddyVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
   private static final VectorShuffle<Byte> NARROW_SHUFFLE;
@@ -98,8 +96,7 @@ final class TeddyVectorScan {
               int b = buckets[litIdx];
               if ((bucketMask & (1 << b)) != 0) {
                 String lit = literals[litIdx];
-                if (candidatePos + lit.length() <= length
-                    && text.startsWith(lit, candidatePos)) {
+                if (candidatePos + lit.length() <= length && text.startsWith(lit, candidatePos)) {
                   return candidatePos;
                 }
               }
@@ -276,8 +273,7 @@ final class TeddyVectorScan {
               int b = buckets[litIdx];
               if ((bucketMask & (1 << b)) != 0) {
                 String lit = literals[litIdx];
-                if (candidatePos + lit.length() <= length
-                    && text.startsWith(lit, candidatePos)) {
+                if (candidatePos + lit.length() <= length && text.startsWith(lit, candidatePos)) {
                   return candidatePos;
                 }
               }

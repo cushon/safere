@@ -193,8 +193,6 @@ final class ByteVectorScan {
     ByteVector v1 = numLits >= 2 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[1]) : null;
     ByteVector v2 = numLits >= 3 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[2]) : null;
     ByteVector v3 = numLits >= 4 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[3]) : null;
-    ByteVector v4 = numLits >= 5 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[4]) : null;
-    ByteVector v5 = numLits >= 6 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[5]) : null;
 
     for (; pos <= limit; pos += vectorLen) {
       ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
@@ -207,12 +205,6 @@ final class ByteVectorScan {
       }
       if (numLits >= 4) {
         matchMask = matchMask.or(inputVec.compare(EQ, v3));
-      }
-      if (numLits >= 5) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v4));
-      }
-      if (numLits >= 6) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v5));
       }
 
       if (matchMask.anyTrue()) {

@@ -488,9 +488,9 @@ public final class Pattern implements Serializable {
     MultiLiteralInfo multiLiteral = null;
     TeddyModel teddyModel = null;
     if (altLiterals != null) {
-      if (altLiterals.length >= 2 && altLiterals.length <= 6) {
+      if (altLiterals.length >= 2 && altLiterals.length <= 4) {
         multiLiteral = MultiLiteralInfo.create(altLiterals);
-      } else if (altLiterals.length >= 8 && altLiterals.length <= 32) {
+      } else if (altLiterals.length >= 5 && altLiterals.length <= 32) {
         teddyModel = TeddyModel.compile(altLiterals, 32);
       }
     }
@@ -2286,7 +2286,7 @@ public final class Pattern implements Serializable {
   /** Finds the longest case-sensitive ASCII literal after a bounded-width match prefix. */
   private static FixedOffsetLiteral extractFixedOffsetLiteral(Regexp re) {
     Regexp node = unwrapCaptures(re);
-    if (node.op != RegexpOp.CONCAT || node.subs == null) {
+    if (node == null || node.op != RegexpOp.CONCAT || node.subs == null) {
       return null;
     }
     FixedOffsetLiteral best = null;

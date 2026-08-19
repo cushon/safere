@@ -191,6 +191,7 @@ final class Ascii {
     }
     return Math.min(a, b);
   }
+
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
     return regionMatchesIgnoreCase(text, offset, prefix, 0, prefixLen);

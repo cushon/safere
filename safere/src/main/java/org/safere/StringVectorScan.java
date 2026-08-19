@@ -491,7 +491,8 @@ final class StringVectorScan {
       return VectorScanProvider.UNSUPPORTED;
     }
     if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return indexOfMultiLiteralLatin1(text, literals, anchorChars, anchorOffsets, minLength, start);
+      return indexOfMultiLiteralLatin1(
+          text, literals, anchorChars, anchorOffsets, minLength, start);
     }
     if (StringSupport.compatibleWith(text, UTF_16)) {
       return indexOfMultiLiteralUtf16(text, literals, anchorChars, anchorOffsets, minLength, start);
@@ -516,8 +517,6 @@ final class StringVectorScan {
     ByteVector v1 = numLits >= 2 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[1]) : null;
     ByteVector v2 = numLits >= 3 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[2]) : null;
     ByteVector v3 = numLits >= 4 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[3]) : null;
-    ByteVector v4 = numLits >= 5 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[4]) : null;
-    ByteVector v5 = numLits >= 6 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[5]) : null;
 
     for (; pos <= limit; pos += vectorLen) {
       ByteVector inputVec = StringSupport.byteVectorFromString(BYTE_SPECIES, text, pos);
@@ -530,12 +529,6 @@ final class StringVectorScan {
       }
       if (numLits >= 4) {
         matchMask = matchMask.or(inputVec.compare(EQ, v3));
-      }
-      if (numLits >= 5) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v4));
-      }
-      if (numLits >= 6) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v5));
       }
 
       if (matchMask.anyTrue()) {
@@ -587,11 +580,12 @@ final class StringVectorScan {
     int limit = length - vectorLen;
 
     ShortVector v0 = ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[0]);
-    ShortVector v1 = numLits >= 2 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[1]) : null;
-    ShortVector v2 = numLits >= 3 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[2]) : null;
-    ShortVector v3 = numLits >= 4 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[3]) : null;
-    ShortVector v4 = numLits >= 5 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[4]) : null;
-    ShortVector v5 = numLits >= 6 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[5]) : null;
+    ShortVector v1 =
+        numLits >= 2 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[1]) : null;
+    ShortVector v2 =
+        numLits >= 3 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[2]) : null;
+    ShortVector v3 =
+        numLits >= 4 ? ShortVector.broadcast(SHORT_SPECIES, (short) anchorChars[3]) : null;
 
     for (; pos <= limit; pos += vectorLen) {
       ShortVector inputVec = StringSupport.shortVectorFromString(SHORT_SPECIES, text, pos);
@@ -604,12 +598,6 @@ final class StringVectorScan {
       }
       if (numLits >= 4) {
         matchMask = matchMask.or(inputVec.compare(EQ, v3));
-      }
-      if (numLits >= 5) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v4));
-      }
-      if (numLits >= 6) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v5));
       }
 
       if (matchMask.anyTrue()) {
