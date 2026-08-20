@@ -17,6 +17,17 @@ import org.junit.jupiter.params.provider.ValueSource;
 @DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
 class Utf8VectorPairTripleTest {
 
+  @Test
+  void pairAndTripleScansHaveIndependentVectorCutoffs() {
+    if (VectorScanProviders.providerForPairLength(64) != null) {
+      assertThat(VectorScanProviders.providerForLength(64)).isNull();
+      assertThat(VectorScanProviders.providerForTripleLength(64)).isNotNull();
+      assertThat(VectorScanProviders.providerForTripleLength(10_240)).isNotNull();
+      assertThat(VectorScanProviders.providerForTripleLength(10_241)).isNull();
+      assertThat(VectorScanProviders.providerForLength(1024)).isNotNull();
+    }
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");

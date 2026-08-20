@@ -16,6 +16,18 @@ final class VectorScanProviders {
     return SELECTED != null && length >= SELECTED.minimumInputLength() ? SELECTED : null;
   }
 
+  static VectorScanProvider providerForPairLength(int length) {
+    return SELECTED != null && length >= SELECTED.minimumPairInputLength() ? SELECTED : null;
+  }
+
+  static VectorScanProvider providerForTripleLength(int length) {
+    return SELECTED != null
+            && length >= SELECTED.minimumTripleInputLength()
+            && length <= SELECTED.maximumTripleInputLength()
+        ? SELECTED
+        : null;
+  }
+
   private static VectorScanProvider loadSelected() {
     String requested = System.getProperty(PROVIDER_PROPERTY, "").trim();
     if (requested.isEmpty() || requested.equals("swar")) {

@@ -11,6 +11,12 @@ interface VectorScanProvider {
 
   int minimumInputLength();
 
+  int minimumPairInputLength();
+
+  int minimumTripleInputLength();
+
+  int maximumTripleInputLength();
+
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 

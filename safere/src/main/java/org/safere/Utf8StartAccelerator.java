@@ -34,6 +34,7 @@ sealed interface Utf8StartAccelerator {
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
       AsciiBitmap bitmap = descriptor.charClassPrefixAscii();
+      CharClassScanInfo scanInfo = Pattern.buildAsciiClassScanInfo(bitmap);
       int card = bitmap.cardinality();
       if (card == 2) {
         int b0 = -1, b1 = -1;
@@ -63,9 +64,8 @@ sealed interface Utf8StartAccelerator {
             }
           }
         }
-        return new AsciiTriple((byte) b0, (byte) b1, (byte) b2);
+        return new AsciiTriple((byte) b0, (byte) b1, (byte) b2, scanInfo);
       }
-      CharClassScanInfo scanInfo = Pattern.buildAsciiClassScanInfo(bitmap);
       if (scanInfo != null) {
         return new CharClass(scanInfo);
       }
@@ -94,9 +94,8 @@ sealed interface Utf8StartAccelerator {
       case Literal lit -> lit.findCandidate(scanner, pos);
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
-      case AsciiPair pair -> scanner.indexOfAsciiPair(pair.b0(), pair.b1(), pos, scanner.length());
-      case AsciiTriple triple ->
-          scanner.indexOfAsciiTriple(triple.b0(), triple.b1(), triple.b2(), pos, scanner.length());
+      case AsciiPair pair -> pair.findCandidate(scanner, pos);
+      case AsciiTriple triple -> triple.findCandidate(scanner, pos);
       case CharClass cc -> cc.findCandidate(scanner, pos);
     };
   }
@@ -230,7 +229,8 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  record AsciiTriple(byte b0, byte b1, byte b2) implements Utf8StartAccelerator {
+  record AsciiTriple(byte b0, byte b1, byte b2, CharClassScanInfo fallback)
+      implements Utf8StartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
@@ -239,6 +239,10 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      if (VectorScanProviders.providerForTripleLength(scanner.length() - fromIndex) == null) {
+        return scanner.indexOfCodePointClass(
+            fallback.ranges, fallback.bitmap0, fallback.bitmap1, fromIndex, scanner.length());
+      }
       return scanner.indexOfAsciiTriple(b0, b1, b2, fromIndex, scanner.length());
     }
   }
