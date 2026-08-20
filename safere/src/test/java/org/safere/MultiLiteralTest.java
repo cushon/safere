@@ -17,6 +17,20 @@ import org.junit.jupiter.params.provider.ValueSource;
 class MultiLiteralTest {
 
   @Test
+  void patternMetadataFollowsVectorProviderAvailability() {
+    Pattern pattern = Pattern.compile("apple|banana|cherry");
+
+    if (!VectorScanProviders.multiLiteralProviderAvailable()) {
+      assertThat(pattern.multiLiteral()).isNull();
+    } else {
+      assertThat(pattern.multiLiteral()).isNotNull();
+      assertThat(VectorScanProviders.providerForLength(64)).isNull();
+      assertThat(VectorScanProviders.providerForMultiLiteralLength(64)).isNotNull();
+      assertThat(VectorScanProviders.providerForLength(1024)).isNotNull();
+    }
+  }
+
+  @Test
   void testMultiLiteralInfoCreation() {
     String[] lits = {"apple", "banana", "cherry"};
     MultiLiteralInfo info = MultiLiteralInfo.create(lits);
@@ -35,7 +49,6 @@ class MultiLiteralTest {
   @ValueSource(strings = {"foo|bar", "foo|bar|baz", "cat|dog|bird|fish"})
   void testBasicMatching(String regex) {
     Pattern pattern = Pattern.compile(regex);
-    assertThat(pattern.multiLiteral()).isNotNull();
 
     String[] keywords = regex.split("\\|");
     for (String kw : keywords) {

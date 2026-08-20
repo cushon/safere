@@ -488,11 +488,17 @@ public final class Pattern implements Serializable {
     AsciiBitmap ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
     String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
     MultiLiteralInfo multiLiteral =
-        altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 4
+        VectorScanProviders.multiLiteralProviderAvailable()
+                && altLiterals != null
+                && altLiterals.length >= 2
+                && altLiterals.length <= 4
             ? MultiLiteralInfo.create(altLiterals)
             : null;
     TeddyModel teddyModel = null;
-    if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
+    if (multiLiteral == null
+        && altLiterals != null
+        && altLiterals.length >= 2
+        && altLiterals.length <= 32) {
       teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
     }
     StartAcceleration startAcceleration =

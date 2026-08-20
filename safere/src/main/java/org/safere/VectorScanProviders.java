@@ -5,7 +5,6 @@
 
 package org.safere;
 
-/** Selects the optional Vector scan provider once without loading it unless requested. */
 final class VectorScanProviders {
   static final String PROVIDER_PROPERTY = "org.safere.experimental.vectorScanProvider";
   private static final VectorScanProvider SELECTED = loadSelected();
@@ -24,21 +23,36 @@ final class VectorScanProviders {
     return SELECTED != null;
   }
 
+  static VectorScanProvider providerForMultiLiteralLength(int length) {
+    return SELECTED != null && length >= SELECTED.minimumMultiLiteralInputLength()
+        ? SELECTED
+        : null;
+  }
+
+  static boolean multiLiteralProviderAvailable() {
+    return SELECTED != null;
+  }
+
   private static VectorScanProvider loadSelected() {
     String requested = System.getProperty(PROVIDER_PROPERTY, "").trim();
-    if (requested.isEmpty() || requested.equals("swar")) {
+    if (requested.isEmpty()) {
       return null;
     }
-    if (!requested.equals("vector")) {
-      throw new IllegalStateException("Unknown Vector scan provider '" + requested + "'");
+    if ("incubator".equals(requested)) {
+      try {
+        return (VectorScanProvider)
+            Class.forName("org.safere.IncubatorVectorScanProvider")
+                .getDeclaredConstructor()
+                .newInstance();
+      } catch (ReflectiveOperationException | LinkageError e) {
+        return null;
+      }
     }
     try {
-      return VectorScanProviderFactory.create();
-    } catch (RuntimeException | LinkageError e) {
-      throw new IllegalStateException(
-          "Could not enable the experimental Vector UTF-8 scanner; use JDK 21 or later and add "
-              + "--add-modules=jdk.incubator.vector",
-          e);
+      return (VectorScanProvider)
+          Class.forName(requested).getDeclaredConstructor().newInstance();
+    } catch (ReflectiveOperationException | LinkageError e) {
+      return null;
     }
   }
 }

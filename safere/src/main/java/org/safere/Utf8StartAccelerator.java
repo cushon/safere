@@ -39,7 +39,7 @@ sealed interface Utf8StartAccelerator {
     }
     if (descriptor.multiLiteral() != null
         && !hasWordBoundary
-        && VectorScanProviders.providerForLength(64) != null) {
+        && VectorScanProviders.multiLiteralProviderAvailable()) {
       return new MultiLiteral(descriptor.multiLiteral());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
@@ -254,7 +254,8 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      VectorScanProvider provider = VectorScanProviders.providerForLength(scanner.length());
+      VectorScanProvider provider =
+          VectorScanProviders.providerForMultiLiteralLength(scanner.length());
       if (provider != null) {
         int idx =
             provider.indexOfMultiLiteral(
@@ -280,9 +281,6 @@ sealed interface Utf8StartAccelerator {
       byte[] bytes = scanner.bytes();
       int offset = scanner.offset();
       for (int i = fromIndex; i <= len - minLen; i++) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record();
-        }
         for (String lit : literals) {
           if (i + lit.length() <= len
               && Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
