@@ -20,10 +20,11 @@ record StartDescriptor(
     CharClassScanInfo charClassPrefix,
     StartAcceleration lineAnchor,
     String anchoredPrefix,
-    CharClassScanInfo anchoredCharClassPrefix) {
+    CharClassScanInfo anchoredCharClassPrefix,
+    TeddyModel teddyModel) {
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null);
 
   StartDescriptor(
       String prefix,
@@ -31,13 +32,14 @@ record StartDescriptor(
       FixedOffsetLiteral fixedOffsetLiteral,
       CharClassScanInfo charClassPrefix,
       StartAcceleration lineAnchor) {
-    this(prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, lineAnchor, null, null);
+    this(prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, lineAnchor, null, null, null);
   }
 
   boolean hasStartAcceleration() {
     return prefix != null
         || fixedOffsetLiteral != null
         || charClassPrefix != null
-        || lineAnchor != null;
+        || lineAnchor != null
+        || teddyModel != null;
   }
 }

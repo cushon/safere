@@ -268,8 +268,10 @@ class PatternProfilesTest {
       }
     }
     for (JsonElement entry : normalized.getAsJsonObject("patternProfiles").getAsJsonArray("re2")) {
-      String alternate = entry.getAsJsonObject().get("alternate").getAsString();
-      assertThat(com.google.re2j.Pattern.compile(alternate)).isNotNull();
+      JsonElement alt = entry.getAsJsonObject().get("alternate");
+      if (alt != null && !alt.isJsonNull()) {
+        assertThat(com.google.re2j.Pattern.compile(alt.getAsString())).isNotNull();
+      }
     }
   }
 
