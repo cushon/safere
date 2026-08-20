@@ -34,7 +34,7 @@ sealed interface Utf8StartAccelerator {
     }
     if (descriptor.multiLiteral() != null
         && !hasWordBoundary
-        && VectorScanProviders.providerForLength(64) != null) {
+        && VectorScanProviders.multiLiteralProviderAvailable()) {
       return new MultiLiteral(descriptor.multiLiteral());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
@@ -215,21 +215,23 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      VectorScanProvider provider = VectorScanProviders.providerForLength(scanner.length);
-      if (provider != null) {
-        int idx =
-            provider.indexOfMultiLiteral(
-                scanner.bytes,
-                scanner.offset,
-                scanner.length,
-                info.literals(),
-                info.anchorChars(),
-                info.anchorOffsets(),
-                info.minLength(),
-                fromIndex);
-        if (idx != VectorScanProvider.UNSUPPORTED) {
-          return idx;
-        }
+      VectorScanProvider provider =
+          VectorScanProviders.providerForMultiLiteralLength(scanner.length);
+      if (provider == null) {
+        return fromIndex;
+      }
+      int idx =
+          provider.indexOfMultiLiteral(
+              scanner.bytes,
+              scanner.offset,
+              scanner.length,
+              info.literals(),
+              info.anchorChars(),
+              info.anchorOffsets(),
+              info.minLength(),
+              fromIndex);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
       }
       return findScalar(scanner, fromIndex);
     }
