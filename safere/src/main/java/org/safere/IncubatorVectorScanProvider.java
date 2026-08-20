@@ -48,7 +48,7 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
 
   @Override
   public int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start) {
-    return TeddyVectorScan.indexOfTeddy(bytes, offset, length, model, start);
+    return TeddyVectorScan.indexOfTeddyUtf8(bytes, offset, length, model, start);
   }
 
   @Override

@@ -25,9 +25,9 @@ import java.util.Arrays;
  *       64–128 byte strides without stack spilling.
  *   <li><b>Candidate false-positive density:</b> For 2–4 literals with distinct prefixes, the
  *       probability of false-positive candidate hits remains low (&lt; 5% in natural text),
- *       allowing the scanner to stay on the fast SIMD path &gt; 95% of the time. When literals share
- *       common prefixes or exceed 4 keywords, dedicated multi-pattern algorithms (such as Teddy
- *       with 4-bit nibble bucket hashing) are used instead.
+ *       allowing the scanner to stay on the fast SIMD path &gt; 95% of the time. When literals
+ *       share common prefixes or exceed 4 keywords, dedicated multi-pattern algorithms (such as
+ *       Teddy with 4-bit nibble bucket hashing) are used instead.
  * </ul>
  */
 @SuppressWarnings("ArrayRecordComponent")
