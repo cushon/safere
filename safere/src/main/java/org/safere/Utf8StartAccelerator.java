@@ -6,7 +6,6 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 
 /**
@@ -38,39 +37,8 @@ sealed interface Utf8StartAccelerator {
       return new Teddy(descriptor.teddyModel());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      AsciiBitmap bitmap = descriptor.charClassPrefixAscii();
-      int card = bitmap.cardinality();
-      if (card == 2) {
-        int b0 = -1, b1 = -1;
-        for (int i = 0; i < 128; i++) {
-          if (bitmap.containsAscii(i)) {
-            if (b0 == -1) {
-              b0 = i;
-            } else {
-              b1 = i;
-              break;
-            }
-          }
-        }
-        return new AsciiPair((byte) b0, (byte) b1);
-      }
-      if (card == 3) {
-        int b0 = -1, b1 = -1, b2 = -1;
-        for (int i = 0; i < 128; i++) {
-          if (bitmap.containsAscii(i)) {
-            if (b0 == -1) {
-              b0 = i;
-            } else if (b1 == -1) {
-              b1 = i;
-            } else {
-              b2 = i;
-              break;
-            }
-          }
-        }
-        return new AsciiTriple((byte) b0, (byte) b1, (byte) b2);
-      }
-      CharClassScanInfo scanInfo = Pattern.buildAsciiClassScanInfo(bitmap);
+      CharClassScanInfo scanInfo =
+          CharClassScanInfo.fromAsciiBitmap(descriptor.charClassPrefixAscii());
       if (scanInfo != null) {
         return new CharClass(scanInfo);
       }
@@ -99,9 +67,6 @@ sealed interface Utf8StartAccelerator {
       case Literal lit -> lit.findCandidate(scanner, pos);
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
-      case AsciiPair pair -> scanner.indexOfAsciiPair(pair.b0(), pair.b1(), pos, scanner.length());
-      case AsciiTriple triple ->
-          scanner.indexOfAsciiTriple(triple.b0(), triple.b1(), triple.b2(), pos, scanner.length());
       case CharClass cc -> cc.findCandidate(scanner, pos);
       case Teddy t -> t.findCandidate(scanner, pos);
     };
@@ -223,32 +188,6 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  record AsciiPair(byte b0, byte b1) implements Utf8StartAccelerator {
-
-    @Override
-    public AcceleratorPolicy policy() {
-      return AcceleratorPolicy.CHAR_CLASS;
-    }
-
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      return scanner.indexOfAsciiPair(b0, b1, fromIndex, scanner.length());
-    }
-  }
-
-  record AsciiTriple(byte b0, byte b1, byte b2) implements Utf8StartAccelerator {
-
-    @Override
-    public AcceleratorPolicy policy() {
-      return AcceleratorPolicy.CHAR_CLASS;
-    }
-
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      return scanner.indexOfAsciiTriple(b0, b1, b2, fromIndex, scanner.length());
-    }
-  }
-
   record CharClass(CharClassScanInfo scanInfo) implements Utf8StartAccelerator {
 
     @Override
@@ -259,8 +198,21 @@ sealed interface Utf8StartAccelerator {
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (scanInfo != null) {
+        if (scanInfo instanceof CharClassScanInfo.AsciiSmallSet smallSet) {
+          char[] chars = smallSet.chars();
+          if (chars.length == 1) {
+            return scanner.indexOfAscii(chars[0], fromIndex, scanner.length());
+          }
+          if (chars.length == 2) {
+            return scanner.indexOfAsciiPair(chars[0], chars[1], fromIndex, scanner.length());
+          }
+          if (chars.length == 3) {
+            return scanner.indexOfAsciiTriple(
+                chars[0], chars[1], chars[2], fromIndex, scanner.length());
+          }
+        }
         return scanner.indexOfCodePointClass(
-            scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex, scanner.length());
+            scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1(), fromIndex, scanner.length());
       }
       return fromIndex;
     }

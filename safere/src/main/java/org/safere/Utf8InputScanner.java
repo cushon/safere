@@ -723,8 +723,8 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   }
 
   @Override
-  public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
+  public int indexOfCharClass(CharClassScanInfo scanInfo, int start) {
     return indexOfCodePointClass(
-        scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, start, length);
+        scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1(), start, length);
   }
 }

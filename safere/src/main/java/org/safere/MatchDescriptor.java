@@ -6,7 +6,6 @@
 package org.safere;
 
 import org.safere.Pattern.CharClassMatchInfo;
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.KeywordAlternation;
 
 /**

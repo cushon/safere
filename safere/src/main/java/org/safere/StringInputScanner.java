@@ -94,11 +94,11 @@ final class StringInputScanner implements InputScanner {
   }
 
   @Override
-  public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
+  public int indexOfCharClass(CharClassScanInfo scanInfo, int start) {
     int position = Math.max(0, start);
-    int[] ranges = scanInfo.ranges;
-    long bitmap0 = scanInfo.bitmap0;
-    long bitmap1 = scanInfo.bitmap1;
+    int[] ranges = scanInfo.ranges();
+    long bitmap0 = scanInfo.bitmap0();
+    long bitmap1 = scanInfo.bitmap1();
     while (position < text.length()) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();

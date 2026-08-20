@@ -97,7 +97,9 @@ class StartAcceleratorTest {
     assertThat(strAcc.findCandidate("xxxa", 0, false)).isEqualTo(3);
 
     Utf8StartAccelerator utf8PairAcc = Utf8StartAccelerator.create(descPair, false);
-    assertThat(utf8PairAcc).isInstanceOf(Utf8StartAccelerator.AsciiPair.class);
+    assertThat(utf8PairAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    assertThat(((Utf8StartAccelerator.CharClass) utf8PairAcc).scanInfo())
+        .isInstanceOf(CharClassScanInfo.AsciiSmallSet.class);
     assertThat(utf8PairAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
     assertThat(utf8PairAcc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
 
