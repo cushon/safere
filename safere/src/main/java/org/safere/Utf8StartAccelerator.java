@@ -67,10 +67,6 @@ sealed interface Utf8StartAccelerator {
       case Literal lit -> lit.findCandidate(scanner, pos);
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
-=======
-      case AsciiPair pair -> pair.findCandidate(scanner, pos);
-      case AsciiTriple triple -> triple.findCandidate(scanner, pos);
->>>>>>> 71b16554 (Use a dedicated pair and triple vector cutoff)
       case CharClass cc -> cc.findCandidate(scanner, pos);
       case Teddy t -> t.findCandidate(scanner, pos);
     };
@@ -192,7 +188,6 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-<<<<<<< HEAD
   record CharClass(CharClassScanInfo scanInfo) implements Utf8StartAccelerator {
 
     @Override
