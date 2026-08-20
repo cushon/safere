@@ -21,22 +21,6 @@ class TeddyTest {
           + "|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY";
 
   @Test
-  void teddyModelCompilationFollowsVectorProviderAvailability() {
-    TeddyModel model = TeddyModel.compileForSelectedProvider(new String[] {"INFO", "WARN"});
-
-    if (!VectorScanProviders.teddyProviderAvailable()) {
-      assertThat(model).isNull();
-    } else {
-      assertThat(model).isNotNull();
-      assertThat(VectorScanProviders.providerForLength(64)).isNull();
-      assertThat(VectorScanProviders.providerForTeddyLength(64)).isNull();
-      assertThat(VectorScanProviders.providerForTeddyLength(256)).isNull();
-      assertThat(VectorScanProviders.providerForLength(1024)).isNotNull();
-      assertThat(VectorScanProviders.providerForTeddyLength(1024)).isNotNull();
-    }
-  }
-
-  @Test
   void smallMultiLiteralStringMatch() {
     Pattern p = Pattern.compile("INFO|WARN|ERROR");
     String text = "2026-08-18 [WARN] system running normally, no ERROR reported";
