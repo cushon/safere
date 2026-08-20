@@ -23,13 +23,16 @@ sealed interface StringStartAccelerator {
       return null;
     }
     if (descriptor.prefix() != null) {
-      return new Literal(descriptor.prefix(), descriptor.prefixFoldCase());
+      if (descriptor.prefixFoldCase()) {
+        return CaseInsensitiveLiteral.create(descriptor.prefix());
+      }
+      return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      return new CharClass(descriptor.charClassPrefixAscii());
+      return CharClass.create(descriptor.charClassPrefixAscii());
     }
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {
       return new LineAnchor(descriptor.lineAnchor());
@@ -56,6 +59,7 @@ sealed interface StringStartAccelerator {
       StringStartAccelerator accelerator, String text, int fromIndex, boolean unixLines) {
     return switch (accelerator) {
       case Literal lit -> lit.findCandidate(text, fromIndex, unixLines);
+      case CaseInsensitiveLiteral cil -> cil.findCandidate(text, fromIndex, unixLines);
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
@@ -67,37 +71,10 @@ sealed interface StringStartAccelerator {
     return AcceleratorPolicy.DEFAULT;
   }
 
-  final class Literal implements StringStartAccelerator {
-    private final String prefix;
-    private final boolean prefixFoldCase;
-    private final int[] failure;
-    private final int anchorOffset;
-    private final char anchorLow;
-    private final char anchorHigh;
+  record Literal(String prefix) implements StringStartAccelerator {
 
-    Literal(String prefix, boolean prefixFoldCase) {
-      this.prefix = prefix;
-      this.prefixFoldCase = prefixFoldCase;
-      if (prefixFoldCase && prefix != null && !prefix.isEmpty()) {
-        this.failure = Ascii.ignoreCaseFailure(prefix);
-        this.anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
-        char anchor = prefix.charAt(anchorOffset);
-        this.anchorLow = Ascii.toLowerCase(anchor);
-        this.anchorHigh = Ascii.toUpperCase(anchor);
-      } else {
-        this.failure = null;
-        this.anchorOffset = 0;
-        this.anchorLow = 0;
-        this.anchorHigh = 0;
-      }
-    }
-
-    public String prefix() {
-      return prefix;
-    }
-
-    public boolean prefixFoldCase() {
-      return prefixFoldCase;
+    static Literal create(String prefix) {
+      return new Literal(prefix);
     }
 
     @Override
@@ -107,10 +84,6 @@ sealed interface StringStartAccelerator {
 
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
-      if (prefixFoldCase) {
-        return Matcher.indexOfIgnoreCase(
-            text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
-      }
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record(Math.max(0, text.length() - fromIndex));
       }
@@ -118,22 +91,37 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class FixedOffset implements StringStartAccelerator {
-    private final FixedOffsetLiteral fixedOffset;
-    private final AsciiBitmap firstAscii;
+  @SuppressWarnings("ArrayRecordComponent")
+  record CaseInsensitiveLiteral(
+      String prefix, int[] failure, int anchorOffset, char anchorLow, char anchorHigh)
+      implements StringStartAccelerator {
 
-    FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap firstAscii) {
-      this.fixedOffset = fixedOffset;
-      this.firstAscii = firstAscii;
+    static CaseInsensitiveLiteral create(String prefix) {
+      if (prefix == null || prefix.isEmpty()) {
+        return new CaseInsensitiveLiteral(prefix, null, 0, '\0', '\0');
+      }
+      int[] failure = Ascii.ignoreCaseFailure(prefix);
+      int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
+      char anchor = prefix.charAt(anchorOffset);
+      char anchorLow = Ascii.toLowerCase(anchor);
+      char anchorHigh = Ascii.toUpperCase(anchor);
+      return new CaseInsensitiveLiteral(prefix, failure, anchorOffset, anchorLow, anchorHigh);
     }
 
-    public FixedOffsetLiteral fixedOffset() {
-      return fixedOffset;
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
-    public AsciiBitmap firstAscii() {
-      return firstAscii;
+    @Override
+    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+      return Matcher.indexOfIgnoreCase(
+          text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }
+  }
+
+  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap firstAscii)
+      implements StringStartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
@@ -209,17 +197,11 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class CharClass implements StringStartAccelerator {
-    private final AsciiBitmap asciiMap;
-    private final boolean[] asciiTable;
+  @SuppressWarnings("ArrayRecordComponent")
+  record CharClass(AsciiBitmap asciiMap, boolean[] asciiTable) implements StringStartAccelerator {
 
-    CharClass(AsciiBitmap asciiMap) {
-      this.asciiMap = asciiMap;
-      this.asciiTable = asciiMap.toBooleanArray();
-    }
-
-    public AsciiBitmap asciiMap() {
-      return asciiMap;
+    static CharClass create(AsciiBitmap asciiMap) {
+      return new CharClass(asciiMap, asciiMap.toBooleanArray());
     }
 
     @Override
@@ -246,16 +228,7 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class LineAnchor implements StringStartAccelerator {
-    private final StartAcceleration startAcceleration;
-
-    LineAnchor(StartAcceleration startAcceleration) {
-      this.startAcceleration = startAcceleration;
-    }
-
-    public StartAcceleration startAcceleration() {
-      return startAcceleration;
-    }
+  record LineAnchor(StartAcceleration startAcceleration) implements StringStartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
