@@ -11,6 +11,8 @@ interface VectorScanProvider {
 
   int minimumInputLength();
 
+  int minimumTeddyInputLength();
+
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 
@@ -26,4 +28,7 @@ interface VectorScanProvider {
       int start) {
     return UNSUPPORTED;
   }
+
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start);
 }

@@ -491,11 +491,16 @@ public final class Pattern implements Serializable {
         altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 4
             ? MultiLiteralInfo.create(altLiterals)
             : null;
+    TeddyModel teddyModel = null;
+    if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
+      teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
+    }
     StartAcceleration startAcceleration =
         (prefix == null
                 && ccPrefixAscii == null
                 && fixedOffsetLiteral == null
-                && multiLiteral == null)
+                && multiLiteral == null
+                && teddyModel == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
@@ -514,7 +519,8 @@ public final class Pattern implements Serializable {
         && multiLiteral == null
         && startAcceleration == null
         && anchoredPrefix == null
-        && anchoredCharClassPrefixAscii == null) {
+        && anchoredCharClassPrefixAscii == null
+        && teddyModel == null) {
       return StartDescriptor.NONE;
     }
     return new StartDescriptor(
@@ -525,7 +531,8 @@ public final class Pattern implements Serializable {
         startAcceleration,
         anchoredPrefix,
         anchoredCharClassPrefixAscii,
-        multiLiteral);
+        multiLiteral,
+        teddyModel);
   }
 
   /**
@@ -2285,7 +2292,7 @@ public final class Pattern implements Serializable {
   /** Finds the longest case-sensitive ASCII literal after a bounded-width match prefix. */
   private static FixedOffsetLiteral extractFixedOffsetLiteral(Regexp re) {
     Regexp node = unwrapCaptures(re);
-    if (node.op != RegexpOp.CONCAT || node.subs == null) {
+    if (node == null || node.op != RegexpOp.CONCAT || node.subs == null) {
       return null;
     }
     FixedOffsetLiteral best = null;
