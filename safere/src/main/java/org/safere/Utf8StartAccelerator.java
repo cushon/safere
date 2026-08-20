@@ -197,24 +197,31 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      if (scanInfo != null) {
-        if (scanInfo instanceof CharClassScanInfo.AsciiSmallSet smallSet) {
-          char[] chars = smallSet.chars();
-          if (chars.length == 1) {
-            return scanner.indexOfAscii(chars[0], fromIndex, scanner.length());
-          }
-          if (chars.length == 2) {
-            return scanner.indexOfAsciiPair(chars[0], chars[1], fromIndex, scanner.length());
-          }
-          if (chars.length == 3) {
-            return scanner.indexOfAsciiTriple(
-                chars[0], chars[1], chars[2], fromIndex, scanner.length());
-          }
-        }
-        return scanner.indexOfCodePointClass(
-            scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1(), fromIndex, scanner.length());
+      if (scanInfo == null) {
+        return fromIndex;
       }
-      return fromIndex;
+      return switch (scanInfo) {
+        case CharClassScanInfo.AsciiSmallSet smallSet -> {
+          char[] chars = smallSet.chars();
+          yield switch (chars.length) {
+            case 1 -> scanner.indexOfAscii(chars[0], fromIndex, scanner.length());
+            case 2 -> scanner.indexOfAsciiPair(chars[0], chars[1], fromIndex, scanner.length());
+            case 3 ->
+                scanner.indexOfAsciiTriple(
+                    chars[0], chars[1], chars[2], fromIndex, scanner.length());
+            default ->
+                scanner.indexOfCodePointClass(
+                    smallSet.ranges(),
+                    smallSet.bitmap0(),
+                    smallSet.bitmap1(),
+                    fromIndex,
+                    scanner.length());
+          };
+        }
+        case CharClassScanInfo other ->
+            scanner.indexOfCodePointClass(
+                other.ranges(), other.bitmap0(), other.bitmap1(), fromIndex, scanner.length());
+      };
     }
   }
 
