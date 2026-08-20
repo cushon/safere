@@ -7,30 +7,48 @@ package org.safere;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 @DisabledForCrosscheck("implementation test uses package-private Vector API internals")
 class VectorSpeciesSimulationTest {
 
-  private static final Object[] BYTE_SPECIES = getSpeciesList("jdk.incubator.vector.ByteVector");
-  private static final Object[] SHORT_SPECIES = getSpeciesList("jdk.incubator.vector.ShortVector");
-  private static final Method BYTE_INDEX_OF_ASCII_CLASS = resolveByteIndexOfAsciiClass();
-  private static final Method BYTE_INDEX_OF_IGNORE_CASE = resolveByteIndexOfIgnoreCase();
-  private static final Method SHORT_INDEX_OF_CHAR_CLASS = resolveShortIndexOfCharClass();
+  private static final boolean VECTOR_AVAILABLE = isVectorApiAvailable();
+  private static final List<SpeciesHandle> BYTE_SPECIES =
+      VECTOR_AVAILABLE ? getSpeciesList("jdk.incubator.vector.ByteVector") : List.of();
+  private static final List<SpeciesHandle> SHORT_SPECIES =
+      VECTOR_AVAILABLE ? getSpeciesList("jdk.incubator.vector.ShortVector") : List.of();
+  private static final Method BYTE_INDEX_OF_ASCII_CLASS =
+      VECTOR_AVAILABLE ? resolveByteIndexOfAsciiClass() : null;
+  private static final Method BYTE_INDEX_OF_IGNORE_CASE =
+      VECTOR_AVAILABLE ? resolveByteIndexOfIgnoreCase() : null;
+  private static final Method SHORT_INDEX_OF_CHAR_CLASS =
+      VECTOR_AVAILABLE ? resolveShortIndexOfCharClass() : null;
 
-  private static Object[] getSpeciesList(String vectorClassName) {
+  private record SpeciesHandle(Object value) {}
+
+  private static boolean isVectorApiAvailable() {
+    try {
+      Class.forName("jdk.incubator.vector.ByteVector");
+      return true;
+    } catch (ClassNotFoundException e) {
+      return false;
+    }
+  }
+
+  private static List<SpeciesHandle> getSpeciesList(String vectorClassName) {
     try {
       Class<?> vectorClass = Class.forName(vectorClassName);
-      return new Object[] {
-        vectorClass.getField("SPECIES_64").get(null),
-        vectorClass.getField("SPECIES_128").get(null),
-        vectorClass.getField("SPECIES_256").get(null),
-        vectorClass.getField("SPECIES_512").get(null)
-      };
-    } catch (Throwable t) {
-      return new Object[0];
+      return List.of(
+          new SpeciesHandle(vectorClass.getField("SPECIES_64").get(null)),
+          new SpeciesHandle(vectorClass.getField("SPECIES_128").get(null)),
+          new SpeciesHandle(vectorClass.getField("SPECIES_256").get(null)),
+          new SpeciesHandle(vectorClass.getField("SPECIES_512").get(null)));
+    } catch (ReflectiveOperationException | LinkageError e) {
+      throw new ExceptionInInitializerError(e);
     }
   }
 
@@ -48,8 +66,8 @@ class VectorSpeciesSimulationTest {
               int.class);
       m.setAccessible(true);
       return m;
-    } catch (Throwable t) {
-      return null;
+    } catch (ReflectiveOperationException | LinkageError e) {
+      throw new ExceptionInInitializerError(e);
     }
   }
 
@@ -71,8 +89,8 @@ class VectorSpeciesSimulationTest {
               int.class);
       m.setAccessible(true);
       return m;
-    } catch (Throwable t) {
-      return null;
+    } catch (ReflectiveOperationException | LinkageError e) {
+      throw new ExceptionInInitializerError(e);
     }
   }
 
@@ -90,23 +108,24 @@ class VectorSpeciesSimulationTest {
               int.class);
       m.setAccessible(true);
       return m;
-    } catch (Throwable t) {
-      return null;
+    } catch (ReflectiveOperationException | LinkageError e) {
+      throw new ExceptionInInitializerError(e);
     }
   }
 
   private static int invokeByteIndexOfAsciiClass(
-      Object species, byte[] bytes, int offset, int length, int[] ranges, int start) {
+      SpeciesHandle species, byte[] bytes, int offset, int length, int[] ranges, int start) {
     try {
       return (int)
-          BYTE_INDEX_OF_ASCII_CLASS.invoke(null, species, bytes, offset, length, ranges, start);
+          BYTE_INDEX_OF_ASCII_CLASS.invoke(
+              null, species.value(), bytes, offset, length, ranges, start);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
   private static int invokeByteIndexOfIgnoreCase(
-      Object species,
+      SpeciesHandle species,
       byte[] bytes,
       int offset,
       int length,
@@ -120,7 +139,7 @@ class VectorSpeciesSimulationTest {
       return (int)
           BYTE_INDEX_OF_IGNORE_CASE.invoke(
               null,
-              species,
+              species.value(),
               bytes,
               offset,
               length,
@@ -136,10 +155,11 @@ class VectorSpeciesSimulationTest {
   }
 
   private static int invokeShortIndexOfCharClass(
-      Object species, char[] chars, int offset, int length, int[] ranges, int start) {
+      SpeciesHandle species, char[] chars, int offset, int length, int[] ranges, int start) {
     try {
       return (int)
-          SHORT_INDEX_OF_CHAR_CLASS.invoke(null, species, chars, offset, length, ranges, start);
+          SHORT_INDEX_OF_CHAR_CLASS.invoke(
+              null, species.value(), chars, offset, length, ranges, start);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -147,11 +167,9 @@ class VectorSpeciesSimulationTest {
 
   @Test
   void asciiClassMatchingAcrossAllByteVectorSpecies() {
-    if (BYTE_SPECIES.length == 0 || BYTE_INDEX_OF_ASCII_CLASS == null) {
-      return;
-    }
+    assumeTrue(VECTOR_AVAILABLE, "Vector API not available on module path");
     int[] ranges = {'0', '9', 'a', 'z'};
-    for (Object species : BYTE_SPECIES) {
+    for (SpeciesHandle species : BYTE_SPECIES) {
       for (int len = 0; len <= 256; len++) {
         byte[] absent = "A".repeat(len).getBytes(UTF_8);
         for (int start = 0; start <= len; start++) {
@@ -189,16 +207,14 @@ class VectorSpeciesSimulationTest {
 
   @Test
   void ignoreCaseMatchingAcrossAllByteVectorSpecies() {
-    if (BYTE_SPECIES.length == 0 || BYTE_INDEX_OF_IGNORE_CASE == null) {
-      return;
-    }
+    assumeTrue(VECTOR_AVAILABLE, "Vector API not available on module path");
     String prefix = "needle";
     int prefixLen = prefix.length();
     int anchorOffset = 0;
     byte low = 'n';
     byte high = 'N';
 
-    for (Object species : BYTE_SPECIES) {
+    for (SpeciesHandle species : BYTE_SPECIES) {
       for (int pad = 0; pad <= 128; pad++) {
         String base = "x".repeat(pad) + "NeEdLe" + "y".repeat(64);
         byte[] bytes = base.getBytes(UTF_8);
@@ -230,11 +246,9 @@ class VectorSpeciesSimulationTest {
 
   @Test
   void charClassMatchingAcrossAllShortVectorSpecies() {
-    if (SHORT_SPECIES.length == 0 || SHORT_INDEX_OF_CHAR_CLASS == null) {
-      return;
-    }
+    assumeTrue(VECTOR_AVAILABLE, "Vector API not available on module path");
     int[] ranges = {'0', '9', 'A', 'Z'};
-    for (Object species : SHORT_SPECIES) {
+    for (SpeciesHandle species : SHORT_SPECIES) {
       for (int len = 0; len <= 128; len++) {
         char[] chars = "a".repeat(len).toCharArray();
         for (int start = 0; start <= len; start++) {
