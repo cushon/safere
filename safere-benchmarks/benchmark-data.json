@@ -737,6 +737,8 @@
       "id": "searchScaling.prose.{size}",
       "axes": {
         "size": [
+          64,
+          256,
           1024,
           10240,
           102400,
@@ -3961,6 +3963,42 @@
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.alternationScaled.64",
+      "operation": "find",
+      "patterns": [
+        "foo|bar|baz|qux|quux|corge|grault|garply"
+      ],
+      "inputs": [
+        "searchScaling.prose.64"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.alternationScaled.256",
+      "operation": "find",
+      "patterns": [
+        "foo|bar|baz|qux|quux|corge|grault|garply"
+      ],
+      "inputs": [
+        "searchScaling.prose.256"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
         ]
