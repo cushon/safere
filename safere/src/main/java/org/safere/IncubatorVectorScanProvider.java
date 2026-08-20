@@ -21,6 +21,11 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   }
 
   @Override
+  public int minimumMultiLiteralInputLength() {
+    return 64;
+  }
+
+  @Override
   public int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
     return ByteVectorScan.indexOfAsciiClass(bytes, offset, length, ranges, start);
   }

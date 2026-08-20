@@ -29,13 +29,12 @@ final class StringVectorScan {
   private static final VectorSpecies<Short> SHORT_SPECIES = ShortVectorScan.SPECIES;
 
   static int indexOfAsciiClass(String text, int[] ranges, int start) {
-    if (StringSupport.hasAccess() && Swar.supportsAsciiRanges(ranges, 4)) {
-      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-        return indexOfLatin1Class(text, ranges, start, text.length());
-      }
-      if (StringSupport.compatibleWith(text, UTF_16)) {
-        return indexOfUtf16Class(text, ranges, start, text.length());
-      }
+    if (StringSupport.isLatin1(text) && Swar.supportsAsciiRanges(ranges, 4)) {
+      return ByteVectorScan.indexOfAsciiClass(
+          StringSupport.value(text), 0, text.length(), ranges, start);
+    }
+    if (StringSupport.isUtf16(text) && Swar.supportsAsciiRanges(ranges, 4)) {
+      return indexOfUtf16Class(text, ranges, start, text.length());
     }
     if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
       return indexOfCharClassChunked(text, ranges, start, text.length());
@@ -48,17 +47,16 @@ final class StringVectorScan {
   }
 
   static int indexOfCharClass(String text, int[] ranges, int start, int limit) {
-    if (StringSupport.hasAccess()) {
-      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-        int[] clamped = clampRangesForLatin1(ranges);
-        if (clamped != null) {
-          return indexOfLatin1Class(text, clamped, start, limit);
-        }
-        return VectorScanProvider.UNSUPPORTED;
+    if (StringSupport.isLatin1(text)) {
+      int[] clamped = clampRangesForLatin1(ranges);
+      if (clamped != null) {
+        return ByteVectorScan.indexOfAsciiClass(
+            StringSupport.value(text), 0, Math.min(limit, text.length()), clamped, start);
       }
-      if (StringSupport.compatibleWith(text, UTF_16)) {
-        return indexOfUtf16Class(text, ranges, start, limit);
-      }
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    if (StringSupport.isUtf16(text)) {
+      return indexOfUtf16Class(text, ranges, start, limit);
     }
     if (limit - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
       return indexOfCharClassChunked(text, ranges, start, limit);
@@ -82,13 +80,11 @@ final class StringVectorScan {
   }
 
   static int indexOfAsciiPair(String text, int c1, int c2, int fromIndex, int limit) {
-    if (StringSupport.hasAccess()) {
-      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-        return indexOfAsciiPairLatin1(text, c1, c2, fromIndex, limit);
-      }
-      if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
-        return indexOfAsciiPairUtf16(text, c1, c2, fromIndex, limit);
-      }
+    if (StringSupport.isLatin1(text)) {
+      return indexOfAsciiPairLatin1(text, c1, c2, fromIndex, limit);
+    }
+    if (StringSupport.isUtf16(text) && nativeOrder() != BIG_ENDIAN) {
+      return indexOfAsciiPairUtf16(text, c1, c2, fromIndex, limit);
     }
     if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
       return indexOfAsciiPairChunked(text, c1, c2, fromIndex, limit);
@@ -97,13 +93,11 @@ final class StringVectorScan {
   }
 
   static int indexOfAsciiTriple(String text, int c1, int c2, int c3, int fromIndex, int limit) {
-    if (StringSupport.hasAccess()) {
-      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-        return indexOfAsciiTripleLatin1(text, c1, c2, c3, fromIndex, limit);
-      }
-      if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
-        return indexOfAsciiTripleUtf16(text, c1, c2, c3, fromIndex, limit);
-      }
+    if (StringSupport.isLatin1(text)) {
+      return indexOfAsciiTripleLatin1(text, c1, c2, c3, fromIndex, limit);
+    }
+    if (StringSupport.isUtf16(text) && nativeOrder() != BIG_ENDIAN) {
+      return indexOfAsciiTripleUtf16(text, c1, c2, c3, fromIndex, limit);
     }
     if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
       return indexOfAsciiTripleChunked(text, c1, c2, c3, fromIndex, limit);
@@ -220,27 +214,6 @@ final class StringVectorScan {
       char c = text.charAt(pos);
       if (c == c1 || c == c2 || c == c3) {
         return pos;
-      }
-    }
-    return -1;
-  }
-
-  private static int indexOfLatin1Class(String text, int[] ranges, int start, int limit) {
-    int scanLimit = Math.min(limit, text.length());
-    int position = Math.max(0, start);
-    int vecLimit = scanLimit - BYTE_SPECIES.length();
-    for (; position <= vecLimit; position += BYTE_SPECIES.length()) {
-      ByteVector values = StringSupport.byteVectorFromString(BYTE_SPECIES, text, position);
-      VectorMask<Byte> matches = ByteVectorScan.matches(values, ranges);
-      if (matches.anyTrue()) {
-        int found = position + matches.firstTrue();
-        return found < scanLimit ? found : -1;
-      }
-    }
-    for (; position < scanLimit; position++) {
-      char c = text.charAt(position);
-      if (c < 256 && ByteVectorScan.matches((byte) c, ranges)) {
-        return position;
       }
     }
     return -1;
@@ -497,84 +470,25 @@ final class StringVectorScan {
     if (text == null || literals == null || literals.length == 0 || text.length() < minLength) {
       return -1;
     }
-    if (StringSupport.hasAccess()) {
-      if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-        return indexOfMultiLiteralLatin1(
-            text, literals, anchorChars, anchorOffsets, minLength, start);
-      }
-      if (StringSupport.compatibleWith(text, UTF_16)) {
-        return indexOfMultiLiteralUtf16(
-            text, literals, anchorChars, anchorOffsets, minLength, start);
-      }
+    if (StringSupport.isLatin1(text)) {
+      return ByteVectorScan.indexOfMultiLiteral(
+          StringSupport.value(text),
+          0,
+          text.length(),
+          literals,
+          anchorChars,
+          anchorOffsets,
+          minLength,
+          start);
+    }
+    if (StringSupport.isUtf16(text)) {
+      return indexOfMultiLiteralUtf16(text, literals, anchorChars, anchorOffsets, minLength, start);
     }
     if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
       return indexOfMultiLiteralChunked(
           text, literals, anchorChars, anchorOffsets, minLength, start);
     }
     return VectorScanProvider.UNSUPPORTED;
-  }
-
-  private static int indexOfMultiLiteralLatin1(
-      String text,
-      String[] literals,
-      char[] anchorChars,
-      int[] anchorOffsets,
-      int minLength,
-      int start) {
-    int numLits = literals.length;
-    int length = text.length();
-    int pos = Math.max(0, start);
-    int vectorLen = BYTE_SPECIES.length();
-    int limit = length - vectorLen;
-
-    ByteVector v0 = ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[0]);
-    ByteVector v1 = numLits >= 2 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[1]) : null;
-    ByteVector v2 = numLits >= 3 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[2]) : null;
-    ByteVector v3 = numLits >= 4 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[3]) : null;
-
-    for (; pos <= limit; pos += vectorLen) {
-      ByteVector inputVec = StringSupport.byteVectorFromString(BYTE_SPECIES, text, pos);
-      VectorMask<Byte> matchMask = inputVec.compare(EQ, v0);
-      if (numLits >= 2) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v1));
-      }
-      if (numLits >= 3) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v2));
-      }
-      if (numLits >= 4) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v3));
-      }
-
-      if (matchMask.anyTrue()) {
-        long activeLanes = matchMask.toLong();
-        while (activeLanes != 0) {
-          int bit = Long.numberOfTrailingZeros(activeLanes);
-          int matchIndex = pos + bit;
-          for (int i = 0; i < numLits; i++) {
-            int candidatePos = matchIndex - anchorOffsets[i];
-            String lit = literals[i];
-            if (candidatePos >= start
-                && candidatePos + lit.length() <= length
-                && text.charAt(matchIndex) == anchorChars[i]
-                && text.startsWith(lit, candidatePos)) {
-              return candidatePos;
-            }
-          }
-          activeLanes &= activeLanes - 1;
-        }
-      }
-    }
-
-    int scalarLimit = length - minLength;
-    for (; pos <= scalarLimit; pos++) {
-      for (int i = 0; i < numLits; i++) {
-        String lit = literals[i];
-        if (pos + lit.length() <= length && text.startsWith(lit, pos)) {
-          return pos;
-        }
-      }
-    }
-    return -1;
   }
 
   private static int indexOfMultiLiteralUtf16(
@@ -653,10 +567,11 @@ final class StringVectorScan {
     if (!StringSupport.hasAccess()) {
       return VectorScanProvider.UNSUPPORTED;
     }
-    if (StringSupport.compatibleWith(text, ISO_8859_1)) {
-      return TeddyVectorScan.indexOfTeddyLatin1(text, model, start);
+    if (StringSupport.isLatin1(text)) {
+      return TeddyVectorScan.indexOfTeddyUtf8(
+          StringSupport.value(text), 0, text.length(), model, start);
     }
-    if (StringSupport.compatibleWith(text, UTF_16) && nativeOrder() != BIG_ENDIAN) {
+    if (StringSupport.isUtf16(text) && nativeOrder() != BIG_ENDIAN) {
       return TeddyVectorScan.indexOfTeddyUtf16(text, model, start);
     }
     return VectorScanProvider.UNSUPPORTED;

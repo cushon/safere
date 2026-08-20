@@ -206,6 +206,8 @@ final class ByteVectorScan {
       return -1;
     }
     int pos = Math.max(0, start);
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
     int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
 
@@ -237,9 +239,14 @@ final class ByteVectorScan {
             String lit = literals[i];
             if (candidatePos >= start
                 && candidatePos + lit.length() <= length
-                && (bytes[offset + matchIndex] & 0xFF) == (anchorChars[i] & 0xFF)
-                && Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
-              return candidatePos;
+                && (bytes[offset + matchIndex] & 0xFF) == (anchorChars[i] & 0xFF)) {
+              if (Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
+                return candidatePos;
+              }
+              verificationWork += lit.length();
+              if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+                return VectorScanProvider.UNSUPPORTED;
+              }
             }
           }
           activeLanes &= activeLanes - 1;
@@ -255,6 +262,10 @@ final class ByteVectorScan {
             && Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
           return pos;
         }
+      }
+      verificationWork += minLength;
+      if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+        return VectorScanProvider.UNSUPPORTED;
       }
     }
     return -1;

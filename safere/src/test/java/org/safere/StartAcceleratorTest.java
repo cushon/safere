@@ -47,7 +47,7 @@ class StartAcceleratorTest {
     assertThat(desc.hasStartAcceleration()).isTrue();
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
-    assertThat(strAcc).isInstanceOf(StringStartAccelerator.Literal.class);
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.CaseInsensitiveLiteral.class);
     assertThat(strAcc.findCandidate("haystack with NEEDLE here", 0, false)).isEqualTo(14);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);

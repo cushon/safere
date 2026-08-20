@@ -20,7 +20,7 @@ import jdk.incubator.vector.VectorSpecies;
 
 /**
  * Access gateway to inspect internal backing storage of a {@link String} when {@code java.base} is
- * open, providing vector loading helpers for String.
+ * open, providing zero-copy vector access for String.
  */
 final class StringSupport {
   private static final VarHandle VALUE_HANDLE;
@@ -53,6 +53,14 @@ final class StringSupport {
     return HAS_ACCESS && !Boolean.getBoolean("org.safere.experimental.forceStringChunking");
   }
 
+  public static boolean isLatin1(String str) {
+    return hasAccess() && coder(str) == 0;
+  }
+
+  public static boolean isUtf16(String str) {
+    return hasAccess() && coder(str) == 1;
+  }
+
   public static boolean compatibleWith(String str, Charset charset) {
     if (!HAS_ACCESS) {
       return false;
@@ -77,7 +85,7 @@ final class StringSupport {
         .reinterpretAsShorts();
   }
 
-  private static byte[] value(String str) {
+  static byte[] value(String str) {
     if (!HAS_ACCESS) {
       throw new UnsupportedOperationException(
           "String internal array access not available; open java.base/java.lang to "
@@ -86,7 +94,7 @@ final class StringSupport {
     return (byte[]) VALUE_HANDLE.get(str);
   }
 
-  private static byte coder(String str) {
+  static byte coder(String str) {
     if (!HAS_ACCESS) {
       throw new UnsupportedOperationException(
           "String internal array access not available; open java.base/java.lang to "

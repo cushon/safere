@@ -13,6 +13,10 @@ interface VectorScanProvider {
 
   int minimumTeddyInputLength();
 
+  default int minimumMultiLiteralInputLength() {
+    return 64;
+  }
+
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 

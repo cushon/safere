@@ -24,6 +24,16 @@ final class VectorScanProviders {
     return SELECTED != null;
   }
 
+  static boolean multiLiteralProviderAvailable() {
+    return SELECTED != null;
+  }
+
+  static VectorScanProvider providerForMultiLiteralLength(int length) {
+    return SELECTED != null && length >= SELECTED.minimumMultiLiteralInputLength()
+        ? SELECTED
+        : null;
+  }
+
   private static VectorScanProvider loadSelected() {
     String requested = System.getProperty(PROVIDER_PROPERTY, "").trim();
     if (requested.isEmpty() || requested.equals("swar")) {

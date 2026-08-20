@@ -9,22 +9,25 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * Metadata for small multi-literal alternation acceleration (2 &le; N &le; 4) using
- * rarest-character multi-vector SIMD matching.
+ * Metadata for small multi-literal alternation acceleration (2 &le; N &le; 4) using multi-vector
+ * SIMD matching on distinct initial prefix characters.
  *
- * <p>The upper bound of 4 literals is chosen based on empirical vector performance and hardware
- * constraints:
+ * <p>All literals anchor on their first character (offset 0) to strictly preserve leftmost-first
+ * matching semantics during left-to-right vector scanning.
+ *
+ * <p>The upper bound of 4 literals and requirement for distinct prefix characters is chosen based
+ * on empirical vector performance and hardware constraints:
  *
  * <ul>
  *   <li><b>Register allocation &amp; unrolling:</b> AVX2 provides 16 YMM vector registers. 2–4
  *       literals require 2–4 broadcast registers plus input and comparison masks (6 registers
  *       total), leaving 10+ free YMM registers for HotSpot C2 to unroll the vector loop across
  *       64–128 byte strides without stack spilling.
- *   <li><b>Candidate false-positive density:</b> For 2–4 literals, the probability of
- *       false-positive candidate hits remains low (&lt; 5% in natural text), allowing the scanner
- *       to stay on the fast SIMD path &gt; 95% of the time and delivering 4x–11x speedups. Beyond 4
- *       literals, candidate density increases and dedicated multi-pattern algorithms (such as Teddy
- *       with 4-bit nibble bucket hashing) are more efficient.
+ *   <li><b>Candidate false-positive density:</b> For 2–4 literals with distinct prefixes, the
+ *       probability of false-positive candidate hits remains low (&lt; 5% in natural text),
+ *       allowing the scanner to stay on the fast SIMD path &gt; 95% of the time. When literals
+ *       share common prefixes or exceed 4 keywords, dedicated multi-pattern algorithms (such as
+ *       Teddy with 4-bit nibble bucket hashing) are used instead.
  * </ul>
  */
 @SuppressWarnings("ArrayRecordComponent")
@@ -38,6 +41,8 @@ record MultiLiteralInfo(String[] literals, char[] anchorChars, int[] anchorOffse
     int minLen = Integer.MAX_VALUE;
     char[] anchorChars = new char[literals.length];
     int[] anchorOffsets = new int[literals.length];
+    long seen0 = 0L;
+    long seen1 = 0L;
 
     for (int i = 0; i < literals.length; i++) {
       String lit = literals[i];
@@ -49,8 +54,21 @@ record MultiLiteralInfo(String[] literals, char[] anchorChars, int[] anchorOffse
           return null;
         }
       }
+      char firstChar = lit.charAt(0);
+      long bit = 1L << (firstChar & 63);
+      if (firstChar < 64) {
+        if ((seen0 & bit) != 0) {
+          return null; // Duplicate anchor character; defer to Teddy
+        }
+        seen0 |= bit;
+      } else {
+        if ((seen1 & bit) != 0) {
+          return null; // Duplicate anchor character; defer to Teddy
+        }
+        seen1 |= bit;
+      }
       anchorOffsets[i] = 0;
-      anchorChars[i] = lit.charAt(0);
+      anchorChars[i] = firstChar;
       minLen = Math.min(minLen, lit.length());
     }
 

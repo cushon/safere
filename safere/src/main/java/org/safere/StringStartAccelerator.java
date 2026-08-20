@@ -23,7 +23,10 @@ sealed interface StringStartAccelerator {
       return null;
     }
     if (descriptor.prefix() != null) {
-      return new Literal(descriptor.prefix(), descriptor.prefixFoldCase());
+      if (descriptor.prefixFoldCase()) {
+        return CaseInsensitiveLiteral.create(descriptor.prefix());
+      }
+      return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
@@ -36,10 +39,10 @@ sealed interface StringStartAccelerator {
     if (descriptor.teddyModel() != null
         && !hasWordBoundary
         && VectorScanProviders.providerForLength(64) != null) {
-      return new Teddy(descriptor.teddyModel(), descriptor.charClassPrefixAscii());
+      return Teddy.create(descriptor.teddyModel(), descriptor.charClassPrefixAscii());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      return new CharClass(descriptor.charClassPrefixAscii());
+      return CharClass.create(descriptor.charClassPrefixAscii());
     }
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {
       return new LineAnchor(descriptor.lineAnchor());
@@ -48,24 +51,14 @@ sealed interface StringStartAccelerator {
   }
 
   /**
-   * Finds the next candidate match start position at or after {@code fromIndex}. Returns negative
-   * if definitely not found.
-   */
-  int findCandidate(String text, int fromIndex, boolean unixLines);
-
-  /**
    * Finds the next candidate match start position at or after {@code fromIndex} using
    * pattern-matched devirtualization.
-   *
-   * <p>Direct sealed-type pattern matching avoids {@code invokeinterface} dispatch overhead on hot
-   * matching loops. HotSpot C2 does not automatically devirtualize megamorphic interface calls with
-   * &ge; 3 implementations across the JVM lifecycle; switching over the sealed subtypes here allows
-   * C2 to inline candidate searches directly into caller loops.
    */
   static int findNextCandidate(
       StringStartAccelerator accelerator, String text, int fromIndex, boolean unixLines) {
     return switch (accelerator) {
       case Literal lit -> lit.findCandidate(text, fromIndex, unixLines);
+      case CaseInsensitiveLiteral cil -> cil.findCandidate(text, fromIndex, unixLines);
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
@@ -74,42 +67,23 @@ sealed interface StringStartAccelerator {
     };
   }
 
+  /**
+   * Finds the next candidate match start position at or after {@code fromIndex}. Returns negative
+   * if definitely not found.
+   */
+  default int findCandidate(String text, int fromIndex, boolean unixLines) {
+    return findNextCandidate(this, text, fromIndex, unixLines);
+  }
+
   /** Returns the tuning and diagnostic policy for this accelerator. */
   default AcceleratorPolicy policy() {
     return AcceleratorPolicy.DEFAULT;
   }
 
-  final class Literal implements StringStartAccelerator {
-    private final String prefix;
-    private final boolean prefixFoldCase;
-    private final int[] failure;
-    private final int anchorOffset;
-    private final char anchorLow;
-    private final char anchorHigh;
+  record Literal(String prefix) implements StringStartAccelerator {
 
-    Literal(String prefix, boolean prefixFoldCase) {
-      this.prefix = prefix;
-      this.prefixFoldCase = prefixFoldCase;
-      if (prefixFoldCase && prefix != null && !prefix.isEmpty()) {
-        this.failure = Ascii.ignoreCaseFailure(prefix);
-        this.anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
-        char anchor = prefix.charAt(anchorOffset);
-        this.anchorLow = Ascii.toLowerCase(anchor);
-        this.anchorHigh = Ascii.toUpperCase(anchor);
-      } else {
-        this.failure = null;
-        this.anchorOffset = 0;
-        this.anchorLow = 0;
-        this.anchorHigh = 0;
-      }
-    }
-
-    public String prefix() {
-      return prefix;
-    }
-
-    public boolean prefixFoldCase() {
-      return prefixFoldCase;
+    static Literal create(String prefix) {
+      return new Literal(prefix);
     }
 
     @Override
@@ -119,17 +93,6 @@ sealed interface StringStartAccelerator {
 
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
-      if (prefixFoldCase) {
-        VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
-        if (provider != null) {
-          int vectorIndex = provider.indexOfIgnoreCase(text, prefix, fromIndex);
-          if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
-            return vectorIndex;
-          }
-        }
-        return Matcher.indexOfIgnoreCase(
-            text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
-      }
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record(Math.max(0, text.length() - fromIndex));
       }
@@ -137,22 +100,37 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class FixedOffset implements StringStartAccelerator {
-    private final FixedOffsetLiteral fixedOffset;
-    private final AsciiBitmap firstAscii;
+  @SuppressWarnings("ArrayRecordComponent")
+  record CaseInsensitiveLiteral(
+      String prefix, int[] failure, int anchorOffset, char anchorLow, char anchorHigh)
+      implements StringStartAccelerator {
 
-    FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap firstAscii) {
-      this.fixedOffset = fixedOffset;
-      this.firstAscii = firstAscii;
+    static CaseInsensitiveLiteral create(String prefix) {
+      if (prefix == null || prefix.isEmpty()) {
+        return new CaseInsensitiveLiteral(prefix, null, 0, '\0', '\0');
+      }
+      int[] failure = Ascii.ignoreCaseFailure(prefix);
+      int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
+      char anchor = prefix.charAt(anchorOffset);
+      char anchorLow = Ascii.toLowerCase(anchor);
+      char anchorHigh = Ascii.toUpperCase(anchor);
+      return new CaseInsensitiveLiteral(prefix, failure, anchorOffset, anchorLow, anchorHigh);
     }
 
-    public FixedOffsetLiteral fixedOffset() {
-      return fixedOffset;
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
     }
 
-    public AsciiBitmap firstAscii() {
-      return firstAscii;
+    @Override
+    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+      return Matcher.indexOfIgnoreCase(
+          text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }
+  }
+
+  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap firstAscii)
+      implements StringStartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
@@ -228,19 +206,11 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class CharClass implements StringStartAccelerator {
-    private final AsciiBitmap asciiMap;
-    private final boolean[] asciiTable;
-    private final int[] ranges;
+  @SuppressWarnings("ArrayRecordComponent")
+  record CharClass(AsciiBitmap asciiMap, boolean[] asciiTable) implements StringStartAccelerator {
 
-    CharClass(AsciiBitmap asciiMap) {
-      this.asciiMap = asciiMap;
-      this.asciiTable = asciiMap.toBooleanArray();
-      this.ranges = asciiMap.toRanges();
-    }
-
-    public AsciiBitmap asciiMap() {
-      return asciiMap;
+    static CharClass create(AsciiBitmap asciiMap) {
+      return new CharClass(asciiMap, asciiMap.toBooleanArray());
     }
 
     @Override
@@ -250,13 +220,6 @@ sealed interface StringStartAccelerator {
 
     @Override
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
-      VectorScanProvider provider = VectorScanProviders.providerForLength(text.length());
-      if (provider != null) {
-        int idx = provider.indexOfAsciiClass(text, ranges, fromIndex);
-        if (idx != VectorScanProvider.UNSUPPORTED) {
-          return idx;
-        }
-      }
       return indexOfCharClass(text, asciiTable, fromIndex);
     }
 
@@ -274,16 +237,7 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class LineAnchor implements StringStartAccelerator {
-    private final StartAcceleration startAcceleration;
-
-    LineAnchor(StartAcceleration startAcceleration) {
-      this.startAcceleration = startAcceleration;
-    }
-
-    public StartAcceleration startAcceleration() {
-      return startAcceleration;
-    }
+  record LineAnchor(StartAcceleration startAcceleration) implements StringStartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
@@ -348,17 +302,7 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class MultiLiteral implements StringStartAccelerator {
-    private final MultiLiteralInfo info;
-
-    MultiLiteral(MultiLiteralInfo info) {
-      this.info = info;
-    }
-
-    public MultiLiteralInfo info() {
-      return info;
-    }
-
+  record MultiLiteral(MultiLiteralInfo info) implements StringStartAccelerator {
     @Override
     public AcceleratorPolicy policy() {
       return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
@@ -401,23 +345,13 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class Teddy implements StringStartAccelerator {
-    private final TeddyModel model;
-    private final AsciiBitmap ccPrefixAscii;
-    private final boolean[] asciiTable;
+  @SuppressWarnings("ArrayRecordComponent")
+  record Teddy(TeddyModel model, AsciiBitmap ccPrefixAscii, boolean[] asciiTable)
+      implements StringStartAccelerator {
 
-    Teddy(TeddyModel model, AsciiBitmap ccPrefixAscii) {
-      this.model = model;
-      this.ccPrefixAscii = ccPrefixAscii;
-      this.asciiTable = ccPrefixAscii != null ? ccPrefixAscii.toBooleanArray() : null;
-    }
-
-    public TeddyModel model() {
-      return model;
-    }
-
-    public AsciiBitmap ccPrefixAscii() {
-      return ccPrefixAscii;
+    static Teddy create(TeddyModel model, AsciiBitmap ccPrefixAscii) {
+      return new Teddy(
+          model, ccPrefixAscii, ccPrefixAscii != null ? ccPrefixAscii.toBooleanArray() : null);
     }
 
     @Override
