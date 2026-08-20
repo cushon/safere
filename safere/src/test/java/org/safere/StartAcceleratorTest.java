@@ -196,8 +196,54 @@ class StartAcceleratorTest {
     assertThat(unacceleratedPat.utf8StartAccelerator()).isNull();
   }
 
+  @Test
+  void multiLiteralWithSharedPrefixReturnsNullAndFallsBackToTeddyOrNone() {
+    MultiLiteralInfo info = MultiLiteralInfo.create(new String[] {"cat", "car"});
+    assertThat(info).as("MultiLiteralInfo must reject colliding initial anchor chars").isNull();
+
+    MultiLiteralInfo distinctInfo = MultiLiteralInfo.create(new String[] {"cat", "dog", "fox"});
+    assertThat(distinctInfo).isNotNull();
+    assertThat(distinctInfo.literals()).containsExactly("cat", "dog", "fox");
+  }
+
+  @Test
+  void multiLiteralScanReturnsUnsupportedWhenWorkLimitExhaustedOnNoise() {
+    if (!isVectorApiAvailable()) {
+      return;
+    }
+    String[] literals = new String[] {"APPLE", "BANANA", "CHERRY"};
+    MultiLiteralInfo info = MultiLiteralInfo.create(literals);
+    assertThat(info).isNotNull();
+
+    byte[] denseNoise = "A B C A B C ".repeat(1000).getBytes(UTF_8);
+
+    int result =
+        ByteVectorScan.indexOfMultiLiteral(
+            denseNoise,
+            0,
+            denseNoise.length,
+            info.literals(),
+            info.anchorChars(),
+            info.anchorOffsets(),
+            info.minLength(),
+            0);
+
+    assertThat(result)
+        .as("Dense candidate false positives must exhaust WorkLimit and return UNSUPPORTED")
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+  }
+
   private static Utf8InputScanner utf8Scanner(String text) {
     byte[] bytes = text.getBytes(UTF_8);
     return new Utf8InputScanner(bytes, 0, bytes.length);
+  }
+
+  private static boolean isVectorApiAvailable() {
+    try {
+      Class.forName("jdk.incubator.vector.ByteVector");
+      return true;
+    } catch (ClassNotFoundException | LinkageError e) {
+      return false;
+    }
   }
 }
