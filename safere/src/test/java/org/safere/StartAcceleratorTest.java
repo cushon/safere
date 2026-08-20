@@ -154,6 +154,40 @@ class StartAcceleratorTest {
     }
   }
 
+  @Test
+  void compiledPatternPoliciesMatchExpectedAccelerators() {
+    Pattern literalPat = Pattern.compile("abc");
+    assertThat(literalPat.stringStartAccelerator()).isNotNull();
+    assertThat(literalPat.utf8StartAccelerator()).isNotNull();
+    assertThat(literalPat.stringStartAccelerator().policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+    assertThat(literalPat.utf8StartAccelerator().policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+
+    Pattern caseInsensitivePat = Pattern.compile("(?i)abc");
+    assertThat(caseInsensitivePat.stringStartAccelerator()).isNotNull();
+    assertThat(caseInsensitivePat.utf8StartAccelerator()).isNotNull();
+    assertThat(caseInsensitivePat.utf8StartAccelerator().policy().strategy())
+        .isEqualTo(MatchStrategy.LITERAL);
+
+    Pattern charClassPat = Pattern.compile("[0-9][a-z]+");
+    assertThat(charClassPat.stringStartAccelerator()).isNotNull();
+    assertThat(charClassPat.utf8StartAccelerator()).isNotNull();
+    assertThat(charClassPat.stringStartAccelerator().policy())
+        .isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(charClassPat.utf8StartAccelerator().policy())
+        .isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+
+    Pattern fixedOffsetPat = Pattern.compile("..needle");
+    assertThat(fixedOffsetPat.stringStartAccelerator()).isNotNull();
+    assertThat(fixedOffsetPat.utf8StartAccelerator()).isNotNull();
+    assertThat(fixedOffsetPat.stringStartAccelerator().policy())
+        .isEqualTo(AcceleratorPolicy.LITERAL);
+    assertThat(fixedOffsetPat.utf8StartAccelerator().policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+
+    Pattern unacceleratedPat = Pattern.compile(".*");
+    assertThat(unacceleratedPat.stringStartAccelerator()).isNull();
+    assertThat(unacceleratedPat.utf8StartAccelerator()).isNull();
+  }
+
   private static Utf8InputScanner utf8Scanner(String text) {
     byte[] bytes = text.getBytes(UTF_8);
     return new Utf8InputScanner(bytes, 0, bytes.length);
