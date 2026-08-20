@@ -32,6 +32,10 @@ record AcceleratorPolicy(
   static final AcceleratorPolicy LITERAL =
       new AcceleratorPolicy(16, 4, true, MatchStrategy.LITERAL);
 
+  /** Policy for vectorized multi-literal and Teddy SIMD filters. */
+  static final AcceleratorPolicy VECTOR_MULTI_LITERAL =
+      new AcceleratorPolicy(64, 4, true, MatchStrategy.LITERAL);
+
   /** Policy for character class bitmap and range table scanning. */
   static final AcceleratorPolicy CHAR_CLASS =
       new AcceleratorPolicy(24, 3, false, MatchStrategy.CHARACTER_CLASS);

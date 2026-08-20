@@ -25,7 +25,7 @@ class StartAcceleratorTest {
 
   @Test
   void literalPrefixAcceleratesStringAndUtf8() {
-    StartDescriptor desc = new StartDescriptor("needle", false, null, null, null);
+    StartDescriptor desc = descriptor("needle", false, null, null);
     assertThat(desc.hasStartAcceleration()).isTrue();
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
@@ -43,7 +43,7 @@ class StartAcceleratorTest {
 
   @Test
   void caseInsensitiveLiteralAcceleratesStringAndUtf8() {
-    StartDescriptor desc = new StartDescriptor("needle", true, null, null, null);
+    StartDescriptor desc = descriptor("needle", true, null, null);
     assertThat(desc.hasStartAcceleration()).isTrue();
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
@@ -59,21 +59,21 @@ class StartAcceleratorTest {
     assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with needle here"), 15)).isEqualTo(-1);
 
     // Single character case-insensitive prefix
-    StartDescriptor singleDesc = new StartDescriptor("a", true, null, null, null);
+    StartDescriptor singleDesc = descriptor("a", true, null, null);
     Utf8StartAccelerator singleUtf8 = Utf8StartAccelerator.create(singleDesc, false);
     assertThat(singleUtf8).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
     assertThat(singleUtf8.findCandidate(utf8Scanner("xxxA"), 0)).isEqualTo(3);
     assertThat(singleUtf8.findCandidate(utf8Scanner("xxxa"), 0)).isEqualTo(3);
 
     // Non-ASCII case-insensitive prefix falls back (null)
-    StartDescriptor nonAsciiDesc = new StartDescriptor("café", true, null, null, null);
+    StartDescriptor nonAsciiDesc = descriptor("café", true, null, null);
     assertThat(Utf8StartAccelerator.create(nonAsciiDesc, false)).isNull();
   }
 
   @Test
   void fixedOffsetLiteralAcceleratesStringAndUtf8() {
     FixedOffsetLiteral fixed = new FixedOffsetLiteral("token", 2, 2, new int[] {2});
-    StartDescriptor desc = new StartDescriptor(null, false, fixed, null, null);
+    StartDescriptor desc = descriptor(null, false, fixed, null);
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.FixedOffset.class);
@@ -89,7 +89,7 @@ class StartAcceleratorTest {
   @Test
   void charClassPrefixAcceleratesStringAndUtf8() {
     AsciiBitmap asciiPair = new AsciiBitmap.Builder().add('a').add('b').build();
-    StartDescriptor descPair = new StartDescriptor(null, false, null, asciiPair, null);
+    StartDescriptor descPair = descriptor(null, false, null, asciiPair);
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(descPair, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
@@ -102,11 +102,20 @@ class StartAcceleratorTest {
     assertThat(utf8PairAcc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
 
     AsciiBitmap asciiMulti = new AsciiBitmap.Builder().add('a').add('b').add('c').add('d').build();
-    StartDescriptor descMulti = new StartDescriptor(null, false, null, asciiMulti, null);
+    StartDescriptor descMulti = descriptor(null, false, null, asciiMulti);
     Utf8StartAccelerator utf8MultiAcc = Utf8StartAccelerator.create(descMulti, false);
     assertThat(utf8MultiAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
     assertThat(utf8MultiAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
     assertThat(utf8MultiAcc.findCandidate(utf8Scanner("xxxd"), 0)).isEqualTo(3);
+  }
+
+  private static StartDescriptor descriptor(
+      String prefix,
+      boolean prefixFoldCase,
+      FixedOffsetLiteral fixedOffsetLiteral,
+      AsciiBitmap charClassPrefixAscii) {
+    return new StartDescriptor(
+        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefixAscii, null, null, null, null);
   }
 
   @Test
@@ -150,6 +159,40 @@ class StartAcceleratorTest {
         }
       }
     }
+  }
+
+  @Test
+  void compiledPatternPoliciesMatchExpectedAccelerators() {
+    Pattern literalPat = Pattern.compile("abc");
+    assertThat(literalPat.stringStartAccelerator()).isNotNull();
+    assertThat(literalPat.utf8StartAccelerator()).isNotNull();
+    assertThat(literalPat.stringStartAccelerator().policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+    assertThat(literalPat.utf8StartAccelerator().policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+
+    Pattern caseInsensitivePat = Pattern.compile("(?i)abc");
+    assertThat(caseInsensitivePat.stringStartAccelerator()).isNotNull();
+    assertThat(caseInsensitivePat.utf8StartAccelerator()).isNotNull();
+    assertThat(caseInsensitivePat.utf8StartAccelerator().policy().strategy())
+        .isEqualTo(MatchStrategy.LITERAL);
+
+    Pattern charClassPat = Pattern.compile("[0-9][a-z]+");
+    assertThat(charClassPat.stringStartAccelerator()).isNotNull();
+    assertThat(charClassPat.utf8StartAccelerator()).isNotNull();
+    assertThat(charClassPat.stringStartAccelerator().policy())
+        .isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(charClassPat.utf8StartAccelerator().policy())
+        .isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+
+    Pattern fixedOffsetPat = Pattern.compile("..needle");
+    assertThat(fixedOffsetPat.stringStartAccelerator()).isNotNull();
+    assertThat(fixedOffsetPat.utf8StartAccelerator()).isNotNull();
+    assertThat(fixedOffsetPat.stringStartAccelerator().policy())
+        .isEqualTo(AcceleratorPolicy.LITERAL);
+    assertThat(fixedOffsetPat.utf8StartAccelerator().policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+
+    Pattern unacceleratedPat = Pattern.compile(".*");
+    assertThat(unacceleratedPat.stringStartAccelerator()).isNull();
+    assertThat(unacceleratedPat.utf8StartAccelerator()).isNull();
   }
 
   private static Utf8InputScanner utf8Scanner(String text) {

@@ -7,11 +7,17 @@ package org.safere;
 
 /** Experimental scan operations implemented with the incubating Vector API. */
 final class IncubatorVectorScanProvider implements VectorScanProvider {
-  private static final int MINIMUM_INPUT_LENGTH = 64;
+  private static final int MINIMUM_INPUT_LENGTH = 1024;
+  private static final int MINIMUM_TEDDY_INPUT_LENGTH = 1024;
 
   @Override
   public int minimumInputLength() {
     return MINIMUM_INPUT_LENGTH;
+  }
+
+  @Override
+  public int minimumTeddyInputLength() {
+    return MINIMUM_TEDDY_INPUT_LENGTH;
   }
 
   @Override
@@ -28,5 +34,10 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   public int indexOfAsciiTriple(
       byte[] bytes, int offset, int length, byte b0, byte b1, byte b2, int start) {
     return ByteVectorScan.indexOfAsciiTriple(bytes, offset, length, b0, b1, b2, start);
+  }
+
+  @Override
+  public int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start) {
+    return TeddyVectorScan.indexOfTeddyUtf8(bytes, offset, length, model, start);
   }
 }
