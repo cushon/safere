@@ -3071,10 +3071,6 @@ public final class Pattern implements Serializable {
   @SuppressWarnings("ArrayRecordComponent")
   record CharClassMatchInfo(int[] ranges, long bitmap0, long bitmap1, boolean allowEmpty) {}
 
-  static CharClassScanInfo buildAsciiClassScanInfo(AsciiBitmap asciiClass) {
-    return CharClassScanInfo.fromAsciiBitmap(asciiClass);
-  }
-
   /**
    * Detects patterns that are structurally a single character class under a quantifier covering the
    * entire string — e.g., {@code [a-zA-Z]+}, {@code \d*}, {@code \w{1,}}, {@code [0-9]+}. When
@@ -3171,7 +3167,7 @@ public final class Pattern implements Serializable {
     if (cc.isEmpty()) {
       return null;
     }
-    return buildCharClassScanInfo(cc);
+    return CharClassScanInfo.fromCharClass(cc);
   }
 
   record SuffixInfo(String suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
@@ -3362,7 +3358,7 @@ public final class Pattern implements Serializable {
     }
     if (node.op != RegexpOp.CONCAT || node.subs == null) {
       CharClass required = requiredCharClass(node, inspectAlternation);
-      return required != null ? buildCharClassScanInfo(required) : null;
+      return required != null ? CharClassScanInfo.fromCharClass(required) : null;
     }
     CharClass mostSelective = null;
     for (Regexp sub : node.subs) {
@@ -3372,7 +3368,7 @@ public final class Pattern implements Serializable {
         mostSelective = required;
       }
     }
-    return mostSelective != null ? buildCharClassScanInfo(mostSelective) : null;
+    return mostSelective != null ? CharClassScanInfo.fromCharClass(mostSelective) : null;
   }
 
   private static CharClass requiredCharClass(Regexp re, boolean inspectAlternation) {
@@ -3629,10 +3625,6 @@ public final class Pattern implements Serializable {
       UnicodeCaseFolding.addUnicodeFoldedRange(ccb, cp, cp);
     }
     return ccb.build();
-  }
-
-  private static CharClassScanInfo buildCharClassScanInfo(CharClass cc) {
-    return CharClassScanInfo.fromCharClass(cc);
   }
 
   /**

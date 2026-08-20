@@ -78,8 +78,8 @@ class PatternInternalTest {
 
   @Test
   void asciiPrefixScanInfoHandlesMissingAndEmptyClasses() {
-    assertThat(Pattern.buildAsciiClassScanInfo(null)).isNull();
-    assertThat(Pattern.buildAsciiClassScanInfo(AsciiBitmap.EMPTY)).isNull();
+    assertThat(CharClassScanInfo.fromAsciiBitmap(null)).isNull();
+    assertThat(CharClassScanInfo.fromAsciiBitmap(AsciiBitmap.EMPTY)).isNull();
   }
 
   @Test
@@ -487,7 +487,7 @@ class PatternInternalTest {
     }
     AsciiBitmap asciiClass = builder.build();
 
-    CharClassScanInfo info = Pattern.buildAsciiClassScanInfo(asciiClass);
+    CharClassScanInfo info = CharClassScanInfo.fromAsciiBitmap(asciiClass);
 
     assertThat(info).isNotNull();
     assertThat(info.ranges()).containsExactly(expectedRanges);
