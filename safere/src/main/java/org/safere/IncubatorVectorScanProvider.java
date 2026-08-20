@@ -9,6 +9,9 @@ package org.safere;
 final class IncubatorVectorScanProvider implements VectorScanProvider {
   private static final int MINIMUM_INPUT_LENGTH = 1024;
   private static final int MINIMUM_TEDDY_INPUT_LENGTH = 1024;
+  private static final int MINIMUM_PAIR_INPUT_LENGTH = 64;
+  private static final int MINIMUM_TRIPLE_INPUT_LENGTH = 64;
+  private static final int MAXIMUM_TRIPLE_INPUT_LENGTH = 10_240;
 
   @Override
   public int minimumInputLength() {
@@ -18,6 +21,21 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   @Override
   public int minimumTeddyInputLength() {
     return MINIMUM_TEDDY_INPUT_LENGTH;
+  }
+
+  @Override
+  public int minimumPairInputLength() {
+    return MINIMUM_PAIR_INPUT_LENGTH;
+  }
+
+  @Override
+  public int minimumTripleInputLength() {
+    return MINIMUM_TRIPLE_INPUT_LENGTH;
+  }
+
+  @Override
+  public int maximumTripleInputLength() {
+    return MAXIMUM_TRIPLE_INPUT_LENGTH;
   }
 
   @Override
@@ -38,6 +56,6 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
 
   @Override
   public int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start) {
-    return TeddyVectorScan.indexOfTeddyUtf8(bytes, offset, length, model, start);
+    return TeddyVectorScan.indexOfTeddy(bytes, offset, length, model, start);
   }
 }
