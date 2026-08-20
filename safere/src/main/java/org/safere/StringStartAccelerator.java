@@ -41,12 +41,6 @@ sealed interface StringStartAccelerator {
   }
 
   /**
-   * Finds the next candidate match start position at or after {@code fromIndex}. Returns negative
-   * if definitely not found.
-   */
-  int findCandidate(String text, int fromIndex, boolean unixLines);
-
-  /**
    * Finds the next candidate match start position at or after {@code fromIndex} using
    * pattern-matched devirtualization.
    *
@@ -82,8 +76,7 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record(Math.max(0, text.length() - fromIndex));
       }
@@ -113,8 +106,7 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       return Matcher.indexOfIgnoreCase(
           text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }
@@ -128,8 +120,7 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       return nextFixedOffsetCandidate(text, fixedOffset, firstAscii, fromIndex);
     }
 
@@ -209,8 +200,7 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.CHAR_CLASS;
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       return indexOfCharClass(text, asciiTable, fromIndex);
     }
 
@@ -235,8 +225,7 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.LINE_ANCHOR;
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       return nextAcceleratedStart(text, startAcceleration, fromIndex, unixLines);
     }
 

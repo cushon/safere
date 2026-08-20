@@ -31,14 +31,25 @@ class StartAcceleratorTest {
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.Literal.class);
     assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
-    assertThat(strAcc.findCandidate("haystack with needle here", 0, false)).isEqualTo(14);
-    assertThat(strAcc.findCandidate("haystack with needle here", 15, false)).isEqualTo(-1);
+    assertThat(
+            StringStartAccelerator.findNextCandidate(strAcc, "haystack with needle here", 0, false))
+        .isEqualTo(14);
+    assertThat(
+            StringStartAccelerator.findNextCandidate(
+                strAcc, "haystack with needle here", 15, false))
+        .isEqualTo(-1);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.Literal.class);
     assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
-    assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with needle here"), 0)).isEqualTo(14);
-    assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with needle here"), 15)).isEqualTo(-1);
+    assertThat(
+            Utf8StartAccelerator.findNextCandidate(
+                utf8Acc, utf8Scanner("haystack with needle here"), 0))
+        .isEqualTo(14);
+    assertThat(
+            Utf8StartAccelerator.findNextCandidate(
+                utf8Acc, utf8Scanner("haystack with needle here"), 15))
+        .isEqualTo(-1);
   }
 
   @Test
@@ -48,22 +59,35 @@ class StartAcceleratorTest {
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CaseInsensitiveLiteral.class);
-    assertThat(strAcc.findCandidate("haystack with NEEDLE here", 0, false)).isEqualTo(14);
+    assertThat(
+            StringStartAccelerator.findNextCandidate(strAcc, "haystack with NEEDLE here", 0, false))
+        .isEqualTo(14);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
     assertThat(utf8Acc.policy().strategy()).isEqualTo(MatchStrategy.LITERAL);
     assertThat(utf8Acc.policy().isExactMatchCandidate()).isTrue();
-    assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with NEEDLE here"), 0)).isEqualTo(14);
-    assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with nEeDlE here"), 0)).isEqualTo(14);
-    assertThat(utf8Acc.findCandidate(utf8Scanner("haystack with needle here"), 15)).isEqualTo(-1);
+    assertThat(
+            Utf8StartAccelerator.findNextCandidate(
+                utf8Acc, utf8Scanner("haystack with NEEDLE here"), 0))
+        .isEqualTo(14);
+    assertThat(
+            Utf8StartAccelerator.findNextCandidate(
+                utf8Acc, utf8Scanner("haystack with nEeDlE here"), 0))
+        .isEqualTo(14);
+    assertThat(
+            Utf8StartAccelerator.findNextCandidate(
+                utf8Acc, utf8Scanner("haystack with needle here"), 15))
+        .isEqualTo(-1);
 
     // Single character case-insensitive prefix
     StartDescriptor singleDesc = descriptor("a", true, null, null);
     Utf8StartAccelerator singleUtf8 = Utf8StartAccelerator.create(singleDesc, false);
     assertThat(singleUtf8).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
-    assertThat(singleUtf8.findCandidate(utf8Scanner("xxxA"), 0)).isEqualTo(3);
-    assertThat(singleUtf8.findCandidate(utf8Scanner("xxxa"), 0)).isEqualTo(3);
+    assertThat(Utf8StartAccelerator.findNextCandidate(singleUtf8, utf8Scanner("xxxA"), 0))
+        .isEqualTo(3);
+    assertThat(Utf8StartAccelerator.findNextCandidate(singleUtf8, utf8Scanner("xxxa"), 0))
+        .isEqualTo(3);
 
     // Non-ASCII case-insensitive prefix falls back (null)
     StartDescriptor nonAsciiDesc = descriptor("café", true, null, null);
@@ -78,12 +102,14 @@ class StartAcceleratorTest {
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.FixedOffset.class);
     assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
-    assertThat(strAcc.findCandidate("abtoken cd", 0, false)).isEqualTo(0);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, "abtoken cd", 0, false))
+        .isEqualTo(0);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.FixedOffset.class);
     assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
-    assertThat(utf8Acc.findCandidate(utf8Scanner("abtoken cd"), 0)).isEqualTo(0);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner("abtoken cd"), 0))
+        .isEqualTo(0);
   }
 
   @Test
@@ -94,12 +120,13 @@ class StartAcceleratorTest {
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
     assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
-    assertThat(strAcc.findCandidate("xxxa", 0, false)).isEqualTo(3);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, "xxxa", 0, false)).isEqualTo(3);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
     assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
-    assertThat(utf8Acc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner("xxxb"), 0))
+        .isEqualTo(3);
   }
 
   private static StartDescriptor descriptor(
@@ -144,8 +171,9 @@ class StartAcceleratorTest {
             .isEqualTo(strAcc.policy().strategy());
 
         for (String input : testInputs) {
-          int strCandidate = strAcc.findCandidate(input, 0, false);
-          int utf8Candidate = utf8Acc.findCandidate(utf8Scanner(input), 0);
+          int strCandidate = StringStartAccelerator.findNextCandidate(strAcc, input, 0, false);
+          int utf8Candidate =
+              Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 0);
           assertThat(utf8Candidate)
               .as("Candidate indices should match for pattern '%s' on input '%s'", patStr, input)
               .isEqualTo(strCandidate);

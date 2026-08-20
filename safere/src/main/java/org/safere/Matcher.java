@@ -1665,7 +1665,7 @@ public final class Matcher implements MatchResult {
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
-          int idx = accelerator.findCandidate(utf8Scanner, searchFrom);
+          int idx = Utf8StartAccelerator.findNextCandidate(accelerator, utf8Scanner, searchFrom);
           if (idx < 0) {
             if (strategy != null) {
               diagnosticBoundary(strategy);
