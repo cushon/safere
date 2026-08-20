@@ -702,6 +702,8 @@
       "id": "searchScaling.random.{size}",
       "axes": {
         "size": [
+          64,
+          256,
           1024,
           10240,
           102400,
@@ -4626,6 +4628,618 @@
         "searchScaling.success.1048576"
       ],
       "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.64",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.64"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.256",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.256"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.1024",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Success.1024",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|WXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral6Fail.1024",
+      "operation": "find",
+      "patterns": [
+        "ALPHA|BETA|GAMMA|DELTA|EPSILON|ZETA"
+      ],
+      "inputs": [
+        "searchScaling.random.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral6Success.1024",
+      "operation": "find",
+      "patterns": [
+        "ALPHA|BETA|GAMMA|DELTA|EPSILON|WXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiPairFail.1024",
+      "operation": "find",
+      "patterns": [
+        "[YZ]"
+      ],
+      "inputs": [
+        "searchScaling.random.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiPairSuccess.1024",
+      "operation": "find",
+      "patterns": [
+        "[YZ]"
+      ],
+      "inputs": [
+        "searchScaling.success.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiTripleFail.1024",
+      "operation": "find",
+      "patterns": [
+        "[XYZ]"
+      ],
+      "inputs": [
+        "searchScaling.random.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiTripleSuccess.1024",
+      "operation": "find",
+      "patterns": [
+        "[XYZ]"
+      ],
+      "inputs": [
+        "searchScaling.success.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.10240",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Success.10240",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|WXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral6Fail.10240",
+      "operation": "find",
+      "patterns": [
+        "ALPHA|BETA|GAMMA|DELTA|EPSILON|ZETA"
+      ],
+      "inputs": [
+        "searchScaling.random.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral6Success.10240",
+      "operation": "find",
+      "patterns": [
+        "ALPHA|BETA|GAMMA|DELTA|EPSILON|WXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiPairFail.10240",
+      "operation": "find",
+      "patterns": [
+        "[YZ]"
+      ],
+      "inputs": [
+        "searchScaling.random.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiPairSuccess.10240",
+      "operation": "find",
+      "patterns": [
+        "[YZ]"
+      ],
+      "inputs": [
+        "searchScaling.success.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiTripleFail.10240",
+      "operation": "find",
+      "patterns": [
+        "[XYZ]"
+      ],
+      "inputs": [
+        "searchScaling.random.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiTripleSuccess.10240",
+      "operation": "find",
+      "patterns": [
+        "[XYZ]"
+      ],
+      "inputs": [
+        "searchScaling.success.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.102400",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Success.102400",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|WXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral6Fail.102400",
+      "operation": "find",
+      "patterns": [
+        "ALPHA|BETA|GAMMA|DELTA|EPSILON|ZETA"
+      ],
+      "inputs": [
+        "searchScaling.random.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral6Success.102400",
+      "operation": "find",
+      "patterns": [
+        "ALPHA|BETA|GAMMA|DELTA|EPSILON|WXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiPairFail.102400",
+      "operation": "find",
+      "patterns": [
+        "[YZ]"
+      ],
+      "inputs": [
+        "searchScaling.random.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiPairSuccess.102400",
+      "operation": "find",
+      "patterns": [
+        "[YZ]"
+      ],
+      "inputs": [
+        "searchScaling.success.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiTripleFail.102400",
+      "operation": "find",
+      "patterns": [
+        "[XYZ]"
+      ],
+      "inputs": [
+        "searchScaling.random.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiTripleSuccess.102400",
+      "operation": "find",
+      "patterns": [
+        "[XYZ]"
+      ],
+      "inputs": [
+        "searchScaling.success.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.1048576",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Success.1048576",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|WXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral6Fail.1048576",
+      "operation": "find",
+      "patterns": [
+        "ALPHA|BETA|GAMMA|DELTA|EPSILON|ZETA"
+      ],
+      "inputs": [
+        "searchScaling.random.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral6Success.1048576",
+      "operation": "find",
+      "patterns": [
+        "ALPHA|BETA|GAMMA|DELTA|EPSILON|WXYZ"
+      ],
+      "inputs": [
+        "searchScaling.success.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiPairFail.1048576",
+      "operation": "find",
+      "patterns": [
+        "[YZ]"
+      ],
+      "inputs": [
+        "searchScaling.random.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiPairSuccess.1048576",
+      "operation": "find",
+      "patterns": [
+        "[YZ]"
+      ],
+      "inputs": [
+        "searchScaling.success.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiTripleFail.1048576",
+      "operation": "find",
+      "patterns": [
+        "[XYZ]"
+      ],
+      "inputs": [
+        "searchScaling.random.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.asciiTripleSuccess.1048576",
+      "operation": "find",
+      "patterns": [
+        "[XYZ]"
+      ],
+      "inputs": [
+        "searchScaling.success.1048576"
+      ],
+      "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
@@ -10083,6 +10697,294 @@
         }
       },
       "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse3Fail.1024",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse3Success.1024",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|gardens"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse6Fail.1024",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight|whisper|crystal|gossamer"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse6Success.1024",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight|whisper|crystal|gardens"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse3Fail.10240",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse3Success.10240",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|gardens"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse6Fail.10240",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight|whisper|crystal|gossamer"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse6Success.10240",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight|whisper|crystal|gardens"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse3Fail.102400",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse3Success.102400",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|gardens"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse6Fail.102400",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight|whisper|crystal|gossamer"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse6Success.102400",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight|whisper|crystal|gardens"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse3Fail.1048576",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse3Success.1048576",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|gardens"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse6Fail.1048576",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight|whisper|crystal|gossamer"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteralProse6Success.1048576",
+      "operation": "find",
+      "patterns": [
+        "blossom|sparkling|twilight|whisper|crystal|gardens"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
