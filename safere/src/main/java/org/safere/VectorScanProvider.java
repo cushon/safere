@@ -11,6 +11,8 @@ interface VectorScanProvider {
 
   int minimumInputLength();
 
+  int minimumTeddyInputLength();
+
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 
@@ -24,16 +26,18 @@ interface VectorScanProvider {
   int indexOfIgnoreCase(String text, String prefix, int start);
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  int indexOfMultiLiteral(
+  default int indexOfMultiLiteral(
       String text,
       String[] literals,
       char[] anchorChars,
       int[] anchorOffsets,
       int minLength,
-      int start);
+      int start) {
+    return UNSUPPORTED;
+  }
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  int indexOfMultiLiteral(
+  default int indexOfMultiLiteral(
       byte[] bytes,
       int offset,
       int length,
@@ -41,7 +45,9 @@ interface VectorScanProvider {
       char[] anchorChars,
       int[] anchorOffsets,
       int minLength,
-      int start);
+      int start) {
+    return UNSUPPORTED;
+  }
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfTeddy(String text, TeddyModel model, int start);

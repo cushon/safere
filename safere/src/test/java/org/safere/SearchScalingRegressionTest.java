@@ -641,6 +641,85 @@ class SearchScalingRegressionTest {
     }
   }
 
+  @Test
+  void startAnchoredLiteralRejectsDisplacedCandidateWithConstantWorkForString() {
+    Pattern pattern = Pattern.compile("^abc");
+    String displaced = "x".repeat(10_000) + "abc";
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(displaced).find()).isFalse());
+    assertThat(work)
+        .as("Start-anchored pattern with displaced candidate must reject in constant work")
+        .isLessThan(20);
+  }
+
+  @Test
+  void startAnchoredLiteralRejectsDisplacedCandidateWithConstantWorkForUtf8() {
+    Pattern pattern = Pattern.compile("^abc");
+    byte[] displaced = ("x".repeat(10_000) + "abc").getBytes(UTF_8);
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(displaced)).find()).isFalse());
+    assertThat(work)
+        .as("Start-anchored UTF-8 pattern with displaced candidate must reject in constant work")
+        .isLessThan(20);
+  }
+
+  @Test
+  void startAnchoredCharClassRejectsDisplacedCandidateWithConstantWork() {
+    Pattern pattern = Pattern.compile("^[0-9]");
+    String displaced = "a".repeat(10_000) + "5";
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(displaced).find()).isFalse());
+    assertThat(work)
+        .as("Start-anchored char-class with displaced match must reject in constant work")
+        .isLessThan(20);
+  }
+
+  @Test
+  void repeatedFindWithAlternatingCaseIsLinearForString() {
+    Pattern pattern = Pattern.compile("(?i)needle");
+    assertRepeatedFindWorkIsLinear(
+        size -> {
+          StringBuilder sb = new StringBuilder();
+          String[] variants = {"Needle ", "needle ", "NEEDLE ", "nEeDlE "};
+          for (int i = 0; i < size; i++) {
+            sb.append(variants[i % variants.length]);
+          }
+          return pattern.matcher(sb.toString())::find;
+        },
+        "String");
+  }
+
+  @Test
+  void repeatedFindWithAlternatingCaseIsLinearForUtf8() {
+    Pattern pattern = Pattern.compile("(?i)needle");
+    assertRepeatedFindWorkIsLinear(
+        size -> {
+          StringBuilder sb = new StringBuilder();
+          String[] variants = {"Needle ", "needle ", "NEEDLE ", "nEeDlE "};
+          for (int i = 0; i < size; i++) {
+            sb.append(variants[i % variants.length]);
+          }
+          return pattern.matcher(Utf8Input.trusted(sb.toString().getBytes(UTF_8)))::find;
+        },
+        "UTF-8");
+  }
+
+  @Test
+  void repeatedFindWithMultiBranchAlternationIsLinear() {
+    Pattern pattern = Pattern.compile("(?:apple|banana|cherry|date)");
+    assertRepeatedFindWorkIsLinear(
+        size -> {
+          StringBuilder sb = new StringBuilder();
+          String[] variants = {"apple ", "banana ", "cherry ", "date "};
+          for (int i = 0; i < size; i++) {
+            sb.append(variants[i % variants.length]);
+          }
+          return pattern.matcher(sb.toString())::find;
+        },
+        "String");
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");

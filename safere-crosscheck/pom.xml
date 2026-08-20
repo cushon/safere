@@ -139,6 +139,7 @@
                         <exclude name="StartAcceleratorDifferentialTest.java"/>
                         <exclude name="StartAcceleratorTest.java"/>
                         <exclude name="StringChunkedVectorFallbackTest.java"/>
+                        <exclude name="TeddyModelTest.java"/>
                         <exclude name="UnicodeJdkConsistencyTest.java"/>
                         <exclude name="UnicodeTablesTest.java"/>
                         <exclude name="Utf8AllocationScalingTest.java"/>
@@ -148,6 +149,7 @@
                         <exclude name="Utf8InputTest.java"/>
                         <exclude name="Utf8LinearTimeTest.java"/>
                         <exclude name="UtilsTest.java"/>
+                        <exclude name="VectorSpeciesSimulationTest.java"/>
                         <exclude name="WalkerTest.java"/>
                         <exclude name="WorkCounterTest.java"/>
                         <exclude name="WorkLimitTest.java"/>

@@ -32,15 +32,15 @@ sealed interface Utf8StartAccelerator {
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
     }
+    if (descriptor.teddyModel() != null
+        && !hasWordBoundary
+        && VectorScanProviders.teddyProviderAvailable()) {
+      return new Teddy(descriptor.teddyModel());
+    }
     if (descriptor.multiLiteral() != null
         && !hasWordBoundary
         && VectorScanProviders.providerForLength(64) != null) {
       return new MultiLiteral(descriptor.multiLiteral());
-    }
-    if (descriptor.teddyModel() != null
-        && !hasWordBoundary
-        && VectorScanProviders.providerForLength(64) != null) {
-      return new Teddy(descriptor.teddyModel());
     }
     if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
       CharClassScanInfo scanInfo =
@@ -262,14 +262,15 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      VectorScanProvider provider = VectorScanProviders.providerForLength(scanner.length());
-      if (provider != null) {
-        int idx =
-            provider.indexOfTeddy(
-                scanner.bytes(), scanner.offset(), scanner.length(), model, fromIndex);
-        if (idx != VectorScanProvider.UNSUPPORTED) {
-          return idx;
-        }
+      VectorScanProvider provider = VectorScanProviders.providerForTeddyLength(scanner.length());
+      if (provider == null) {
+        return fromIndex;
+      }
+      int idx =
+          provider.indexOfTeddy(
+              scanner.bytes(), scanner.offset(), scanner.length(), model, fromIndex);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
       }
       int len = scanner.length();
       int minLen = model.minLength();
