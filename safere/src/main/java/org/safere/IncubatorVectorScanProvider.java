@@ -73,9 +73,18 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
       String[] literals,
       char[] anchorChars,
       int[] anchorOffsets,
+      int[] anchorRanges,
       int minLength,
       int start) {
     return ByteVectorScan.indexOfMultiLiteral(
-        bytes, offset, length, literals, anchorChars, anchorOffsets, minLength, start);
+        bytes,
+        offset,
+        length,
+        literals,
+        anchorChars,
+        anchorOffsets,
+        anchorRanges,
+        minLength,
+        start);
   }
 }

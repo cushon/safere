@@ -45,6 +45,7 @@ interface VectorScanProvider {
       String[] literals,
       char[] anchorChars,
       int[] anchorOffsets,
+      int[] anchorRanges,
       int minLength,
       int start);
 }

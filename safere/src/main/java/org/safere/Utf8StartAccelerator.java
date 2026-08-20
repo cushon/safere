@@ -272,6 +272,7 @@ sealed interface Utf8StartAccelerator {
                 info.literals(),
                 info.anchorChars(),
                 info.anchorOffsets(),
+                info.anchorRanges(),
                 info.minLength(),
                 fromIndex);
         if (idx != VectorScanProvider.UNSUPPORTED) {

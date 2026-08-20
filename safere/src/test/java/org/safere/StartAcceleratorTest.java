@@ -302,6 +302,7 @@ class StartAcceleratorTest {
             info.literals(),
             info.anchorChars(),
             info.anchorOffsets(),
+            info.anchorRanges(),
             info.minLength(),
             0);
 

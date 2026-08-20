@@ -244,6 +244,7 @@ final class ByteVectorScan {
       String[] literals,
       char[] anchorChars,
       int[] anchorOffsets,
+      int[] anchorRanges,
       int minLength,
       int start) {
     int numLits = literals.length;
@@ -256,23 +257,9 @@ final class ByteVectorScan {
     int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
 
-    ByteVector v0 = ByteVector.broadcast(SPECIES, (byte) anchorChars[0]);
-    ByteVector v1 = numLits >= 2 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[1]) : null;
-    ByteVector v2 = numLits >= 3 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[2]) : null;
-    ByteVector v3 = numLits >= 4 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[3]) : null;
-
     for (; pos <= limit; pos += vectorLen) {
       ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
-      VectorMask<Byte> matchMask = inputVec.compare(EQ, v0);
-      if (numLits >= 2) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v1));
-      }
-      if (numLits >= 3) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v2));
-      }
-      if (numLits >= 4) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v3));
-      }
+      VectorMask<Byte> matchMask = matches(inputVec, anchorRanges);
 
       if (matchMask.anyTrue()) {
         long activeLanes = matchMask.toLong();
@@ -301,9 +288,11 @@ final class ByteVectorScan {
 
     int scalarLimit = length - minLength;
     for (; pos <= scalarLimit; pos++) {
+      int value = bytes[offset + pos] & 0xFF;
       for (int i = 0; i < numLits; i++) {
         String lit = literals[i];
-        if (pos + lit.length() <= length
+        if (value == anchorChars[i]
+            && pos + lit.length() <= length
             && Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
           return pos;
         }

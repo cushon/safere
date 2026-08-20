@@ -39,6 +39,11 @@ class MultiLiteralTest {
     assertThat(info.minLength()).isEqualTo(5);
     assertThat(info.anchorChars()).containsExactly('a', 'b', 'c');
     assertThat(info.anchorOffsets()).containsExactly(0, 0, 0);
+    assertThat(info.anchorRanges()).containsExactly('a', 'c');
+
+    MultiLiteralInfo disjoint =
+        MultiLiteralInfo.create(new String[] {"apple", "banana", "watermelon"});
+    assertThat(disjoint.anchorRanges()).containsExactly('a', 'b', 'w', 'w');
 
     assertThat(MultiLiteralInfo.create(new String[] {"single"})).isNull();
     assertThat(MultiLiteralInfo.create(new String[] {"1", "2", "3", "4", "5"})).isNull();
