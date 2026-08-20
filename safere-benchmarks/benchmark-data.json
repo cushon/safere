@@ -452,7 +452,7 @@
       "id": "vectorScan.multi.nonascii.32768",
       "recipe": {
         "kind": "repeatToLength",
-        "unit": "\u00e9",
+        "unit": "é",
         "length": 32768
       },
       "shared": true
@@ -1729,7 +1729,7 @@
       },
       "recipe": {
         "kind": "delimitedRepeatToLength",
-        "value": "\u3044\u304f\u3064\u3082\u306e\u3000\u4e2d\u56fd\u8a9e\u3068\u65e5\u672c\u8a9e\u306e\u6587\u5b57\u3000\u304c\u3053\u3053\u306b\u3042\u308a\u307e\u3059\u3000\u305d\u3057\u3066\u3000\u3044\u304f\u3064\u304b\u306e\u30b9\u30da\u30fc\u30b9\u3000\u304c\u3042\u308a\u307e\u3059",
+        "value": "いくつもの　中国語と日本語の文字　がここにあります　そして　いくつかのスペース　があります",
         "delimiterAlphabet": " ",
         "seed": 42,
         "length": "{size}"
@@ -1747,7 +1747,7 @@
       },
       "recipe": {
         "kind": "delimitedRepeatToLength",
-        "value": "\u3044\u304f\u3064\u3082\u306e\u4e2d\u56fd\u8a9e\u3068\u65e5\u672c\u8a9e\u306e\u6587\u5b57\u304c\u3053\u3053\u306b\u3042\u308a\u307e\u3059\u305d\u3057\u3066\u3044\u304f\u3064\u304b\u306e\u30b9\u30da\u30fc\u30b9\u304c\u3042\u308a\u307e\u3059",
+        "value": "いくつもの中国語と日本語の文字がここにありますそしていくつかのスペースがあります",
         "delimiterAlphabet": " ",
         "seed": 42,
         "length": "{size}"
@@ -1765,7 +1765,7 @@
       },
       "recipe": {
         "kind": "delimitedRepeatToLength",
-        "value": "\u8fd9\u662f\u4e00\u4e2a\u4e2d\u6587\u6d4b\u8bd5\u53e5\u5b50",
+        "value": "这是一个中文测试句子",
         "delimiterAlphabet": " ",
         "seed": 42,
         "length": "{size}"
@@ -1801,7 +1801,7 @@
       },
       "recipe": {
         "kind": "delimitedRepeatToLength",
-        "value": "Today is a beautiful day \ud83d\ude07 with warm sunshine.",
+        "value": "Today is a beautiful day 😇 with warm sunshine.",
         "delimiterAlphabet": " ",
         "seed": 42,
         "length": "{size}"
@@ -2113,21 +2113,21 @@
       "id": "utf8.captureFree.multibyteEarly",
       "recipe": {
         "kind": "literal",
-        "text": "\u9519\u8bef\uff1a\u8bf7\u6c42\u5931\u8d25"
+        "text": "错误：请求失败"
       }
     },
     {
       "id": "utf8.captureFree.multibyteLate",
       "recipe": {
         "kind": "literal",
-        "text": "\u8bf7\u6c42\u5904\u7406\u7ed3\u675f\uff1a\u9519\u8bef"
+        "text": "请求处理结束：错误"
       }
     },
     {
       "id": "utf8.captureFree.multibyteNoMatch",
       "recipe": {
         "kind": "literal",
-        "text": "\u8bf7\u6c42\u5904\u7406\u6210\u529f"
+        "text": "请求处理成功"
       }
     },
     {
@@ -2141,7 +2141,7 @@
       "id": "utf8.repeatedFind.multibyte",
       "recipe": {
         "kind": "literal",
-        "text": "one caf\u00e9 \u6771\u4eac na\u00efve"
+        "text": "one café 東京 naïve"
       }
     },
     {
@@ -2155,7 +2155,7 @@
       "id": "utf8.captureBounds.named",
       "recipe": {
         "kind": "literal",
-        "text": "city=\u6771\u4eac&name=Ren\u00e9e"
+        "text": "city=東京&name=Renée"
       }
     },
     {
@@ -2169,42 +2169,42 @@
       "id": "utf8.emptyMatch",
       "recipe": {
         "kind": "literal",
-        "text": "a\ud83d\udcb0\u6709"
+        "text": "a💰有"
       }
     },
     {
       "id": "utf8.window",
       "recipe": {
         "kind": "literal",
-        "text": "sentinel-before-city=\u6771\u4eac&name=Ren\u00e9e-sentinel-after"
+        "text": "sentinel-before-city=東京&name=Renée-sentinel-after"
       }
     },
     {
       "id": "utf8.construction",
       "recipe": {
         "kind": "literal",
-        "text": "one caf\u00e9 \u6771\u4eac na\u00efve"
+        "text": "one café 東京 naïve"
       }
     },
     {
       "id": "utf8.replacement.literal",
       "recipe": {
         "kind": "literal",
-        "text": "\u9519\u8bef then \u9519\u8bef"
+        "text": "错误 then 错误"
       }
     },
     {
       "id": "utf8.replacement.numbered",
       "recipe": {
         "kind": "literal",
-        "text": "city=\u6771\u4eac&name=Ren\u00e9e"
+        "text": "city=東京&name=Renée"
       }
     },
     {
       "id": "utf8.replacement.named",
       "recipe": {
         "kind": "literal",
-        "text": "city=\u6771\u4eac&name=Ren\u00e9e"
+        "text": "city=東京&name=Renée"
       }
     },
     {
@@ -2837,14 +2837,14 @@
       "operation": "replaceAll",
       "patterns": [
         {
-          "java": " ?[\\[\uff3b](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]\uff3d]",
+          "java": " ?[\\[［](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]］]",
           "alternates": {
             "rust-regex": {
-              "pattern": " ?[\\[\uff3b](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]\uff3d]",
+              "pattern": " ?[\\[［](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]］]",
               "reason": "Rust regex gives \\d Unicode semantics"
             },
             "dotnet": {
-              "pattern": " ?[\\[\uff3b](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]\uff3d]",
+              "pattern": " ?[\\[［](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]］]",
               "reason": ".NET gives \\d Unicode semantics while Java defaults to ASCII"
             }
           }
@@ -3709,7 +3709,7 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.cjkSearch.{matchLabel}.{size}",
       "operation": "find",
       "patterns": [
-        "[\u4e00-\u9fa5]{3,}"
+        "[一-龥]{3,}"
       ],
       "inputs": [
         "realWorldRegex.cjkSearch.{matchLabel}.{size}"
@@ -3739,7 +3739,7 @@
       "operation": "find",
       "patterns": [
         {
-          "java": "[\ud83d\ude00-\ud83d\ude07]",
+          "java": "[😀-😇]",
           "alternates": {
             "dotnet": {
               "pattern": "\\uD83D[\\uDE00-\\uDE07]",
@@ -3775,7 +3775,7 @@
       "id": "RealWorldRegexBenchmark.runBenchmark.recitation.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
-        "\\s*[\\[\uff3b]\\s*(?:(?:[0-9]+\\.?){3,4}(?:\\s*[,\u3001]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]\uff3d]"
+        "\\s*[\\[［]\\s*(?:(?:[0-9]+\\.?){3,4}(?:\\s*[,、]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]］]"
       ],
       "inputs": [
         "realWorldRegex.recitation.{matchLabel}.{size}"
@@ -8109,7 +8109,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeDecode.multibyteEarly",
       "operation": "utf8DecodeFind",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteEarly"
@@ -8128,7 +8128,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeDecode.multibyteLate",
       "operation": "utf8DecodeFind",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteLate"
@@ -8147,7 +8147,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeDecode.multibyteNoMatch",
       "operation": "utf8DecodeFind",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteNoMatch"
@@ -8235,7 +8235,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeBytes.multibyteEarly",
       "operation": "find",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteEarly"
@@ -8258,7 +8258,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeBytes.multibyteLate",
       "operation": "find",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteLate"
@@ -8281,7 +8281,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeBytes.multibyteNoMatch",
       "operation": "find",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteNoMatch"
@@ -8373,7 +8373,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeString.multibyteEarly",
       "operation": "find",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteEarly"
@@ -8396,7 +8396,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeString.multibyteLate",
       "operation": "find",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteLate"
@@ -8419,7 +8419,7 @@
       "id": "Utf8MatchingBenchmark.captureFreeString.multibyteNoMatch",
       "operation": "find",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.captureFree.multibyteNoMatch"
@@ -8587,7 +8587,7 @@
       "id": "Utf8MatchingBenchmark.window",
       "operation": "findInWindow",
       "patterns": [
-        "\u6771\u4eac"
+        "東京"
       ],
       "inputs": [
         "utf8.window"
@@ -8670,7 +8670,7 @@
       "id": "Utf8MatchingBenchmark.requiredClassNonmatchBytes",
       "operation": "find",
       "patterns": [
-        "[\u4e00-\u9fa5]{3,}"
+        "[一-龥]{3,}"
       ],
       "inputs": [
         "utf8Matching.requiredClassNonmatch.text"
@@ -9174,7 +9174,7 @@
       "id": "Utf8MatchingBenchmark.requiredClassNonmatchMatcher",
       "operation": "find",
       "patterns": [
-        "[\u4e00-\u9fa5]{3,}"
+        "[一-龥]{3,}"
       ],
       "inputs": [
         "utf8Matching.requiredClassNonmatch.text"
@@ -9200,7 +9200,7 @@
       "id": "Utf8MatchingBenchmark.requiredClassNonmatchString",
       "operation": "find",
       "patterns": [
-        "[\u4e00-\u9fa5]{3,}"
+        "[一-龥]{3,}"
       ],
       "inputs": [
         "utf8Matching.requiredClassNonmatch.text"
@@ -9384,7 +9384,7 @@
       "id": "ByteReplacementBenchmark.literal",
       "operation": "utf8Replacement",
       "patterns": [
-        "\u9519\u8bef"
+        "错误"
       ],
       "inputs": [
         "utf8.replacement.literal"
