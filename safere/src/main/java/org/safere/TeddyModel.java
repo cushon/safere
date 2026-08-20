@@ -103,6 +103,11 @@ final class TeddyModel implements Serializable {
     return is3Byte;
   }
 
+  /** Compiles a Teddy model only when the optional vector provider is active. */
+  static TeddyModel compileForSelectedProvider(String[] literals) {
+    return VectorScanProviders.providerForLength(64) == null ? null : compile(literals, 64);
+  }
+
   /**
    * Compiles up to 32 ASCII literal keywords into a {@link TeddyModel}.
    *

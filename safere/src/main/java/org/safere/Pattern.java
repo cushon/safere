@@ -487,7 +487,7 @@ public final class Pattern implements Serializable {
     String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
     TeddyModel teddyModel = null;
     if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
-      teddyModel = TeddyModel.compile(altLiterals, 64);
+      teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
     }
     StartAcceleration startAcceleration =
         (prefix == null

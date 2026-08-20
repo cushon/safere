@@ -206,7 +206,6 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  @SuppressWarnings("ArrayRecordComponent")
   record Teddy(TeddyModel model) implements Utf8StartAccelerator {
     @Override
     public AcceleratorPolicy policy() {
