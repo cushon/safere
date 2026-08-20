@@ -10054,6 +10054,18 @@
         {
           "java": "[\\p{IsAlphabetic}]+\\d+",
           "alternates": {
+            "re2": {
+              "unsupported": true,
+              "reason": "RE2 and Go do not expose the Unicode Alphabetic binary property"
+            },
+            "rust-regex": {
+              "pattern": "[\\p{Alphabetic}]+[0-9]+",
+              "reason": "Rust regex uses the Unicode binary property name without Java's Is prefix and gives \\d Unicode semantics"
+            },
+            "pcre2": {
+              "unsupported": true,
+              "reason": "PCRE2 does not expose the Unicode Alphabetic binary property"
+            },
             "dotnet": {
               "unsupported": true,
               "reason": ".NET does not expose Java's IsAlphabetic Unicode property"
@@ -10093,6 +10105,18 @@
         {
           "java": "[\\p{IsAlphabetic}]+\\d+",
           "alternates": {
+            "re2": {
+              "unsupported": true,
+              "reason": "RE2 and Go do not expose the Unicode Alphabetic binary property"
+            },
+            "rust-regex": {
+              "pattern": "[\\p{Alphabetic}]+[0-9]+",
+              "reason": "Rust regex uses the Unicode binary property name without Java's Is prefix and gives \\d Unicode semantics"
+            },
+            "pcre2": {
+              "unsupported": true,
+              "reason": "PCRE2 does not expose the Unicode Alphabetic binary property"
+            },
             "dotnet": {
               "unsupported": true,
               "reason": ".NET does not expose Java's IsAlphabetic Unicode property"
@@ -10129,7 +10153,27 @@
       "id": "UnicodePrefixBenchmark.cjk.absent.{size}",
       "operation": "find",
       "patterns": [
-        "[\\u4E00-\\u9FFF]+\\d+"
+        {
+          "java": "[\\u4E00-\\u9FFF]+\\d+",
+          "alternates": {
+            "re2": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "RE2 and Go use braced hexadecimal code point escapes"
+            },
+            "rust-regex": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "Rust regex uses braced hexadecimal code point escapes and gives \\d Unicode semantics"
+            },
+            "pcre2": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "PCRE2 uses braced hexadecimal code point escapes"
+            },
+            "dotnet": {
+              "pattern": "[\\u4E00-\\u9FFF]+[0-9]+",
+              "reason": ".NET gives \\d Unicode semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "unicodePrefix.englishProseAbsent.{size}"
@@ -10160,7 +10204,27 @@
       "id": "UnicodePrefixBenchmark.cjk.late.{size}",
       "operation": "find",
       "patterns": [
-        "[\\u4E00-\\u9FFF]+\\d+"
+        {
+          "java": "[\\u4E00-\\u9FFF]+\\d+",
+          "alternates": {
+            "re2": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "RE2 and Go use braced hexadecimal code point escapes"
+            },
+            "rust-regex": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "Rust regex uses braced hexadecimal code point escapes and gives \\d Unicode semantics"
+            },
+            "pcre2": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "PCRE2 uses braced hexadecimal code point escapes"
+            },
+            "dotnet": {
+              "pattern": "[\\u4E00-\\u9FFF]+[0-9]+",
+              "reason": ".NET gives \\d Unicode semantics"
+            }
+          }
+        }
       ],
       "inputs": [
         "unicodePrefix.cjkLate.{size}"

@@ -149,9 +149,9 @@ class BenchmarkInputMaterializerTest {
     assertThat(entry.get("sha256").getAsString())
         .isEqualTo("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
     JsonObject resolvedData = manifest.getAsJsonObject("benchmarkData");
-    assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("re2")).hasSize(6);
+    assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("re2")).hasSize(8);
     assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("rust-regex"))
-        .hasSize(26);
+        .hasSize(28);
     assertThat(resolvedData.getAsJsonObject("replacementProfiles").getAsJsonArray("go-regexp"))
         .hasSize(1);
     assertThat(resolvedData.getAsJsonObject("replacementProfiles").getAsJsonArray("re2-cpp"))
@@ -159,7 +159,7 @@ class BenchmarkInputMaterializerTest {
     assertThat(resolvedData.getAsJsonObject("replacementProfiles").getAsJsonArray("rust-regex"))
         .hasSize(1);
     assertThat(resolvedData.getAsJsonObject("patternProfiles").getAsJsonArray("dotnet"))
-        .hasSize(39);
+        .hasSize(40);
     JsonObject executionPlan = manifest.getAsJsonObject("executionPlan");
     assertThat(executionPlan.get("version").getAsInt()).isEqualTo(1);
     assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(603);
@@ -188,7 +188,60 @@ class BenchmarkInputMaterializerTest {
               "UnicodePrefixBenchmark.alphabetic." + input + ".1024@dotnet_nonbacktracking");
       assertThat(dotnetAlphabetic.get("status").getAsString()).isEqualTo("excluded");
       assertThat(dotnetAlphabetic.getAsJsonObject("exclusion").get("reason").getAsString())
-          .contains("IsAlphabetic Unicode property");
+          .contains("Alphabetic");
+
+      for (String engineId : new String[] {"re2_cpp", "go_regexp", "pcre2_jit"}) {
+        JsonObject excludedAlphabetic =
+            executionEntry(
+                executionPlan, "UnicodePrefixBenchmark.alphabetic." + input + ".1024@" + engineId);
+        assertThat(excludedAlphabetic.get("status").getAsString()).isEqualTo("excluded");
+        assertThat(excludedAlphabetic.getAsJsonObject("exclusion").get("reason").getAsString())
+            .contains("Alphabetic");
+      }
+      assertThat(
+              executionEntry(
+                      executionPlan,
+                      "UnicodePrefixBenchmark.alphabetic." + input + ".1024@rust_regex")
+                  .getAsJsonArray("patterns")
+                  .get(0)
+                  .getAsString())
+          .isEqualTo("[\\p{Alphabetic}]+[0-9]+");
+
+      assertThat(
+              executionEntry(executionPlan, "UnicodePrefixBenchmark.cjk." + input + ".1024@re2_cpp")
+                  .getAsJsonArray("patterns")
+                  .get(0)
+                  .getAsString())
+          .isEqualTo("[\\x{4E00}-\\x{9FFF}]+[0-9]+");
+      assertThat(
+              executionEntry(
+                      executionPlan, "UnicodePrefixBenchmark.cjk." + input + ".1024@go_regexp")
+                  .getAsJsonArray("patterns")
+                  .get(0)
+                  .getAsString())
+          .isEqualTo("[\\x{4E00}-\\x{9FFF}]+[0-9]+");
+      assertThat(
+              executionEntry(
+                      executionPlan, "UnicodePrefixBenchmark.cjk." + input + ".1024@rust_regex")
+                  .getAsJsonArray("patterns")
+                  .get(0)
+                  .getAsString())
+          .isEqualTo("[\\x{4E00}-\\x{9FFF}]+[0-9]+");
+      assertThat(
+              executionEntry(
+                      executionPlan, "UnicodePrefixBenchmark.cjk." + input + ".1024@pcre2_jit")
+                  .getAsJsonArray("patterns")
+                  .get(0)
+                  .getAsString())
+          .isEqualTo("[\\x{4E00}-\\x{9FFF}]+[0-9]+");
+      assertThat(
+              executionEntry(
+                      executionPlan,
+                      "UnicodePrefixBenchmark.cjk." + input + ".1024@dotnet_nonbacktracking")
+                  .getAsJsonArray("patterns")
+                  .get(0)
+                  .getAsString())
+          .isEqualTo("[\\u4E00-\\u9FFF]+[0-9]+");
     }
     for (JsonElement engineElement : executionPlan.getAsJsonArray("engines")) {
       String engineId = engineElement.getAsJsonObject().get("id").getAsString();
