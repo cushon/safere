@@ -16,6 +16,14 @@ final class VectorScanProviders {
     return SELECTED != null && length >= SELECTED.minimumInputLength() ? SELECTED : null;
   }
 
+  static VectorScanProvider providerForTeddyLength(int length) {
+    return SELECTED != null && length >= SELECTED.minimumTeddyInputLength() ? SELECTED : null;
+  }
+
+  static boolean teddyProviderAvailable() {
+    return SELECTED != null;
+  }
+
   private static VectorScanProvider loadSelected() {
     String requested = System.getProperty(PROVIDER_PROPERTY, "").trim();
     if (requested.isEmpty() || requested.equals("swar")) {
