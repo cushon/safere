@@ -47,7 +47,9 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
-    if (scanProvider != null && limit - fromIndex >= scanProvider.minimumInputLength()) {
+    if (!WorkCounterConfig.ENABLED
+        && scanProvider != null
+        && limit - fromIndex >= scanProvider.minimumInputLength()) {
       int idx = StringVectorScan.indexOfAsciiPair(text, c1, c2, fromIndex, limit);
       if (idx != VectorScanProvider.UNSUPPORTED) {
         return idx;
@@ -72,7 +74,9 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
-    if (scanProvider != null && limit - fromIndex >= scanProvider.minimumInputLength()) {
+    if (!WorkCounterConfig.ENABLED
+        && scanProvider != null
+        && limit - fromIndex >= scanProvider.minimumInputLength()) {
       int idx = StringVectorScan.indexOfAsciiTriple(text, c1, c2, c3, fromIndex, limit);
       if (idx != VectorScanProvider.UNSUPPORTED) {
         return idx;
@@ -117,7 +121,7 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCharClass(CharClassScanInfo scanInfo, int start) {
-    if (scanProvider != null) {
+    if (!WorkCounterConfig.ENABLED && scanProvider != null) {
       int vectorIndex = StringVectorScan.indexOfCharClass(text, scanInfo.ranges(), start);
       if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
         return vectorIndex;
@@ -146,7 +150,9 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCodePointClass(int[] ranges, long bitmap0, long bitmap1, int start, int limit) {
-    if (scanProvider != null && limit - start >= scanProvider.minimumInputLength()) {
+    if (!WorkCounterConfig.ENABLED
+        && scanProvider != null
+        && limit - start >= scanProvider.minimumInputLength()) {
       int vectorIndex = StringVectorScan.indexOfCharClass(text, ranges, start, limit);
       if (vectorIndex != VectorScanProvider.UNSUPPORTED) {
         return vectorIndex;
