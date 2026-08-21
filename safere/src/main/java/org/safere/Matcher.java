@@ -21,6 +21,7 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import org.safere.Pattern.CharClassScanInfo;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by
@@ -952,14 +953,14 @@ public final class Matcher implements MatchResult {
           return true;
         }
       }
-    } else if (parentPattern.charClassPrefixAscii() != null) {
-      AsciiBitmap cc = parentPattern.charClassPrefixAscii();
+    } else if (parentPattern.charClassPrefix() != null) {
+      CharClassScanInfo cc = parentPattern.charClassPrefix();
       if (text != null) {
         if (searchFrom >= text.length()) {
           return true;
         }
-        char c = text.charAt(searchFrom);
-        if (!cc.contains(c)) {
+        int cp = text.codePointAt(searchFrom);
+        if (!cc.contains(cp)) {
           if (WorkCounterConfig.ENABLED) {
             WorkCounter.record(1);
           }
@@ -969,8 +970,8 @@ public final class Matcher implements MatchResult {
         if (searchFrom >= utf8Scanner.length()) {
           return true;
         }
-        int ascii = utf8Scanner.asciiAt(searchFrom);
-        if (!cc.contains(ascii)) {
+        int cp = utf8Scanner.codePointAt(searchFrom);
+        if (!cc.contains(cp)) {
           return true;
         }
       }
@@ -992,14 +993,14 @@ public final class Matcher implements MatchResult {
           return true;
         }
       }
-    } else if (parentPattern.anchoredCharClassPrefixAscii() != null) {
-      AsciiBitmap cc = parentPattern.anchoredCharClassPrefixAscii();
+    } else if (parentPattern.anchoredCharClassPrefix() != null) {
+      CharClassScanInfo cc = parentPattern.anchoredCharClassPrefix();
       if (text != null) {
         if (searchFrom >= text.length()) {
           return true;
         }
-        char c = text.charAt(searchFrom);
-        if (!cc.contains(c)) {
+        int cp = text.codePointAt(searchFrom);
+        if (!cc.contains(cp)) {
           if (WorkCounterConfig.ENABLED) {
             WorkCounter.record(1);
           }
@@ -1009,8 +1010,8 @@ public final class Matcher implements MatchResult {
         if (searchFrom >= utf8Scanner.length()) {
           return true;
         }
-        int ascii = utf8Scanner.asciiAt(searchFrom);
-        if (!cc.contains(ascii)) {
+        int cp = utf8Scanner.codePointAt(searchFrom);
+        if (!cc.contains(cp)) {
           return true;
         }
       }

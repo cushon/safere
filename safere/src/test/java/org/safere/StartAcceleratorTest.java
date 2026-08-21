@@ -9,6 +9,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
+import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 
 @DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
@@ -114,8 +115,8 @@ class StartAcceleratorTest {
 
   @Test
   void charClassPrefixAcceleratesStringAndUtf8() {
-    AsciiBitmap ascii = new AsciiBitmap.Builder().add('a').add('b').build();
-    StartDescriptor desc = descriptor(null, false, null, ascii);
+    CharClassScanInfo scanInfo = Pattern.compile("[ab]").charClassPrefix();
+    StartDescriptor desc = descriptor(null, false, null, scanInfo);
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
@@ -133,9 +134,56 @@ class StartAcceleratorTest {
       String prefix,
       boolean prefixFoldCase,
       FixedOffsetLiteral fixedOffsetLiteral,
-      AsciiBitmap charClassPrefixAscii) {
+      CharClassScanInfo charClassPrefix) {
     return new StartDescriptor(
-        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefixAscii, null, null, null, null);
+        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, null, null, null, null);
+  }
+
+  @Test
+  void unicodeCharClassPrefixAcceleratesStringAndUtf8() {
+    Pattern pattern = Pattern.compile("[\\p{IsAlphabetic}]+");
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
+    assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, "123\u00e945", 0, false))
+        .isEqualTo(3);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner("123\u00e945"), 0))
+        .isEqualTo(3);
+  }
+
+  @Test
+  void supplementaryUnicodeCharClassPrefixAcceleratesStringAndUtf8() {
+    Pattern pattern = Pattern.compile("[(é)|(😀)]");
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
+    assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, "x\uD83D\uDE00y", 0, false))
+        .isEqualTo(1);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner("x😀y"), 0))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void unicodeCharClassPrefixResumesAsciiScanningAfterNonAsciiCodePoints() {
+    StringStartAccelerator accelerator =
+        Pattern.compile("[\\p{IsAlphabetic}]+").stringStartAccelerator();
+
+    assertThat(StringStartAccelerator.findNextCandidate(accelerator, "000©000", 0, false))
+        .isEqualTo(-1);
+    assertThat(StringStartAccelerator.findNextCandidate(accelerator, "000©000Ā", 0, false))
+        .isEqualTo(7);
+    assertThat(StringStartAccelerator.findNextCandidate(accelerator, "000😀000a", 0, false))
+        .isEqualTo(8);
+    assertThat(StringStartAccelerator.findNextCandidate(accelerator, "000😀000a", 4, false))
+        .isEqualTo(8);
   }
 
   @Test

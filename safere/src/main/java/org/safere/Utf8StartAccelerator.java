@@ -30,19 +30,15 @@ sealed interface Utf8StartAccelerator {
       return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
+      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
     }
     if (descriptor.teddyModel() != null
         && !hasWordBoundary
         && VectorScanProviders.teddyProviderAvailable()) {
       return new Teddy(descriptor.teddyModel());
     }
-    if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      CharClassScanInfo scanInfo =
-          Pattern.buildAsciiClassScanInfo(descriptor.charClassPrefixAscii());
-      if (scanInfo != null) {
-        return new CharClass(scanInfo);
-      }
+    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
+      return new CharClass(descriptor.charClassPrefix());
     }
     return null;
   }
@@ -124,7 +120,7 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap charClassPrefixAscii)
+  record FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo charClassPrefix)
       implements Utf8StartAccelerator {
 
     @Override
@@ -133,13 +129,13 @@ sealed interface Utf8StartAccelerator {
     }
 
     int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefixAscii, fromIndex);
+      return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefix, fromIndex);
     }
 
     private static int nextFixedOffsetCandidate(
         Utf8InputScanner scanner,
         FixedOffsetLiteral fixedOffsetLiteral,
-        AsciiBitmap charClassPrefixAscii,
+        CharClassScanInfo charClassPrefix,
         int searchFrom) {
       int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
       int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
@@ -153,15 +149,15 @@ sealed interface Utf8StartAccelerator {
         if (literalStart < 0) {
           return -1;
         }
-        if (discreteOffsets != null
-            && discreteOffsets.length == 1
-            && charClassPrefixAscii != null) {
+        if (discreteOffsets != null && discreteOffsets.length == 1 && charClassPrefix != null) {
           int earliestValid = -1;
           for (int offset : discreteOffsets) {
             int candidateStart = literalStart - offset;
             if (candidateStart >= searchFrom) {
-              int first = scanner.asciiAt(candidateStart);
-              if (charClassPrefixAscii.contains(first)
+              int first =
+                  candidateStart < scanner.length() ? scanner.codePointAt(candidateStart) : -1;
+              if (first >= 0
+                  && charClassPrefix.contains(first)
                   && (earliestValid < 0 || candidateStart < earliestValid)) {
                 earliestValid = candidateStart;
               }

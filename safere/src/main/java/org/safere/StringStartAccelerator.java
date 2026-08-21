@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 import org.safere.Pattern.StartAcceleration;
 
@@ -29,10 +30,10 @@ sealed interface StringStartAccelerator {
       return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
+      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
     }
-    if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      return CharClass.create(descriptor.charClassPrefixAscii());
+    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
+      return CharClass.create(descriptor.charClassPrefix());
     }
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {
       return new LineAnchor(descriptor.lineAnchor());
@@ -113,7 +114,7 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap firstAscii)
+  record FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo firstCharClass)
       implements StringStartAccelerator {
 
     @Override
@@ -122,11 +123,14 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return nextFixedOffsetCandidate(text, fixedOffset, firstAscii, fromIndex);
+      return nextFixedOffsetCandidate(text, fixedOffset, firstCharClass, fromIndex);
     }
 
     private static int nextFixedOffsetCandidate(
-        String text, FixedOffsetLiteral fixedOffsetLiteral, AsciiBitmap firstAscii, int fromIndex) {
+        String text,
+        FixedOffsetLiteral fixedOffsetLiteral,
+        CharClassScanInfo firstCharClass,
+        int fromIndex) {
       int minOffset = fixedOffsetLiteral.minOffset();
       if (minOffset > text.length() - fromIndex) {
         return -1;
@@ -146,14 +150,14 @@ sealed interface StringStartAccelerator {
         if (literalStart < 0) {
           return -1;
         }
-        if (discreteOffsets != null && discreteOffsets.length == 1 && firstAscii != null) {
+        if (discreteOffsets != null && discreteOffsets.length == 1 && firstCharClass != null) {
           boolean matchFound = false;
           int earliestValid = -1;
           for (int offset : discreteOffsets) {
             int candidateStart = literalStart - offset;
             if (candidateStart >= fromIndex) {
               int first = candidateStart < text.length() ? text.charAt(candidateStart) : -1;
-              if (first >= 0 && firstAscii.contains(first)) {
+              if (first >= 0 && firstCharClass.contains(first)) {
                 matchFound = true;
                 if (earliestValid < 0 || candidateStart < earliestValid) {
                   earliestValid = candidateStart;
@@ -191,10 +195,11 @@ sealed interface StringStartAccelerator {
 
   // The lookup table is immutable pattern metadata; array identity and value semantics are unused.
   @SuppressWarnings("ArrayRecordComponent")
-  record CharClass(AsciiBitmap asciiMap, boolean[] asciiTable) implements StringStartAccelerator {
+  record CharClass(CharClassScanInfo scanInfo, boolean[] asciiTable)
+      implements StringStartAccelerator {
 
-    static CharClass create(AsciiBitmap asciiMap) {
-      return new CharClass(asciiMap, asciiMap.toBooleanArray());
+    static CharClass create(CharClassScanInfo scanInfo) {
+      return new CharClass(scanInfo, buildAsciiTable(scanInfo));
     }
 
     @Override
@@ -203,20 +208,64 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return indexOfCharClass(text, asciiTable, fromIndex);
+      return indexOfCharClass(text, asciiTable, scanInfo.ranges, scanInfo.isAscii, fromIndex);
     }
 
-    private static int indexOfCharClass(String text, boolean[] asciiTable, int fromIndex) {
-      for (int i = fromIndex; i < text.length(); i++) {
+    private static int indexOfCharClass(
+        String text, boolean[] asciiTable, int[] ranges, boolean isAscii, int fromIndex) {
+      int length = text.length();
+      int index = fromIndex;
+      while (index < length) {
+        int asciiResult = scanAsciiRun(text, asciiTable, index);
+        if (asciiResult >= 0) {
+          return asciiResult;
+        }
+        index = ~asciiResult;
+        if (index >= length) {
+          return -1;
+        }
+
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        int cp = text.codePointAt(index);
+        if (!isAscii && Matcher.binarySearchRanges(ranges, cp)) {
+          return index;
+        }
+        index += Character.charCount(cp);
+      }
+      return -1;
+    }
+
+    /**
+     * Scans one contiguous ASCII run. A nonnegative result is a matching position; a negative
+     * result is the complement of either the first non-ASCII position or the text length. Keeping
+     * Unicode decoding and range lookup outside this loop allows HotSpot to optimize the common
+     * ASCII path independently.
+     */
+    private static int scanAsciiRun(String text, boolean[] asciiTable, int fromIndex) {
+      int length = text.length();
+      for (int i = fromIndex; i < length; i++) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
         char ch = text.charAt(i);
-        if (ch < 128 && asciiTable[ch]) {
+        if (ch >= 128) {
+          return ~i;
+        }
+        if (asciiTable[ch]) {
           return i;
         }
       }
-      return -1;
+      return ~length;
+    }
+
+    private static boolean[] buildAsciiTable(CharClassScanInfo scanInfo) {
+      boolean[] table = new boolean[128];
+      for (int i = 0; i < 128; i++) {
+        table[i] = scanInfo.contains(i);
+      }
+      return table;
     }
   }
 
