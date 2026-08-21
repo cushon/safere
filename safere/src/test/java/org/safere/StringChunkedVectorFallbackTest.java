@@ -81,7 +81,7 @@ class StringChunkedVectorFallbackTest {
     }
     String text = new String(chars);
 
-    int found = StringVectorScan.indexOfIgnoreCase(text, "hello", 0);
+    int found = Matcher.indexOfIgnoreCase(text, "hello", 0);
     assertThat(found).isEqualTo(targetOffset);
   }
 
