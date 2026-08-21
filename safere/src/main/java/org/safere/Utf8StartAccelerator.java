@@ -293,6 +293,7 @@ sealed interface Utf8StartAccelerator {
           return -1;
         }
         int start = innerMatch;
+        int count = 0;
         while (start > fromIndex) {
           int cp = scanner.singleUnitCodePointBefore(start);
           int prevPos;
@@ -306,12 +307,12 @@ sealed interface Utf8StartAccelerator {
           if (!leadingClass.contains(cp)) {
             break;
           }
-          if (innerMatch - prevPos > maxRepetition) {
+          if (count + 1 > maxRepetition) {
             break;
           }
+          count++;
           start = prevPos;
         }
-        int count = innerMatch - start;
         if (count >= minRepetition) {
           return start;
         }

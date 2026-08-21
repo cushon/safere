@@ -404,18 +404,18 @@ sealed interface StringStartAccelerator {
           return -1;
         }
         int start = innerMatch;
+        int count = 0;
         while (start > fromIndex) {
           int cp = text.codePointBefore(start);
           if (!leadingClass.contains(cp)) {
             break;
           }
-          int charCount = Character.charCount(cp);
-          if (innerMatch - (start - charCount) > maxRepetition) {
+          if (count + 1 > maxRepetition) {
             break;
           }
-          start -= charCount;
+          count++;
+          start -= Character.charCount(cp);
         }
-        int count = innerMatch - start;
         if (count >= minRepetition) {
           return start;
         }
