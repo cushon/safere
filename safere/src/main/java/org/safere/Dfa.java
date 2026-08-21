@@ -83,7 +83,7 @@ final class Dfa {
    * plus position-dependent flags. States are cached and shared across transitions to avoid
    * recomputation.
    */
-  private static final class State {
+  static final class State {
     final int id;
     final int[] insts; // sorted NFA instruction IDs (CHAR_RANGE, EMPTY_WIDTH, and MATCH only)
     final int flags;
@@ -822,7 +822,7 @@ final class Dfa {
   }
 
   private static boolean instMatches(Inst ip, int ch) {
-    if (ip.opCode == InstOp.OP_CHAR_RANGE) {
+    if (ip.opCode == InstOp.OP_CHAR_RANGE || ip.opCode == InstOp.OP_ALT_MATCH) {
       return ip.matchesChar(ch);
     }
     if (ip.opCode == InstOp.OP_CHAR_CLASS) {
@@ -838,7 +838,7 @@ final class Dfa {
    * prefix loop that the compiler generates. This keeps all start positions alive within the DFA
    * state without needing to restart at each position (unlike the NFA).
    */
-  private State startState(InputScanner text, int pos, boolean anchored) {
+  State startState(InputScanner text, int pos, boolean anchored) {
     return startState(text, pos, anchored, false);
   }
 
@@ -886,7 +886,7 @@ final class Dfa {
    * @param reverseContext if true, FLAG_LAST_WORD is set based on the character AT pos (the char to
    *     the right of where a reverse scan begins), rather than the character BEFORE pos
    */
-  private State startState(InputScanner text, int pos, boolean anchored, boolean reverseContext) {
+  State startState(InputScanner text, int pos, boolean anchored, boolean reverseContext) {
     int startInst = anchored ? prog.start() : prog.startUnanchored();
     if (startInst == 0) {
       return deadState;

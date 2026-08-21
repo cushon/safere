@@ -685,6 +685,14 @@ class DfaTest {
 
   @Test
   void automataDerivedStartStateAcceleratesAlternations() {
+    Regexp re = Parser.parse("apple|banana|cherry", FLAGS);
+    Prog prog = Compiler.compile(re);
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    InputScanner scanner = new StringInputScanner("x".repeat(100));
+    Dfa.State s = dfa.startState(scanner, 0, false);
+    assertThat(s.accelerator).isNotNull();
+    assertThat(s.accelerator).isInstanceOf(StateAccelerator.AsciiTripleEscape.class);
+
     Pattern pattern = Pattern.compile("apple|banana|cherry");
     String text = "x".repeat(500) + "banana" + "y".repeat(500);
     assertThat(pattern.matcher(text).find()).isTrue();
