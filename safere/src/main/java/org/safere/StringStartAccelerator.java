@@ -84,6 +84,7 @@ sealed interface StringStartAccelerator {
     }
   }
 
+  // The failure table is immutable pattern metadata; array identity and value semantics are unused.
   @SuppressWarnings("ArrayRecordComponent")
   record CaseInsensitiveLiteral(
       String prefix, int[] failure, int anchorOffset, char anchorLow, char anchorHigh)
@@ -188,6 +189,7 @@ sealed interface StringStartAccelerator {
     }
   }
 
+  // The lookup table is immutable pattern metadata; array identity and value semantics are unused.
   @SuppressWarnings("ArrayRecordComponent")
   record CharClass(AsciiBitmap asciiMap, boolean[] asciiTable) implements StringStartAccelerator {
 
