@@ -36,7 +36,7 @@ class MatchDescriptorTest {
     MatchDescriptor desc = p.matchDescriptor();
     assertThat(desc.hasFastPath()).isTrue();
     assertThat(desc.singleCharClass()).isNotNull();
-    assertThat(desc.singleCharClass().isAscii).isTrue();
+    assertThat(desc.singleCharClass().isAscii()).isTrue();
   }
 
   @Test

@@ -6,7 +6,6 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 
 /**
@@ -30,7 +29,7 @@ sealed interface Utf8StartAccelerator {
       return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
+      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
     }
     if (descriptor.teddyModel() != null
         && !hasWordBoundary
@@ -42,12 +41,8 @@ sealed interface Utf8StartAccelerator {
         && VectorScanProviders.multiLiteralProviderAvailable()) {
       return new MultiLiteral(descriptor.multiLiteral());
     }
-    if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      CharClassScanInfo scanInfo =
-          Pattern.buildAsciiClassScanInfo(descriptor.charClassPrefixAscii());
-      if (scanInfo != null) {
-        return new CharClass(scanInfo);
-      }
+    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
+      return new CharClass(descriptor.charClassPrefix());
     }
     return null;
   }
@@ -138,7 +133,7 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap charClassPrefixAscii)
+  record FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo charClassPrefix)
       implements Utf8StartAccelerator {
 
     @Override
@@ -148,13 +143,13 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefixAscii, fromIndex);
+      return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefix, fromIndex);
     }
 
     private static int nextFixedOffsetCandidate(
         Utf8InputScanner scanner,
         FixedOffsetLiteral fixedOffsetLiteral,
-        AsciiBitmap charClassPrefixAscii,
+        CharClassScanInfo charClassPrefix,
         int searchFrom) {
       int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
       int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
@@ -168,15 +163,15 @@ sealed interface Utf8StartAccelerator {
         if (literalStart < 0) {
           return -1;
         }
-        if (discreteOffsets != null
-            && discreteOffsets.length == 1
-            && charClassPrefixAscii != null) {
+        if (discreteOffsets != null && discreteOffsets.length == 1 && charClassPrefix != null) {
           int earliestValid = -1;
           for (int offset : discreteOffsets) {
             int candidateStart = literalStart - offset;
             if (candidateStart >= searchFrom) {
-              int first = scanner.asciiAt(candidateStart);
-              if (charClassPrefixAscii.contains(first)
+              int first =
+                  candidateStart < scanner.length() ? scanner.codePointAt(candidateStart) : -1;
+              if (first >= 0
+                  && charClassPrefix.contains(first)
                   && (earliestValid < 0 || candidateStart < earliestValid)) {
                 earliestValid = candidateStart;
               }
@@ -204,11 +199,35 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      if (scanInfo != null) {
-        return scanner.indexOfCodePointClass(
-            scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex, scanner.length());
+      if (scanInfo == null) {
+        return fromIndex;
       }
-      return fromIndex;
+      return switch (scanInfo) {
+        case CharClassScanInfo.AsciiSmallSet smallSet -> {
+          char[] chars = smallSet.chars();
+          yield switch (chars.length) {
+            case 1 -> scanner.indexOfAscii(chars[0], fromIndex, scanner.length());
+            case 2 -> scanner.indexOfAsciiPair(chars[0], chars[1], fromIndex, scanner.length());
+            case 3 ->
+                scanner.indexOfCodePointClass(
+                    smallSet.ranges(),
+                    smallSet.bitmap0(),
+                    smallSet.bitmap1(),
+                    fromIndex,
+                    scanner.length());
+            default ->
+                scanner.indexOfCodePointClass(
+                    smallSet.ranges(),
+                    smallSet.bitmap0(),
+                    smallSet.bitmap1(),
+                    fromIndex,
+                    scanner.length());
+          };
+        }
+        case CharClassScanInfo other ->
+            scanner.indexOfCodePointClass(
+                other.ranges(), other.bitmap0(), other.bitmap1(), fromIndex, scanner.length());
+      };
     }
   }
 

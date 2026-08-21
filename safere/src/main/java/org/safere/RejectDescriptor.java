@@ -5,7 +5,6 @@
 
 package org.safere;
 
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.DisjointRequiredLiterals;
 import org.safere.Pattern.EndAnchoredCharClassInfo;
 import org.safere.Pattern.SuffixInfo;

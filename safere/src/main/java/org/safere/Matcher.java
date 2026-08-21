@@ -625,8 +625,8 @@ public final class Matcher implements MatchResult {
    * Fast path for {@code find()} when the pattern is exactly one character class. Scans code points
    * directly and returns the first matching code point as group 0.
    */
-  private boolean singleCharClassFindFastPath(Pattern.CharClassScanInfo scanInfo, int fromIndex) {
-    if (scanInfo.isAscii) {
+  private boolean singleCharClassFindFastPath(CharClassScanInfo scanInfo, int fromIndex) {
+    if (scanInfo.isAscii()) {
       int idx = activeScanner().indexOfCharClass(scanInfo, fromIndex);
       if (idx >= 0) {
         return applyFullMatchResult(new int[] {idx, idx + 1});
@@ -636,9 +636,9 @@ public final class Matcher implements MatchResult {
     int idx =
         activeScanner()
             .indexOfCodePointClass(
-                scanInfo.ranges,
-                scanInfo.bitmap0,
-                scanInfo.bitmap1,
+                scanInfo.ranges(),
+                scanInfo.bitmap0(),
+                scanInfo.bitmap1(),
                 fromIndex,
                 activeScanner().length());
     if (idx >= 0) {
@@ -952,14 +952,14 @@ public final class Matcher implements MatchResult {
           return true;
         }
       }
-    } else if (parentPattern.charClassPrefixAscii() != null) {
-      AsciiBitmap cc = parentPattern.charClassPrefixAscii();
+    } else if (parentPattern.charClassPrefix() != null) {
+      CharClassScanInfo cc = parentPattern.charClassPrefix();
       if (text != null) {
         if (searchFrom >= text.length()) {
           return true;
         }
-        char c = text.charAt(searchFrom);
-        if (!cc.contains(c)) {
+        int cp = text.codePointAt(searchFrom);
+        if (!cc.contains(cp)) {
           if (WorkCounterConfig.ENABLED) {
             WorkCounter.record(1);
           }
@@ -969,8 +969,8 @@ public final class Matcher implements MatchResult {
         if (searchFrom >= utf8Scanner.length()) {
           return true;
         }
-        int ascii = utf8Scanner.asciiAt(searchFrom);
-        if (!cc.contains(ascii)) {
+        int cp = utf8Scanner.codePointAt(searchFrom);
+        if (!cc.contains(cp)) {
           return true;
         }
       }
@@ -992,14 +992,14 @@ public final class Matcher implements MatchResult {
           return true;
         }
       }
-    } else if (parentPattern.anchoredCharClassPrefixAscii() != null) {
-      AsciiBitmap cc = parentPattern.anchoredCharClassPrefixAscii();
+    } else if (parentPattern.anchoredCharClassPrefix() != null) {
+      CharClassScanInfo cc = parentPattern.anchoredCharClassPrefix();
       if (text != null) {
         if (searchFrom >= text.length()) {
           return true;
         }
-        char c = text.charAt(searchFrom);
-        if (!cc.contains(c)) {
+        int cp = text.codePointAt(searchFrom);
+        if (!cc.contains(cp)) {
           if (WorkCounterConfig.ENABLED) {
             WorkCounter.record(1);
           }
@@ -1009,8 +1009,8 @@ public final class Matcher implements MatchResult {
         if (searchFrom >= utf8Scanner.length()) {
           return true;
         }
-        int ascii = utf8Scanner.asciiAt(searchFrom);
-        if (!cc.contains(ascii)) {
+        int cp = utf8Scanner.codePointAt(searchFrom);
+        if (!cc.contains(cp)) {
           return true;
         }
       }
@@ -4419,7 +4419,7 @@ public final class Matcher implements MatchResult {
     }
 
     // Char class fast path
-    Pattern.CharClassScanInfo singleCharClass = parentPattern.matchDescriptor().singleCharClass();
+    CharClassScanInfo singleCharClass = parentPattern.matchDescriptor().singleCharClass();
     if (options.charClassMatchFastPaths() && singleCharClass != null) {
       if (prog.anchorStart() && fromIndex > 0) {
         return -1L;
@@ -4434,7 +4434,7 @@ public final class Matcher implements MatchResult {
         }
         return -1L;
       }
-      if (singleCharClass.isAscii) {
+      if (singleCharClass.isAscii()) {
         int idx = scanner.indexOfCharClass(singleCharClass, fromIndex);
         if (idx < 0) {
           return -1L;
@@ -4443,9 +4443,9 @@ public final class Matcher implements MatchResult {
       }
       int idx =
           scanner.indexOfCodePointClass(
-              singleCharClass.ranges,
-              singleCharClass.bitmap0,
-              singleCharClass.bitmap1,
+              singleCharClass.ranges(),
+              singleCharClass.bitmap0(),
+              singleCharClass.bitmap1(),
               fromIndex,
               scanner.length());
       if (idx < 0) {
@@ -4727,12 +4727,12 @@ public final class Matcher implements MatchResult {
   }
 
   static final class SingleCharClassPreparedRunner implements PreparedMatchRunner {
-    private final Pattern.CharClassScanInfo singleCharClass;
+    private final CharClassScanInfo singleCharClass;
     private final Pattern.CharClassMatchInfo charClassMatch;
     private final boolean isStartAnchored;
 
     SingleCharClassPreparedRunner(
-        Pattern.CharClassScanInfo singleCharClass,
+        CharClassScanInfo singleCharClass,
         Pattern.CharClassMatchInfo charClassMatch,
         boolean isStartAnchored) {
       this.singleCharClass = singleCharClass;

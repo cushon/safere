@@ -399,6 +399,18 @@ class CharClassTest {
     assertThat(cc.contains(0x1F5FF)).isFalse();
   }
 
+  @Test
+  void scanInfoRetainsPrecomputedRanges() {
+    CharClassScanInfo smallSet =
+        CharClassScanInfo.fromCharClass(new CharClassBuilder().addRune('a').addRune('z').build());
+    CharClassScanInfo bitmap =
+        CharClassScanInfo.fromCharClass(
+            new CharClassBuilder().addRune('a').addRune('c').addRune('e').addRune('g').build());
+
+    assertThat(smallSet.ranges()).isSameAs(smallSet.ranges());
+    assertThat(bitmap.ranges()).isSameAs(bitmap.ranges());
+  }
+
   private static void assertRanges(CharClass cc, int... endpoints) {
     assertThat(endpoints.length).isEven();
     assertThat(cc.numRanges()).isEqualTo(endpoints.length / 2);

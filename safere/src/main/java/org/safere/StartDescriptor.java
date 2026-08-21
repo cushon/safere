@@ -16,20 +16,38 @@ record StartDescriptor(
     String prefix,
     boolean prefixFoldCase,
     FixedOffsetLiteral fixedOffsetLiteral,
-    AsciiBitmap charClassPrefixAscii,
+    CharClassScanInfo charClassPrefix,
     StartAcceleration lineAnchor,
     String anchoredPrefix,
-    AsciiBitmap anchoredCharClassPrefixAscii,
+    CharClassScanInfo anchoredCharClassPrefix,
     MultiLiteralInfo multiLiteral,
     TeddyModel teddyModel) {
 
   static final StartDescriptor NONE =
       new StartDescriptor(null, false, null, null, null, null, null, null, null);
 
+  StartDescriptor(
+      String prefix,
+      boolean prefixFoldCase,
+      FixedOffsetLiteral fixedOffsetLiteral,
+      CharClassScanInfo charClassPrefix,
+      StartAcceleration lineAnchor) {
+    this(
+        prefix,
+        prefixFoldCase,
+        fixedOffsetLiteral,
+        charClassPrefix,
+        lineAnchor,
+        null,
+        null,
+        null,
+        null);
+  }
+
   boolean hasStartAcceleration() {
     return prefix != null
         || fixedOffsetLiteral != null
-        || charClassPrefixAscii != null
+        || charClassPrefix != null
         || lineAnchor != null
         || multiLiteral != null
         || teddyModel != null;

@@ -9,7 +9,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
-import org.safere.Pattern.CharClassScanInfo;
 
 @DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
 class RejectPrefilterTest {
@@ -59,7 +58,7 @@ class RejectPrefilterTest {
     int[] ranges = new int[] {'0', '9'};
     long b0 = 0x03FF000000000000L; // digits 0-9
     long b1 = 0L;
-    CharClassScanInfo scanInfo = new CharClassScanInfo(ranges, b0, b1, true);
+    CharClassScanInfo scanInfo = new CharClassScanInfo.AsciiRanges(ranges, b0, b1);
 
     RejectDescriptor desc = new RejectDescriptor(null, scanInfo);
     assertThat(desc.hasRejectionFilter()).isTrue();
@@ -89,7 +88,7 @@ class RejectPrefilterTest {
     int[] ranges = new int[] {'0', '9'};
     long b0 = 0x03FF000000000000L;
     long b1 = 0L;
-    CharClassScanInfo scanInfo = new CharClassScanInfo(ranges, b0, b1, true);
+    CharClassScanInfo scanInfo = new CharClassScanInfo.AsciiRanges(ranges, b0, b1);
 
     RejectDescriptor desc = new RejectDescriptor("token", scanInfo);
     RejectPrefilter prefilter = RejectPrefilter.create(desc);
