@@ -280,7 +280,7 @@ sealed interface Utf8StartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
-      return inner.policy();
+      return new AcceleratorPolicy(16, 4, false, inner.policy().strategy());
     }
 
     @Override
