@@ -283,4 +283,68 @@ class StartAcceleratorTest {
     assertThat(utf8Acc.findCandidate(utf8Scanner("http://example without leading space"), 0))
         .isEqualTo(-1);
   }
+
+  @Test
+  void leadingBoundedUnicodeExpansionAcceleratesStringAndUtf8() {
+    Pattern pattern = Pattern.compile("[\\u00e9\\u00e8]+:target");
+    StartDescriptor desc = pattern.startDescriptor();
+    assertThat(desc.hasStartAcceleration()).isTrue();
+    assertThat(desc.leadingExpansion()).isNotNull();
+    assertThat(desc.leadingExpansion().minRepetition()).isEqualTo(1);
+    assertThat(desc.leadingExpansion().maxRepetition()).isEqualTo(Integer.MAX_VALUE);
+
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
+    // 5 \u00e9 chars before :target
+    assertThat(strAcc.findCandidate("prefix\u00e9\u00e9\u00e9\u00e9\u00e9:target", 0, false))
+        .isEqualTo(6);
+    // 1 \u00e9 char
+    assertThat(strAcc.findCandidate("prefix\u00e9:target", 0, false)).isEqualTo(6);
+    // 0 \u00e9 chars -> fails minRepetition check (1)
+    assertThat(strAcc.findCandidate("prefix:target", 0, false)).isEqualTo(-1);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.LeadingExpansion.class);
+    // In UTF-8, "prefix" is 6 bytes. Each \u00e9 is 2 bytes (0xC3 0xA9).
+    // ":target" starts at byte 6 + (5 * 2) = 16.
+    // Leftmost \u00e9 is at byte 6.
+    assertThat(utf8Acc.findCandidate(utf8Scanner("prefix\u00e9\u00e9\u00e9\u00e9\u00e9:target"), 0))
+        .isEqualTo(6);
+    // 1 code point -> byte 6
+    assertThat(utf8Acc.findCandidate(utf8Scanner("prefix\u00e9:target"), 0)).isEqualTo(6);
+    // 0 code points -> fails minRepetition
+    assertThat(utf8Acc.findCandidate(utf8Scanner("prefix:target"), 0)).isEqualTo(-1);
+  }
+
+  @Test
+  void leadingSupplementaryUnicodeExpansionAcceleratesStringAndUtf8() {
+    // Supplementary code point class: U+1F600, U+1F601 (Grinning Face, Beaming Face)
+    Pattern pattern = Pattern.compile("[\\x{1F600}\\x{1F601}]+:target");
+    StartDescriptor desc = pattern.startDescriptor();
+    assertThat(desc.hasStartAcceleration()).isTrue();
+    assertThat(desc.leadingExpansion()).isNotNull();
+
+    String emoji4 =
+        new StringBuilder("abc")
+            .appendCodePoint(0x1F600)
+            .appendCodePoint(0x1F601)
+            .appendCodePoint(0x1F600)
+            .appendCodePoint(0x1F601)
+            .append(":target")
+            .toString();
+    String noEmoji = "abc:target";
+
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    // In UTF-16, "abc" is 3 chars. Each emoji is 2 chars (surrogate pair).
+    // "abc...:target" -> Leftmost emoji is at index 3.
+    assertThat(strAcc.findCandidate(emoji4, 0, false)).isEqualTo(3);
+    // 0 emoji -> fails minRepetition (1)
+    assertThat(strAcc.findCandidate(noEmoji, 0, false)).isEqualTo(-1);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    // In UTF-8, "abc" is 3 bytes. Each emoji is 4 bytes.
+    // Leftmost emoji is at byte 3.
+    assertThat(utf8Acc.findCandidate(utf8Scanner(emoji4), 0)).isEqualTo(3);
+    assertThat(utf8Acc.findCandidate(utf8Scanner(noEmoji), 0)).isEqualTo(-1);
+  }
 }
