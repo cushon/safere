@@ -1358,6 +1358,9 @@ final class Dfa {
       if (idx >= 0) {
         return idx;
       }
+      if (hasPositionDependentTransitions && limit < text.length()) {
+        return limit;
+      }
       return -1;
     }
     return pos;
