@@ -24,8 +24,10 @@ sealed interface CharClassScanInfo {
   int[] ranges();
 
   /** Matches 1, 2, or 3 exact ASCII characters via single-instruction SIMD equality. */
+  // Arrays are immutable, privately owned scanner metadata; array identity is never observed.
   @SuppressWarnings("ArrayRecordComponent")
-  record AsciiSmallSet(char[] chars, long bitmap0, long bitmap1) implements CharClassScanInfo {
+  record AsciiSmallSet(char[] chars, int[] ranges, long bitmap0, long bitmap1)
+      implements CharClassScanInfo {
     @Override
     public boolean contains(int cp) {
       if (cp < 64) {
@@ -41,14 +43,10 @@ sealed interface CharClassScanInfo {
     public boolean isAscii() {
       return true;
     }
-
-    @Override
-    public int[] ranges() {
-      return CharClassScanInfo.buildRangesFromBitmaps(bitmap0, bitmap1);
-    }
   }
 
   /** Matches contiguous ASCII intervals (1-4 ranges, e.g. [a-zA-Z0-9_]) via SIMD range tests. */
+  // The array is immutable, privately owned scanner metadata; array identity is never observed.
   @SuppressWarnings("ArrayRecordComponent")
   record AsciiRanges(int[] ranges, long bitmap0, long bitmap1) implements CharClassScanInfo {
     @Override
@@ -69,7 +67,9 @@ sealed interface CharClassScanInfo {
   }
 
   /** Matches arbitrary ASCII character distributions via 128-bit bitmap lookup. */
-  record AsciiBitmapClass(long bitmap0, long bitmap1) implements CharClassScanInfo {
+  // The array is immutable, privately owned scanner metadata; array identity is never observed.
+  @SuppressWarnings("ArrayRecordComponent")
+  record AsciiBitmapClass(int[] ranges, long bitmap0, long bitmap1) implements CharClassScanInfo {
     @Override
     public boolean contains(int cp) {
       if (cp < 64) {
@@ -85,16 +85,12 @@ sealed interface CharClassScanInfo {
     public boolean isAscii() {
       return true;
     }
-
-    @Override
-    public int[] ranges() {
-      return CharClassScanInfo.buildRangesFromBitmaps(bitmap0, bitmap1);
-    }
   }
 
   /**
    * Matches BMP/Unicode character classes with ASCII acceleration bitmap + binary search ranges.
    */
+  // The array is immutable, privately owned scanner metadata; array identity is never observed.
   @SuppressWarnings("ArrayRecordComponent")
   record UnicodeGeneral(int[] ranges, long bitmap0, long bitmap1) implements CharClassScanInfo {
     @Override
@@ -121,6 +117,7 @@ sealed interface CharClassScanInfo {
     long b0 = asciiClass.bitmap0();
     long b1 = asciiClass.bitmap1();
     int count = Long.bitCount(b0) + Long.bitCount(b1);
+    int[] ranges = buildRangesFromBitmaps(b0, b1);
     if (count > 0 && count <= 3) {
       char[] chars = new char[count];
       int idx = 0;
@@ -134,14 +131,13 @@ sealed interface CharClassScanInfo {
           chars[idx++] = (char) (i + 64);
         }
       }
-      return new AsciiSmallSet(chars, b0, b1);
+      return new AsciiSmallSet(chars, ranges, b0, b1);
     }
 
-    int[] ranges = buildRangesFromBitmaps(b0, b1);
     if (ranges != null && ranges.length / 2 <= 4) {
       return new AsciiRanges(ranges, b0, b1);
     }
-    return new AsciiBitmapClass(b0, b1);
+    return new AsciiBitmapClass(ranges, b0, b1);
   }
 
   static CharClassScanInfo fromCharClass(CharClass cc) {
@@ -184,12 +180,12 @@ sealed interface CharClassScanInfo {
             chars[idx++] = (char) (i + 64);
           }
         }
-        return new AsciiSmallSet(chars, b0, b1);
+        return new AsciiSmallSet(chars, ranges, b0, b1);
       }
       if (numRanges <= 4) {
         return new AsciiRanges(ranges, b0, b1);
       }
-      return new AsciiBitmapClass(b0, b1);
+      return new AsciiBitmapClass(ranges, b0, b1);
     }
 
     return new UnicodeGeneral(ranges, b0, b1);
