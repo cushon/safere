@@ -684,6 +684,42 @@ class DfaTest {
   }
 
   @Test
+  void automataDerivedStartStateAcceleratesAlternations() {
+    Pattern pattern = Pattern.compile("apple|banana|cherry");
+    String text = "x".repeat(500) + "banana" + "y".repeat(500);
+    assertThat(pattern.matcher(text).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+
+    String noMatch = "x".repeat(1000);
+    assertThat(pattern.matcher(noMatch).find()).isFalse();
+    assertThat(pattern.find(Utf8Input.validated(noMatch.getBytes(UTF_8)))).isFalse();
+  }
+
+  @Test
+  void automataDerivedStartStateAcceleratesMultiTokenAlternation() {
+    Pattern pattern = Pattern.compile("(?:image-tokens|video-tokens|pdf-tokens)");
+    String text = "x".repeat(500) + "video-tokens" + "y".repeat(500);
+    assertThat(pattern.matcher(text).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+
+    String noMatch = "x".repeat(1000);
+    assertThat(pattern.matcher(noMatch).find()).isFalse();
+    assertThat(pattern.find(Utf8Input.validated(noMatch.getBytes(UTF_8)))).isFalse();
+  }
+
+  @Test
+  void automataDerivedStartStateAcceleratesDisjointRangeAlternation() {
+    Pattern pattern = Pattern.compile("[0-9]{3}|[a-z]{3}");
+    String text = "---".repeat(100) + "123" + "---".repeat(100);
+    assertThat(pattern.matcher(text).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+
+    String noMatch = "---".repeat(200);
+    assertThat(pattern.matcher(noMatch).find()).isFalse();
+    assertThat(pattern.find(Utf8Input.validated(noMatch.getBytes(UTF_8)))).isFalse();
+  }
+
+  @Test
   void wordBoundaryLongText() {
     String regex = "(?:\\w(?:\\b))";
     String input = "#".repeat(260) + "a";

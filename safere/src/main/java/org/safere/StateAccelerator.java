@@ -23,6 +23,16 @@ sealed interface StateAccelerator {
    */
   int findEscape(InputScanner text, int fromIndex, int limit);
 
+  /** Returns the accelerator policy for this state accelerator. */
+  default AcceleratorPolicy policy() {
+    return switch (this) {
+      case SingleAsciiEscape single -> AcceleratorPolicy.LITERAL;
+      case AsciiPairEscape pair -> AcceleratorPolicy.CHAR_CLASS;
+      case AsciiTripleEscape triple -> AcceleratorPolicy.CHAR_CLASS;
+      case CharClassEscape cc -> AcceleratorPolicy.CHAR_CLASS;
+    };
+  }
+
   /**
    * Fast-forwards to the next escape character in a self-loop state using pattern-matched
    * devirtualization.

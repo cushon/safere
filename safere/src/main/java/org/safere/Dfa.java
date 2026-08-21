@@ -801,16 +801,24 @@ final class Dfa {
 
   /** Returns whether this DFA can accelerate start positions for the supplied input substrate. */
   boolean hasStartAcceleration(InputScanner text) {
-    return startAccelerationPolicy(text) != null;
+    return startAccelerationPolicy(text, null) != null;
   }
 
-  private AcceleratorPolicy startAccelerationPolicy(InputScanner text) {
-    return switch (text) {
-      case Utf8InputScanner unusedUtf8 ->
-          utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
-      case StringInputScanner unusedString ->
-          stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
-    };
+  private AcceleratorPolicy startAccelerationPolicy(InputScanner text, State startState) {
+    AcceleratorPolicy policy =
+        switch (text) {
+          case Utf8InputScanner unusedUtf8 ->
+              utf8StartAccelerator != null ? utf8StartAccelerator.policy() : null;
+          case StringInputScanner unusedString ->
+              stringStartAccelerator != null ? stringStartAccelerator.policy() : null;
+        };
+    if (policy != null) {
+      return policy;
+    }
+    if (startState != null && startState.accelerator != null) {
+      return startState.accelerator.policy();
+    }
+    return null;
   }
 
   private static boolean instMatches(Inst ip, int ch) {
@@ -1316,26 +1324,43 @@ final class Dfa {
    * Fast-forwards the start position of unanchored search matching when returning to the start
    * state.
    */
-  private int fastForward(InputScanner text, int pos, int posDepThreshold) {
-    return switch (text) {
-      case Utf8InputScanner utf8Scanner -> {
-        if (utf8StartAccelerator != null) {
-          int idx = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, utf8Scanner, pos);
-          if (idx >= 0) {
-            yield Math.min(idx, posDepThreshold - 1);
+  private int fastForward(InputScanner text, int pos, int posDepThreshold, State startState) {
+    int next =
+        switch (text) {
+          case Utf8InputScanner utf8Scanner -> {
+            if (utf8StartAccelerator != null) {
+              int idx =
+                  Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, utf8Scanner, pos);
+              if (idx >= 0) {
+                yield Math.min(idx, posDepThreshold - 1);
+              }
+              yield -1;
+            }
+            yield -2;
           }
-          yield -1;
-        }
-        yield pos;
+          case StringInputScanner stringScanner -> {
+            if (stringStartAccelerator != null) {
+              yield StringStartAccelerator.findNextCandidate(
+                  stringStartAccelerator, stringScanner.text(), pos, prog.unixLines());
+            }
+            yield -2;
+          }
+        };
+    if (next != -2) {
+      return next;
+    }
+    if (startState != null && startState.accelerator != null) {
+      int limit =
+          hasPositionDependentTransitions
+              ? Math.min(text.length(), posDepThreshold - 1)
+              : text.length();
+      int idx = StateAccelerator.findNextEscape(startState.accelerator, text, pos, limit);
+      if (idx >= 0) {
+        return idx;
       }
-      case StringInputScanner stringScanner -> {
-        if (stringStartAccelerator != null) {
-          yield StringStartAccelerator.findNextCandidate(
-              stringStartAccelerator, stringScanner.text(), pos, prog.unixLines());
-        }
-        yield pos;
-      }
-    };
+      return -1;
+    }
+    return pos;
   }
 
   /**
@@ -1392,7 +1417,7 @@ final class Dfa {
       return new SearchResult(matched, matchEnd);
     }
 
-    AcceleratorPolicy activePolicy = startAccelerationPolicy(text);
+    AcceleratorPolicy activePolicy = startAccelerationPolicy(text, s);
     boolean canAccelerate = activePolicy != null && !anchored;
     int minSkip = AcceleratorPolicy.DEFAULT.minProfitableSkip();
     int maxStrikes = AcceleratorPolicy.DEFAULT.strikeBudget();
@@ -1415,7 +1440,7 @@ final class Dfa {
     // Fast path: loop through ASCII characters (characters < 128)
     while (pos < textLen) {
       if (canAccelerate && !accelerationDisabled && s.isStartState && (textLen - pos >= minSkip)) {
-        int nextPos = fastForward(text, pos, posDepThreshold);
+        int nextPos = fastForward(text, pos, posDepThreshold, s);
         if (nextPos == -1) {
           return new SearchResult(matched, matchEnd);
         }
@@ -1538,7 +1563,7 @@ final class Dfa {
     // General loop handles non-ASCII, position-dependent checks, and trailing end-of-text sentinel
     while (pos <= textLen) {
       if (canAccelerate && !accelerationDisabled && s.isStartState && (textLen - pos >= minSkip)) {
-        int nextPos = fastForward(text, pos, posDepThreshold);
+        int nextPos = fastForward(text, pos, posDepThreshold, s);
         if (nextPos == -1) {
           return new SearchResult(matched, matchEnd);
         }
