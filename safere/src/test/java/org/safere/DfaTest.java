@@ -683,7 +683,6 @@ class DfaTest {
     assertThat(accelerated.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
   }
 
-
   @Test
   void automataDerivedStartStateAcceleratesOptionalWhitespaceBracket() {
     Pattern pattern = Pattern.compile("[ \\t]*\\[\\[.*?\\]\\]");
