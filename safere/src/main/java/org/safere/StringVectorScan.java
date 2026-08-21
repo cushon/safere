@@ -89,7 +89,7 @@ final class StringVectorScan {
     if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
       return indexOfAsciiPairChunked(text, c1, c2, fromIndex, limit);
     }
-    return -1;
+    return VectorScanProvider.UNSUPPORTED;
   }
 
   static int indexOfAsciiTriple(String text, int c1, int c2, int c3, int fromIndex, int limit) {
@@ -102,7 +102,7 @@ final class StringVectorScan {
     if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
       return indexOfAsciiTripleChunked(text, c1, c2, c3, fromIndex, limit);
     }
-    return -1;
+    return VectorScanProvider.UNSUPPORTED;
   }
 
   private static int indexOfAsciiPairLatin1(String text, int c1, int c2, int fromIndex, int limit) {

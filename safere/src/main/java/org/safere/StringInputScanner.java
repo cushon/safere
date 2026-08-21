@@ -49,7 +49,7 @@ final class StringInputScanner implements InputScanner {
   public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
     if (scanProvider != null && limit - fromIndex >= scanProvider.minimumInputLength()) {
       int idx = StringVectorScan.indexOfAsciiPair(text, c1, c2, fromIndex, limit);
-      if (idx != -1 || fromIndex >= limit) {
+      if (idx != VectorScanProvider.UNSUPPORTED) {
         return idx;
       }
     }
@@ -74,7 +74,7 @@ final class StringInputScanner implements InputScanner {
   public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
     if (scanProvider != null && limit - fromIndex >= scanProvider.minimumInputLength()) {
       int idx = StringVectorScan.indexOfAsciiTriple(text, c1, c2, c3, fromIndex, limit);
-      if (idx != -1 || fromIndex >= limit) {
+      if (idx != VectorScanProvider.UNSUPPORTED) {
         return idx;
       }
     }
