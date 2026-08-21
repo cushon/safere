@@ -4038,7 +4038,7 @@
       "id": "SearchScalingBenchmark.optionalIndentBracketScaled.64",
       "operation": "find",
       "patterns": [
-        "\\d*\\[\\[.*?\\]\\]"
+        "(?:a*x|b*y|c*z)"
       ],
       "inputs": [
         "searchScaling.prose.64"
@@ -4074,7 +4074,7 @@
       "id": "SearchScalingBenchmark.optionalIndentBracketScaled.256",
       "operation": "find",
       "patterns": [
-        "\\d*\\[\\[.*?\\]\\]"
+        "(?:a*x|b*y|c*z)"
       ],
       "inputs": [
         "searchScaling.prose.256"
@@ -4110,7 +4110,7 @@
       "id": "SearchScalingBenchmark.optionalIndentBracketScaled.1024",
       "operation": "find",
       "patterns": [
-        "\\d*\\[\\[.*?\\]\\]"
+        "(?:a*x|b*y|c*z)"
       ],
       "inputs": [
         "searchScaling.prose.1024"
@@ -4308,7 +4308,7 @@
       "id": "SearchScalingBenchmark.optionalIndentBracketScaled.10240",
       "operation": "find",
       "patterns": [
-        "\\d*\\[\\[.*?\\]\\]"
+        "(?:a*x|b*y|c*z)"
       ],
       "inputs": [
         "searchScaling.prose.10240"
@@ -4506,7 +4506,7 @@
       "id": "SearchScalingBenchmark.optionalIndentBracketScaled.102400",
       "operation": "find",
       "patterns": [
-        "\\d*\\[\\[.*?\\]\\]"
+        "(?:a*x|b*y|c*z)"
       ],
       "inputs": [
         "searchScaling.prose.102400"
@@ -4704,7 +4704,7 @@
       "id": "SearchScalingBenchmark.optionalIndentBracketScaled.1048576",
       "operation": "find",
       "patterns": [
-        "\\d*\\[\\[.*?\\]\\]"
+        "(?:a*x|b*y|c*z)"
       ],
       "inputs": [
         "searchScaling.prose.1048576"
