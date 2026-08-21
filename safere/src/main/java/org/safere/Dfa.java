@@ -1325,30 +1325,19 @@ final class Dfa {
    * state.
    */
   private int fastForward(InputScanner text, int pos, int posDepThreshold, State startState) {
-    int next =
-        switch (text) {
-          case Utf8InputScanner utf8Scanner -> {
-            if (utf8StartAccelerator != null) {
-              int idx =
-                  Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, utf8Scanner, pos);
-              if (idx >= 0) {
-                yield Math.min(idx, posDepThreshold - 1);
-              }
-              yield -1;
-            }
-            yield -2;
-          }
-          case StringInputScanner stringScanner -> {
-            if (stringStartAccelerator != null) {
-              yield StringStartAccelerator.findNextCandidate(
-                  stringStartAccelerator, stringScanner.text(), pos, prog.unixLines());
-            }
-            yield -2;
-          }
-        };
-    if (next != -2) {
-      return next;
+    if (text instanceof Utf8InputScanner utf8Scanner && utf8StartAccelerator != null) {
+      int idx = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, utf8Scanner, pos);
+      return idx >= 0 ? Math.min(idx, posDepThreshold - 1) : -1;
     }
+    if (text instanceof StringInputScanner stringScanner && stringStartAccelerator != null) {
+      return StringStartAccelerator.findNextCandidate(
+          stringStartAccelerator, stringScanner.text(), pos, prog.unixLines());
+    }
+    return fastForwardStartState(text, pos, posDepThreshold, startState);
+  }
+
+  private int fastForwardStartState(
+      InputScanner text, int pos, int posDepThreshold, State startState) {
     if (startState != null && startState.accelerator != null) {
       int limit =
           hasPositionDependentTransitions
