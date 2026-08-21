@@ -117,7 +117,7 @@ class StartAcceleratorTest {
       FixedOffsetLiteral fixedOffsetLiteral,
       CharClassScanInfo charClassPrefix) {
     return new StartDescriptor(
-        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, null, null, null, null);
+        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, null, null, null, null, null);
   }
 
   @Test

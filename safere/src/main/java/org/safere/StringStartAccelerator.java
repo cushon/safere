@@ -381,38 +381,12 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class LeadingExpansion implements StringStartAccelerator {
-    private final CharClassScanInfo leadingClass;
-    private final int minRepetition;
-    private final int maxRepetition;
-    private final StringStartAccelerator inner;
-
-    LeadingExpansion(
-        CharClassScanInfo leadingClass,
-        int minRepetition,
-        int maxRepetition,
-        StringStartAccelerator inner) {
-      this.leadingClass = leadingClass;
-      this.minRepetition = minRepetition;
-      this.maxRepetition = maxRepetition;
-      this.inner = inner;
-    }
-
-    public CharClassScanInfo leadingClass() {
-      return leadingClass;
-    }
-
-    public int minRepetition() {
-      return minRepetition;
-    }
-
-    public int maxRepetition() {
-      return maxRepetition;
-    }
-
-    public StringStartAccelerator inner() {
-      return inner;
-    }
+  record LeadingExpansion(
+      CharClassScanInfo leadingClass,
+      int minRepetition,
+      int maxRepetition,
+      StringStartAccelerator inner)
+      implements StringStartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {

@@ -32,45 +32,6 @@ record StartDescriptor(
   static final StartDescriptor NONE =
       new StartDescriptor(null, false, null, null, null, null, null, null, null);
 
-  StartDescriptor(
-      String prefix,
-      boolean prefixFoldCase,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      CharClassScanInfo charClassPrefix,
-      StartAcceleration lineAnchor) {
-    this(
-        prefix,
-        prefixFoldCase,
-        fixedOffsetLiteral,
-        charClassPrefix,
-        lineAnchor,
-        null,
-        null,
-        null,
-        null);
-  }
-
-  StartDescriptor(
-      String prefix,
-      boolean prefixFoldCase,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      CharClassScanInfo charClassPrefix,
-      StartAcceleration lineAnchor,
-      String anchoredPrefix,
-      CharClassScanInfo anchoredCharClassPrefix,
-      TeddyModel teddyModel) {
-    this(
-        prefix,
-        prefixFoldCase,
-        fixedOffsetLiteral,
-        charClassPrefix,
-        lineAnchor,
-        anchoredPrefix,
-        anchoredCharClassPrefix,
-        teddyModel,
-        null);
-  }
-
   boolean hasStartAcceleration() {
     return prefix != null
         || fixedOffsetLiteral != null
