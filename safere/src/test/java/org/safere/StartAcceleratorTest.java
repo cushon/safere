@@ -240,4 +240,47 @@ class StartAcceleratorTest {
     byte[] bytes = text.getBytes(UTF_8);
     return new Utf8InputScanner(bytes, 0, bytes.length);
   }
+
+  @Test
+  void leadingWhitespaceCharClassExpansionAcceleratesStringAndUtf8() {
+    Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
+    StartDescriptor desc = pattern.startDescriptor();
+    assertThat(desc.hasStartAcceleration()).isTrue();
+    assertThat(desc.leadingExpansion()).isNotNull();
+
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
+    assertThat(strAcc.findCandidate("hello   [123] world", 0, false)).isEqualTo(5);
+    assertThat(strAcc.findCandidate("hello [123] world", 0, false)).isEqualTo(5);
+    assertThat(strAcc.findCandidate("[123] world", 0, false)).isEqualTo(0);
+    assertThat(strAcc.findCandidate("hello world without match", 0, false)).isEqualTo(-1);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.LeadingExpansion.class);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("hello   [123] world"), 0)).isEqualTo(5);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("hello [123] world"), 0)).isEqualTo(5);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("[123] world"), 0)).isEqualTo(0);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("hello world without match"), 0)).isEqualTo(-1);
+  }
+
+  @Test
+  void leadingWhitespaceLiteralExpansionAcceleratesStringAndUtf8() {
+    Pattern pattern = Pattern.compile("\\s+https?://\\w+");
+    StartDescriptor desc = pattern.startDescriptor();
+    assertThat(desc.hasStartAcceleration()).isTrue();
+    assertThat(desc.leadingExpansion()).isNotNull();
+
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
+    // Requires at least 1 leading whitespace
+    assertThat(strAcc.findCandidate("visit  http://example", 0, false)).isEqualTo(5);
+    assertThat(strAcc.findCandidate("http://example without leading space", 0, false))
+        .isEqualTo(-1);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.LeadingExpansion.class);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("visit  http://example"), 0)).isEqualTo(5);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("http://example without leading space"), 0))
+        .isEqualTo(-1);
+  }
 }

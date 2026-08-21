@@ -34,6 +34,17 @@ sealed interface StringStartAccelerator {
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {
       return new LineAnchor(descriptor.lineAnchor());
     }
+    if (descriptor.leadingExpansion() != null) {
+      StringStartAccelerator inner =
+          create(descriptor.leadingExpansion().innerDescriptor(), hasWordBoundary);
+      if (inner != null) {
+        return new LeadingExpansion(
+            descriptor.leadingExpansion().leadingClass(),
+            descriptor.leadingExpansion().minRepetition(),
+            descriptor.leadingExpansion().maxRepetition(),
+            inner);
+      }
+    }
     return null;
   }
 
@@ -59,6 +70,7 @@ sealed interface StringStartAccelerator {
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
+      case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
     };
   }
 
@@ -111,10 +123,12 @@ sealed interface StringStartAccelerator {
         return Matcher.indexOfIgnoreCase(
             text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
       }
+      int idx = text.indexOf(prefix, fromIndex);
       if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record(Math.max(0, text.length() - fromIndex));
+        int scanned = idx >= 0 ? idx - fromIndex + prefix.length() : text.length() - fromIndex;
+        WorkCounter.record(Math.max(0, scanned));
       }
-      return text.indexOf(prefix, fromIndex);
+      return idx;
     }
   }
 
@@ -364,6 +378,76 @@ sealed interface StringStartAccelerator {
           || prev == '\u2028'
           || prev == '\u2029'
           || (prev == '\r' && text.charAt(pos) != '\n');
+    }
+  }
+
+  final class LeadingExpansion implements StringStartAccelerator {
+    private final CharClassScanInfo leadingClass;
+    private final int minRepetition;
+    private final int maxRepetition;
+    private final StringStartAccelerator inner;
+
+    LeadingExpansion(
+        CharClassScanInfo leadingClass,
+        int minRepetition,
+        int maxRepetition,
+        StringStartAccelerator inner) {
+      this.leadingClass = leadingClass;
+      this.minRepetition = minRepetition;
+      this.maxRepetition = maxRepetition;
+      this.inner = inner;
+    }
+
+    public CharClassScanInfo leadingClass() {
+      return leadingClass;
+    }
+
+    public int minRepetition() {
+      return minRepetition;
+    }
+
+    public int maxRepetition() {
+      return maxRepetition;
+    }
+
+    public StringStartAccelerator inner() {
+      return inner;
+    }
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return inner.policy();
+    }
+
+    @Override
+    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+      int searchPos = Math.max(0, fromIndex);
+      int textLen = text.length();
+      while (searchPos < textLen) {
+        int innerMatch =
+            StringStartAccelerator.findNextCandidate(inner, text, searchPos, unixLines);
+        if (innerMatch < 0) {
+          return -1;
+        }
+        int start = innerMatch;
+        while (start > fromIndex) {
+          int cp = text.codePointBefore(start);
+          if (!leadingClass.contains(cp)) {
+            break;
+          }
+          int charCount = Character.charCount(cp);
+          if (innerMatch - (start - charCount) > maxRepetition) {
+            break;
+          }
+          start -= charCount;
+        }
+        int count = innerMatch - start;
+        if (count >= minRepetition) {
+          return start;
+        }
+        searchPos = innerMatch + 1;
+      }
+      return -1;
     }
   }
 }
