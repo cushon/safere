@@ -683,6 +683,15 @@ class DfaTest {
     assertThat(accelerated.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
   }
 
+
+  @Test
+  void automataDerivedStartStateAcceleratesOptionalWhitespaceBracket() {
+    Pattern pattern = Pattern.compile("[ \\t]*\\[\\[.*?\\]\\]");
+    String text = "x".repeat(1000) + "[[test]]" + "y".repeat(1000);
+    assertThat(pattern.matcher(text).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+  }
+
   @Test
   void automataDerivedStartStateAcceleratesAlternations() {
     Regexp re = Parser.parse("apple|banana|cherry", FLAGS);

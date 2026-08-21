@@ -734,27 +734,6 @@
       "shared": true
     },
     {
-      "id": "searchScaling.wildcardBody.{size}",
-      "axes": {
-        "size": [
-          64,
-          256,
-          1024,
-          10240,
-          102400,
-          1048576
-        ]
-      },
-      "recipe": {
-        "kind": "surroundToLength",
-        "prefix": "HEADER ",
-        "unit": "abcdefghijklmnopqrstuvwxyz ",
-        "suffix": " FOOTER",
-        "length": "{size}"
-      },
-      "shared": true
-    },
-    {
       "id": "searchScaling.prose.{size}",
       "axes": {
         "size": [
@@ -4056,13 +4035,13 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.wildcardBodyFind.64",
+      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.64",
       "operation": "find",
       "patterns": [
-        "(?s)HEADER.*?FOOTER"
+        "[ \\t]*\\[\\[.*?\\]\\]"
       ],
       "inputs": [
-        "searchScaling.wildcardBody.64"
+        "searchScaling.prose.64"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4092,13 +4071,13 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.wildcardBodyFind.256",
+      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.256",
       "operation": "find",
       "patterns": [
-        "(?s)HEADER.*?FOOTER"
+        "[ \\t]*\\[\\[.*?\\]\\]"
       ],
       "inputs": [
-        "searchScaling.wildcardBody.256"
+        "searchScaling.prose.256"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4128,13 +4107,13 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.wildcardBodyFind.1024",
+      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.1024",
       "operation": "find",
       "patterns": [
-        "(?s)HEADER.*?FOOTER"
+        "[ \\t]*\\[\\[.*?\\]\\]"
       ],
       "inputs": [
-        "searchScaling.wildcardBody.1024"
+        "searchScaling.prose.1024"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4326,13 +4305,13 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.wildcardBodyFind.10240",
+      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.10240",
       "operation": "find",
       "patterns": [
-        "(?s)HEADER.*?FOOTER"
+        "[ \\t]*\\[\\[.*?\\]\\]"
       ],
       "inputs": [
-        "searchScaling.wildcardBody.10240"
+        "searchScaling.prose.10240"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4524,13 +4503,13 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.wildcardBodyFind.102400",
+      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.102400",
       "operation": "find",
       "patterns": [
-        "(?s)HEADER.*?FOOTER"
+        "[ \\t]*\\[\\[.*?\\]\\]"
       ],
       "inputs": [
-        "searchScaling.wildcardBody.102400"
+        "searchScaling.prose.102400"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4722,13 +4701,13 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.wildcardBodyFind.1048576",
+      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.1048576",
       "operation": "find",
       "patterns": [
-        "(?s)HEADER.*?FOOTER"
+        "[ \\t]*\\[\\[.*?\\]\\]"
       ],
       "inputs": [
-        "searchScaling.wildcardBody.1048576"
+        "searchScaling.prose.1048576"
       ],
       "resultConsumption": "boolean",
       "measurement": {
