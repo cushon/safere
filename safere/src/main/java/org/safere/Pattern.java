@@ -137,8 +137,8 @@ public final class Pattern implements Serializable {
   private final transient boolean canMatchEmpty;
   private final transient boolean startsWithGraphemeClusterBoundary;
   private final transient boolean hasInternalGraphemeClusterBoundary;
-  private final transient AsciiBitmap charClassPrefixAscii;
-  private final transient AsciiBitmap anchoredCharClassPrefixAscii;
+  private final transient CharClassScanInfo charClassPrefix;
+  private final transient CharClassScanInfo anchoredCharClassPrefix;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
@@ -311,8 +311,8 @@ public final class Pattern implements Serializable {
     this.canMatchEmpty = canMatchEmpty;
     this.startsWithGraphemeClusterBoundary = startsWithGraphemeClusterBoundary;
     this.hasInternalGraphemeClusterBoundary = hasInternalGraphemeClusterBoundary;
-    this.charClassPrefixAscii = startDescriptor.charClassPrefixAscii();
-    this.anchoredCharClassPrefixAscii = startDescriptor.anchoredCharClassPrefixAscii();
+    this.charClassPrefix = startDescriptor.charClassPrefix();
+    this.anchoredCharClassPrefix = startDescriptor.anchoredCharClassPrefix();
     this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
     this.utf8StartAccelerator =
         Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
@@ -483,23 +483,14 @@ public final class Pattern implements Serializable {
     boolean prefixFoldCase = prefixResult.foldCase();
     FixedOffsetLiteral fixedOffsetLiteral =
         prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
-    AsciiBitmap ccPrefixAscii = (prefix == null) ? extractCharClassPrefixAscii(metadataAst) : null;
+    CharClassScanInfo ccPrefix = (prefix == null) ? extractCharClassPrefix(metadataAst) : null;
     String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
-    MultiLiteralInfo multiLiteral = null;
     TeddyModel teddyModel = null;
-    if (altLiterals != null) {
-      if (altLiterals.length >= 2 && altLiterals.length <= 4) {
-        multiLiteral = MultiLiteralInfo.create(altLiterals);
-      } else if (altLiterals.length >= 5 && altLiterals.length <= 32) {
-        teddyModel = TeddyModel.compile(altLiterals, 64);
-      }
+    if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
+      teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
     }
     StartAcceleration startAcceleration =
-        (prefix == null
-                && ccPrefixAscii == null
-                && fixedOffsetLiteral == null
-                && multiLiteral == null
-                && teddyModel == null)
+        (prefix == null && ccPrefix == null && fixedOffsetLiteral == null && teddyModel == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
@@ -508,17 +499,16 @@ public final class Pattern implements Serializable {
         anchoredPrefixResult.prefix() != null && !anchoredPrefixResult.foldCase()
             ? anchoredPrefixResult.prefix()
             : null;
-    AsciiBitmap anchoredCharClassPrefixAscii =
+    CharClassScanInfo anchoredCharClassPrefix =
         anchoredPrefix == null && anchoredCandidate != null
-            ? extractCharClassPrefixAscii(anchoredCandidate)
+            ? extractCharClassPrefix(anchoredCandidate)
             : null;
     if (prefix == null
         && fixedOffsetLiteral == null
-        && ccPrefixAscii == null
+        && ccPrefix == null
         && startAcceleration == null
         && anchoredPrefix == null
-        && anchoredCharClassPrefixAscii == null
-        && multiLiteral == null
+        && anchoredCharClassPrefix == null
         && teddyModel == null) {
       return StartDescriptor.NONE;
     }
@@ -526,11 +516,10 @@ public final class Pattern implements Serializable {
         prefix,
         prefixFoldCase,
         fixedOffsetLiteral,
-        ccPrefixAscii,
+        ccPrefix,
         startAcceleration,
         anchoredPrefix,
-        anchoredCharClassPrefixAscii,
-        multiLiteral,
+        anchoredCharClassPrefix,
         teddyModel);
   }
 
@@ -658,12 +647,12 @@ public final class Pattern implements Serializable {
         if (!scanner.startsWith(anchoredPrefixUtf8, 0)) {
           return false;
         }
-      } else if (anchoredCharClassPrefixAscii != null) {
+      } else if (anchoredCharClassPrefix != null) {
         if (scanner.length() == 0) {
           return false;
         }
-        int ascii = scanner.asciiAt(0);
-        if (!anchoredCharClassPrefixAscii.contains(ascii)) {
+        int cp = scanner.codePointAt(0);
+        if (!anchoredCharClassPrefix.contains(cp)) {
           return false;
         }
       }
@@ -675,7 +664,7 @@ public final class Pattern implements Serializable {
     if (enginePathOptions.startAcceleration()
         && utf8StartAccelerator != null
         && !prog.anchorStart()) {
-      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
+      searchStart = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
       if (searchStart < 0) {
         return false;
       }
@@ -723,14 +712,14 @@ public final class Pattern implements Serializable {
           diagnostics.boundary(MatchStrategy.LITERAL);
           return false;
         }
-      } else if (anchoredCharClassPrefixAscii != null) {
+      } else if (anchoredCharClassPrefix != null) {
         if (scanner.length() == 0) {
           diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
           return false;
         }
-        int ascii = scanner.asciiAt(0);
-        if (!anchoredCharClassPrefixAscii.contains(ascii)) {
+        int cp = scanner.codePointAt(0);
+        if (!anchoredCharClassPrefix.contains(cp)) {
           diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
           return false;
@@ -749,7 +738,7 @@ public final class Pattern implements Serializable {
       if (strategy != null) {
         diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
-      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
+      searchStart = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
       if (searchStart < 0) {
         if (strategy != null) {
           diagnostics.boundary(strategy);
@@ -1040,7 +1029,7 @@ public final class Pattern implements Serializable {
               : Matcher.FallbackPreparedRunner.INSTANCE);
     }
 
-    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
+    CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
     Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
     if (enginePathOptions.charClassMatchFastPaths()
         && (singleCharClass != null || charClassMatch != null)) {
@@ -1066,7 +1055,7 @@ public final class Pattern implements Serializable {
   }
 
   private Matcher.PreparedMatchRunner createLiteralFallbackRunner(boolean regionActive) {
-    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
+    CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
     Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
     if (enginePathOptions.charClassMatchFastPaths()
         && (singleCharClass != null || charClassMatch != null)) {
@@ -1336,12 +1325,12 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns an {@link AsciiBitmap} of the character-class prefix, or {@code null} if the pattern
-   * has no character-class prefix. Used for prefix acceleration in {@link Matcher#doFind()} when no
-   * literal prefix exists.
+   * Returns a {@link CharClassScanInfo} of the character-class prefix, or {@code null} if the
+   * pattern has no character-class prefix. Used for prefix acceleration in {@link Matcher#doFind()}
+   * when no literal prefix exists.
    */
-  AsciiBitmap charClassPrefixAscii() {
-    return charClassPrefixAscii;
+  CharClassScanInfo charClassPrefix() {
+    return charClassPrefix;
   }
 
   String anchoredPrefix() {
@@ -1352,8 +1341,8 @@ public final class Pattern implements Serializable {
     return anchoredPrefixUtf8;
   }
 
-  AsciiBitmap anchoredCharClassPrefixAscii() {
-    return anchoredCharClassPrefixAscii;
+  CharClassScanInfo anchoredCharClassPrefix() {
+    return anchoredCharClassPrefix;
   }
 
   /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
@@ -2690,18 +2679,13 @@ public final class Pattern implements Serializable {
    * Extracts a character-class prefix bitmap for ASCII acceleration. Walks the AST (through CAPTURE
    * and CONCAT wrappers) to find a required character class at the start of the pattern. If found
    * and the class contains only ASCII code points, returns a {@code boolean[128]} bitmap where
-   * {@code true} entries indicate matching code points. This allows {@link Matcher#doFind()} to
-   * skip ahead to positions where the first character could start a match, avoiding unnecessary
-   * engine invocations.
+   * Extracts a character-class prefix from the AST, supporting both ASCII and Unicode character
+   * classes.
    *
-   * <p>Handles bare {@link RegexpOp#CHAR_CLASS}, {@link RegexpOp#PLUS} and {@link RegexpOp#REPEAT}
-   * (with {@code min >= 1}) wrapping a character class, since these all require at least one
-   * character from the class.
-   *
-   * @return an {@link AsciiBitmap}, or {@code null} if no suitable prefix exists
+   * @return a {@link CharClassScanInfo}, or {@code null} if no suitable prefix exists
    */
-  private static AsciiBitmap extractCharClassPrefixAscii(Regexp re) {
-    AsciiBitmap.Builder bitmap = new AsciiBitmap.Builder();
+  private static CharClassScanInfo extractCharClassPrefix(Regexp re) {
+    CharClassBuilder builder = new CharClassBuilder();
     Deque<Regexp> work = new ArrayDeque<>();
     work.add(re);
 
@@ -2726,21 +2710,19 @@ public final class Pattern implements Serializable {
 
       switch (node.op) {
         case LITERAL -> {
-          if (!addLiteralPrefixAscii(node.rune, node.flags, bitmap)) {
-            return null;
-          }
+          builder.addCharClass(literalCharClass(node.rune, node.flags));
         }
         case LITERAL_STRING -> {
-          if (node.runes == null
-              || node.runes.length == 0
-              || !addLiteralPrefixAscii(node.runes[0], node.flags, bitmap)) {
+          if (node.runes == null || node.runes.length == 0) {
             return null;
           }
+          builder.addCharClass(literalCharClass(node.runes[0], node.flags));
         }
         case CHAR_CLASS -> {
-          if (!addCharClassPrefixAscii(node.charClass, bitmap)) {
+          if (node.charClass == null || node.charClass.isEmpty()) {
             return null;
           }
+          builder.addCharClass(node.charClass);
         }
         case ALTERNATE -> {
           if (node.nsub() == 0) {
@@ -2756,25 +2738,19 @@ public final class Pattern implements Serializable {
       }
     }
 
-    return bitmap.build();
+    CharClass cc = builder.build();
+    if (cc.isEmpty()) {
+      return null;
+    }
+    // Selectivity check: If the character class matches more than 50% of the Unicode space,
+    // scanning for it will cause high false-positive rates. Skip prefix acceleration.
+    if (cc.numRunes() > 0x80000) {
+      return null;
+    }
+    return CharClassScanInfo.fromCharClass(cc);
   }
 
-  private static boolean addLiteralPrefixAscii(int r, int flags, AsciiBitmap.Builder bitmap) {
-    if (r >= 128) {
-      return false;
-    }
-    bitmap.add(r);
-    if ((flags & ParseFlags.FOLD_CASE) != 0) {
-      if (r >= 'a' && r <= 'z') {
-        bitmap.add(r - 32);
-      } else if (r >= 'A' && r <= 'Z') {
-        bitmap.add(r + 32);
-      }
-    }
-    return true;
-  }
-
-  private static boolean addCharClassPrefixAscii(CharClass cc, AsciiBitmap.Builder bitmap) {
+  private static boolean addAsciiCharClass(CharClass cc, AsciiBitmap.Builder bitmap) {
     if (cc == null || cc.isEmpty()) {
       return false;
     }
@@ -3079,63 +3055,6 @@ public final class Pattern implements Serializable {
   @SuppressWarnings("ArrayRecordComponent")
   record CharClassMatchInfo(int[] ranges, long bitmap0, long bitmap1, boolean allowEmpty) {}
 
-  /** Holds precomputed data for scanning one character class. */
-  static final class CharClassScanInfo {
-    final int[] ranges;
-    final long bitmap0;
-    final long bitmap1;
-    final boolean isAscii;
-
-    CharClassScanInfo(int[] ranges, long bitmap0, long bitmap1, boolean isAscii) {
-      this.ranges = ranges;
-      this.bitmap0 = bitmap0;
-      this.bitmap1 = bitmap1;
-      this.isAscii = isAscii;
-    }
-
-    boolean contains(int cp) {
-      if (cp < 64) {
-        return cp >= 0 && (bitmap0 & (1L << cp)) != 0;
-      }
-      if (cp < 128) {
-        return (bitmap1 & (1L << (cp - 64))) != 0;
-      }
-      if (isAscii) {
-        return false;
-      }
-      return Matcher.binarySearchRanges(ranges, cp);
-    }
-  }
-
-  static CharClassScanInfo buildAsciiClassScanInfo(AsciiBitmap asciiClass) {
-    if (asciiClass == null || asciiClass.isEmpty()) {
-      return null;
-    }
-    int[] ranges = new int[128 * 2];
-    int rangeCount = 0;
-    int value = 0;
-    while (value < 128) {
-      if (!asciiClass.containsAscii(value)) {
-        value++;
-        continue;
-      }
-      int low = value;
-      while (value + 1 < 128 && asciiClass.containsAscii(value + 1)) {
-        value++;
-      }
-      int high = value;
-      ranges[rangeCount * 2] = low;
-      ranges[rangeCount * 2 + 1] = high;
-      rangeCount++;
-      value++;
-    }
-    if (rangeCount == 0) {
-      return null;
-    }
-    return new CharClassScanInfo(
-        Arrays.copyOf(ranges, rangeCount * 2), asciiClass.bitmap0(), asciiClass.bitmap1(), true);
-  }
-
   /**
    * Detects patterns that are structurally a single character class under a quantifier covering the
    * entire string — e.g., {@code [a-zA-Z]+}, {@code \d*}, {@code \w{1,}}, {@code [0-9]+}. When
@@ -3232,7 +3151,7 @@ public final class Pattern implements Serializable {
     if (cc.isEmpty()) {
       return null;
     }
-    return buildCharClassScanInfo(cc);
+    return CharClassScanInfo.fromCharClass(cc);
   }
 
   record SuffixInfo(String suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
@@ -3258,21 +3177,24 @@ public final class Pattern implements Serializable {
     EndAnchoredCharClassInfo endAnchoredCharClass =
         endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
     String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
-    AsciiBitmap ccPrefixAscii =
-        startDescriptor != null ? startDescriptor.charClassPrefixAscii() : null;
+    CharClassScanInfo ccPrefix = startDescriptor != null ? startDescriptor.charClassPrefix() : null;
     String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
     CharClassScanInfo requiredMatchClass = null;
     if (prefix == null && endAnchoredCharClass == null) {
-      if (ccPrefixAscii == null) {
+      if (ccPrefix == null) {
         requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
       } else {
         CharClassScanInfo candidate = extractRequiredMatchClass(metadataAst, false);
-        if (candidate != null && candidate.ranges != null) {
+        if (candidate != null && candidate.ranges() != null) {
           int candidateRunes = 0;
-          for (int i = 0; i < candidate.ranges.length; i += 2) {
-            candidateRunes += (candidate.ranges[i + 1] - candidate.ranges[i] + 1);
+          for (int i = 0; i < candidate.ranges().length; i += 2) {
+            candidateRunes += (candidate.ranges()[i + 1] - candidate.ranges()[i] + 1);
           }
-          if (candidateRunes < ccPrefixAscii.cardinality()) {
+          int prefixRunes = 0;
+          for (int i = 0; i < ccPrefix.ranges().length; i += 2) {
+            prefixRunes += (ccPrefix.ranges()[i + 1] - ccPrefix.ranges()[i] + 1);
+          }
+          if (candidateRunes < prefixRunes) {
             requiredMatchClass = candidate;
           }
         }
@@ -3399,7 +3321,7 @@ public final class Pattern implements Serializable {
       }
     }
     AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
-    if (sub.op == RegexpOp.CHAR_CLASS && addCharClassPrefixAscii(sub.charClass, builder)) {
+    if (sub.op == RegexpOp.CHAR_CLASS && addAsciiCharClass(sub.charClass, builder)) {
       boolean unixLines = (flags & UNIX_LINES) != 0;
       return new EndAnchoredCharClassInfo(builder.build(), wasDollar, unixLines);
     }
@@ -3423,7 +3345,7 @@ public final class Pattern implements Serializable {
     }
     if (node.op != RegexpOp.CONCAT || node.subs == null) {
       CharClass required = requiredCharClass(node, inspectAlternation);
-      return required != null ? buildCharClassScanInfo(required) : null;
+      return required != null ? CharClassScanInfo.fromCharClass(required) : null;
     }
     CharClass mostSelective = null;
     for (Regexp sub : node.subs) {
@@ -3433,7 +3355,7 @@ public final class Pattern implements Serializable {
         mostSelective = required;
       }
     }
-    return mostSelective != null ? buildCharClassScanInfo(mostSelective) : null;
+    return mostSelective != null ? CharClassScanInfo.fromCharClass(mostSelective) : null;
   }
 
   private static CharClass requiredCharClass(Regexp re, boolean inspectAlternation) {
@@ -3690,30 +3612,6 @@ public final class Pattern implements Serializable {
       UnicodeCaseFolding.addUnicodeFoldedRange(ccb, cp, cp);
     }
     return ccb.build();
-  }
-
-  private static CharClassScanInfo buildCharClassScanInfo(CharClass cc) {
-    int numRanges = cc.numRanges();
-    int[] ranges = new int[numRanges * 2];
-    long b0 = 0;
-    long b1 = 0;
-    for (int i = 0; i < numRanges; i++) {
-      int lo = cc.lo(i);
-      int hi = cc.hi(i);
-      ranges[i * 2] = lo;
-      ranges[i * 2 + 1] = hi;
-      int start = Math.max(lo, 0);
-      int end = Math.min(hi, 127);
-      for (int cp = start; cp <= end; cp++) {
-        if (cp < 64) {
-          b0 |= 1L << cp;
-        } else {
-          b1 |= 1L << (cp - 64);
-        }
-      }
-    }
-    boolean isAscii = numRanges > 0 && cc.hi(numRanges - 1) <= 127;
-    return new CharClassScanInfo(ranges, b0, b1, isAscii);
   }
 
   /**

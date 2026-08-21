@@ -94,7 +94,7 @@ sealed interface InputScanner permits StringInputScanner, Utf8InputScanner {
     return (int) (decoded >> 32);
   }
 
-  default int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
+  default int indexOfCharClass(CharClassScanInfo scanInfo, int start) {
     return -1;
   }
 

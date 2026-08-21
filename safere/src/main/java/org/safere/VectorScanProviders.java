@@ -24,12 +24,14 @@ final class VectorScanProviders {
     return SELECTED != null;
   }
 
-  static boolean multiLiteralProviderAvailable() {
-    return SELECTED != null;
+  static VectorScanProvider providerForPairLength(int length) {
+    return SELECTED != null && length >= SELECTED.minimumPairInputLength() ? SELECTED : null;
   }
 
-  static VectorScanProvider providerForMultiLiteralLength(int length) {
-    return SELECTED != null && length >= SELECTED.minimumMultiLiteralInputLength()
+  static VectorScanProvider providerForTripleLength(int length) {
+    return SELECTED != null
+            && length >= SELECTED.minimumTripleInputLength()
+            && length <= SELECTED.maximumTripleInputLength()
         ? SELECTED
         : null;
   }
@@ -40,7 +42,7 @@ final class VectorScanProviders {
       return null;
     }
     if (!requested.equals("vector")) {
-      throw new IllegalStateException("Unknown Vector scan provider '" + requested + "'");
+      throw new IllegalStateException(unknownProviderMessage(requested));
     }
     try {
       return VectorScanProviderFactory.create();
@@ -50,5 +52,9 @@ final class VectorScanProviders {
               + "--add-modules=jdk.incubator.vector",
           e);
     }
+  }
+
+  static String unknownProviderMessage(String requested) {
+    return "Unknown Vector scan provider " + requested;
   }
 }

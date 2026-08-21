@@ -13,48 +13,25 @@ interface VectorScanProvider {
 
   int minimumTeddyInputLength();
 
-  default int minimumMultiLiteralInputLength() {
-    return 64;
-  }
+  int minimumPairInputLength();
+
+  int minimumTripleInputLength();
+
+  int maximumTripleInputLength();
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  int indexOfAsciiClass(String text, int[] ranges, int start);
-
-  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  int indexOfCharClass(String text, int[] ranges, int start);
-
-  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  int indexOfIgnoreCase(String text, String prefix, int start);
-
-  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  default int indexOfMultiLiteral(
-      String text,
-      String[] literals,
-      char[] anchorChars,
-      int[] anchorOffsets,
-      int minLength,
-      int start) {
+  default int indexOfAsciiPair(byte[] bytes, int offset, int length, byte b0, byte b1, int start) {
     return UNSUPPORTED;
   }
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  default int indexOfMultiLiteral(
-      byte[] bytes,
-      int offset,
-      int length,
-      String[] literals,
-      char[] anchorChars,
-      int[] anchorOffsets,
-      int minLength,
-      int start) {
+  default int indexOfAsciiTriple(
+      byte[] bytes, int offset, int length, byte b0, byte b1, byte b2, int start) {
     return UNSUPPORTED;
   }
-
-  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
-  int indexOfTeddy(String text, TeddyModel model, int start);
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start);

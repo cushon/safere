@@ -6,7 +6,6 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 
 /**
@@ -30,33 +29,18 @@ sealed interface Utf8StartAccelerator {
       return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefixAscii());
+      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
     }
     if (descriptor.teddyModel() != null
         && !hasWordBoundary
         && VectorScanProviders.teddyProviderAvailable()) {
       return new Teddy(descriptor.teddyModel());
     }
-    if (descriptor.multiLiteral() != null
-        && !hasWordBoundary
-        && VectorScanProviders.providerForLength(64) != null) {
-      return new MultiLiteral(descriptor.multiLiteral());
-    }
-    if (descriptor.charClassPrefixAscii() != null && !hasWordBoundary) {
-      CharClassScanInfo scanInfo =
-          Pattern.buildAsciiClassScanInfo(descriptor.charClassPrefixAscii());
-      if (scanInfo != null) {
-        return new CharClass(scanInfo);
-      }
+    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
+      return new CharClass(descriptor.charClassPrefix());
     }
     return null;
   }
-
-  /**
-   * Finds the next candidate match start position at or after {@code fromIndex}. Returns negative
-   * if definitely not found.
-   */
-  int findCandidate(Utf8InputScanner scanner, int fromIndex);
 
   /**
    * Finds the next candidate match start position at or after {@code pos} using pattern-matched
@@ -74,7 +58,6 @@ sealed interface Utf8StartAccelerator {
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
       case CharClass cc -> cc.findCandidate(scanner, pos);
-      case MultiLiteral ml -> ml.findCandidate(scanner, pos);
       case Teddy t -> t.findCandidate(scanner, pos);
     };
   }
@@ -98,8 +81,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (prefixUtf8 != null) {
         return scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts, fromIndex);
       }
@@ -131,14 +113,13 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       return scanner.indexOfIgnoreCase(
           prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }
   }
 
-  record FixedOffset(FixedOffsetLiteral fixedOffset, AsciiBitmap charClassPrefixAscii)
+  record FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo charClassPrefix)
       implements Utf8StartAccelerator {
 
     @Override
@@ -146,15 +127,14 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefixAscii, fromIndex);
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefix, fromIndex);
     }
 
     private static int nextFixedOffsetCandidate(
         Utf8InputScanner scanner,
         FixedOffsetLiteral fixedOffsetLiteral,
-        AsciiBitmap charClassPrefixAscii,
+        CharClassScanInfo charClassPrefix,
         int searchFrom) {
       int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
       int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
@@ -168,15 +148,15 @@ sealed interface Utf8StartAccelerator {
         if (literalStart < 0) {
           return -1;
         }
-        if (discreteOffsets != null
-            && discreteOffsets.length == 1
-            && charClassPrefixAscii != null) {
+        if (discreteOffsets != null && discreteOffsets.length == 1 && charClassPrefix != null) {
           int earliestValid = -1;
           for (int offset : discreteOffsets) {
             int candidateStart = literalStart - offset;
             if (candidateStart >= searchFrom) {
-              int first = scanner.asciiAt(candidateStart);
-              if (charClassPrefixAscii.contains(first)
+              int first =
+                  candidateStart < scanner.length() ? scanner.codePointAt(candidateStart) : -1;
+              if (first >= 0
+                  && charClassPrefix.contains(first)
                   && (earliestValid < 0 || candidateStart < earliestValid)) {
                 earliestValid = candidateStart;
               }
@@ -202,66 +182,46 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.CHAR_CLASS;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      if (scanInfo != null) {
-        return scanner.indexOfCodePointClass(
-            scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex, scanner.length());
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      if (scanInfo == null) {
+        return fromIndex;
       }
-      return fromIndex;
+      return switch (scanInfo) {
+        case CharClassScanInfo.AsciiSmallSet smallSet -> {
+          char[] chars = smallSet.chars();
+          yield switch (chars.length) {
+            case 1 -> scanner.indexOfAscii(chars[0], fromIndex, scanner.length());
+            case 2 -> scanner.indexOfAsciiPair(chars[0], chars[1], fromIndex, scanner.length());
+            case 3 ->
+                scanner.indexOfCodePointClass(
+                    smallSet.ranges(),
+                    smallSet.bitmap0(),
+                    smallSet.bitmap1(),
+                    fromIndex,
+                    scanner.length());
+            default ->
+                scanner.indexOfCodePointClass(
+                    smallSet.ranges(),
+                    smallSet.bitmap0(),
+                    smallSet.bitmap1(),
+                    fromIndex,
+                    scanner.length());
+          };
+        }
+        case CharClassScanInfo other ->
+            scanner.indexOfCodePointClass(
+                other.ranges(), other.bitmap0(), other.bitmap1(), fromIndex, scanner.length());
+      };
     }
   }
 
-  @SuppressWarnings("ArrayRecordComponent")
-  record MultiLiteral(MultiLiteralInfo info) implements Utf8StartAccelerator {
-    @Override
-    public AcceleratorPolicy policy() {
-      return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
-    }
-
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      VectorScanProvider provider = VectorScanProviders.providerForLength(scanner.length());
-      if (provider != null) {
-        int idx =
-            provider.indexOfMultiLiteral(
-                scanner.bytes(),
-                scanner.offset(),
-                scanner.length(),
-                info.literals(),
-                info.anchorChars(),
-                info.anchorOffsets(),
-                info.minLength(),
-                fromIndex);
-        if (idx != VectorScanProvider.UNSUPPORTED) {
-          return idx;
-        }
-      }
-      int len = scanner.length();
-      int minLen = info.minLength();
-      byte[] bytes = scanner.bytes();
-      int offset = scanner.offset();
-      for (int i = fromIndex; i <= len - minLen; i++) {
-        for (String lit : info.literals()) {
-          if (i + lit.length() <= len
-              && Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
-            return i;
-          }
-        }
-      }
-      return -1;
-    }
-  }
-
-  @SuppressWarnings("ArrayRecordComponent")
   record Teddy(TeddyModel model) implements Utf8StartAccelerator {
     @Override
     public AcceleratorPolicy policy() {
       return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       VectorScanProvider provider = VectorScanProviders.providerForTeddyLength(scanner.length());
       if (provider == null) {
         return fromIndex;
