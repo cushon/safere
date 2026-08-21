@@ -691,7 +691,6 @@ class DfaTest {
     assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
   }
 
-
   @Test
   void automataDerivedStartStateAcceleratesAlternations() {
     Regexp re = Parser.parse("apple|banana|cherry", FLAGS);
