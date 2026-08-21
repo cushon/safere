@@ -2820,12 +2820,14 @@ public final class Matcher implements MatchResult {
   private String replaceImpl(String replacement, int limit) {
     Objects.requireNonNull(replacement, "replacement");
     reset();
-    RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
-    if (rejectPrefilter != null && text != null) {
-      if (rejectPrefilter.canReject(activeScanner(), text, searchFrom, enginePathOptions())) {
-        diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
-        diagnosticBoundary(rejectPrefilter.strategy());
-        return text;
+    if (!parentPattern.prog().anchorStart()) {
+      RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+      if (rejectPrefilter != null && text != null) {
+        if (rejectPrefilter.canReject(activeScanner(), text, searchFrom, enginePathOptions())) {
+          diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
+          diagnosticBoundary(rejectPrefilter.strategy());
+          return text;
+        }
       }
     }
     LazyTemplate template = new LazyTemplate(replacement, groupCount());
@@ -4357,10 +4359,12 @@ public final class Matcher implements MatchResult {
   }
 
   int findSplitPositions(int limit, SplitBuffer buffer) {
-    RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
-    if (rejectPrefilter != null && text != null) {
-      if (rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())) {
-        return 0;
+    if (!parentPattern.prog().anchorStart()) {
+      RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+      if (rejectPrefilter != null && text != null) {
+        if (rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())) {
+          return 0;
+        }
       }
     }
     int last = 0;

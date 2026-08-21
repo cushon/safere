@@ -3179,9 +3179,10 @@ public final class Pattern implements Serializable {
     String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
     CharClassScanInfo ccPrefix = startDescriptor != null ? startDescriptor.charClassPrefix() : null;
     String suffixStr = endAnchoredSuffix != null ? endAnchoredSuffix.suffix() : null;
-    String requiredLiteral = extractRequiredLiteral(metadataAst, prefix, suffixStr);
+    String requiredLiteral =
+        !anchorStart ? extractRequiredLiteral(metadataAst, prefix, suffixStr) : null;
     CharClassScanInfo requiredMatchClass = null;
-    if (prefix == null && endAnchoredCharClass == null) {
+    if (!anchorStart && prefix == null && endAnchoredCharClass == null) {
       if (ccPrefix == null) {
         requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
       } else {
