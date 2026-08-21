@@ -247,6 +247,30 @@ final class ByteVectorScan {
       int[] anchorRanges,
       int minLength,
       int start) {
+    return indexOfMultiLiteral(
+        bytes,
+        offset,
+        length,
+        literals,
+        anchorChars,
+        anchorOffsets,
+        anchorRanges,
+        minLength,
+        null,
+        start);
+  }
+
+  static int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int[] anchorRanges,
+      int minLength,
+      TeddyModel teddyModel,
+      int start) {
     int numLits = literals.length;
     if (numLits == 0 || length < minLength) {
       return -1;
@@ -254,12 +278,22 @@ final class ByteVectorScan {
     int pos = Math.max(0, start);
     long verificationWork = 0;
     long workLimit = WorkLimit.forRemaining(length - pos);
+    int observedBytes = 0;
+    long estimatedVerificationBytes = 0;
     int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
 
     for (; pos <= limit; pos += vectorLen) {
       ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
       VectorMask<Byte> matchMask = matches(inputVec, anchorRanges);
+
+      if (teddyModel != null && MultiLiteralSelectionPolicy.shouldObserve(observedBytes)) {
+        observedBytes += vectorLen;
+        estimatedVerificationBytes += (long) matchMask.trueCount() * minLength;
+        if (MultiLiteralSelectionPolicy.prefersTeddy(estimatedVerificationBytes, observedBytes)) {
+          return TeddyVectorScan.indexOfTeddyUtf8(bytes, offset, length, teddyModel, pos);
+        }
+      }
 
       if (matchMask.anyTrue()) {
         long activeLanes = matchMask.toLong();

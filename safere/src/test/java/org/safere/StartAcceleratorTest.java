@@ -311,6 +311,45 @@ class StartAcceleratorTest {
         .isEqualTo(VectorScanProvider.UNSUPPORTED);
   }
 
+  @Test
+  void adaptiveTeddySelectionUsesEstimatedCandidateVerificationCost() {
+    assertThat(MultiLiteralSelectionPolicy.prefersTeddy(5L * 7, 64)).isTrue();
+    assertThat(MultiLiteralSelectionPolicy.prefersTeddy(4L * 7, 64)).isFalse();
+    assertThat(MultiLiteralSelectionPolicy.prefersTeddy(16L * 7, 256)).isFalse();
+    assertThat(MultiLiteralSelectionPolicy.prefersTeddy(19L * 7, 256)).isTrue();
+    assertThat(MultiLiteralSelectionPolicy.shouldObserve(255)).isTrue();
+    assertThat(MultiLiteralSelectionPolicy.shouldObserve(256)).isFalse();
+  }
+
+  @Test
+  void adaptiveTeddySelectionPreservesTheEarliestLiteralMatch() {
+    if (!isVectorApiAvailable()) {
+      return;
+    }
+    String[] literals = new String[] {"blossom", "sparkling", "twilight"};
+    MultiLiteralInfo info = MultiLiteralInfo.create(literals);
+    TeddyModel teddyModel = TeddyModel.compile(literals, 64);
+    assertThat(info).isNotNull();
+    assertThat(teddyModel).isNotNull();
+    String prefix = "b s t ".repeat(12);
+    byte[] input = (prefix + "sparkling then blossom").getBytes(UTF_8);
+
+    int result =
+        ByteVectorScan.indexOfMultiLiteral(
+            input,
+            0,
+            input.length,
+            info.literals(),
+            info.anchorChars(),
+            info.anchorOffsets(),
+            info.anchorRanges(),
+            info.minLength(),
+            teddyModel,
+            0);
+
+    assertThat(result).isEqualTo(prefix.length());
+  }
+
   private static Utf8InputScanner utf8Scanner(String text) {
     byte[] bytes = text.getBytes(UTF_8);
     return new Utf8InputScanner(bytes, 0, bytes.length);

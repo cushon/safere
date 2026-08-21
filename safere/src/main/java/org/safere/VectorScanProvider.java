@@ -47,5 +47,6 @@ interface VectorScanProvider {
       int[] anchorOffsets,
       int[] anchorRanges,
       int minLength,
+      TeddyModel teddyModel,
       int start);
 }

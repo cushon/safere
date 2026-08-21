@@ -495,10 +495,7 @@ public final class Pattern implements Serializable {
             ? MultiLiteralInfo.create(altLiterals)
             : null;
     TeddyModel teddyModel = null;
-    if (multiLiteral == null
-        && altLiterals != null
-        && altLiterals.length >= 2
-        && altLiterals.length <= 32) {
+    if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
       teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
     }
     StartAcceleration startAcceleration =

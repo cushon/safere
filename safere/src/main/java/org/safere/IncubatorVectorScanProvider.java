@@ -75,6 +75,7 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
       int[] anchorOffsets,
       int[] anchorRanges,
       int minLength,
+      TeddyModel teddyModel,
       int start) {
     return ByteVectorScan.indexOfMultiLiteral(
         bytes,
@@ -85,6 +86,7 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
         anchorOffsets,
         anchorRanges,
         minLength,
+        teddyModel,
         start);
   }
 }
