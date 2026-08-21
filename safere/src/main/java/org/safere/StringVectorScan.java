@@ -73,7 +73,9 @@ final class StringVectorScan {
         return indexOfIgnoreCaseUtf16(text, prefix, start);
       }
     }
-    // Fall back to Matcher.indexOfIgnoreCase which leverages JVM intrinsic String.indexOf(char)
+    if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return indexOfIgnoreCaseChunked(text, prefix, start);
+    }
     return VectorScanProvider.UNSUPPORTED;
   }
 
@@ -597,6 +599,30 @@ final class StringVectorScan {
     return -1;
   }
 
+  private static int indexOfIgnoreCaseChunked(String text, String prefix, int start) {
+    int prefixLen = prefix.length();
+    int scanLimit = text.length();
+    int pos = Math.max(0, start);
+    char[] chunk = StringChunkBuffer.get();
+    int overlap = prefixLen - 1;
+
+    while (pos < scanLimit) {
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk = scanChunkIgnoreCase(chunk, chunkSize, prefix);
+      if (matchInChunk == VectorScanProvider.UNSUPPORTED) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize - overlap;
+    }
+    return -1;
+  }
+
   private static int indexOfAsciiPairChunked(
       String text, int c1, int c2, int fromIndex, int limit) {
     int scanLimit = Math.min(limit, text.length());
@@ -676,6 +702,52 @@ final class StringVectorScan {
     }
     for (; p < chunkSize; p++) {
       if (ShortVectorScan.matches(chunk[p], ranges)) {
+        return p;
+      }
+    }
+    return -1;
+  }
+
+  private static int scanChunkIgnoreCase(char[] chunk, int chunkSize, String prefix) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return 0;
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+    if (prefixLen > 1) {
+      return Utf16.indexOfIgnoreCase(chunk, 0, chunkSize, prefix, 0);
+    }
+
+    char first = prefix.charAt(0);
+    short low = (short) toLowerCase(first);
+    short high = (short) toUpperCase(first);
+    ShortVector lowVec = ShortVector.broadcast(SHORT_SPECIES, low);
+    ShortVector highVec = ShortVector.broadcast(SHORT_SPECIES, high);
+
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector inputVec = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> matchMask = inputVec.compare(EQ, lowVec).or(inputVec.compare(EQ, highVec));
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int candidatePos = p + bit;
+          if (candidatePos + prefixLen <= chunkSize
+              && Utf16.regionMatchesIgnoreCase(chunk, candidatePos, prefix, prefixLen)) {
+            return candidatePos;
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+    for (; p < chunkSize; p++) {
+      if (Utf16.regionMatchesIgnoreCase(chunk, p, prefix, prefixLen)) {
         return p;
       }
     }
