@@ -88,8 +88,8 @@ class StartAcceleratorTest {
 
   @Test
   void charClassPrefixAcceleratesStringAndUtf8() {
-    AsciiBitmap asciiPair = new AsciiBitmap.Builder().add('a').add('b').build();
-    StartDescriptor descPair = descriptor(null, false, null, asciiPair);
+    CharClassScanInfo pairScanInfo = Pattern.compile("[ab]").charClassPrefix();
+    StartDescriptor descPair = descriptor(null, false, null, pairScanInfo);
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(descPair, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
@@ -103,8 +103,8 @@ class StartAcceleratorTest {
     assertThat(utf8PairAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
     assertThat(utf8PairAcc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
 
-    AsciiBitmap asciiMulti = new AsciiBitmap.Builder().add('a').add('b').add('c').add('d').build();
-    StartDescriptor descMulti = descriptor(null, false, null, asciiMulti);
+    CharClassScanInfo multiScanInfo = Pattern.compile("[abcd]").charClassPrefix();
+    StartDescriptor descMulti = descriptor(null, false, null, multiScanInfo);
     Utf8StartAccelerator utf8MultiAcc = Utf8StartAccelerator.create(descMulti, false);
     assertThat(utf8MultiAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
     assertThat(utf8MultiAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
@@ -115,9 +115,48 @@ class StartAcceleratorTest {
       String prefix,
       boolean prefixFoldCase,
       FixedOffsetLiteral fixedOffsetLiteral,
-      AsciiBitmap charClassPrefixAscii) {
+      CharClassScanInfo charClassPrefix) {
     return new StartDescriptor(
-        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefixAscii, null, null, null, null);
+        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, null, null, null, null);
+  }
+
+  @Test
+  void unicodeCharClassPrefixAcceleratesStringAndUtf8() {
+    Pattern pattern = Pattern.compile("[\\p{IsAlphabetic}]+");
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
+    assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(strAcc.findCandidate("123\u00e945", 0, false)).isEqualTo(3);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("123\u00e945"), 0)).isEqualTo(3);
+  }
+
+  @Test
+  void supplementaryUnicodeCharClassPrefixAcceleratesStringAndUtf8() {
+    Pattern pattern = Pattern.compile("[(é)|(😀)]");
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
+    assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(strAcc.findCandidate("x\uD83D\uDE00y", 0, false)).isEqualTo(1);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(utf8Acc.findCandidate(utf8Scanner("x😀y"), 0)).isEqualTo(1);
+  }
+
+  @Test
+  void unicodeCharClassPrefixResumesAsciiScanningAfterNonAsciiCodePoints() {
+    StringStartAccelerator accelerator =
+        Pattern.compile("[\\p{IsAlphabetic}]+").stringStartAccelerator();
+
+    assertThat(accelerator.findCandidate("000©000", 0, false)).isEqualTo(-1);
+    assertThat(accelerator.findCandidate("000©000Ā", 0, false)).isEqualTo(7);
+    assertThat(accelerator.findCandidate("000😀000a", 0, false)).isEqualTo(8);
+    assertThat(accelerator.findCandidate("000😀000a", 4, false)).isEqualTo(8);
   }
 
   @Test

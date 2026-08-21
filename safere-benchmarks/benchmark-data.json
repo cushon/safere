@@ -2381,6 +2381,72 @@
         "suffix": ":8080",
         "length": "{size}"
       }
+    },
+    {
+      "id": "unicodePrefix.digitsAbsent.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "0123456789 9876543210 1357924680 ",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "unicodePrefix.alphabeticLate.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "0123456789 9876543210 1357924680 ",
+        "suffix": "\u00e9123",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "unicodePrefix.englishProseAbsent.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "The quick brown fox jumps over the lazy dog. Standard English prose without CJK characters. ",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "unicodePrefix.cjkLate.{size}",
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "The quick brown fox jumps over the lazy dog. Standard English prose without CJK characters. ",
+        "suffix": "\u4f60\u597d123",
+        "length": "{size}"
+      },
+      "shared": true
     }
   ],
   "workloads": [
@@ -10946,6 +11012,210 @@
       "inputs": [
         "searchScaling.prose.1048576"
       ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodePrefixBenchmark.alphabetic.absent.{size}",
+      "operation": "find",
+      "patterns": [
+        {
+          "java": "[\\p{IsAlphabetic}]+\\d+",
+          "alternates": {
+            "re2": {
+              "unsupported": true,
+              "reason": "RE2 and Go do not expose the Unicode Alphabetic binary property"
+            },
+            "rust-regex": {
+              "pattern": "[\\p{Alphabetic}]+[0-9]+",
+              "reason": "Rust regex uses the Unicode binary property name without Java's Is prefix and gives \\d Unicode semantics"
+            },
+            "pcre2": {
+              "unsupported": true,
+              "reason": "PCRE2 does not expose the Unicode Alphabetic binary property"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET does not expose Java's IsAlphabetic Unicode property"
+            }
+          }
+        }
+      ],
+      "inputs": [
+        "unicodePrefix.digitsAbsent.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures Unicode alphabetic prefix acceleration scanning over non-matching digits.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodePrefixBenchmark.alphabetic.late.{size}",
+      "operation": "find",
+      "patterns": [
+        {
+          "java": "[\\p{IsAlphabetic}]+\\d+",
+          "alternates": {
+            "re2": {
+              "unsupported": true,
+              "reason": "RE2 and Go do not expose the Unicode Alphabetic binary property"
+            },
+            "rust-regex": {
+              "pattern": "[\\p{Alphabetic}]+[0-9]+",
+              "reason": "Rust regex uses the Unicode binary property name without Java's Is prefix and gives \\d Unicode semantics"
+            },
+            "pcre2": {
+              "unsupported": true,
+              "reason": "PCRE2 does not expose the Unicode Alphabetic binary property"
+            },
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET does not expose Java's IsAlphabetic Unicode property"
+            }
+          }
+        }
+      ],
+      "inputs": [
+        "unicodePrefix.alphabeticLate.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures Unicode alphabetic prefix acceleration scanning to a late non-ASCII match.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodePrefixBenchmark.cjk.absent.{size}",
+      "operation": "find",
+      "patterns": [
+        {
+          "java": "[\\u4E00-\\u9FFF]+\\d+",
+          "alternates": {
+            "re2": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "RE2 and Go use braced hexadecimal code point escapes"
+            },
+            "rust-regex": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "Rust regex uses braced hexadecimal code point escapes and gives \\d Unicode semantics"
+            },
+            "pcre2": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "PCRE2 uses braced hexadecimal code point escapes"
+            },
+            "dotnet": {
+              "pattern": "[\\u4E00-\\u9FFF]+[0-9]+",
+              "reason": ".NET gives \\d Unicode semantics"
+            }
+          }
+        }
+      ],
+      "inputs": [
+        "unicodePrefix.englishProseAbsent.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures CJK prefix acceleration scanning over non-matching English prose.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodePrefixBenchmark.cjk.late.{size}",
+      "operation": "find",
+      "patterns": [
+        {
+          "java": "[\\u4E00-\\u9FFF]+\\d+",
+          "alternates": {
+            "re2": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "RE2 and Go use braced hexadecimal code point escapes"
+            },
+            "rust-regex": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "Rust regex uses braced hexadecimal code point escapes and gives \\d Unicode semantics"
+            },
+            "pcre2": {
+              "pattern": "[\\x{4E00}-\\x{9FFF}]+[0-9]+",
+              "reason": "PCRE2 uses braced hexadecimal code point escapes"
+            },
+            "dotnet": {
+              "pattern": "[\\u4E00-\\u9FFF]+[0-9]+",
+              "reason": ".NET gives \\d Unicode semantics"
+            }
+          }
+        }
+      ],
+      "inputs": [
+        "unicodePrefix.cjkLate.{size}"
+      ],
+      "axes": {
+        "size": [
+          1024,
+          32768,
+          1048576
+        ]
+      },
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Measures CJK prefix acceleration scanning to a late CJK match.",
+      "requirements": [],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",

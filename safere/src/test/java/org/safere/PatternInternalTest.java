@@ -58,7 +58,7 @@ class PatternInternalTest {
   void transparentGroupsPreserveCharacterClassAccelerators() {
     Pattern p = Pattern.compile("(?:[A-Z]+)");
 
-    AsciiBitmap prefix = p.charClassPrefixAscii();
+    CharClassScanInfo prefix = p.charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('A')).isTrue();
     assertThat(p.matchDescriptor().charClassMatch()).isNotNull();
@@ -69,7 +69,7 @@ class PatternInternalTest {
     assertThat(Pattern.compile("^https://.*").anchoredPrefix()).isEqualTo("https://");
     assertThat(Pattern.compile("\\Ahttps://.*").anchoredPrefix()).isEqualTo("https://");
 
-    AsciiBitmap prefix = Pattern.compile("^[0-9]+").anchoredCharClassPrefixAscii();
+    CharClassScanInfo prefix = Pattern.compile("^[0-9]+").anchoredCharClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('0')).isTrue();
     assertThat(prefix.contains('9')).isTrue();
@@ -158,7 +158,7 @@ class PatternInternalTest {
   @Test
   void alternatePrefixAcceleration() {
     Pattern p = Pattern.compile("(?:cat|dog|bird)s?");
-    AsciiBitmap prefix = p.charClassPrefixAscii();
+    CharClassScanInfo prefix = p.charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('c')).isTrue();
     assertThat(prefix.contains('d')).isTrue();
@@ -169,7 +169,7 @@ class PatternInternalTest {
   @Test
   void alternatePrefixCaseInsensitiveAcceleration() {
     Pattern p = Pattern.compile("(?i)(?:cat|dog|bird)s?");
-    AsciiBitmap prefix = p.charClassPrefixAscii();
+    CharClassScanInfo prefix = p.charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('c')).isTrue();
     assertThat(prefix.contains('C')).isTrue();
@@ -181,10 +181,24 @@ class PatternInternalTest {
   }
 
   @Test
+  void unicodeCharacterClassPrefixAcceleration() {
+    Pattern p = Pattern.compile("[\\p{IsAlphabetic}]+");
+    CharClassScanInfo prefix = p.charClassPrefix();
+    assertThat(prefix).isNotNull();
+    assertThat(prefix.isAscii()).isFalse();
+    assertThat(prefix.contains('a')).isTrue();
+    assertThat(prefix.contains('Z')).isTrue();
+    assertThat(prefix.contains('\u00e9')).isTrue(); // é
+    assertThat(prefix.contains('\u03b1')).isTrue(); // α
+    assertThat(prefix.contains('1')).isFalse();
+    assertThat(prefix.contains(' ')).isFalse();
+  }
+
+  @Test
   void deeplyNestedRequiredQuantifierPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedRequiredPlusPattern(1_000, "[ab]"));
 
-    AsciiBitmap prefix = p.charClassPrefixAscii();
+    CharClassScanInfo prefix = p.charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('a')).isTrue();
     assertThat(prefix.contains('b')).isTrue();
@@ -195,7 +209,7 @@ class PatternInternalTest {
   void deeplyNestedAlternationPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedAlternationPattern(1_000));
 
-    AsciiBitmap prefix = p.charClassPrefixAscii();
+    CharClassScanInfo prefix = p.charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('a')).isTrue();
     assertThat(prefix.contains('b')).isTrue();
