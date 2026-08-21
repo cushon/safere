@@ -89,7 +89,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       }
       return -1;
     }
-    int res = ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, (byte) c1, (byte) c2, start);
+    int res = scanBytePair(scanLen, (byte) c1, (byte) c2, start);
     return (res >= 0 && res < limit) ? res : -1;
   }
 
@@ -110,10 +110,31 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       }
       return -1;
     }
-    int res =
-        ByteSwarScan.indexOfByteTriple(
-            bytes, offset, scanLen, (byte) c1, (byte) c2, (byte) c3, start);
+    int res = scanByteTriple(scanLen, (byte) c1, (byte) c2, (byte) c3, start);
     return (res >= 0 && res < limit) ? res : -1;
+  }
+
+  private int scanBytePair(int scanLen, byte b0, byte b1, int start) {
+    VectorScanProvider pairProvider = VectorScanProviders.providerForPairLength(scanLen - start);
+    if (pairProvider != null) {
+      int idx = pairProvider.indexOfAsciiPair(bytes, offset, scanLen, b0, b1, start);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
+      }
+    }
+    return ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, b0, b1, start);
+  }
+
+  private int scanByteTriple(int scanLen, byte b0, byte b1, byte b2, int start) {
+    VectorScanProvider tripleProvider =
+        VectorScanProviders.providerForTripleLength(scanLen - start);
+    if (tripleProvider != null) {
+      int idx = tripleProvider.indexOfAsciiTriple(bytes, offset, scanLen, b0, b1, b2, start);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
+      }
+    }
+    return ByteSwarScan.indexOfByteTriple(bytes, offset, scanLen, b0, b1, b2, start);
   }
 
   Utf8InputScanner slice(int start, int end) {
@@ -263,42 +284,64 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
    *     requires the general code-point scan
    */
   private int indexOfAsciiRanges(int[] ranges, long bitmap0, long bitmap1, int start, int scanLen) {
-    if (ranges.length >= 2 && ranges[0] >= 0 && ranges[ranges.length - 1] < 0x80) {
-      if (scanProvider != null && scanLen - start >= scanProvider.minimumInputLength()) {
-        int position = start;
-        int scalarLimit = Math.min(scanLen, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
-        for (; position < scalarLimit; position++) {
-          if (InputScanner.classContains(ranges, bitmap0, bitmap1, unsignedByteAt(position))) {
-            return position;
-          }
+    if (ranges.length < 2 || ranges[0] < 0 || ranges[ranges.length - 1] >= 0x80) {
+      return -2;
+    }
+    switch (ranges.length) {
+      case 2 -> {
+        int low = ranges[0];
+        int high = ranges[1];
+        if (low == high) {
+          int res = indexOfByte((byte) low, start);
+          return (res >= 0 && res < scanLen) ? res : -1;
         }
-        int result = scanProvider.indexOfAsciiClass(bytes, offset, scanLen, ranges, position);
-        if (result != VectorScanProvider.UNSUPPORTED) {
-          return result;
+        if (high == low + 1) {
+          return scanBytePair(scanLen, (byte) low, (byte) high, start);
         }
+      }
+      case 4 -> {
+        if (ranges[0] == ranges[1] && ranges[2] == ranges[3]) {
+          return scanBytePair(scanLen, (byte) ranges[0], (byte) ranges[2], start);
+        }
+      }
+      case 6 -> {
+        if (useSpecializedAsciiTriple(ranges, scanLen - start)) {
+          return scanByteTriple(
+              scanLen, (byte) ranges[0], (byte) ranges[2], (byte) ranges[4], start);
+        }
+      }
+      default -> {}
+    }
+    if (scanProvider != null && scanLen - start >= scanProvider.minimumInputLength()) {
+      int position = start;
+      int scalarLimit = Math.min(scanLen, position + VECTOR_SCALAR_PROLOGUE_LENGTH);
+      for (; position < scalarLimit; position++) {
+        if (InputScanner.classContains(ranges, bitmap0, bitmap1, unsignedByteAt(position))) {
+          return position;
+        }
+      }
+      int result = scanProvider.indexOfAsciiClass(bytes, offset, scanLen, ranges, position);
+      if (result != VectorScanProvider.UNSUPPORTED) {
+        return result;
       }
     }
-    if (ranges.length == 2 && ranges[0] >= 0 && ranges[1] < 0x80) {
-      int low = ranges[0];
-      int high = ranges[1];
-      if (low == high) {
-        int res = indexOfByte((byte) low, start);
-        return (res >= 0 && res < scanLen) ? res : -1;
-      }
-      if (high == low + 1) {
-        return ByteSwarScan.indexOfBytePair(bytes, offset, scanLen, (byte) low, (byte) high, start);
-      }
-      return ByteSwarScan.indexOfByteRange(bytes, offset, scanLen, low, high, start);
-    }
-    if (ranges.length == 4
-        && ranges[0] == ranges[1]
-        && ranges[2] == ranges[3]
-        && ranges[0] >= 0
-        && ranges[3] < 0x80) {
-      return ByteSwarScan.indexOfBytePair(
-          bytes, offset, scanLen, (byte) ranges[0], (byte) ranges[2], start);
+    if (ranges.length == 2) {
+      return ByteSwarScan.indexOfByteRange(bytes, offset, scanLen, ranges[0], ranges[1], start);
     }
     return -2;
+  }
+
+  static boolean isAsciiTriple(int[] ranges) {
+    return ranges.length == 6
+        && ranges[0] == ranges[1]
+        && ranges[2] == ranges[3]
+        && ranges[4] == ranges[5];
+  }
+
+  static boolean useSpecializedAsciiTriple(int[] ranges, int remaining) {
+    return isAsciiTriple(ranges)
+        && (VectorScanProviders.providerForTripleLength(remaining) != null
+            || VectorScanProviders.providerForLength(remaining) == null);
   }
 
   private int indexOfNonAsciiCodePointClass(int[] ranges, int start, int scanLen) {
@@ -475,8 +518,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       return indexOfByte((byte) first, start);
     }
     if (last == second) {
-      return ByteSwarScan.indexOfBytePair(
-          bytes, offset, length, (byte) first, (byte) second, start);
+      return scanBytePair(length, (byte) first, (byte) second, start);
     }
     return contiguous
         ? ByteSwarScan.indexOfByteRange(bytes, offset, length, first, last, start)
@@ -697,8 +739,8 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   }
 
   @Override
-  public int indexOfCharClass(Pattern.CharClassScanInfo scanInfo, int start) {
+  public int indexOfCharClass(CharClassScanInfo scanInfo, int start) {
     return indexOfCodePointClass(
-        scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, start, length);
+        scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1(), start, length);
   }
 }

@@ -1029,7 +1029,7 @@ public final class Pattern implements Serializable {
               : Matcher.FallbackPreparedRunner.INSTANCE);
     }
 
-    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
+    CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
     Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
     if (enginePathOptions.charClassMatchFastPaths()
         && (singleCharClass != null || charClassMatch != null)) {
@@ -1055,7 +1055,7 @@ public final class Pattern implements Serializable {
   }
 
   private Matcher.PreparedMatchRunner createLiteralFallbackRunner(boolean regionActive) {
-    Pattern.CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
+    CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
     Pattern.CharClassMatchInfo charClassMatch = matchDescriptor.charClassMatch();
     if (enginePathOptions.charClassMatchFastPaths()
         && (singleCharClass != null || charClassMatch != null)) {
@@ -2747,7 +2747,7 @@ public final class Pattern implements Serializable {
     if (cc.numRunes() > 0x80000) {
       return null;
     }
-    return buildCharClassScanInfo(cc);
+    return CharClassScanInfo.fromCharClass(cc);
   }
 
   private static boolean addAsciiCharClass(CharClass cc, AsciiBitmap.Builder bitmap) {
@@ -3055,63 +3055,6 @@ public final class Pattern implements Serializable {
   @SuppressWarnings("ArrayRecordComponent")
   record CharClassMatchInfo(int[] ranges, long bitmap0, long bitmap1, boolean allowEmpty) {}
 
-  /** Holds precomputed data for scanning one character class. */
-  static final class CharClassScanInfo {
-    final int[] ranges;
-    final long bitmap0;
-    final long bitmap1;
-    final boolean isAscii;
-
-    CharClassScanInfo(int[] ranges, long bitmap0, long bitmap1, boolean isAscii) {
-      this.ranges = ranges;
-      this.bitmap0 = bitmap0;
-      this.bitmap1 = bitmap1;
-      this.isAscii = isAscii;
-    }
-
-    boolean contains(int cp) {
-      if (cp < 64) {
-        return cp >= 0 && (bitmap0 & (1L << cp)) != 0;
-      }
-      if (cp < 128) {
-        return (bitmap1 & (1L << (cp - 64))) != 0;
-      }
-      if (isAscii) {
-        return false;
-      }
-      return Matcher.binarySearchRanges(ranges, cp);
-    }
-  }
-
-  static CharClassScanInfo buildAsciiClassScanInfo(AsciiBitmap asciiClass) {
-    if (asciiClass == null || asciiClass.isEmpty()) {
-      return null;
-    }
-    int[] ranges = new int[128 * 2];
-    int rangeCount = 0;
-    int value = 0;
-    while (value < 128) {
-      if (!asciiClass.containsAscii(value)) {
-        value++;
-        continue;
-      }
-      int low = value;
-      while (value + 1 < 128 && asciiClass.containsAscii(value + 1)) {
-        value++;
-      }
-      int high = value;
-      ranges[rangeCount * 2] = low;
-      ranges[rangeCount * 2 + 1] = high;
-      rangeCount++;
-      value++;
-    }
-    if (rangeCount == 0) {
-      return null;
-    }
-    return new CharClassScanInfo(
-        Arrays.copyOf(ranges, rangeCount * 2), asciiClass.bitmap0(), asciiClass.bitmap1(), true);
-  }
-
   /**
    * Detects patterns that are structurally a single character class under a quantifier covering the
    * entire string — e.g., {@code [a-zA-Z]+}, {@code \d*}, {@code \w{1,}}, {@code [0-9]+}. When
@@ -3208,7 +3151,7 @@ public final class Pattern implements Serializable {
     if (cc.isEmpty()) {
       return null;
     }
-    return buildCharClassScanInfo(cc);
+    return CharClassScanInfo.fromCharClass(cc);
   }
 
   record SuffixInfo(String suffix, boolean wasDollar, boolean unixLines, boolean foldCase) {
@@ -3242,14 +3185,14 @@ public final class Pattern implements Serializable {
         requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
       } else {
         CharClassScanInfo candidate = extractRequiredMatchClass(metadataAst, false);
-        if (candidate != null && candidate.ranges != null) {
+        if (candidate != null && candidate.ranges() != null) {
           int candidateRunes = 0;
-          for (int i = 0; i < candidate.ranges.length; i += 2) {
-            candidateRunes += (candidate.ranges[i + 1] - candidate.ranges[i] + 1);
+          for (int i = 0; i < candidate.ranges().length; i += 2) {
+            candidateRunes += (candidate.ranges()[i + 1] - candidate.ranges()[i] + 1);
           }
           int prefixRunes = 0;
-          for (int i = 0; i < ccPrefix.ranges.length; i += 2) {
-            prefixRunes += (ccPrefix.ranges[i + 1] - ccPrefix.ranges[i] + 1);
+          for (int i = 0; i < ccPrefix.ranges().length; i += 2) {
+            prefixRunes += (ccPrefix.ranges()[i + 1] - ccPrefix.ranges()[i] + 1);
           }
           if (candidateRunes < prefixRunes) {
             requiredMatchClass = candidate;
@@ -3402,7 +3345,7 @@ public final class Pattern implements Serializable {
     }
     if (node.op != RegexpOp.CONCAT || node.subs == null) {
       CharClass required = requiredCharClass(node, inspectAlternation);
-      return required != null ? buildCharClassScanInfo(required) : null;
+      return required != null ? CharClassScanInfo.fromCharClass(required) : null;
     }
     CharClass mostSelective = null;
     for (Regexp sub : node.subs) {
@@ -3412,7 +3355,7 @@ public final class Pattern implements Serializable {
         mostSelective = required;
       }
     }
-    return mostSelective != null ? buildCharClassScanInfo(mostSelective) : null;
+    return mostSelective != null ? CharClassScanInfo.fromCharClass(mostSelective) : null;
   }
 
   private static CharClass requiredCharClass(Regexp re, boolean inspectAlternation) {
@@ -3669,30 +3612,6 @@ public final class Pattern implements Serializable {
       UnicodeCaseFolding.addUnicodeFoldedRange(ccb, cp, cp);
     }
     return ccb.build();
-  }
-
-  private static CharClassScanInfo buildCharClassScanInfo(CharClass cc) {
-    int numRanges = cc.numRanges();
-    int[] ranges = new int[numRanges * 2];
-    long b0 = 0;
-    long b1 = 0;
-    for (int i = 0; i < numRanges; i++) {
-      int lo = cc.lo(i);
-      int hi = cc.hi(i);
-      ranges[i * 2] = lo;
-      ranges[i * 2 + 1] = hi;
-      int start = Math.max(lo, 0);
-      int end = Math.min(hi, 127);
-      for (int cp = start; cp <= end; cp++) {
-        if (cp < 64) {
-          b0 |= 1L << cp;
-        } else {
-          b1 |= 1L << (cp - 64);
-        }
-      }
-    }
-    boolean isAscii = numRanges > 0 && cc.hi(numRanges - 1) <= 127;
-    return new CharClassScanInfo(ranges, b0, b1, isAscii);
   }
 
   /**

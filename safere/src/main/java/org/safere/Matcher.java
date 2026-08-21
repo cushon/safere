@@ -21,7 +21,6 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import org.safere.Pattern.CharClassScanInfo;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by
@@ -626,8 +625,8 @@ public final class Matcher implements MatchResult {
    * Fast path for {@code find()} when the pattern is exactly one character class. Scans code points
    * directly and returns the first matching code point as group 0.
    */
-  private boolean singleCharClassFindFastPath(Pattern.CharClassScanInfo scanInfo, int fromIndex) {
-    if (scanInfo.isAscii) {
+  private boolean singleCharClassFindFastPath(CharClassScanInfo scanInfo, int fromIndex) {
+    if (scanInfo.isAscii()) {
       int idx = activeScanner().indexOfCharClass(scanInfo, fromIndex);
       if (idx >= 0) {
         return applyFullMatchResult(new int[] {idx, idx + 1});
@@ -637,9 +636,9 @@ public final class Matcher implements MatchResult {
     int idx =
         activeScanner()
             .indexOfCodePointClass(
-                scanInfo.ranges,
-                scanInfo.bitmap0,
-                scanInfo.bitmap1,
+                scanInfo.ranges(),
+                scanInfo.bitmap0(),
+                scanInfo.bitmap1(),
                 fromIndex,
                 activeScanner().length());
     if (idx >= 0) {
@@ -4422,7 +4421,7 @@ public final class Matcher implements MatchResult {
     }
 
     // Char class fast path
-    Pattern.CharClassScanInfo singleCharClass = parentPattern.matchDescriptor().singleCharClass();
+    CharClassScanInfo singleCharClass = parentPattern.matchDescriptor().singleCharClass();
     if (options.charClassMatchFastPaths() && singleCharClass != null) {
       if (prog.anchorStart() && fromIndex > 0) {
         return -1L;
@@ -4437,7 +4436,7 @@ public final class Matcher implements MatchResult {
         }
         return -1L;
       }
-      if (singleCharClass.isAscii) {
+      if (singleCharClass.isAscii()) {
         int idx = scanner.indexOfCharClass(singleCharClass, fromIndex);
         if (idx < 0) {
           return -1L;
@@ -4446,9 +4445,9 @@ public final class Matcher implements MatchResult {
       }
       int idx =
           scanner.indexOfCodePointClass(
-              singleCharClass.ranges,
-              singleCharClass.bitmap0,
-              singleCharClass.bitmap1,
+              singleCharClass.ranges(),
+              singleCharClass.bitmap0(),
+              singleCharClass.bitmap1(),
               fromIndex,
               scanner.length());
       if (idx < 0) {
@@ -4732,12 +4731,12 @@ public final class Matcher implements MatchResult {
   }
 
   static final class SingleCharClassPreparedRunner implements PreparedMatchRunner {
-    private final Pattern.CharClassScanInfo singleCharClass;
+    private final CharClassScanInfo singleCharClass;
     private final Pattern.CharClassMatchInfo charClassMatch;
     private final boolean isStartAnchored;
 
     SingleCharClassPreparedRunner(
-        Pattern.CharClassScanInfo singleCharClass,
+        CharClassScanInfo singleCharClass,
         Pattern.CharClassMatchInfo charClassMatch,
         boolean isStartAnchored) {
       this.singleCharClass = singleCharClass;

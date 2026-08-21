@@ -6,7 +6,6 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 
 /**
@@ -184,11 +183,35 @@ sealed interface Utf8StartAccelerator {
     }
 
     int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      if (scanInfo != null) {
-        return scanner.indexOfCodePointClass(
-            scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1, fromIndex, scanner.length());
+      if (scanInfo == null) {
+        return fromIndex;
       }
-      return fromIndex;
+      return switch (scanInfo) {
+        case CharClassScanInfo.AsciiSmallSet smallSet -> {
+          char[] chars = smallSet.chars();
+          yield switch (chars.length) {
+            case 1 -> scanner.indexOfAscii(chars[0], fromIndex, scanner.length());
+            case 2 -> scanner.indexOfAsciiPair(chars[0], chars[1], fromIndex, scanner.length());
+            case 3 ->
+                scanner.indexOfCodePointClass(
+                    smallSet.ranges(),
+                    smallSet.bitmap0(),
+                    smallSet.bitmap1(),
+                    fromIndex,
+                    scanner.length());
+            default ->
+                scanner.indexOfCodePointClass(
+                    smallSet.ranges(),
+                    smallSet.bitmap0(),
+                    smallSet.bitmap1(),
+                    fromIndex,
+                    scanner.length());
+          };
+        }
+        case CharClassScanInfo other ->
+            scanner.indexOfCodePointClass(
+                other.ranges(), other.bitmap0(), other.bitmap1(), fromIndex, scanner.length());
+      };
     }
   }
 

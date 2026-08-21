@@ -5,7 +5,6 @@
 
 package org.safere;
 
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 import org.safere.Pattern.StartAcceleration;
 
@@ -208,7 +207,7 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return indexOfCharClass(text, asciiTable, scanInfo.ranges, scanInfo.isAscii, fromIndex);
+      return indexOfCharClass(text, asciiTable, scanInfo.ranges(), scanInfo.isAscii(), fromIndex);
     }
 
     private static int indexOfCharClass(
