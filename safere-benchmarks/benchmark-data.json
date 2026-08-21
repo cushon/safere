@@ -4053,6 +4053,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.nonGreedyAlternationScaled.64",
+      "operation": "find",
+      "patterns": [
+        "apple+?|banana+?|cherry+?"
+      ],
+      "inputs": [
+        "searchScaling.prose.64"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.currencyPriceScaled.64",
       "operation": "find",
       "patterns": [
@@ -4089,6 +4107,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.nonGreedyAlternationScaled.256",
+      "operation": "find",
+      "patterns": [
+        "apple+?|banana+?|cherry+?"
+      ],
+      "inputs": [
+        "searchScaling.prose.256"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.currencyPriceScaled.256",
       "operation": "find",
       "patterns": [
@@ -4111,6 +4147,24 @@
       "operation": "find",
       "patterns": [
         "foo|bar|baz|qux|quux|corge|grault|garply"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.nonGreedyAlternationScaled.1024",
+      "operation": "find",
+      "patterns": [
+        "apple+?|banana+?|cherry+?"
       ],
       "inputs": [
         "searchScaling.prose.1024"
@@ -4323,6 +4377,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.nonGreedyAlternationScaled.10240",
+      "operation": "find",
+      "patterns": [
+        "apple+?|banana+?|cherry+?"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.currencyPriceScaled.10240",
       "operation": "find",
       "patterns": [
@@ -4521,6 +4593,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.nonGreedyAlternationScaled.102400",
+      "operation": "find",
+      "patterns": [
+        "apple+?|banana+?|cherry+?"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.currencyPriceScaled.102400",
       "operation": "find",
       "patterns": [
@@ -4705,6 +4795,24 @@
       "operation": "find",
       "patterns": [
         "foo|bar|baz|qux|quux|corge|grault|garply"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.nonGreedyAlternationScaled.1048576",
+      "operation": "find",
+      "patterns": [
+        "apple+?|banana+?|cherry+?"
       ],
       "inputs": [
         "searchScaling.prose.1048576"
