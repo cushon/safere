@@ -45,6 +45,51 @@ final class ByteVectorScan {
     return -1;
   }
 
+  static int indexOfAsciiPair(byte[] bytes, int offset, int length, byte b0, byte b1, int start) {
+    int position = Math.max(0, start);
+    int limit = position + SPECIES.loopBound(length - position);
+    ByteVector v0 = ByteVector.broadcast(SPECIES, b0);
+    ByteVector v1 = ByteVector.broadcast(SPECIES, b1);
+    for (; position < limit; position += SPECIES.length()) {
+      ByteVector values = ByteVector.fromArray(SPECIES, bytes, offset + position);
+      VectorMask<Byte> matches = values.compare(EQ, v0).or(values.compare(EQ, v1));
+      if (matches.anyTrue()) {
+        return position + matches.firstTrue();
+      }
+    }
+    for (; position < length; position++) {
+      byte val = bytes[offset + position];
+      if (val == b0 || val == b1) {
+        return position;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiTriple(
+      byte[] bytes, int offset, int length, byte b0, byte b1, byte b2, int start) {
+    int position = Math.max(0, start);
+    int limit = position + SPECIES.loopBound(length - position);
+    ByteVector v0 = ByteVector.broadcast(SPECIES, b0);
+    ByteVector v1 = ByteVector.broadcast(SPECIES, b1);
+    ByteVector v2 = ByteVector.broadcast(SPECIES, b2);
+    for (; position < limit; position += SPECIES.length()) {
+      ByteVector values = ByteVector.fromArray(SPECIES, bytes, offset + position);
+      VectorMask<Byte> matches =
+          values.compare(EQ, v0).or(values.compare(EQ, v1)).or(values.compare(EQ, v2));
+      if (matches.anyTrue()) {
+        return position + matches.firstTrue();
+      }
+    }
+    for (; position < length; position++) {
+      byte val = bytes[offset + position];
+      if (val == b0 || val == b1 || val == b2) {
+        return position;
+      }
+    }
+    return -1;
+  }
+
   private static VectorMask<Byte> matches(ByteVector values, int[] ranges) {
     VectorMask<Byte> matches = matches(values, ranges[0], ranges[1]);
     if (ranges.length >= 4) {

@@ -5,7 +5,6 @@
 
 package org.safere;
 
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 import org.safere.Pattern.StartAcceleration;
 

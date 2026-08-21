@@ -6,7 +6,6 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.DisjointRequiredLiterals;
 import org.safere.Pattern.EndAnchoredCharClassInfo;
 import org.safere.Pattern.SuffixInfo;
@@ -159,7 +158,7 @@ sealed interface RejectPrefilter
   record CharClass(int[] ranges, long bitmap0, long bitmap1) implements RejectPrefilter {
 
     static CharClass create(CharClassScanInfo scanInfo) {
-      return new CharClass(scanInfo.ranges, scanInfo.bitmap0, scanInfo.bitmap1);
+      return new CharClass(scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1());
     }
 
     @Override

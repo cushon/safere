@@ -9,7 +9,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
-import org.safere.Pattern.CharClassScanInfo;
 import org.safere.Pattern.FixedOffsetLiteral;
 
 @DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
@@ -89,18 +88,27 @@ class StartAcceleratorTest {
 
   @Test
   void charClassPrefixAcceleratesStringAndUtf8() {
-    CharClassScanInfo scanInfo = Pattern.compile("[ab]").charClassPrefix();
-    StartDescriptor desc = descriptor(null, false, null, scanInfo);
+    CharClassScanInfo pairScanInfo = Pattern.compile("[ab]").charClassPrefix();
+    StartDescriptor descPair = descriptor(null, false, null, pairScanInfo);
 
-    StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
+    StringStartAccelerator strAcc = StringStartAccelerator.create(descPair, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
     assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
     assertThat(strAcc.findCandidate("xxxa", 0, false)).isEqualTo(3);
 
-    Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
-    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
-    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
-    assertThat(utf8Acc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
+    Utf8StartAccelerator utf8PairAcc = Utf8StartAccelerator.create(descPair, false);
+    assertThat(utf8PairAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    assertThat(((Utf8StartAccelerator.CharClass) utf8PairAcc).scanInfo())
+        .isInstanceOf(CharClassScanInfo.AsciiSmallSet.class);
+    assertThat(utf8PairAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(utf8PairAcc.findCandidate(utf8Scanner("xxxb"), 0)).isEqualTo(3);
+
+    CharClassScanInfo multiScanInfo = Pattern.compile("[abcd]").charClassPrefix();
+    StartDescriptor descMulti = descriptor(null, false, null, multiScanInfo);
+    Utf8StartAccelerator utf8MultiAcc = Utf8StartAccelerator.create(descMulti, false);
+    assertThat(utf8MultiAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    assertThat(utf8MultiAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(utf8MultiAcc.findCandidate(utf8Scanner("xxxd"), 0)).isEqualTo(3);
   }
 
   private static StartDescriptor descriptor(
