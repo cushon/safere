@@ -305,7 +305,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         }
       }
       case 6 -> {
-        if (ranges[0] == ranges[1] && ranges[2] == ranges[3] && ranges[4] == ranges[5]) {
+        if (useSpecializedAsciiTriple(ranges, scanLen - start)) {
           return scanByteTriple(
               scanLen, (byte) ranges[0], (byte) ranges[2], (byte) ranges[4], start);
         }
@@ -329,6 +329,19 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
       return ByteSwarScan.indexOfByteRange(bytes, offset, scanLen, ranges[0], ranges[1], start);
     }
     return -2;
+  }
+
+  static boolean isAsciiTriple(int[] ranges) {
+    return ranges.length == 6
+        && ranges[0] == ranges[1]
+        && ranges[2] == ranges[3]
+        && ranges[4] == ranges[5];
+  }
+
+  static boolean useSpecializedAsciiTriple(int[] ranges, int remaining) {
+    return isAsciiTriple(ranges)
+        && (VectorScanProviders.providerForTripleLength(remaining) != null
+            || VectorScanProviders.providerForLength(remaining) == null);
   }
 
   private int indexOfNonAsciiCodePointClass(int[] ranges, int start, int scanLen) {

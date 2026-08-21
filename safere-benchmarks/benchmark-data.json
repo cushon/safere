@@ -4746,7 +4746,7 @@
       "id": "SearchScalingBenchmark.asciiTripleFail.1024",
       "operation": "find",
       "patterns": [
-        "[XYZ]"
+        "[XZ_]"
       ],
       "inputs": [
         "searchScaling.random.1024"
@@ -4764,7 +4764,7 @@
       "id": "SearchScalingBenchmark.asciiTripleSuccess.1024",
       "operation": "find",
       "patterns": [
-        "[XYZ]"
+        "[XZ_]"
       ],
       "inputs": [
         "searchScaling.success.1024"
@@ -4890,7 +4890,7 @@
       "id": "SearchScalingBenchmark.asciiTripleFail.10240",
       "operation": "find",
       "patterns": [
-        "[XYZ]"
+        "[XZ_]"
       ],
       "inputs": [
         "searchScaling.random.10240"
@@ -4908,7 +4908,7 @@
       "id": "SearchScalingBenchmark.asciiTripleSuccess.10240",
       "operation": "find",
       "patterns": [
-        "[XYZ]"
+        "[XZ_]"
       ],
       "inputs": [
         "searchScaling.success.10240"
@@ -5034,7 +5034,7 @@
       "id": "SearchScalingBenchmark.asciiTripleFail.102400",
       "operation": "find",
       "patterns": [
-        "[XYZ]"
+        "[XZ_]"
       ],
       "inputs": [
         "searchScaling.random.102400"
@@ -5052,7 +5052,7 @@
       "id": "SearchScalingBenchmark.asciiTripleSuccess.102400",
       "operation": "find",
       "patterns": [
-        "[XYZ]"
+        "[XZ_]"
       ],
       "inputs": [
         "searchScaling.success.102400"
@@ -5178,7 +5178,7 @@
       "id": "SearchScalingBenchmark.asciiTripleFail.1048576",
       "operation": "find",
       "patterns": [
-        "[XYZ]"
+        "[XZ_]"
       ],
       "inputs": [
         "searchScaling.random.1048576"
@@ -5196,7 +5196,7 @@
       "id": "SearchScalingBenchmark.asciiTripleSuccess.1048576",
       "operation": "find",
       "patterns": [
-        "[XYZ]"
+        "[XZ_]"
       ],
       "inputs": [
         "searchScaling.success.1048576"

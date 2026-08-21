@@ -18,6 +18,30 @@ import org.junit.jupiter.params.provider.ValueSource;
 class Utf8VectorPairTripleTest {
 
   @Test
+  void tripleScannerRequiresThreeDisjointCharacters() {
+    assertThat(Utf8InputScanner.isAsciiTriple(new int[] {'X', 'X', 'Z', 'Z', '_', '_'})).isTrue();
+    assertThat(Utf8InputScanner.isAsciiTriple(new int[] {'X', 'Z'})).isFalse();
+    assertThat(Utf8InputScanner.isAsciiTriple(new int[] {'X', 'X', 'Z', 'Z'})).isFalse();
+  }
+
+  @Test
+  void disjointTripleDispatchHonorsVectorCrossover() {
+    int[] ranges = {'X', 'X', 'Z', 'Z', '_', '_'};
+    if (VectorScanProviders.providerForTripleLength(64) != null) {
+      assertThat(Utf8InputScanner.useSpecializedAsciiTriple(ranges, 64)).isTrue();
+      assertThat(Utf8InputScanner.useSpecializedAsciiTriple(ranges, 10_240)).isTrue();
+    }
+    if (VectorScanProviders.providerForLength(10_241) != null) {
+      assertThat(Utf8InputScanner.useSpecializedAsciiTriple(ranges, 10_241)).isFalse();
+    }
+  }
+
+  @Test
+  void unknownProviderDiagnosticIncludesRequestedValue() {
+    assertThat(VectorScanProviders.unknownProviderMessage("typo")).contains("typo");
+  }
+
+  @Test
   void pairAndTripleScansHaveIndependentVectorCutoffs() {
     if (VectorScanProviders.providerForPairLength(64) != null) {
       assertThat(VectorScanProviders.providerForLength(64)).isNull();

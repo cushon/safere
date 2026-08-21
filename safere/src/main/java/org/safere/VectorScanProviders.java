@@ -42,7 +42,7 @@ final class VectorScanProviders {
       return null;
     }
     if (!requested.equals("vector")) {
-      throw new IllegalStateException("Unknown Vector scan provider  + requested + ");
+      throw new IllegalStateException(unknownProviderMessage(requested));
     }
     try {
       return VectorScanProviderFactory.create();
@@ -52,5 +52,9 @@ final class VectorScanProviders {
               + "--add-modules=jdk.incubator.vector",
           e);
     }
+  }
+
+  static String unknownProviderMessage(String requested) {
+    return "Unknown Vector scan provider " + requested;
   }
 }

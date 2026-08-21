@@ -207,8 +207,12 @@ sealed interface Utf8StartAccelerator {
             case 1 -> scanner.indexOfAscii(chars[0], fromIndex, scanner.length());
             case 2 -> scanner.indexOfAsciiPair(chars[0], chars[1], fromIndex, scanner.length());
             case 3 ->
-                scanner.indexOfAsciiTriple(
-                    chars[0], chars[1], chars[2], fromIndex, scanner.length());
+                scanner.indexOfCodePointClass(
+                    smallSet.ranges(),
+                    smallSet.bitmap0(),
+                    smallSet.bitmap1(),
+                    fromIndex,
+                    scanner.length());
             default ->
                 scanner.indexOfCodePointClass(
                     smallSet.ranges(),
