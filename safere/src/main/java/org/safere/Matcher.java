@@ -2823,9 +2823,17 @@ public final class Matcher implements MatchResult {
     if (!parentPattern.prog().anchorStart()) {
       RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
       if (rejectPrefilter != null && text != null) {
-        if (rejectPrefilter.canReject(activeScanner(), text, searchFrom, enginePathOptions())) {
-          diagnosticParticipation(rejectPrefilter.strategy(), StrategyRole.REJECT_PREFILTER);
-          diagnosticBoundary(rejectPrefilter.strategy());
+        InputScanner scanner = activeScanner();
+        EnginePathOptions options = enginePathOptions();
+        MatchStrategy rejectionStrategy =
+            rejectPrefilter instanceof RejectPrefilter.Composite composite
+                ? composite.rejectionStrategy(scanner, text, searchFrom, options)
+                : rejectPrefilter.canReject(scanner, text, searchFrom, options)
+                    ? rejectPrefilter.strategy()
+                    : null;
+        if (rejectionStrategy != null) {
+          diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+          diagnosticBoundary(rejectionStrategy);
           return text;
         }
       }
