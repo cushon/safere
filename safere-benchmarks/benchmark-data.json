@@ -2447,6 +2447,46 @@
         "length": "{size}"
       },
       "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.emailValid.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "user.name+service@subdomain.example.com"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.emailInvalid.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "invalid-email-address-missing-domain-and-at-symbol-noise"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.dateValid.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "2026-08-22"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.dateInvalid.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "not-a-valid-date-string-value-with-no-matching-format"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.tokenLookingAt.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "AUTH: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 (extra trailing text that is not consumed)"
+      },
+      "shared": true
     }
   ],
   "workloads": [
@@ -11223,6 +11263,119 @@
         "constraints": [
           "prematerializedInput"
         ]
+      }
+    },
+    {
+      "id": "ValidationBenchmark.emailMatches.match",
+      "operation": "matches",
+      "patterns": [
+        "^([a-zA-Z0-9_.+-]+)@([a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+)$"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.emailValid.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ValidationBenchmark.emailMatches.noMatch",
+      "operation": "matches",
+      "patterns": [
+        "^([a-zA-Z0-9_.+-]+)@([a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+)$"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.emailInvalid.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "id": "ValidationBenchmark.dateMatches.match",
+      "operation": "matches",
+      "patterns": [
+        "^(\\d{4})-(\\d{2})-(\\d{2})$"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.dateValid.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ValidationBenchmark.dateMatches.noMatch",
+      "operation": "matches",
+      "patterns": [
+        "^(\\d{4})-(\\d{2})-(\\d{2})$"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.dateInvalid.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "id": "ValidationBenchmark.tokenLookingAt",
+      "operation": "lookingAt",
+      "patterns": [
+        "^AUTH:\\s+([A-Za-z]+)\\s+([A-Za-z0-9_.-]+)"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.tokenLookingAt.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      },
+      "lifecycle": {
+        "matcher": "newPerInvocation"
       }
     }
   ]
