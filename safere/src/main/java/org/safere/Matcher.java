@@ -4018,7 +4018,7 @@ public final class Matcher implements MatchResult {
           parentPattern
               .onePass()
               .search(
-                  scanner, deferredMatchStart, deferredMatchEnd, false, prog.numCaptures(), groups);
+                  scanner, deferredMatchStart, deferredMatchEnd, true, prog.numCaptures(), groups);
     } else {
       boolean savedCaptureSearch = diagnosticCaptureSearch;
       diagnosticCaptureSearch = true;

@@ -736,6 +736,47 @@ class SearchScalingRegressionTest {
         "String");
   }
 
+  @Test
+  void caseInsensitiveLinearChainUsesOnePassForSubmatchExtraction() {
+    Pattern pattern = Pattern.compile("(?i)id:([0-9]+)");
+    String input = "prefix noise ID:98765 trailing text";
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(0)).isEqualTo("ID:98765");
+              assertThat(matcher.group(1)).isEqualTo("98765");
+            });
+    assertThat(groupReadWork)
+        .as(
+            "Case-insensitive linear chain submatch extraction must run in bounded slice OnePass"
+                + " work")
+        .isLessThanOrEqualTo(30);
+  }
+
+  @Test
+  void unanchoredLinearChainSubmatchWorkIsBoundedByMatchSlice() {
+    Pattern pattern = Pattern.compile("([a-z]+)@([a-z]+)\\.com");
+    String prefix = "noise ".repeat(500);
+    String match = "alice@google.com";
+    String suffix = " trailing".repeat(500);
+    String input = prefix + match + suffix;
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(1)).isEqualTo("alice");
+              assertThat(matcher.group(2)).isEqualTo("google");
+            });
+    assertThat(groupReadWork)
+        .as(
+            "Submatch extraction work must be strictly bounded by match slice length, not haystack"
+                + " length")
+        .isLessThanOrEqualTo(match.length() * 2L + 20);
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");
