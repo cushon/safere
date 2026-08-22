@@ -778,7 +778,9 @@ class SearchScalingRegressionTest {
     long lookingAtWork =
         WorkCounter.countForTesting(() -> assertThat(matcher.lookingAt()).isTrue());
     assertThat(lookingAtWork)
-        .as("lookingAt() must only execute DFA prefix scan bounded by matched prefix, not trailing 10k chars")
+        .as(
+            "lookingAt() must only execute DFA prefix scan bounded by matched prefix, not trailing"
+                + " 10k chars")
         .isLessThanOrEqualTo(50);
     assertThat(matcher.group(0)).isEqualTo("application:12345");
     assertThat(matcher.group(1)).isEqualTo("12345");
