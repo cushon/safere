@@ -280,6 +280,7 @@ sealed interface Utf8StartAccelerator {
         if (idx != VectorScanProvider.UNSUPPORTED) {
           return idx;
         }
+        return fromIndex;
       }
       return findScalar(scanner, fromIndex);
     }
@@ -292,9 +293,13 @@ sealed interface Utf8StartAccelerator {
       int offset = scanner.offset();
       for (int i = fromIndex; i <= len - minLen; i++) {
         for (String lit : literals) {
-          if (i + lit.length() <= len
-              && Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
-            return i;
+          if (i + lit.length() <= len) {
+            if (WorkCounterConfig.ENABLED) {
+              WorkCounter.record(lit.length());
+            }
+            if (Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
+              return i;
+            }
           }
         }
       }

@@ -306,6 +306,9 @@ final class ByteVectorScan {
             if (candidatePos >= start
                 && candidatePos + lit.length() <= length
                 && (bytes[offset + matchIndex] & 0xFF) == (anchorChars[i] & 0xFF)) {
+              if (WorkCounterConfig.ENABLED) {
+                WorkCounter.record(lit.length());
+              }
               if (Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
                 return candidatePos;
               }
@@ -325,10 +328,13 @@ final class ByteVectorScan {
       int value = bytes[offset + pos] & 0xFF;
       for (int i = 0; i < numLits; i++) {
         String lit = literals[i];
-        if (value == anchorChars[i]
-            && pos + lit.length() <= length
-            && Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
-          return pos;
+        if (value == anchorChars[i] && pos + lit.length() <= length) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(lit.length());
+          }
+          if (Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
+            return pos;
+          }
         }
       }
       verificationWork += minLength;

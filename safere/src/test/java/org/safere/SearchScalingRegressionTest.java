@@ -830,6 +830,22 @@ class SearchScalingRegressionTest {
     assertThat(matcher.group(1)).isEqualTo("12345");
   }
 
+  @Test
+  void multiLiteralPrefilterDoesNotRestartScalarVerificationAfterLateDenseCandidates() {
+    int literalLength = 512;
+    Pattern pattern =
+        Pattern.compile("A".repeat(literalLength - 1) + "B|" + "B".repeat(literalLength - 1) + "C");
+    byte[] noise = ("x".repeat(256) + "A".repeat(8_192)).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("WorkLimit exhaustion must resume with the normal matcher without a scalar rescan")
+        .isLessThan((long) noise.length * 10);
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");
