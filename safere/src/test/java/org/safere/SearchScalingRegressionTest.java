@@ -737,21 +737,23 @@ class SearchScalingRegressionTest {
   }
 
   @Test
-  void caseInsensitiveLinearChainUsesOnePassForSubmatchExtraction() {
-    Pattern pattern = Pattern.compile("(?i)id:([0-9]+)");
-    String input = "prefix noise ID:98765 trailing text";
+  void unicodeCaseInsensitiveLinearChainUsesOnePassForSubmatchExtraction() {
+    // (?iu) triggers inst.foldCase = true on literal runes (e.g. Kelvin sign K <-> K <-> k)
+    Pattern pattern = Pattern.compile("(?iu)key:([0-9]+)");
+    assertThat(pattern.canOnePassSubmatch()).isTrue();
+    assertThat(pattern.onePass()).isNotNull();
+
+    String input = "prefix noise KEY:98765 trailing text";
     Matcher matcher = pattern.matcher(input);
     assertThat(matcher.find()).isTrue();
     long groupReadWork =
         WorkCounter.countForTesting(
             () -> {
-              assertThat(matcher.group(0)).isEqualTo("ID:98765");
+              assertThat(matcher.group(0)).isEqualTo("KEY:98765");
               assertThat(matcher.group(1)).isEqualTo("98765");
             });
     assertThat(groupReadWork)
-        .as(
-            "Case-insensitive linear chain submatch extraction must run in bounded slice OnePass"
-                + " work")
+        .as("Unicode case-insensitive linear chain submatch extraction must run in OnePass with zero NFA allocations")
         .isLessThanOrEqualTo(30);
   }
 
