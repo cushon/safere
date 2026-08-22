@@ -753,7 +753,9 @@ class SearchScalingRegressionTest {
               assertThat(matcher.group(1)).isEqualTo("98765");
             });
     assertThat(groupReadWork)
-        .as("Unicode case-insensitive linear chain submatch extraction must run in OnePass with zero NFA allocations")
+        .as(
+            "Unicode case-insensitive linear chain submatch extraction must run in OnePass with"
+                + " zero NFA allocations")
         .isLessThanOrEqualTo(30);
   }
 

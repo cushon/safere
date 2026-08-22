@@ -557,7 +557,8 @@ final class OnePass {
       int[] scratchCap) {
     GraphemeSupport.Context graphemeContext =
         GraphemeSupport.Context.create(text, hasGraphemeSemantics);
-    return search(text, startPos, endPos, endMatch, nsubmatch, reuseGroups, scratchCap, graphemeContext);
+    return search(
+        text, startPos, endPos, endMatch, nsubmatch, reuseGroups, scratchCap, graphemeContext);
   }
 
   private int[] search(
