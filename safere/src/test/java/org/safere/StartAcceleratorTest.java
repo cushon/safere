@@ -7,6 +7,7 @@ package org.safere;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import org.junit.jupiter.api.Test;
 import org.safere.Pattern.FixedOffsetLiteral;
@@ -414,5 +415,16 @@ class StartAcceleratorTest {
         .isEqualTo(3);
     assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(noEmoji), 0))
         .isEqualTo(-1);
+  }
+
+  @Test
+  void consecutiveLeadingRepetitionsDoNotOverflowDuringCompilation() {
+    StringBuilder regex = new StringBuilder();
+    for (int i = 0; i < 5_000; i++) {
+      regex.append((i & 1) == 0 ? "[ab]*" : "[cd]*");
+    }
+    regex.append('z');
+
+    assertThatCode(() -> Pattern.compile(regex.toString())).doesNotThrowAnyException();
   }
 }

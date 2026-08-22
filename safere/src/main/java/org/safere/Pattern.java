@@ -480,6 +480,11 @@ public final class Pattern implements Serializable {
   }
 
   private static StartDescriptor extractStartDescriptor(Regexp metadataAst) {
+    return extractStartDescriptor(metadataAst, true);
+  }
+
+  private static StartDescriptor extractStartDescriptor(
+      Regexp metadataAst, boolean allowLeadingExpansion) {
     PrefixResult prefixResult = extractPrefix(metadataAst);
     String prefix = prefixResult.prefix();
     boolean prefixFoldCase = prefixResult.foldCase();
@@ -506,7 +511,10 @@ public final class Pattern implements Serializable {
             ? extractCharClassPrefix(anchoredCandidate)
             : null;
     StartDescriptor.LeadingExpansion leadingExpansion =
-        (prefix == null && fixedOffsetLiteral == null && teddyModel == null)
+        (allowLeadingExpansion
+                && prefix == null
+                && fixedOffsetLiteral == null
+                && teddyModel == null)
             ? extractLeadingExpansion(metadataAst)
             : null;
     if (leadingExpansion != null) {
@@ -610,7 +618,7 @@ public final class Pattern implements Serializable {
     List<Regexp> tailSubs = re.subs.subList(idx + 1, re.nsub());
     Regexp tail = tailSubs.size() == 1 ? tailSubs.getFirst() : Regexp.concat(tailSubs, 0);
 
-    StartDescriptor inner = extractStartDescriptor(tail);
+    StartDescriptor inner = extractStartDescriptor(tail, false);
     if (inner == null || !inner.hasStartAcceleration() || inner.leadingExpansion() != null) {
       return null;
     }
