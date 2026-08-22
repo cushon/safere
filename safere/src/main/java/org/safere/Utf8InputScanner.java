@@ -532,7 +532,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
    * @return the index of the first match, {@code -1} if the literal is absent, or {@code -2} if the
    *     work budget was exhausted before either could be established
    */
-  private int boundedBoyerMooreHorspool(byte[] literal, int[] shifts, int start) {
+  int boundedBoyerMooreHorspool(byte[] literal, int[] shifts, int start) {
     int last = literal.length - 1;
     int position = start + last;
     long work = 0;
