@@ -736,6 +736,53 @@ class SearchScalingRegressionTest {
         "String");
   }
 
+  @Test
+  void matchesWithCapturesDefersNfaWorkUntilGroupIsRead() {
+    Pattern pattern = Pattern.compile("([a-z]+)@([a-z]+)\\.com");
+    String input = "alice@google.com";
+    Matcher matcher = pattern.matcher(input);
+    long matchWork = WorkCounter.countForTesting(() -> assertThat(matcher.matches()).isTrue());
+    assertThat(matcher.group(0)).isEqualTo(input);
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(1)).isEqualTo("alice");
+              assertThat(matcher.group(2)).isEqualTo("google");
+            });
+    assertThat(matchWork)
+        .as("matches() must only run forward DFA work without eager NFA state building")
+        .isLessThanOrEqualTo(input.length() * 2L + 20);
+    assertThat(groupReadWork)
+        .as("Submatch extraction happens on-demand when group(k) is read")
+        .isLessThanOrEqualTo(input.length() * 2L + 20);
+  }
+
+  @Test
+  void matchesWithCapturesRejectsNonMatchingInputInLinearWork() {
+    Pattern pattern = Pattern.compile("([a-z]+)@([a-z]+)\\.com");
+    String input = "x".repeat(10_000);
+    Matcher matcher = pattern.matcher(input);
+    long work = WorkCounter.countForTesting(() -> assertThat(matcher.matches()).isFalse());
+    assertThat(work)
+        .as("Non-matching input in matches() must reject in linear DFA steps without NFA work")
+        .isLessThanOrEqualTo(input.length() + 20);
+  }
+
+  @Test
+  void lookingAtWithCapturesDefersNfaWorkUntilGroupIsRead() {
+    Pattern pattern = Pattern.compile("([a-z]+):\\s+(\\d+)");
+    String input = "count: 42 (and extra trailing text that should not prevent lookingAt)";
+    Matcher matcher = pattern.matcher(input);
+    long lookingAtWork =
+        WorkCounter.countForTesting(() -> assertThat(matcher.lookingAt()).isTrue());
+    assertThat(matcher.group(0)).isEqualTo("count: 42");
+    assertThat(matcher.group(1)).isEqualTo("count");
+    assertThat(matcher.group(2)).isEqualTo("42");
+    assertThat(lookingAtWork)
+        .as("lookingAt() must only execute DFA prefix scan")
+        .isLessThanOrEqualTo(input.length() + 20);
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");
