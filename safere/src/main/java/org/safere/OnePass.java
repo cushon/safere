@@ -544,9 +544,20 @@ final class OnePass {
       boolean endMatch,
       int nsubmatch,
       int[] reuseGroups) {
+    return search(text, startPos, endPos, endMatch, nsubmatch, reuseGroups, null);
+  }
+
+  int[] search(
+      InputScanner text,
+      int startPos,
+      int endPos,
+      boolean endMatch,
+      int nsubmatch,
+      int[] reuseGroups,
+      int[] scratchCap) {
     GraphemeSupport.Context graphemeContext =
         GraphemeSupport.Context.create(text, hasGraphemeSemantics);
-    return search(text, startPos, endPos, endMatch, nsubmatch, reuseGroups, graphemeContext);
+    return search(text, startPos, endPos, endMatch, nsubmatch, reuseGroups, scratchCap, graphemeContext);
   }
 
   private int[] search(
@@ -556,10 +567,11 @@ final class OnePass {
       boolean endMatch,
       int nsubmatch,
       int[] reuseGroups,
+      int[] scratchCap,
       GraphemeSupport.Context graphemeContext) {
     int ncap = 2 * Math.max(nsubmatch, 1);
-    int[] cap = new int[ncap];
-    Arrays.fill(cap, -1);
+    int[] cap = scratchCap != null && scratchCap.length >= ncap ? scratchCap : new int[ncap];
+    Arrays.fill(cap, 0, ncap, -1);
     cap[0] = startPos;
 
     int stateOffset = 0;
