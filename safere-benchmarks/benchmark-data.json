@@ -11234,14 +11234,14 @@
     },
     {
       "id": "UnicodeCaseFoldingBenchmark.linearChainCapture",
-      "operation": "captureGroups",
+      "operation": "matchesGroupLengthSum",
       "patterns": [
-        "(?iu)key:([0-9]+)-([0-9]+)-([0-9]+)"
+        "^(?iu)([a-z]+)://([^:/]+):([0-9]+)$"
       ],
       "inputs": [
-        "unicodeCaseFold.capture.input"
+        "onePassScaling.withCaptures.4096"
       ],
-      "resultConsumption": "string",
+      "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
