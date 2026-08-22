@@ -545,21 +545,17 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         int literalPosition = last;
         int inputPosition = position;
         while (literalPosition >= 0 && bytes[offset + inputPosition] == literal[literalPosition]) {
-          if (WorkLimit.isExhausted(work, workLimit)) {
-            return -2;
-          }
-          work++;
           literalPosition--;
           inputPosition--;
         }
         if (literalPosition < 0) {
           return inputPosition + 1;
         }
+        work += (last - literalPosition + 1);
         if (WorkLimit.isExhausted(work, workLimit)) {
           return -2;
         }
         position += shifts[bytes[offset + position] & 0xFF];
-        work++;
       }
     }
     return -1;
