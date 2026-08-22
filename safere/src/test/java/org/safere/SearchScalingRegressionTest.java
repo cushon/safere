@@ -738,28 +738,29 @@ class SearchScalingRegressionTest {
 
   @Test
   void matchesWithCapturesDefersNfaWorkUntilGroupIsRead() {
-    Pattern pattern = Pattern.compile("([a-z]+)@([a-z]+)\\.com");
-    String input = "alice@google.com";
+    // Non-OnePass pattern due to ambiguous repetition where b is part of [a-z]
+    Pattern pattern = Pattern.compile("([a-z]+)b([a-z]+)");
+    String input = "helloworldbwelcome";
     Matcher matcher = pattern.matcher(input);
     long matchWork = WorkCounter.countForTesting(() -> assertThat(matcher.matches()).isTrue());
     assertThat(matcher.group(0)).isEqualTo(input);
     long groupReadWork =
         WorkCounter.countForTesting(
             () -> {
-              assertThat(matcher.group(1)).isEqualTo("alice");
-              assertThat(matcher.group(2)).isEqualTo("google");
+              assertThat(matcher.group(1)).isEqualTo("helloworld");
+              assertThat(matcher.group(2)).isEqualTo("welcome");
             });
     assertThat(matchWork)
         .as("matches() must only run forward DFA work without eager NFA state building")
         .isLessThanOrEqualTo(input.length() * 2L + 20);
     assertThat(groupReadWork)
         .as("Submatch extraction happens on-demand when group(k) is read")
-        .isLessThanOrEqualTo(input.length() * 2L + 20);
+        .isLessThanOrEqualTo(input.length() * 5L + 20);
   }
 
   @Test
   void matchesWithCapturesRejectsNonMatchingInputInLinearWork() {
-    Pattern pattern = Pattern.compile("([a-z]+)@([a-z]+)\\.com");
+    Pattern pattern = Pattern.compile("([a-z]+)b([a-z]+)");
     String input = "x".repeat(10_000);
     Matcher matcher = pattern.matcher(input);
     long work = WorkCounter.countForTesting(() -> assertThat(matcher.matches()).isFalse());
@@ -770,17 +771,17 @@ class SearchScalingRegressionTest {
 
   @Test
   void lookingAtWithCapturesDefersNfaWorkUntilGroupIsRead() {
-    Pattern pattern = Pattern.compile("([a-z]+):\\s+(\\d+)");
-    String input = "count: 42 (and extra trailing text that should not prevent lookingAt)";
+    // Non-OnePass pattern due to overlapping alternation branches
+    Pattern pattern = Pattern.compile("(?:apple|application|apply):([0-9]+)");
+    String input = "application:12345 " + "x".repeat(10_000);
     Matcher matcher = pattern.matcher(input);
     long lookingAtWork =
         WorkCounter.countForTesting(() -> assertThat(matcher.lookingAt()).isTrue());
-    assertThat(matcher.group(0)).isEqualTo("count: 42");
-    assertThat(matcher.group(1)).isEqualTo("count");
-    assertThat(matcher.group(2)).isEqualTo("42");
     assertThat(lookingAtWork)
-        .as("lookingAt() must only execute DFA prefix scan")
-        .isLessThanOrEqualTo(input.length() + 20);
+        .as("lookingAt() must only execute DFA prefix scan bounded by matched prefix, not trailing 10k chars")
+        .isLessThanOrEqualTo(50);
+    assertThat(matcher.group(0)).isEqualTo("application:12345");
+    assertThat(matcher.group(1)).isEqualTo("12345");
   }
 
   private static boolean isVectorApiAvailable() {
