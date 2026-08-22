@@ -116,9 +116,12 @@ class MultiLiteralTest {
 
   @Test
   void testFuzzEquivalenceWithJavaRegex() {
-    String[] keywords = {"alpha", "beta", "gamma", "delta", "zeta"};
+    String[] keywords = {"alpha", "beta", "gamma", "delta"};
     String regex = String.join("|", keywords);
     Pattern safere = Pattern.compile(regex);
+    if (VectorScanProviders.multiLiteralProviderAvailable()) {
+      assertThat(safere.multiLiteral()).isNotNull();
+    }
     java.util.regex.Pattern jre = java.util.regex.Pattern.compile(regex);
 
     Random rnd = new Random(42);
