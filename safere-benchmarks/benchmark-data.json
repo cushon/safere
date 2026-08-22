@@ -2447,6 +2447,13 @@
         "length": "{size}"
       },
       "shared": true
+    },
+    {
+      "id": "unicodeCaseFold.capture.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "transaction_id=\u212aEY:98765-2024-03-15; status=OK"
+      }
     }
   ],
   "workloads": [
@@ -11222,6 +11229,31 @@
         "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodeCaseFoldingBenchmark.linearChainCapture",
+      "operation": "captureGroups",
+      "patterns": [
+        "(?iu)key:([0-9]+)-([0-9]+)-([0-9]+)"
+      ],
+      "inputs": [
+        "unicodeCaseFold.capture.input"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "groups": [
+          1,
+          2,
+          3
         ]
       }
     }
