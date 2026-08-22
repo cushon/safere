@@ -4075,7 +4075,7 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.64",
+      "id": "SearchScalingBenchmark.starredAlternationScaled.64",
       "operation": "find",
       "patterns": [
         "(?:a*x|b*y|c*z)"
@@ -4111,7 +4111,7 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.256",
+      "id": "SearchScalingBenchmark.starredAlternationScaled.256",
       "operation": "find",
       "patterns": [
         "(?:a*x|b*y|c*z)"
@@ -4147,7 +4147,7 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.1024",
+      "id": "SearchScalingBenchmark.starredAlternationScaled.1024",
       "operation": "find",
       "patterns": [
         "(?:a*x|b*y|c*z)"
@@ -4345,7 +4345,7 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.10240",
+      "id": "SearchScalingBenchmark.starredAlternationScaled.10240",
       "operation": "find",
       "patterns": [
         "(?:a*x|b*y|c*z)"
@@ -4543,7 +4543,7 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.102400",
+      "id": "SearchScalingBenchmark.starredAlternationScaled.102400",
       "operation": "find",
       "patterns": [
         "(?:a*x|b*y|c*z)"
@@ -4741,7 +4741,7 @@
       }
     },
     {
-      "id": "SearchScalingBenchmark.optionalIndentBracketScaled.1048576",
+      "id": "SearchScalingBenchmark.starredAlternationScaled.1048576",
       "operation": "find",
       "patterns": [
         "(?:a*x|b*y|c*z)"
