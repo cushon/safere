@@ -2449,42 +2449,42 @@
       "shared": true
     },
     {
-      "id": "crossEngine.ValidationBenchmark.emailValid.input",
+      "id": "crossEngine.ValidationBenchmark.ambiguousValid.input",
       "recipe": {
         "kind": "literal",
-        "text": "user.name+service@subdomain.example.com"
+        "text": "helloworldbwelcome"
       },
       "shared": true
     },
     {
-      "id": "crossEngine.ValidationBenchmark.emailInvalid.input",
+      "id": "crossEngine.ValidationBenchmark.ambiguousInvalid.input",
       "recipe": {
         "kind": "literal",
-        "text": "invalid-email-address-missing-domain-and-at-symbol-noise"
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
       },
       "shared": true
     },
     {
-      "id": "crossEngine.ValidationBenchmark.dateValid.input",
+      "id": "crossEngine.ValidationBenchmark.overlapValid.input",
       "recipe": {
         "kind": "literal",
-        "text": "2026-08-22"
+        "text": "application:12345"
       },
       "shared": true
     },
     {
-      "id": "crossEngine.ValidationBenchmark.dateInvalid.input",
+      "id": "crossEngine.ValidationBenchmark.overlapInvalid.input",
       "recipe": {
         "kind": "literal",
-        "text": "not-a-valid-date-string-value-with-no-matching-format"
+        "text": "applenotvalid:12345"
       },
       "shared": true
     },
     {
-      "id": "crossEngine.ValidationBenchmark.tokenLookingAt.input",
+      "id": "crossEngine.ValidationBenchmark.overlapLookingAt.input",
       "recipe": {
         "kind": "literal",
-        "text": "AUTH: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 (extra trailing text that is not consumed)"
+        "text": "application:12345 (and trailing data that is not matched)"
       },
       "shared": true
     }
@@ -11266,13 +11266,13 @@
       }
     },
     {
-      "id": "ValidationBenchmark.emailMatches.match",
+      "id": "ValidationBenchmark.ambiguousLoopMatches.match",
       "operation": "matches",
       "patterns": [
-        "^([a-zA-Z0-9_.+-]+)@([a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+)$"
+        "^([a-z]+)b([a-z]+)$"
       ],
       "inputs": [
-        "crossEngine.ValidationBenchmark.emailValid.input"
+        "crossEngine.ValidationBenchmark.ambiguousValid.input"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -11288,13 +11288,13 @@
       }
     },
     {
-      "id": "ValidationBenchmark.emailMatches.noMatch",
+      "id": "ValidationBenchmark.ambiguousLoopMatches.noMatch",
       "operation": "matches",
       "patterns": [
-        "^([a-zA-Z0-9_.+-]+)@([a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+)$"
+        "^([a-z]+)b([a-z]+)$"
       ],
       "inputs": [
-        "crossEngine.ValidationBenchmark.emailInvalid.input"
+        "crossEngine.ValidationBenchmark.ambiguousInvalid.input"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -11310,13 +11310,13 @@
       }
     },
     {
-      "id": "ValidationBenchmark.dateMatches.match",
+      "id": "ValidationBenchmark.overlappingAlternationMatches.match",
       "operation": "matches",
       "patterns": [
-        "^(\\d{4})-(\\d{2})-(\\d{2})$"
+        "^(?:apple|application|apply):([0-9]+)$"
       ],
       "inputs": [
-        "crossEngine.ValidationBenchmark.dateValid.input"
+        "crossEngine.ValidationBenchmark.overlapValid.input"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -11332,13 +11332,13 @@
       }
     },
     {
-      "id": "ValidationBenchmark.dateMatches.noMatch",
+      "id": "ValidationBenchmark.overlappingAlternationMatches.noMatch",
       "operation": "matches",
       "patterns": [
-        "^(\\d{4})-(\\d{2})-(\\d{2})$"
+        "^(?:apple|application|apply):([0-9]+)$"
       ],
       "inputs": [
-        "crossEngine.ValidationBenchmark.dateInvalid.input"
+        "crossEngine.ValidationBenchmark.overlapInvalid.input"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -11354,13 +11354,13 @@
       }
     },
     {
-      "id": "ValidationBenchmark.tokenLookingAt",
+      "id": "ValidationBenchmark.overlappingLookingAt",
       "operation": "lookingAt",
       "patterns": [
-        "^AUTH:\\s+([A-Za-z]+)\\s+([A-Za-z0-9_.-]+)"
+        "^(?:apple|application|apply):([0-9]+)"
       ],
       "inputs": [
-        "crossEngine.ValidationBenchmark.tokenLookingAt.input"
+        "crossEngine.ValidationBenchmark.overlapLookingAt.input"
       ],
       "resultConsumption": "boolean",
       "measurement": {
