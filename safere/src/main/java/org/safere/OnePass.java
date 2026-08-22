@@ -745,7 +745,7 @@ final class OnePass {
     GraphemeSupport.Context graphemeContext =
         GraphemeSupport.Context.create(text, hasGraphemeSemantics);
     for (int start = startPos; start < limit; start++) {
-      int[] result = search(text, start, textLen, false, nsubmatch, null, graphemeContext);
+      int[] result = search(text, start, textLen, false, nsubmatch, null, null, graphemeContext);
       if (result != null) {
         return result;
       }
