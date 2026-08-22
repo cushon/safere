@@ -371,6 +371,10 @@ sealed interface StringStartAccelerator {
         int count = 0;
         while (start > fromIndex) {
           int cp = text.codePointBefore(start);
+          int cpStart = start - Character.charCount(cp);
+          if (cpStart < fromIndex) {
+            break;
+          }
           if (!leadingClass.contains(cp)) {
             break;
           }
@@ -378,7 +382,7 @@ sealed interface StringStartAccelerator {
             break;
           }
           count++;
-          start -= Character.charCount(cp);
+          start = cpStart;
         }
         if (count >= minRepetition) {
           return start;

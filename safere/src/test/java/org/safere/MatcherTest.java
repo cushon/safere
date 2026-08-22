@@ -449,6 +449,33 @@ class MatcherTest {
     }
 
     @Test
+    @DisplayName("find(int) does not move before a start inside a surrogate pair")
+    void findStartInsideSurrogatePairStaysWithinRequestedRange() {
+      String input = "😀bX😀b";
+
+      Matcher required = Pattern.compile("[\\x{1F600}]+b").matcher(input);
+      assertThat(required.find(1)).isTrue();
+      assertThat(required.start()).isEqualTo(4);
+      assertThat(required.group()).isEqualTo("😀b");
+
+      Matcher optional = Pattern.compile("[\\x{1F600}]*b").matcher(input);
+      assertThat(optional.find(1)).isTrue();
+      assertThat(optional.start()).isEqualTo(2);
+      assertThat(optional.group()).isEqualTo("b");
+    }
+
+    @Test
+    @DisplayName("find(int) keeps bounded supplementary leading expansions within the start")
+    void boundedLeadingExpansionRespectsFindStart() {
+      String input = "😀😀bX😀b";
+      Matcher matcher = Pattern.compile("[\\x{1F600}]{1,2}b").matcher(input);
+
+      assertThat(matcher.find(1)).isTrue();
+      assertThat(matcher.start()).isEqualTo(2);
+      assertThat(matcher.group()).isEqualTo("😀b");
+    }
+
+    @Test
     @DisplayName("find(int) throws for negative start")
     void findWithNegativeStart() {
       Pattern p = Pattern.compile("\\d+");
