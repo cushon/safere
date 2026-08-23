@@ -24,10 +24,11 @@ record StartDescriptor(
     TeddyModel teddyModel,
     HashChain hashChain,
     ClassHashChain classHashChain,
-    ClassHashChain16 classHashChain16) {
+    ClassHashChainUtf16 classHashChainUtf16,
+    ClassHashChainUtf8 classHashChainUtf8) {
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null, null);
 
   StartDescriptor(
       String prefix,
@@ -51,7 +52,8 @@ record StartDescriptor(
             ? HashChain.compile(prefix.getBytes(StandardCharsets.UTF_8))
             : null,
         compileClassHashChain(prefix, prefixFoldCase),
-        compileClassHashChain16(prefix, prefixFoldCase));
+        compileClassHashChainUtf16(prefix, prefixFoldCase),
+        compileClassHashChainUtf8(prefix, prefixFoldCase));
   }
 
   private static ClassHashChain compileClassHashChain(String prefix, boolean foldCase) {
@@ -60,9 +62,15 @@ record StartDescriptor(
         : null;
   }
 
-  private static ClassHashChain16 compileClassHashChain16(String prefix, boolean foldCase) {
+  private static ClassHashChainUtf16 compileClassHashChainUtf16(String prefix, boolean foldCase) {
     return prefix != null && foldCase && !Ascii.isAscii(prefix)
-        ? ClassHashChain16.compileCaseInsensitive(prefix)
+        ? ClassHashChainUtf16.compileCaseInsensitive(prefix)
+        : null;
+  }
+
+  private static ClassHashChainUtf8 compileClassHashChainUtf8(String prefix, boolean foldCase) {
+    return prefix != null && foldCase && !Ascii.isAscii(prefix)
+        ? ClassHashChainUtf8.compileCaseInsensitive(prefix)
         : null;
   }
 

@@ -788,22 +788,42 @@ class SearchScalingRegressionTest {
   }
 
   @Test
-  void classHashChain16AchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForStringInput() {
-    ClassHashChain16 chc16 =
-        ClassHashChain16.compileCaseInsensitive("конфигурация_сервера"); // M = 20
+  void classHashChainUtf16AchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForStringInput() {
+    ClassHashChainUtf16 chcUtf16 =
+        ClassHashChainUtf16.compileCaseInsensitive("конфигурация_сервера"); // M = 20
     String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5); // 270 chars
     long work =
         WorkCounter.countForTesting(
             () ->
-                assertThat(chc16.search(text, 0, WorkLimit.forRemaining(text.length())))
+                assertThat(chcUtf16.search(text, 0, WorkLimit.forRemaining(text.length())))
                     .isEqualTo(-1));
 
     // Sublinear bound: 270 / 19 = ~14 operations (vs 270 for linear scan)
     assertThat(work)
         .as(
-            "ClassHashChain16 must perform sublinear work on non-ASCII case-insensitive patterns"
+            "ClassHashChainUtf16 must perform sublinear work on non-ASCII case-insensitive patterns"
                 + " for String input")
         .isLessThanOrEqualTo(text.length() / 15 + 10);
+  }
+
+  @Test
+  void classHashChainUtf8AchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForUtf8Input() {
+    ClassHashChainUtf8 chcUtf8 = ClassHashChainUtf8.compileCaseInsensitive("конфигурация_сервера");
+    String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5);
+    byte[] bytes = text.getBytes(UTF_8);
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(
+                        chcUtf8.search(
+                            bytes, 0, bytes.length, 0, WorkLimit.forRemaining(bytes.length)))
+                    .isEqualTo(-1));
+
+    assertThat(work)
+        .as(
+            "ClassHashChainUtf8 must perform sublinear work on non-ASCII case-insensitive patterns"
+                + " for UTF-8 input")
+        .isLessThanOrEqualTo(bytes.length / 15 + 10);
   }
 
   @Test

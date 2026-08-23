@@ -27,7 +27,7 @@ sealed interface StringStartAccelerator {
           descriptor.prefix(),
           descriptor.prefixFoldCase(),
           descriptor.classHashChain(),
-          descriptor.classHashChain16());
+          descriptor.classHashChainUtf16());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
@@ -78,13 +78,13 @@ sealed interface StringStartAccelerator {
     private final char anchorLow;
     private final char anchorHigh;
     private final ClassHashChain classHashChain;
-    private final ClassHashChain16 classHashChain16;
+    private final ClassHashChainUtf16 classHashChainUtf16;
 
     Literal(
         String prefix,
         boolean prefixFoldCase,
         ClassHashChain classHashChain,
-        ClassHashChain16 classHashChain16) {
+        ClassHashChainUtf16 classHashChainUtf16) {
       this.prefix = prefix;
       this.prefixFoldCase = prefixFoldCase;
       if (prefixFoldCase && prefix != null && !prefix.isEmpty()) {
@@ -97,20 +97,20 @@ sealed interface StringStartAccelerator {
               classHashChain != null
                   ? classHashChain
                   : ClassHashChain.compileCaseInsensitive(prefix);
-          this.classHashChain16 = null;
+          this.classHashChainUtf16 = null;
         } else {
           this.classHashChain = null;
-          this.classHashChain16 =
-              classHashChain16 != null
-                  ? classHashChain16
-                  : ClassHashChain16.compileCaseInsensitive(prefix);
+          this.classHashChainUtf16 =
+              classHashChainUtf16 != null
+                  ? classHashChainUtf16
+                  : ClassHashChainUtf16.compileCaseInsensitive(prefix);
         }
       } else {
         this.anchorOffset = 0;
         this.anchorLow = 0;
         this.anchorHigh = 0;
         this.classHashChain = null;
-        this.classHashChain16 = null;
+        this.classHashChainUtf16 = null;
       }
     }
 
@@ -137,7 +137,7 @@ sealed interface StringStartAccelerator {
             anchorLow,
             anchorHigh,
             classHashChain,
-            classHashChain16,
+            classHashChainUtf16,
             fromIndex);
       }
       if (WorkCounterConfig.ENABLED) {

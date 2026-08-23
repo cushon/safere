@@ -1014,7 +1014,7 @@ public final class Pattern implements Serializable {
               : Matcher.FallbackPreparedRunner.INSTANCE,
           matchDescriptor.hashChain(),
           matchDescriptor.classHashChain(),
-          matchDescriptor.classHashChain16());
+          matchDescriptor.classHashChainUtf16());
     }
 
     CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();

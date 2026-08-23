@@ -8,12 +8,13 @@ package org.safere;
 import java.util.Arrays;
 
 /**
- * Precomputed 16-bit 2-gram shift table for multilingual case-insensitive String search.
+ * Precomputed 16-bit 2-gram shift table for multilingual case-insensitive UTF-16 String search.
  *
  * <p>Maps 16-bit character pairs into a 1024-entry shift table to provide sublinear candidate skips
- * for non-ASCII case-insensitive patterns (e.g. Cyrillic, Greek, accented Latin, Emoji).
+ * for non-ASCII case-insensitive patterns (e.g. Cyrillic, Greek, accented Latin, Emoji) on {@link
+ * CharSequence}.
  */
-final class ClassHashChain16 {
+final class ClassHashChainUtf16 {
   private static final int TABLE_SIZE = 1024;
   private static final int TABLE_MASK = 0x3FF;
 
@@ -21,7 +22,7 @@ final class ClassHashChain16 {
   private final byte[] shifts;
   private final int length;
 
-  private ClassHashChain16(String literal, byte[] shifts, int length) {
+  private ClassHashChainUtf16(String literal, byte[] shifts, int length) {
     this.literal = literal;
     this.shifts = shifts;
     this.length = length;
@@ -31,7 +32,7 @@ final class ClassHashChain16 {
     return ((c0 * 31 + c1) ^ (c0 >>> 5)) & TABLE_MASK;
   }
 
-  static ClassHashChain16 compileCaseInsensitive(String literal) {
+  static ClassHashChainUtf16 compileCaseInsensitive(String literal) {
     if (literal == null || literal.length() < 4) {
       return null;
     }
@@ -60,7 +61,7 @@ final class ClassHashChain16 {
       }
     }
 
-    return new ClassHashChain16(literal, shifts, m);
+    return new ClassHashChainUtf16(literal, shifts, m);
   }
 
   private static char[] foldChars(char c) {

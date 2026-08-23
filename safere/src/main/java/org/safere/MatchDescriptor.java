@@ -33,10 +33,11 @@ record MatchDescriptor(
     int minMatchLength,
     HashChain hashChain,
     ClassHashChain classHashChain,
-    ClassHashChain16 classHashChain16) {
+    ClassHashChainUtf16 classHashChainUtf16,
+    ClassHashChainUtf8 classHashChainUtf8) {
 
   static final MatchDescriptor NONE =
-      new MatchDescriptor(null, false, null, null, null, 0, null, null, null);
+      new MatchDescriptor(null, false, null, null, null, 0, null, null, null, null);
 
   MatchDescriptor(
       String literalMatch,
@@ -56,7 +57,8 @@ record MatchDescriptor(
             ? HashChain.compile(literalMatch.getBytes(StandardCharsets.UTF_8))
             : null,
         compileClassHashChain(literalMatch, literalFoldCase),
-        compileClassHashChain16(literalMatch, literalFoldCase));
+        compileClassHashChainUtf16(literalMatch, literalFoldCase),
+        compileClassHashChainUtf8(literalMatch, literalFoldCase));
   }
 
   private static ClassHashChain compileClassHashChain(String literal, boolean foldCase) {
@@ -65,9 +67,15 @@ record MatchDescriptor(
         : null;
   }
 
-  private static ClassHashChain16 compileClassHashChain16(String literal, boolean foldCase) {
+  private static ClassHashChainUtf16 compileClassHashChainUtf16(String literal, boolean foldCase) {
     return literal != null && foldCase && !Ascii.isAscii(literal)
-        ? ClassHashChain16.compileCaseInsensitive(literal)
+        ? ClassHashChainUtf16.compileCaseInsensitive(literal)
+        : null;
+  }
+
+  private static ClassHashChainUtf8 compileClassHashChainUtf8(String literal, boolean foldCase) {
+    return literal != null && foldCase && !Ascii.isAscii(literal)
+        ? ClassHashChainUtf8.compileCaseInsensitive(literal)
         : null;
   }
 

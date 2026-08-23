@@ -438,6 +438,14 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
+  int indexOfIgnoreCaseUtf8(ClassHashChainUtf8 classHashChainUtf8, int start) {
+    if (classHashChainUtf8 == null) {
+      return -1;
+    }
+    return classHashChainUtf8.search(
+        bytes, offset, length, start, WorkLimit.forRemaining(remaining(start)));
+  }
+
   int indexOfIgnoreCase(
       String prefix,
       int anchorOffset,
