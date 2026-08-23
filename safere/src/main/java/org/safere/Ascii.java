@@ -222,7 +222,8 @@ final class Ascii {
     for (int i = startFrom; i < prefixLen; i++) {
       char c = text.charAt(offset + i);
       char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != toLowerCase(p)) {
+      char la = toLowerCase(c);
+      if (la != p && la != toLowerCase(p)) {
         return false;
       }
     }
@@ -234,7 +235,8 @@ final class Ascii {
     for (int i = 0; i < prefixLen; i++) {
       int b = bytes[offset + i] & 0xFF;
       char p = prefix.charAt(i);
-      if (b != p && toLowerCase(b) != toLowerCase(p)) {
+      int lb = toLowerCase(b);
+      if (lb != p && lb != toLowerCase(p)) {
         return false;
       }
     }
