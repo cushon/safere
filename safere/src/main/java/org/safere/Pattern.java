@@ -128,6 +128,7 @@ public final class Pattern implements Serializable {
   private final transient byte[] literalMatchUtf8;
   private final transient int[] literalMatchFailure;
   private final transient int[] literalMatchShifts;
+  private final transient HashChain literalMatchHashChain;
   private final transient byte[] prefixUtf8;
   private final transient String anchoredPrefix;
   private final transient byte[] anchoredPrefixUtf8;
@@ -305,6 +306,8 @@ public final class Pattern implements Serializable {
         literalMatch == null ? null : literalMatch.getBytes(StandardCharsets.UTF_8);
     this.literalMatchFailure = literalMatchUtf8 == null ? null : literalFailure(literalMatchUtf8);
     this.literalMatchShifts = literalMatchUtf8 == null ? null : literalShifts(literalMatchUtf8);
+    this.literalMatchHashChain =
+        literalMatchUtf8 == null ? null : HashChain.compile(literalMatchUtf8);
     this.hasLazy = hasLazy;
     this.hasAlternation = hasAlternation;
     this.hasNullableAlternation = hasNullableAlternation;
@@ -636,7 +639,9 @@ public final class Pattern implements Serializable {
       if (prog.anchorStart()) {
         return scanner.startsWith(literalMatchUtf8, 0);
       }
-      return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
+      return scanner.indexOf(
+              literalMatchUtf8, literalMatchFailure, literalMatchShifts, literalMatchHashChain, 0)
+          >= 0;
     }
     if (enginePathOptions.keywordAlternationFastPath()
         && matchDescriptor.keywordAlternation() != null) {
@@ -695,7 +700,13 @@ public final class Pattern implements Serializable {
       boolean matched =
           prog.anchorStart()
               ? scanner.startsWith(literalMatchUtf8, 0)
-              : scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
+              : scanner.indexOf(
+                      literalMatchUtf8,
+                      literalMatchFailure,
+                      literalMatchShifts,
+                      literalMatchHashChain,
+                      0)
+                  >= 0;
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }
@@ -3691,11 +3702,26 @@ public final class Pattern implements Serializable {
             continue;
           }
           boolean childFoldCase = (c.flags & ParseFlags.FOLD_CASE) != 0;
-          if (!foldCaseInitialized) {
-            foldCase = childFoldCase;
-            foldCaseInitialized = true;
-          } else if (childFoldCase != foldCase) {
-            return LiteralResult.NONE;
+          if (c.op == RegexpOp.LITERAL) {
+            if (Ascii.toLowerCase(c.rune) != Ascii.toUpperCase(c.rune)) {
+              if (!foldCaseInitialized) {
+                foldCase = childFoldCase;
+                foldCaseInitialized = true;
+              } else if (childFoldCase != foldCase) {
+                return LiteralResult.NONE;
+              }
+            }
+          } else if (c.op == RegexpOp.LITERAL_STRING && c.runes != null) {
+            for (int r : c.runes) {
+              if (Ascii.toLowerCase(r) != Ascii.toUpperCase(r)) {
+                if (!foldCaseInitialized) {
+                  foldCase = childFoldCase;
+                  foldCaseInitialized = true;
+                } else if (childFoldCase != foldCase) {
+                  return LiteralResult.NONE;
+                }
+              }
+            }
           }
           if (c.op == RegexpOp.LITERAL) {
             sb.appendCodePoint(c.rune);

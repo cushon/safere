@@ -736,6 +736,54 @@ class SearchScalingRegressionTest {
         "String");
   }
 
+  @Test
+  void hashChainAchievesSublinearWorkOnExactLiteral() {
+    Pattern pattern = Pattern.compile("content-length-header"); // M = 21, threshold = 840B
+    byte[] bytes = "x".repeat(800).getBytes(UTF_8);
+    Utf8Input input = Utf8Input.trusted(bytes);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    // 800 / 20 = ~40 operations (vs 800 operations for linear scan)
+    assertThat(work)
+        .as("HashChain must perform sublinear work bounded by N / (M - 1)")
+        .isLessThanOrEqualTo(bytes.length / 20 + 10);
+  }
+
+  @Test
+  void classHashChainAchievesSublinearWorkOnCaseInsensitiveLiteral() {
+    Pattern pattern =
+        Pattern.compile(
+            "(?i)content_length_header"); // M = 7 for prefix "content", threshold = 280B
+    byte[] bytes =
+        "The quick brown fox jumps over the lazy dog. ".repeat(5).getBytes(UTF_8); // 225 bytes
+    Utf8Input input = Utf8Input.trusted(bytes);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    // 225 / 6 = ~37 operations (vs 225 operations for linear scan)
+    assertThat(work)
+        .as("Class-HashChain must perform sublinear work on case-insensitive patterns")
+        .isLessThanOrEqualTo(bytes.length / 6 + 10);
+  }
+
+  @Test
+  void classHashChainAchievesSublinearWorkOnCaseInsensitiveLiteralForStringInput() {
+    Pattern pattern = Pattern.compile("(?i)content_length_header");
+    String text = "The quick brown fox jumps over the lazy dog. ".repeat(5); // 225 chars
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(text).find()).isFalse());
+
+    // 225 / 6 = ~37 operations (vs 225 operations for linear scan)
+    assertThat(work)
+        .as(
+            "Class-HashChain must perform sublinear work on case-insensitive patterns for String"
+                + " input")
+        .isLessThanOrEqualTo(text.length() / 6 + 10);
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");

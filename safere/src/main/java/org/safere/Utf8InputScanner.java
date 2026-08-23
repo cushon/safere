@@ -372,12 +372,23 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   }
 
   int indexOf(byte[] literal, int[] failure, int[] shifts) {
-    return indexOf(literal, failure, shifts, 0);
+    return indexOf(literal, failure, shifts, null, 0);
   }
 
   int indexOf(byte[] literal, int[] failure, int[] shifts, int start) {
+    return indexOf(literal, failure, shifts, null, start);
+  }
+
+  int indexOf(byte[] literal, int[] failure, int[] shifts, HashChain hashChain, int start) {
     if (literal.length == 0) {
       return start;
+    }
+    if (hashChain != null && remaining(start) < ByteSwarScan.filterThreshold(literal.length)) {
+      int result =
+          hashChain.search(bytes, offset, length, start, WorkLimit.forRemaining(remaining(start)));
+      if (result >= -1) {
+        return result;
+      }
     }
     if (!WorkCounterConfig.ENABLED) {
       if (literal.length == 1) {
@@ -436,9 +447,28 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
 
   int indexOfIgnoreCase(
       String prefix, int[] failure, int anchorOffset, byte anchorLow, byte anchorHigh, int start) {
+    return indexOfIgnoreCase(prefix, failure, anchorOffset, anchorLow, anchorHigh, null, start);
+  }
+
+  int indexOfIgnoreCase(
+      String prefix,
+      int[] failure,
+      int anchorOffset,
+      byte anchorLow,
+      byte anchorHigh,
+      ClassHashChain classHashChain,
+      int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return start;
+    }
+    if (classHashChain != null && remaining(start) < ByteSwarScan.filterThreshold(prefixLen)) {
+      int result =
+          classHashChain.search(
+              bytes, offset, length, start, WorkLimit.forRemaining(remaining(start)));
+      if (result >= -1) {
+        return result;
+      }
     }
     if (!WorkCounterConfig.ENABLED) {
       if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {

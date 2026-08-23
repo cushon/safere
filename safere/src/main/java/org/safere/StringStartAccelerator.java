@@ -74,6 +74,7 @@ sealed interface StringStartAccelerator {
     private final int anchorOffset;
     private final char anchorLow;
     private final char anchorHigh;
+    private final ClassHashChain classHashChain;
 
     Literal(String prefix, boolean prefixFoldCase) {
       this.prefix = prefix;
@@ -84,11 +85,13 @@ sealed interface StringStartAccelerator {
         char anchor = prefix.charAt(anchorOffset);
         this.anchorLow = Ascii.toLowerCase(anchor);
         this.anchorHigh = Ascii.toUpperCase(anchor);
+        this.classHashChain = ClassHashChain.compileCaseInsensitive(prefix);
       } else {
         this.failure = null;
         this.anchorOffset = 0;
         this.anchorLow = 0;
         this.anchorHigh = 0;
+        this.classHashChain = null;
       }
     }
 
@@ -109,7 +112,7 @@ sealed interface StringStartAccelerator {
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
       if (prefixFoldCase) {
         return Matcher.indexOfIgnoreCase(
-            text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
+            text, prefix, failure, anchorOffset, anchorLow, anchorHigh, classHashChain, fromIndex);
       }
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record(Math.max(0, text.length() - fromIndex));
