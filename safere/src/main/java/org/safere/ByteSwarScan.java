@@ -342,8 +342,13 @@ abstract class ByteSwarScan {
         return -2;
       }
     }
-    return Utf8InputScanner.indexOfLinear(
-        bytes, offset, length, literal, Pattern.literalFailure(literal), position);
+    while (position <= length - literal.length) {
+      if (matchesAt(bytes, offset, literal, position)) {
+        return position;
+      }
+      position++;
+    }
+    return -1;
   }
 
   private static boolean matchesAt(byte[] bytes, int offset, byte[] literal, int position) {
