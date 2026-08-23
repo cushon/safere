@@ -2242,7 +2242,9 @@ public final class Matcher implements MatchResult {
 
   static int indexOfIgnoreCase(
       String text, String prefix, int anchorOffset, char low, char high, int fromIndex) {
-    return indexOfIgnoreCase(text, prefix, anchorOffset, low, high, null, fromIndex);
+    ClassHashChain classHashChain =
+        prefix.length() >= 4 ? ClassHashChain.compileCaseInsensitive(prefix) : null;
+    return indexOfIgnoreCase(text, prefix, anchorOffset, low, high, classHashChain, fromIndex);
   }
 
   static int indexOfIgnoreCase(
