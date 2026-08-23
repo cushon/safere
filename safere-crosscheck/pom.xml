@@ -113,6 +113,7 @@
                         <exclude name="EmptyOpTest.java"/>
                         <exclude name="EnginePathEquivalenceTest.java"/>
                         <exclude name="GraphemeLinearTimeTest.java"/>
+                        <exclude name="HashChainTest.java"/>
                         <exclude name="InstOpTest.java"/>
                         <exclude name="InstTest.java"/>
                         <exclude name="IntArrayListTest.java"/>
