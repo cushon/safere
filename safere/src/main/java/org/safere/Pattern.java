@@ -3665,18 +3665,9 @@ public final class Pattern implements Serializable {
             continue;
           }
           boolean childFoldCase = (c.flags & ParseFlags.FOLD_CASE) != 0;
-          if (c.op == RegexpOp.LITERAL) {
-            if (Character.toLowerCase(c.rune) != Character.toUpperCase(c.rune)) {
-              if (!foldCaseInitialized) {
-                foldCase = childFoldCase;
-                foldCaseInitialized = true;
-              } else if (childFoldCase != foldCase) {
-                return LiteralResult.NONE;
-              }
-            }
-          } else if (c.op == RegexpOp.LITERAL_STRING && c.runes != null) {
-            for (int r : c.runes) {
-              if (Character.toLowerCase(r) != Character.toUpperCase(r)) {
+          switch (c.op) {
+            case LITERAL -> {
+              if (Character.toLowerCase(c.rune) != Character.toUpperCase(c.rune)) {
                 if (!foldCaseInitialized) {
                   foldCase = childFoldCase;
                   foldCaseInitialized = true;
@@ -3684,16 +3675,27 @@ public final class Pattern implements Serializable {
                   return LiteralResult.NONE;
                 }
               }
+              sb.appendCodePoint(c.rune);
             }
-          }
-          if (c.op == RegexpOp.LITERAL) {
-            sb.appendCodePoint(c.rune);
-          } else if (c.op == RegexpOp.LITERAL_STRING && c.runes != null) {
-            for (int r : c.runes) {
-              sb.appendCodePoint(r);
+            case LITERAL_STRING -> {
+              if (c.runes == null) {
+                return LiteralResult.NONE;
+              }
+              for (int r : c.runes) {
+                if (Character.toLowerCase(r) != Character.toUpperCase(r)) {
+                  if (!foldCaseInitialized) {
+                    foldCase = childFoldCase;
+                    foldCaseInitialized = true;
+                  } else if (childFoldCase != foldCase) {
+                    return LiteralResult.NONE;
+                  }
+                }
+                sb.appendCodePoint(r);
+              }
             }
-          } else {
-            return LiteralResult.NONE;
+            default -> {
+              return LiteralResult.NONE;
+            }
           }
         }
       }
