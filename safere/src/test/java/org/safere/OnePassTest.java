@@ -7,6 +7,10 @@ package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -116,6 +120,57 @@ class OnePassTest {
       assertThat(r).isNotNull();
       assertThat(r[0]).isEqualTo(0);
       assertThat(r[1]).isEqualTo(3);
+    }
+
+    @Test
+    void unicodeClassLookupIsSafeAcrossConcurrentMatchers() throws InterruptedException {
+      OnePass onePass = build("(?iu)\u0100");
+      assertThat(onePass).isNotNull();
+
+      int threadCount = 8;
+      CountDownLatch start = new CountDownLatch(1);
+      AtomicReference<String> failure = new AtomicReference<>();
+      List<Thread> threads = new ArrayList<>();
+      for (int threadIndex = 0; threadIndex < threadCount; threadIndex++) {
+        boolean expected = (threadIndex & 1) == 0;
+        String input = expected ? "\u0100" : "\u0200";
+        Thread thread =
+            Thread.ofPlatform()
+                .start(
+                    () -> {
+                      try {
+                        start.await();
+                        InputScanner scanner = new StringInputScanner(input);
+                        int[] result = new int[2];
+                        int[] scratch = new int[2];
+                        for (int iteration = 0;
+                            iteration < 100_000 && failure.get() == null;
+                            iteration++) {
+                          boolean matched =
+                              onePass.search(scanner, 0, scanner.length(), true, 1, result, scratch)
+                                  != null;
+                          if (matched != expected) {
+                            failure.compareAndSet(
+                                null,
+                                "expected "
+                                    + expected
+                                    + " for U+"
+                                    + Integer.toHexString(input.charAt(0)));
+                          }
+                        }
+                      } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        failure.compareAndSet(null, "worker interrupted");
+                      }
+                    });
+        threads.add(thread);
+      }
+
+      start.countDown();
+      for (Thread thread : threads) {
+        thread.join();
+      }
+      assertThat(failure.get()).isNull();
     }
 
     @Test

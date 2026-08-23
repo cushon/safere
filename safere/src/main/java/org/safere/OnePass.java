@@ -105,11 +105,6 @@ final class OnePass {
   /** Direct lookup table mapping ASCII code points (0–127) to equivalence class indices. */
   private final int[] asciiClassMap;
 
-  /** Cache for mapping code points >= 128 to their equivalence class. */
-  private final int[] cacheCps = new int[256];
-
-  private final int[] cacheClasses = new int[256];
-
   /** Whether the program requires end-of-text matching (stripped trailing {@code $} or \z). */
   private final boolean anchorEnd;
 
@@ -137,7 +132,6 @@ final class OnePass {
     this.matchAction = matchAction;
     this.boundaries = boundaries;
     this.asciiClassMap = buildAsciiClassMap(boundaries);
-    Arrays.fill(this.cacheCps, -1);
     this.anchorEnd = anchorEnd;
     this.dollarAnchorEnd = dollarAnchorEnd;
     this.unixLines = unixLines;
@@ -763,15 +757,8 @@ final class OnePass {
     if (cp < 128 && cp >= 0) {
       return asciiClassMap[cp];
     }
-    int cacheIdx = cp & 255;
-    if (cacheCps[cacheIdx] == cp) {
-      return cacheClasses[cacheIdx];
-    }
     int idx = Arrays.binarySearch(boundaries, cp);
-    int cls = (idx >= 0) ? idx : (-idx - 1) - 1;
-    cacheCps[cacheIdx] = cp;
-    cacheClasses[cacheIdx] = cls;
-    return cls;
+    return (idx >= 0) ? idx : (-idx - 1) - 1;
   }
 
   /**
