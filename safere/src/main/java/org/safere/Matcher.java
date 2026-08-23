@@ -2265,14 +2265,11 @@ public final class Matcher implements MatchResult {
       ClassHashChainUtf16 classHashChainUtf16,
       int fromIndex) {
     int prefixLen = prefix.length();
-    switch (prefixLen) {
-      case 0 -> {
-        return Math.min(Math.max(0, fromIndex), text.length());
-      }
-      case 1 -> {
-        return Ascii.indexOfIgnoreCase(text, low, high, fromIndex);
-      }
-      default -> {}
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, fromIndex), text.length());
+    }
+    if (prefixLen == 1) {
+      return Ascii.indexOfIgnoreCase(text, low, high, fromIndex);
     }
     int length = text.length();
     int pos = Math.max(0, fromIndex);
