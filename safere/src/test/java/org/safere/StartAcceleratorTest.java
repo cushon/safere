@@ -65,9 +65,16 @@ class StartAcceleratorTest {
     assertThat(singleUtf8.findCandidate(utf8Scanner("xxxA"), 0)).isEqualTo(3);
     assertThat(singleUtf8.findCandidate(utf8Scanner("xxxa"), 0)).isEqualTo(3);
 
-    // Non-ASCII case-insensitive prefix falls back (null)
+    // Non-ASCII case-insensitive prefix (length >= 4) is accelerated via ClassHashChainUtf8
     StartDescriptor nonAsciiDesc = descriptor("café", true, null, null);
-    assertThat(Utf8StartAccelerator.create(nonAsciiDesc, false)).isNull();
+    Utf8StartAccelerator nonAsciiUtf8 = Utf8StartAccelerator.create(nonAsciiDesc, false);
+    assertThat(nonAsciiUtf8).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveUtf8Literal.class);
+    assertThat(nonAsciiUtf8.findCandidate(utf8Scanner("xxxCAFÉ"), 0)).isEqualTo(3);
+    assertThat(nonAsciiUtf8.findCandidate(utf8Scanner("xxxcafé"), 0)).isEqualTo(3);
+
+    // Short non-ASCII case-insensitive prefix (< 4 chars) falls back to null
+    StartDescriptor shortNonAsciiDesc = descriptor("é", true, null, null);
+    assertThat(Utf8StartAccelerator.create(shortNonAsciiDesc, false)).isNull();
   }
 
   @Test
