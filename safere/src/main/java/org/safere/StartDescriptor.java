@@ -33,15 +33,6 @@ record StartDescriptor(
       boolean prefixFoldCase,
       FixedOffsetLiteral fixedOffsetLiteral,
       CharClassScanInfo charClassPrefix,
-      StartAcceleration lineAnchor) {
-    this(prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, lineAnchor, null, null, null);
-  }
-
-  StartDescriptor(
-      String prefix,
-      boolean prefixFoldCase,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      CharClassScanInfo charClassPrefix,
       StartAcceleration lineAnchor,
       String anchoredPrefix,
       CharClassScanInfo anchoredCharClassPrefix,

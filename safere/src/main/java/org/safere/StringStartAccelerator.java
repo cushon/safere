@@ -76,13 +76,6 @@ sealed interface StringStartAccelerator {
     private final char anchorHigh;
     private final ClassHashChain classHashChain;
 
-    Literal(String prefix, boolean prefixFoldCase) {
-      this(
-          prefix,
-          prefixFoldCase,
-          prefixFoldCase && prefix != null ? ClassHashChain.compileCaseInsensitive(prefix) : null);
-    }
-
     Literal(String prefix, boolean prefixFoldCase, ClassHashChain classHashChain) {
       this.prefix = prefix;
       this.prefixFoldCase = prefixFoldCase;

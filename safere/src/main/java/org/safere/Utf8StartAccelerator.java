@@ -76,10 +76,6 @@ sealed interface Utf8StartAccelerator {
   @SuppressWarnings("ArrayRecordComponent")
   record Literal(byte[] prefixUtf8, HashChain hashChain) implements Utf8StartAccelerator {
 
-    static Literal create(String prefix) {
-      return create(prefix, null);
-    }
-
     static Literal create(String prefix, HashChain hashChain) {
       byte[] utf8 = prefix.getBytes(StandardCharsets.UTF_8);
       return new Literal(utf8, hashChain != null ? hashChain : HashChain.compile(utf8));
@@ -107,10 +103,6 @@ sealed interface Utf8StartAccelerator {
       byte anchorHigh,
       ClassHashChain classHashChain)
       implements Utf8StartAccelerator {
-
-    static Utf8StartAccelerator create(String prefix) {
-      return create(prefix, null);
-    }
 
     static Utf8StartAccelerator create(String prefix, ClassHashChain classHashChain) {
       for (int i = 0; i < prefix.length(); i++) {

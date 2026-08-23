@@ -116,10 +116,6 @@ sealed interface RejectPrefilter
   @SuppressWarnings("ArrayRecordComponent")
   record Literal(String literal, byte[] utf8, HashChain hashChain) implements RejectPrefilter {
 
-    static Literal create(String literal) {
-      return create(literal, null);
-    }
-
     static Literal create(String literal, HashChain hashChain) {
       byte[] utf8 = literal.getBytes(StandardCharsets.UTF_8);
       return new Literal(literal, utf8, hashChain != null ? hashChain : HashChain.compile(utf8));

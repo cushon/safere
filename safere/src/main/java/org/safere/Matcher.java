@@ -4588,15 +4588,6 @@ public final class Matcher implements MatchResult {
         boolean foldCase,
         byte[] literalUtf8,
         boolean isStartAnchored,
-        PreparedMatchRunner fallback) {
-      this(literal, foldCase, literalUtf8, isStartAnchored, fallback, null, null);
-    }
-
-    LiteralPreparedRunner(
-        String literal,
-        boolean foldCase,
-        byte[] literalUtf8,
-        boolean isStartAnchored,
         PreparedMatchRunner fallback,
         HashChain hashChain,
         ClassHashChain classHashChain) {
