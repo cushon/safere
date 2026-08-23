@@ -304,8 +304,7 @@ abstract class ByteSwarScan {
    * @return the index of the first match, {@code -1} if the literal is absent, or {@code -2} if the
    *     work budget was exhausted before either could be established
    */
-  static int indexOfFiltered(
-      byte[] bytes, int offset, int length, byte[] literal, int[] failure, int start) {
+  static int indexOfFiltered(byte[] bytes, int offset, int length, byte[] literal, int start) {
     int last = literal.length - 1;
     long repeatedFirst = (literal[0] & 0xFFL) * BYTE_ONES;
     long repeatedLast = (literal[last] & 0xFFL) * BYTE_ONES;
@@ -343,7 +342,8 @@ abstract class ByteSwarScan {
         return -2;
       }
     }
-    return Utf8InputScanner.indexOfLinear(bytes, offset, length, literal, failure, position);
+    return Utf8InputScanner.indexOfLinear(
+        bytes, offset, length, literal, Pattern.literalFailure(literal), position);
   }
 
   private static boolean matchesAt(byte[] bytes, int offset, byte[] literal, int position) {

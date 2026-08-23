@@ -128,6 +128,10 @@ final class Ascii {
     return failure;
   }
 
+  static int indexOfLinearIgnoreCase(String text, String prefix, int start) {
+    return indexOfLinearIgnoreCase(text, prefix, ignoreCaseFailure(prefix), start);
+  }
+
   /** Knuth-Morris-Pratt scan on String, strictly linear in text length regardless of pattern. */
   static int indexOfLinearIgnoreCase(String text, String prefix, int[] failure, int start) {
     int matched = 0;

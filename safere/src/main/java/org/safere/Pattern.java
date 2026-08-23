@@ -126,8 +126,6 @@ public final class Pattern implements Serializable {
   private final transient boolean prefixFoldCase;
   private final transient MatchDescriptor matchDescriptor;
   private final transient byte[] literalMatchUtf8;
-  private final transient int[] literalMatchFailure;
-  private final transient int[] literalMatchShifts;
   private final transient HashChain literalMatchHashChain;
   private final transient byte[] prefixUtf8;
   private final transient String anchoredPrefix;
@@ -304,8 +302,6 @@ public final class Pattern implements Serializable {
     String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
         literalMatch == null ? null : literalMatch.getBytes(StandardCharsets.UTF_8);
-    this.literalMatchFailure = literalMatchUtf8 == null ? null : literalFailure(literalMatchUtf8);
-    this.literalMatchShifts = literalMatchUtf8 == null ? null : literalShifts(literalMatchUtf8);
     this.literalMatchHashChain =
         literalMatchUtf8 == null ? null : HashChain.compile(literalMatchUtf8);
     this.hasLazy = hasLazy;
@@ -639,9 +635,7 @@ public final class Pattern implements Serializable {
       if (prog.anchorStart()) {
         return scanner.startsWith(literalMatchUtf8, 0);
       }
-      return scanner.indexOf(
-              literalMatchUtf8, literalMatchFailure, literalMatchShifts, literalMatchHashChain, 0)
-          >= 0;
+      return scanner.indexOf(literalMatchUtf8, literalMatchHashChain, 0) >= 0;
     }
     if (enginePathOptions.keywordAlternationFastPath()
         && matchDescriptor.keywordAlternation() != null) {
@@ -700,13 +694,7 @@ public final class Pattern implements Serializable {
       boolean matched =
           prog.anchorStart()
               ? scanner.startsWith(literalMatchUtf8, 0)
-              : scanner.indexOf(
-                      literalMatchUtf8,
-                      literalMatchFailure,
-                      literalMatchShifts,
-                      literalMatchHashChain,
-                      0)
-                  >= 0;
+              : scanner.indexOf(literalMatchUtf8, literalMatchHashChain, 0) >= 0;
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }
@@ -798,18 +786,6 @@ public final class Pattern implements Serializable {
       failure[index] = matched;
     }
     return failure;
-  }
-
-  static int[] literalShifts(byte[] literal) {
-    if (literal.length < 2) {
-      return null;
-    }
-    int[] shifts = new int[256];
-    Arrays.fill(shifts, literal.length);
-    for (int index = 0; index < literal.length - 1; index++) {
-      shifts[literal[index] & 0xFF] = literal.length - index - 1;
-    }
-    return shifts;
   }
 
   /**
@@ -1032,8 +1008,6 @@ public final class Pattern implements Serializable {
           literal,
           matchDescriptor.literalFoldCase(),
           literalMatchUtf8,
-          literalMatchFailure,
-          literalMatchShifts,
           prog.anchorStart(),
           matchDescriptor.literalFoldCase()
               ? createLiteralFallbackRunner(regionActive)
@@ -1485,14 +1459,6 @@ public final class Pattern implements Serializable {
 
   byte[] literalMatchUtf8() {
     return literalMatchUtf8;
-  }
-
-  int[] literalMatchFailure() {
-    return literalMatchFailure;
-  }
-
-  int[] literalMatchShifts() {
-    return literalMatchShifts;
   }
 
   byte[] prefixUtf8() {
@@ -2127,8 +2093,7 @@ public final class Pattern implements Serializable {
     private final int maxOffset;
     private final int[] discreteOffsets;
     private final byte[] utf8;
-    private final int[] failure;
-    private final int[] shifts;
+    private final HashChain hashChain;
 
     FixedOffsetLiteral(String literal, int offset) {
       this(literal, offset, offset, new int[] {offset});
@@ -2140,8 +2105,7 @@ public final class Pattern implements Serializable {
       this.maxOffset = maxOffset;
       this.discreteOffsets = discreteOffsets;
       this.utf8 = literal.getBytes(StandardCharsets.UTF_8);
-      this.failure = literalFailure(utf8);
-      this.shifts = literalShifts(utf8);
+      this.hashChain = HashChain.compile(this.utf8);
     }
 
     String literal() {
@@ -2172,12 +2136,8 @@ public final class Pattern implements Serializable {
       return utf8;
     }
 
-    int[] failure() {
-      return failure;
-    }
-
-    int[] shifts() {
-      return shifts;
+    HashChain hashChain() {
+      return hashChain;
     }
   }
 

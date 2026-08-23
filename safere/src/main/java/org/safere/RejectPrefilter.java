@@ -112,15 +112,12 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record Literal(String literal, byte[] utf8, int[] failure, int[] shifts, HashChain hashChain)
-      implements RejectPrefilter {
+  record Literal(String literal, byte[] utf8, HashChain hashChain) implements RejectPrefilter {
 
     static Literal create(String literal) {
       byte[] utf8 = literal.getBytes(StandardCharsets.UTF_8);
-      int[] failure = Pattern.literalFailure(utf8);
-      int[] shifts = Pattern.literalShifts(utf8);
       HashChain hashChain = HashChain.compile(utf8);
-      return new Literal(literal, utf8, failure, shifts, hashChain);
+      return new Literal(literal, utf8, hashChain);
     }
 
     @Override
@@ -130,7 +127,7 @@ sealed interface RejectPrefilter
         return false;
       }
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
-        return utf8Scanner.indexOf(utf8, failure, shifts, hashChain, searchFrom) < 0;
+        return utf8Scanner.indexOf(utf8, hashChain, searchFrom) < 0;
       }
       if (text != null) {
         if (WorkCounterConfig.ENABLED) {
@@ -146,7 +143,7 @@ sealed interface RejectPrefilter
       if (!options.literalFastPaths()) {
         return false;
       }
-      return scanner.indexOf(utf8, failure, shifts, hashChain, searchFrom) < 0;
+      return scanner.indexOf(utf8, hashChain, searchFrom) < 0;
     }
 
     @Override
