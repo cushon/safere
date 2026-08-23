@@ -2264,14 +2264,6 @@ public final class Matcher implements MatchResult {
       ClassHashChain classHashChain,
       ClassHashChain16 classHashChain16,
       int fromIndex) {
-    if (classHashChain != null) {
-      return classHashChain.search(
-          text, fromIndex, WorkLimit.forRemaining(text.length() - fromIndex));
-    }
-    if (classHashChain16 != null) {
-      return classHashChain16.search(
-          text, fromIndex, WorkLimit.forRemaining(text.length() - fromIndex));
-    }
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return Math.min(Math.max(0, fromIndex), text.length());
@@ -2300,7 +2292,27 @@ public final class Matcher implements MatchResult {
         }
         char c = text.charAt(pos + anchorOffset);
         if (hasHigh ? (c | 0x20) == low : c == low) {
-          if (isAsciiPrefix
+          if (classHashChain != null) {
+            int shift = classHashChain.shiftAt(text, pos);
+            if (shift == 0) {
+              if (Ascii.regionMatchesIgnoreCase(text, pos, prefix, startFrom, prefixLen)) {
+                return pos;
+              }
+            } else {
+              pos += shift - 1;
+              continue;
+            }
+          } else if (classHashChain16 != null) {
+            int shift = classHashChain16.shiftAt(text, pos);
+            if (shift == 0) {
+              if (text.regionMatches(true, pos, prefix, 0, prefixLen)) {
+                return pos;
+              }
+            } else {
+              pos += shift - 1;
+              continue;
+            }
+          } else if (isAsciiPrefix
               ? Ascii.regionMatchesIgnoreCase(text, pos, prefix, startFrom, prefixLen)
               : text.regionMatches(true, pos, prefix, 0, prefixLen)) {
             return pos;
@@ -2310,6 +2322,12 @@ public final class Matcher implements MatchResult {
             workLimit = WorkLimit.forRemaining(length - pos);
           }
           if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+            if (classHashChain != null) {
+              return classHashChain.search(text, pos + 1, workLimit);
+            }
+            if (classHashChain16 != null) {
+              return classHashChain16.search(text, pos + 1, workLimit);
+            }
             return Ascii.indexOfLinearIgnoreCase(text, prefix, pos + 1);
           }
         }
@@ -2362,14 +2380,44 @@ public final class Matcher implements MatchResult {
       }
       int candidatePos = nextAnchor - anchorOffset;
       if (WorkLimit.candidateInBounds(candidatePos, pos, length, prefixLen)) {
-        if (isAsciiPrefix
-            ? Ascii.regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)
-            : text.regionMatches(true, candidatePos, prefix, 0, prefixLen)) {
-          return candidatePos;
+        if (classHashChain != null) {
+          int shift = classHashChain.shiftAt(text, candidatePos);
+          if (shift == 0) {
+            if (Ascii.regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)) {
+              return candidatePos;
+            }
+            pos = candidatePos + 1;
+          } else {
+            pos = candidatePos + shift;
+            continue;
+          }
+        } else if (classHashChain16 != null) {
+          int shift = classHashChain16.shiftAt(text, candidatePos);
+          if (shift == 0) {
+            if (text.regionMatches(true, candidatePos, prefix, 0, prefixLen)) {
+              return candidatePos;
+            }
+            pos = candidatePos + 1;
+          } else {
+            pos = candidatePos + shift;
+            continue;
+          }
+        } else {
+          if (isAsciiPrefix
+              ? Ascii.regionMatchesIgnoreCase(text, candidatePos, prefix, prefixLen)
+              : text.regionMatches(true, candidatePos, prefix, 0, prefixLen)) {
+            return candidatePos;
+          }
+          pos = candidatePos + 1;
         }
-        pos = candidatePos + 1;
         verificationWork += prefixLen;
         if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          if (classHashChain != null) {
+            return classHashChain.search(text, pos, workLimit);
+          }
+          if (classHashChain16 != null) {
+            return classHashChain16.search(text, pos, workLimit);
+          }
           return Ascii.indexOfLinearIgnoreCase(text, prefix, pos);
         }
       } else {

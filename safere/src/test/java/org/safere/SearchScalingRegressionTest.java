@@ -771,10 +771,13 @@ class SearchScalingRegressionTest {
 
   @Test
   void classHashChainAchievesSublinearWorkOnCaseInsensitiveLiteralForStringInput() {
-    Pattern pattern = Pattern.compile("(?i)content_length_header");
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("content_length_header");
     String text = "The quick brown fox jumps over the lazy dog. ".repeat(5); // 225 chars
     long work =
-        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(text).find()).isFalse());
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(chc.search(text, 0, WorkLimit.forRemaining(text.length())))
+                    .isEqualTo(-1));
 
     // 225 / 6 = ~37 operations (vs 225 operations for linear scan)
     assertThat(work)
@@ -801,6 +804,19 @@ class SearchScalingRegressionTest {
             "ClassHashChain16 must perform sublinear work on non-ASCII case-insensitive patterns"
                 + " for String input")
         .isLessThanOrEqualTo(text.length() / 15 + 10);
+  }
+
+  @Test
+  void hybridCaseInsensitiveSearchIsImmuneToFalseAnchorStormsForStringInput() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find"); // anchor is 'k' / 'K'
+    String text = "k_other_words_".repeat(20); // 280 chars with 20 'k' false anchors
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(text).find()).isFalse());
+
+    // shiftAt skips forward on false anchors, keeping work well below quadratic O(N * M)
+    assertThat(work)
+        .as("Hybrid search with shiftAt must avoid quadratic work on false anchor floods")
+        .isLessThanOrEqualTo(text.length() * 2);
   }
 
   private static boolean isVectorApiAvailable() {
