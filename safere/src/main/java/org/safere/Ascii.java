@@ -211,32 +211,40 @@ final class Ascii {
 
   /** Returns whether a string matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(String text, int offset, String prefix, int prefixLen) {
-    if (prefixLen == 2) {
-      char c0 = text.charAt(offset);
-      char p0 = prefix.charAt(0);
-      if (c0 != p0 && toLowerCase(c0) != toLowerCase(p0)) {
-        return false;
+    return switch (prefixLen) {
+      case 0 -> true;
+      case 1 -> {
+        char c = text.charAt(offset);
+        char p = prefix.charAt(0);
+        yield c == p || toLowerCase(c) == toLowerCase(p);
       }
-      char c1 = text.charAt(offset + 1);
-      char p1 = prefix.charAt(1);
-      return c1 == p1 || toLowerCase(c1) == toLowerCase(p1);
-    }
-    if (prefixLen == 3) {
-      char c0 = text.charAt(offset);
-      char p0 = prefix.charAt(0);
-      if (c0 != p0 && toLowerCase(c0) != toLowerCase(p0)) {
-        return false;
+      case 2 -> {
+        char c0 = text.charAt(offset);
+        char p0 = prefix.charAt(0);
+        if (c0 != p0 && toLowerCase(c0) != toLowerCase(p0)) {
+          yield false;
+        }
+        char c1 = text.charAt(offset + 1);
+        char p1 = prefix.charAt(1);
+        yield c1 == p1 || toLowerCase(c1) == toLowerCase(p1);
       }
-      char c1 = text.charAt(offset + 1);
-      char p1 = prefix.charAt(1);
-      if (c1 != p1 && toLowerCase(c1) != toLowerCase(p1)) {
-        return false;
+      case 3 -> {
+        char c0 = text.charAt(offset);
+        char p0 = prefix.charAt(0);
+        if (c0 != p0 && toLowerCase(c0) != toLowerCase(p0)) {
+          yield false;
+        }
+        char c1 = text.charAt(offset + 1);
+        char p1 = prefix.charAt(1);
+        if (c1 != p1 && toLowerCase(c1) != toLowerCase(p1)) {
+          yield false;
+        }
+        char c2 = text.charAt(offset + 2);
+        char p2 = prefix.charAt(2);
+        yield c2 == p2 || toLowerCase(c2) == toLowerCase(p2);
       }
-      char c2 = text.charAt(offset + 2);
-      char p2 = prefix.charAt(2);
-      return c2 == p2 || toLowerCase(c2) == toLowerCase(p2);
-    }
-    return regionMatchesIgnoreCase(text, offset, prefix, 0, prefixLen);
+      default -> regionMatchesIgnoreCase(text, offset, prefix, 0, prefixLen);
+    };
   }
 
   /**
@@ -261,39 +269,49 @@ final class Ascii {
 
   /** Returns whether a byte array matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(byte[] bytes, int offset, String prefix, int prefixLen) {
-    if (prefixLen == 2) {
-      int b0 = bytes[offset] & 0xFF;
-      char p0 = prefix.charAt(0);
-      if (b0 != p0 && toLowerCase(b0) != toLowerCase(p0)) {
-        return false;
+    return switch (prefixLen) {
+      case 0 -> true;
+      case 1 -> {
+        int b = bytes[offset] & 0xFF;
+        char p = prefix.charAt(0);
+        yield b == p || toLowerCase(b) == toLowerCase(p);
       }
-      int b1 = bytes[offset + 1] & 0xFF;
-      char p1 = prefix.charAt(1);
-      return b1 == p1 || toLowerCase(b1) == toLowerCase(p1);
-    }
-    if (prefixLen == 3) {
-      int b0 = bytes[offset] & 0xFF;
-      char p0 = prefix.charAt(0);
-      if (b0 != p0 && toLowerCase(b0) != toLowerCase(p0)) {
-        return false;
+      case 2 -> {
+        int b0 = bytes[offset] & 0xFF;
+        char p0 = prefix.charAt(0);
+        if (b0 != p0 && toLowerCase(b0) != toLowerCase(p0)) {
+          yield false;
+        }
+        int b1 = bytes[offset + 1] & 0xFF;
+        char p1 = prefix.charAt(1);
+        yield b1 == p1 || toLowerCase(b1) == toLowerCase(p1);
       }
-      int b1 = bytes[offset + 1] & 0xFF;
-      char p1 = prefix.charAt(1);
-      if (b1 != p1 && toLowerCase(b1) != toLowerCase(p1)) {
-        return false;
+      case 3 -> {
+        int b0 = bytes[offset] & 0xFF;
+        char p0 = prefix.charAt(0);
+        if (b0 != p0 && toLowerCase(b0) != toLowerCase(p0)) {
+          yield false;
+        }
+        int b1 = bytes[offset + 1] & 0xFF;
+        char p1 = prefix.charAt(1);
+        if (b1 != p1 && toLowerCase(b1) != toLowerCase(p1)) {
+          yield false;
+        }
+        int b2 = bytes[offset + 2] & 0xFF;
+        char p2 = prefix.charAt(2);
+        yield b2 == p2 || toLowerCase(b2) == toLowerCase(p2);
       }
-      int b2 = bytes[offset + 2] & 0xFF;
-      char p2 = prefix.charAt(2);
-      return b2 == p2 || toLowerCase(b2) == toLowerCase(p2);
-    }
-    for (int i = 0; i < prefixLen; i++) {
-      int b = bytes[offset + i] & 0xFF;
-      char p = prefix.charAt(i);
-      if (b != p && toLowerCase(b) != toLowerCase(p)) {
-        return false;
+      default -> {
+        for (int i = 0; i < prefixLen; i++) {
+          int b = bytes[offset + i] & 0xFF;
+          char p = prefix.charAt(i);
+          if (b != p && toLowerCase(b) != toLowerCase(p)) {
+            yield false;
+          }
+        }
+        yield true;
       }
-    }
-    return true;
+    };
   }
 
   /** Returns whether a byte array matches an exact ASCII pattern prefix. */
