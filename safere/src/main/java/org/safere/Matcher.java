@@ -3432,20 +3432,6 @@ public final class Matcher implements MatchResult {
         anchorLow = literalRunner.anchorLow();
         anchorHigh = literalRunner.anchorHigh();
         classHashChain = literalRunner.classHashChain();
-      } else {
-        int literalLen = literal.length();
-        if (literalLen == 1) {
-          anchorOffset = 0;
-          char c = literal.charAt(0);
-          anchorLow = Ascii.toLowerCase(c);
-          anchorHigh = Ascii.toUpperCase(c);
-        } else {
-          anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen);
-          char c = literal.charAt(anchorOffset);
-          anchorLow = Ascii.toLowerCase(c);
-          anchorHigh = Ascii.toUpperCase(c);
-          classHashChain = ClassHashChain.compileCaseInsensitive(literal);
-        }
       }
     }
 
@@ -4603,12 +4589,30 @@ public final class Matcher implements MatchResult {
         byte[] literalUtf8,
         boolean isStartAnchored,
         PreparedMatchRunner fallback) {
+      this(literal, foldCase, literalUtf8, isStartAnchored, fallback, null, null);
+    }
+
+    LiteralPreparedRunner(
+        String literal,
+        boolean foldCase,
+        byte[] literalUtf8,
+        boolean isStartAnchored,
+        PreparedMatchRunner fallback,
+        HashChain hashChain,
+        ClassHashChain classHashChain) {
       this.literal = literal;
       this.foldCase = foldCase;
       this.literalUtf8 = literalUtf8;
-      this.hashChain = literalUtf8 != null ? HashChain.compile(literalUtf8) : null;
+      this.hashChain =
+          hashChain != null
+              ? hashChain
+              : (literalUtf8 != null ? HashChain.compile(literalUtf8) : null);
       this.classHashChain =
-          foldCase && literal != null ? ClassHashChain.compileCaseInsensitive(literal) : null;
+          classHashChain != null
+              ? classHashChain
+              : (foldCase && literal != null
+                  ? ClassHashChain.compileCaseInsensitive(literal)
+                  : null);
       int literalLen = literal != null ? literal.length() : 0;
       if (foldCase && literalLen > 0) {
         if (literalLen == 1) {

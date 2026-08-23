@@ -64,7 +64,9 @@ sealed interface RejectPrefilter
             ? EndAnchoredCharClass.create(descriptor.endAnchoredCharClass())
             : null;
     RejectPrefilter litFilter =
-        descriptor.requiredLiteral() != null ? Literal.create(descriptor.requiredLiteral()) : null;
+        descriptor.requiredLiteral() != null
+            ? Literal.create(descriptor.requiredLiteral(), descriptor.hashChain())
+            : null;
     RejectPrefilter ccFilter =
         descriptor.requiredCharClass() != null
             ? CharClass.create(descriptor.requiredCharClass())
@@ -115,9 +117,12 @@ sealed interface RejectPrefilter
   record Literal(String literal, byte[] utf8, HashChain hashChain) implements RejectPrefilter {
 
     static Literal create(String literal) {
+      return create(literal, null);
+    }
+
+    static Literal create(String literal, HashChain hashChain) {
       byte[] utf8 = literal.getBytes(StandardCharsets.UTF_8);
-      HashChain hashChain = HashChain.compile(utf8);
-      return new Literal(literal, utf8, hashChain);
+      return new Literal(literal, utf8, hashChain != null ? hashChain : HashChain.compile(utf8));
     }
 
     @Override

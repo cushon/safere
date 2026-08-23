@@ -1011,7 +1011,9 @@ public final class Pattern implements Serializable {
           prog.anchorStart(),
           matchDescriptor.literalFoldCase()
               ? createLiteralFallbackRunner(regionActive)
-              : Matcher.FallbackPreparedRunner.INSTANCE);
+              : Matcher.FallbackPreparedRunner.INSTANCE,
+          matchDescriptor.hashChain(),
+          matchDescriptor.classHashChain());
     }
 
     CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();

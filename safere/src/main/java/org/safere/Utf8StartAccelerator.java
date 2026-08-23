@@ -24,9 +24,9 @@ sealed interface Utf8StartAccelerator {
     }
     if (descriptor.prefix() != null) {
       if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(descriptor.prefix());
+        return CaseInsensitiveLiteral.create(descriptor.prefix(), descriptor.classHashChain());
       }
-      return Literal.create(descriptor.prefix());
+      return Literal.create(descriptor.prefix(), descriptor.hashChain());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
@@ -77,8 +77,12 @@ sealed interface Utf8StartAccelerator {
   record Literal(byte[] prefixUtf8, HashChain hashChain) implements Utf8StartAccelerator {
 
     static Literal create(String prefix) {
+      return create(prefix, null);
+    }
+
+    static Literal create(String prefix, HashChain hashChain) {
       byte[] utf8 = prefix.getBytes(StandardCharsets.UTF_8);
-      return new Literal(utf8, HashChain.compile(utf8));
+      return new Literal(utf8, hashChain != null ? hashChain : HashChain.compile(utf8));
     }
 
     @Override
@@ -105,6 +109,10 @@ sealed interface Utf8StartAccelerator {
       implements Utf8StartAccelerator {
 
     static Utf8StartAccelerator create(String prefix) {
+      return create(prefix, null);
+    }
+
+    static Utf8StartAccelerator create(String prefix, ClassHashChain classHashChain) {
       for (int i = 0; i < prefix.length(); i++) {
         if (prefix.charAt(i) > 127) {
           return null;
@@ -115,7 +123,11 @@ sealed interface Utf8StartAccelerator {
       byte low = (byte) Ascii.toLowerCase(anchor);
       byte high = (byte) Ascii.toUpperCase(anchor);
       return new CaseInsensitiveLiteral(
-          prefix, anchorOffset, low, high, ClassHashChain.compileCaseInsensitive(prefix));
+          prefix,
+          anchorOffset,
+          low,
+          high,
+          classHashChain != null ? classHashChain : ClassHashChain.compileCaseInsensitive(prefix));
     }
 
     @Override

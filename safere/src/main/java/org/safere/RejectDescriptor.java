@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.DisjointRequiredLiterals;
 import org.safere.Pattern.EndAnchoredCharClassInfo;
 import org.safere.Pattern.SuffixInfo;
@@ -18,7 +19,8 @@ record RejectDescriptor(
     CharClassScanInfo requiredCharClass,
     DisjointRequiredLiterals disjointRequiredLiterals,
     SuffixInfo endAnchoredSuffix,
-    EndAnchoredCharClassInfo endAnchoredCharClass) {
+    EndAnchoredCharClassInfo endAnchoredCharClass,
+    HashChain hashChain) {
 
   RejectDescriptor(String requiredLiteral, CharClassScanInfo requiredCharClass) {
     this(requiredLiteral, requiredCharClass, null, null, null);
@@ -39,7 +41,24 @@ record RejectDescriptor(
     this(requiredLiteral, requiredCharClass, disjointRequiredLiterals, endAnchoredSuffix, null);
   }
 
-  static final RejectDescriptor NONE = new RejectDescriptor(null, null, null, null, null);
+  RejectDescriptor(
+      String requiredLiteral,
+      CharClassScanInfo requiredCharClass,
+      DisjointRequiredLiterals disjointRequiredLiterals,
+      SuffixInfo endAnchoredSuffix,
+      EndAnchoredCharClassInfo endAnchoredCharClass) {
+    this(
+        requiredLiteral,
+        requiredCharClass,
+        disjointRequiredLiterals,
+        endAnchoredSuffix,
+        endAnchoredCharClass,
+        requiredLiteral != null
+            ? HashChain.compile(requiredLiteral.getBytes(StandardCharsets.UTF_8))
+            : null);
+  }
+
+  static final RejectDescriptor NONE = new RejectDescriptor(null, null, null, null, null, null);
 
   boolean hasRejectionFilter() {
     return requiredLiteral != null

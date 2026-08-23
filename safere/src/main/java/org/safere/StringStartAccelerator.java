@@ -23,7 +23,8 @@ sealed interface StringStartAccelerator {
       return null;
     }
     if (descriptor.prefix() != null) {
-      return new Literal(descriptor.prefix(), descriptor.prefixFoldCase());
+      return new Literal(
+          descriptor.prefix(), descriptor.prefixFoldCase(), descriptor.classHashChain());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
@@ -76,6 +77,13 @@ sealed interface StringStartAccelerator {
     private final ClassHashChain classHashChain;
 
     Literal(String prefix, boolean prefixFoldCase) {
+      this(
+          prefix,
+          prefixFoldCase,
+          prefixFoldCase && prefix != null ? ClassHashChain.compileCaseInsensitive(prefix) : null);
+    }
+
+    Literal(String prefix, boolean prefixFoldCase, ClassHashChain classHashChain) {
       this.prefix = prefix;
       this.prefixFoldCase = prefixFoldCase;
       if (prefixFoldCase && prefix != null && !prefix.isEmpty()) {
@@ -83,7 +91,8 @@ sealed interface StringStartAccelerator {
         char anchor = prefix.charAt(anchorOffset);
         this.anchorLow = Ascii.toLowerCase(anchor);
         this.anchorHigh = Ascii.toUpperCase(anchor);
-        this.classHashChain = ClassHashChain.compileCaseInsensitive(prefix);
+        this.classHashChain =
+            classHashChain != null ? classHashChain : ClassHashChain.compileCaseInsensitive(prefix);
       } else {
         this.anchorOffset = 0;
         this.anchorLow = 0;

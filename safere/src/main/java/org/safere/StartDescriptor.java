@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.FixedOffsetLiteral;
 import org.safere.Pattern.StartAcceleration;
 
@@ -20,10 +21,12 @@ record StartDescriptor(
     StartAcceleration lineAnchor,
     String anchoredPrefix,
     CharClassScanInfo anchoredCharClassPrefix,
-    TeddyModel teddyModel) {
+    TeddyModel teddyModel,
+    HashChain hashChain,
+    ClassHashChain classHashChain) {
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null);
 
   StartDescriptor(
       String prefix,
@@ -32,6 +35,30 @@ record StartDescriptor(
       CharClassScanInfo charClassPrefix,
       StartAcceleration lineAnchor) {
     this(prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, lineAnchor, null, null, null);
+  }
+
+  StartDescriptor(
+      String prefix,
+      boolean prefixFoldCase,
+      FixedOffsetLiteral fixedOffsetLiteral,
+      CharClassScanInfo charClassPrefix,
+      StartAcceleration lineAnchor,
+      String anchoredPrefix,
+      CharClassScanInfo anchoredCharClassPrefix,
+      TeddyModel teddyModel) {
+    this(
+        prefix,
+        prefixFoldCase,
+        fixedOffsetLiteral,
+        charClassPrefix,
+        lineAnchor,
+        anchoredPrefix,
+        anchoredCharClassPrefix,
+        teddyModel,
+        prefix != null && !prefixFoldCase
+            ? HashChain.compile(prefix.getBytes(StandardCharsets.UTF_8))
+            : null,
+        prefix != null && prefixFoldCase ? ClassHashChain.compileCaseInsensitive(prefix) : null);
   }
 
   boolean hasStartAcceleration() {

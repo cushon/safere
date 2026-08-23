@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.CharClassMatchInfo;
 import org.safere.Pattern.KeywordAlternation;
 
@@ -29,9 +30,34 @@ record MatchDescriptor(
     CharClassScanInfo singleCharClass,
     KeywordAlternation keywordAlternation,
     CharClassMatchInfo charClassMatch,
-    int minMatchLength) {
+    int minMatchLength,
+    HashChain hashChain,
+    ClassHashChain classHashChain) {
 
-  static final MatchDescriptor NONE = new MatchDescriptor(null, false, null, null, null, 0);
+  static final MatchDescriptor NONE =
+      new MatchDescriptor(null, false, null, null, null, 0, null, null);
+
+  MatchDescriptor(
+      String literalMatch,
+      boolean literalFoldCase,
+      CharClassScanInfo singleCharClass,
+      KeywordAlternation keywordAlternation,
+      CharClassMatchInfo charClassMatch,
+      int minMatchLength) {
+    this(
+        literalMatch,
+        literalFoldCase,
+        singleCharClass,
+        keywordAlternation,
+        charClassMatch,
+        minMatchLength,
+        literalMatch != null && !literalFoldCase
+            ? HashChain.compile(literalMatch.getBytes(StandardCharsets.UTF_8))
+            : null,
+        literalMatch != null && literalFoldCase
+            ? ClassHashChain.compileCaseInsensitive(literalMatch)
+            : null);
+  }
 
   boolean hasFastPath() {
     return literalMatch != null
