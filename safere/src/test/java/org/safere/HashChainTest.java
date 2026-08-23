@@ -7,8 +7,10 @@ package org.safere;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
 @DisabledForCrosscheck("package-private HashChain tests exercise SafeRE internals")
@@ -55,6 +57,26 @@ class HashChainTest {
     byte[] haystack = "request completed normally without failure".getBytes(UTF_8);
     int found = hc.search(haystack, 0, haystack.length, 0, WorkLimit.forRemaining(haystack.length));
     assertThat(found).isEqualTo(-1);
+  }
+
+  @Test
+  void terminalHashCollisionsDoNotCountAsMatches() {
+    assertThat(HashChain.hash((byte) 'c', (byte) 'd'))
+        .isEqualTo(HashChain.hash((byte) 'k', (byte) 'd'));
+
+    byte[] exactText = "abkd".getBytes(UTF_8);
+    HashChain exact = HashChain.compile("abcd".getBytes(UTF_8));
+    assertThat(exact).isNotNull();
+    assertThat(exact.search(exactText, 0, exactText.length, 0, 100)).isEqualTo(-1);
+
+    ClassHashChain folded = ClassHashChain.compileCaseInsensitive("abcd");
+    assertThat(folded).isNotNull();
+    assertThat(folded.search(exactText, 0, exactText.length, 0, 100)).isEqualTo(-1);
+    assertThat(folded.search("abkd", 0, 100)).isEqualTo(-1);
+
+    assertThat(Pattern.compile("abcd").matcher(Utf8Input.validated(exactText)).find()).isFalse();
+    assertThat(Pattern.compile("(?i)abcd").matcher(Utf8Input.validated(exactText)).find())
+        .isFalse();
   }
 
   @Test
@@ -109,6 +131,17 @@ class HashChainTest {
     int result =
         chc.search(haystack, 0, haystack.length, 0, WorkLimit.forRemaining(haystack.length));
     assertThat(result).isEqualTo(-2);
+  }
+
+  @Test
+  void stringCaseInsensitiveSearchFallsBackAfterWorkLimitExhaustion() {
+    String literal = "c" + "ab".repeat(20);
+    String prefix = "ab".repeat(10_000);
+    Matcher matcher =
+        Pattern.compile("(?i)c(?:ab){20}").matcher(prefix + literal.toUpperCase(Locale.ROOT));
+
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isEqualTo(prefix.length());
   }
 
   @Test
@@ -223,7 +256,7 @@ class HashChainTest {
     assertThat(ClassHashChainUtf8.compileCaseInsensitive(null)).isNull();
     assertThat(ClassHashChainUtf8.compileCaseInsensitive("")).isNull();
     assertThat(ClassHashChainUtf8.compileCaseInsensitive("а")).isNull();
-    assertThat(ClassHashChainUtf8.compileCaseInsensitive("привет")).isNotNull();
+    assertThat(ClassHashChainUtf8.compileCaseInsensitive("примир")).isNotNull();
   }
 
   @Test
@@ -275,6 +308,18 @@ class HashChainTest {
   }
 
   @Test
+  void classHashChainUtf16MatchesSupplementaryCaseFolds() {
+    String upper = new String(Character.toChars(0x10400)).repeat(4);
+    String lower = new String(Character.toChars(0x10428)).repeat(4);
+    ClassHashChainUtf16 chain = ClassHashChainUtf16.compileCaseInsensitive(upper);
+    assertThat(chain).isNotNull();
+    assertThat(chain.search(lower, 0, 100)).isZero();
+
+    Matcher matcher = Pattern.compile("(?iu)" + upper).matcher(lower);
+    assertThat(matcher.find()).isTrue();
+  }
+
+  @Test
   void classHashChainUtf16AdversarialCollisionsTripWorkLimit() {
     ClassHashChainUtf16 chcUtf16 = ClassHashChainUtf16.compileCaseInsensitive("сбабаб");
     assertThat(chcUtf16).isNotNull();
@@ -300,11 +345,11 @@ class HashChainTest {
 
   @Test
   void classHashChainUtf8MatchesCyrillicAcrossCasing() {
-    String pattern = "привет_мир";
+    String pattern = "примир_мир";
     ClassHashChainUtf8 chcUtf8 = ClassHashChainUtf8.compileCaseInsensitive(pattern);
     assertThat(chcUtf8).isNotNull();
 
-    List<String> variants = List.of("привет_мир", "ПРИВЕТ_МИР", "Привет_Мир", "пРиВеТ_мИр");
+    List<String> variants = List.of("примир_мир", "ПРИМИР_МИР", "Примир_Мир", "пРиМиР_мИр");
     for (String variant : variants) {
       for (int prefixLen = 0; prefixLen <= 8; prefixLen++) {
         for (int suffixLen = 0; suffixLen <= 8; suffixLen++) {
@@ -321,11 +366,11 @@ class HashChainTest {
 
   @Test
   void classHashChainUtf8MatchesGermanAndGreekAcrossCasing() {
-    String germanPattern = "über_spitzen";
+    String germanPattern = "über_mühen";
     ClassHashChainUtf8 germanChc = ClassHashChainUtf8.compileCaseInsensitive(germanPattern);
     assertThat(germanChc).isNotNull();
 
-    List<String> germanVariants = List.of("über_spitzen", "ÜBER_SPITZEN", "Über_Spitzen");
+    List<String> germanVariants = List.of("über_mühen", "ÜBER_MÜHEN", "Über_Mühen");
     for (String variant : germanVariants) {
       String text = "Vor dem Text " + variant + " nach dem Text";
       byte[] bytes = text.getBytes(UTF_8);
@@ -344,11 +389,42 @@ class HashChainTest {
   }
 
   @Test
+  void utf8UnicodeSearchFallsBackWhenHashChainExhaustsItsWorkLimit() {
+    String nearMiss = "хримир_мир";
+    String match = "ПРИМИР_МИР";
+    byte[] bytes = (nearMiss.repeat(1_000) + match).getBytes(UTF_8);
+
+    Utf8Matcher matcher = Pattern.compile("(?iu)примир_мир").matcher(Utf8Input.validated(bytes));
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isEqualTo(nearMiss.repeat(1_000).getBytes(UTF_8).length);
+    assertThat(matcher.end()).isEqualTo(bytes.length);
+  }
+
+  @Test
+  void utf8UnicodeHashChainRejectsVariableWidthCaseFolds() {
+    assertThat(ClassHashChainUtf8.compileCaseInsensitive("Keyword")).isNull();
+
+    Utf8Matcher matcher =
+        Pattern.compile("(?iu)Keyword").matcher(Utf8Input.validated("keyword".getBytes(UTF_8)));
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isZero();
+    assertThat(matcher.end()).isEqualTo("keyword".length());
+  }
+
+  @Test
+  void utf8UnicodeHashChainBoundsMalformedTrustedInput() {
+    byte[] malformed = {(byte) 0xF0, 0x00, (byte) 0xC3, (byte) 0xA9};
+    Utf8Matcher matcher = Pattern.compile("(?iu)éé").matcher(Utf8Input.trusted(malformed));
+
+    assertThatCode(matcher::find).doesNotThrowAnyException();
+  }
+
+  @Test
   void classHashChainUtf8ShiftAtReturnsExpectedShifts() {
-    ClassHashChainUtf8 chcUtf8 = ClassHashChainUtf8.compileCaseInsensitive("конфигурация");
+    ClassHashChainUtf8 chcUtf8 = ClassHashChainUtf8.compileCaseInsensitive("мир_примир");
     assertThat(chcUtf8).isNotNull();
 
-    byte[] matchBytes = "КОНФИГУРАЦИЯ".getBytes(UTF_8);
+    byte[] matchBytes = "МИР_ПРИМИР".getBytes(UTF_8);
     assertThat(chcUtf8.shiftAt(matchBytes, 0, matchBytes.length, 0)).isEqualTo(0);
 
     byte[] mismatchBytes = "к_другие_слова_хх_конец".getBytes(UTF_8);

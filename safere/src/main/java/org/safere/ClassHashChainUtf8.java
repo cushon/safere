@@ -19,6 +19,7 @@ import java.util.List;
 final class ClassHashChainUtf8 {
   private static final int TABLE_SIZE = 1024;
   private static final int TABLE_MASK = 0x3FF;
+  private static final int REPLACEMENT_CHARACTER = 0xFFFD;
 
   private final String prefix;
   private final byte[] shifts;
@@ -53,21 +54,20 @@ final class ClassHashChainUtf8 {
       int cp = prefix.codePointAt(i);
       int charCount = Character.charCount(cp);
 
-      int lower = Character.toLowerCase(cp);
-      int upper = Character.toUpperCase(cp);
       byte[] origBytes = new String(new int[] {cp}, 0, 1).getBytes(StandardCharsets.UTF_8);
-      byte[] lowerBytes = new String(new int[] {lower}, 0, 1).getBytes(StandardCharsets.UTF_8);
-      byte[] upperBytes = new String(new int[] {upper}, 0, 1).getBytes(StandardCharsets.UTF_8);
-
-      if (lowerBytes.length == origBytes.length && upperBytes.length == origBytes.length) {
-        if (Arrays.equals(lowerBytes, upperBytes)) {
-          charVariants.add(new byte[][] {lowerBytes});
-        } else {
-          charVariants.add(new byte[][] {lowerBytes, upperBytes});
+      List<byte[]> variants = new ArrayList<>();
+      int folded = cp;
+      do {
+        byte[] foldedBytes = new String(new int[] {folded}, 0, 1).getBytes(StandardCharsets.UTF_8);
+        if (foldedBytes.length != origBytes.length) {
+          return null;
         }
-      } else {
-        charVariants.add(new byte[][] {origBytes});
-      }
+        if (variants.stream().noneMatch(existing -> Arrays.equals(existing, foldedBytes))) {
+          variants.add(foldedBytes);
+        }
+        folded = Inst.simpleFold(folded);
+      } while (folded != cp);
+      charVariants.add(variants.toArray(byte[][]::new));
 
       i += charCount;
     }
@@ -201,40 +201,95 @@ final class ClassHashChainUtf8 {
       return false;
     }
     int pos = startOffset;
+    int end = startOffset + byteLength;
     int prefixLen = prefix.length();
     int prefixCharIdx = 0;
 
     while (prefixCharIdx < prefixLen) {
+      if (pos >= end) {
+        return false;
+      }
       int expectedCp = prefix.codePointAt(prefixCharIdx);
       int expectedCount = Character.charCount(expectedCp);
       prefixCharIdx += expectedCount;
 
-      int b0 = bytes[pos++] & 0xFF;
-      int actualCp;
-      if (b0 < 0x80) {
-        actualCp = b0;
-      } else if ((b0 & 0xE0) == 0xC0) {
-        int b1 = bytes[pos++] & 0xFF;
-        actualCp = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
-      } else if ((b0 & 0xF0) == 0xE0) {
-        int b1 = bytes[pos++] & 0xFF;
-        int b2 = bytes[pos++] & 0xFF;
-        actualCp = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
-      } else if ((b0 & 0xF8) == 0xF0) {
-        int b1 = bytes[pos++] & 0xFF;
-        int b2 = bytes[pos++] & 0xFF;
-        int b3 = bytes[pos++] & 0xFF;
-        actualCp = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
-      } else {
-        return false;
-      }
-
-      if (actualCp != expectedCp
-          && Character.toLowerCase(actualCp) != Character.toLowerCase(expectedCp)
-          && Character.toUpperCase(actualCp) != Character.toUpperCase(expectedCp)) {
+      long decoded = decodeForward(bytes, pos, end);
+      int actualCp = (int) decoded;
+      pos = (int) (decoded >>> Integer.SIZE);
+      if (!unicodeEqualsIgnoreCase(actualCp, expectedCp)) {
         return false;
       }
     }
-    return true;
+    return pos == end;
+  }
+
+  private static long decodeForward(byte[] bytes, int pos, int end) {
+    int b0 = bytes[pos] & 0xFF;
+    if (b0 < 0x80) {
+      return decoded(b0, pos + 1);
+    }
+    if (b0 >= 0xC2 && b0 <= 0xDF && continuation(bytes, pos + 1, end)) {
+      int codePoint = ((b0 & 0x1F) << 6) | (bytes[pos + 1] & 0x3F);
+      return decoded(codePoint, pos + 2);
+    }
+    if (b0 >= 0xE0
+        && b0 <= 0xEF
+        && validThreeByteSecond(bytes, b0, pos + 1, end)
+        && continuation(bytes, pos + 2, end)) {
+      int codePoint =
+          ((b0 & 0x0F) << 12) | ((bytes[pos + 1] & 0x3F) << 6) | (bytes[pos + 2] & 0x3F);
+      return decoded(codePoint, pos + 3);
+    }
+    if (b0 >= 0xF0
+        && b0 <= 0xF4
+        && validFourByteSecond(bytes, b0, pos + 1, end)
+        && continuation(bytes, pos + 2, end)
+        && continuation(bytes, pos + 3, end)) {
+      int codePoint =
+          ((b0 & 0x07) << 18)
+              | ((bytes[pos + 1] & 0x3F) << 12)
+              | ((bytes[pos + 2] & 0x3F) << 6)
+              | (bytes[pos + 3] & 0x3F);
+      return decoded(codePoint, pos + 4);
+    }
+    return decoded(REPLACEMENT_CHARACTER, pos + 1);
+  }
+
+  private static boolean continuation(byte[] bytes, int pos, int end) {
+    return pos < end && (bytes[pos] & 0xC0) == 0x80;
+  }
+
+  private static boolean validThreeByteSecond(byte[] bytes, int first, int pos, int end) {
+    if (!continuation(bytes, pos, end)) {
+      return false;
+    }
+    int second = bytes[pos] & 0xFF;
+    return (first != 0xE0 || second >= 0xA0) && (first != 0xED || second <= 0x9F);
+  }
+
+  private static boolean validFourByteSecond(byte[] bytes, int first, int pos, int end) {
+    if (!continuation(bytes, pos, end)) {
+      return false;
+    }
+    int second = bytes[pos] & 0xFF;
+    return (first != 0xF0 || second >= 0x90) && (first != 0xF4 || second <= 0x8F);
+  }
+
+  private static long decoded(int codePoint, int next) {
+    return ((long) next << Integer.SIZE) | (codePoint & 0xFFFF_FFFFL);
+  }
+
+  private static boolean unicodeEqualsIgnoreCase(int left, int right) {
+    if (left == right) {
+      return true;
+    }
+    int folded = Inst.simpleFold(left);
+    while (folded != left) {
+      if (folded == right) {
+        return true;
+      }
+      folded = Inst.simpleFold(folded);
+    }
+    return false;
   }
 }

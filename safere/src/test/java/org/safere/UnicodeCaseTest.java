@@ -96,6 +96,14 @@ class UnicodeCaseTest {
   }
 
   @Test
+  void findWithShortMultiMemberSimpleFoldPrefix() {
+    Pattern p = Pattern.compile("(?iu)ϑϑ");
+    Matcher m = p.matcher("ϴϴ");
+    assertThat(m.find()).isTrue();
+    assertThat(m.group()).isEqualTo("ϴϴ");
+  }
+
+  @Test
   void splitWithUnicodeCase() {
     Pattern p = Pattern.compile("café", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     String[] parts = p.split("xCAFÉyCaféz");
@@ -106,6 +114,12 @@ class UnicodeCaseTest {
   void replaceAllWithUnicodeCase() {
     Pattern p = Pattern.compile("naïve", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     assertThat(p.matcher("He is NAÏVE").replaceAll("smart")).isEqualTo("He is smart");
+  }
+
+  @Test
+  void replaceAllWithCapturedCaseInsensitiveLiteral() {
+    Pattern p = Pattern.compile("(?i)(abc)");
+    assertThat(p.matcher("ABC abc").replaceAll("x")).isEqualTo("x x");
   }
 
   @Test

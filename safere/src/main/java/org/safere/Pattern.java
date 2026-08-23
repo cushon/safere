@@ -302,8 +302,7 @@ public final class Pattern implements Serializable {
     String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
         literalMatch == null ? null : literalMatch.getBytes(StandardCharsets.UTF_8);
-    this.literalMatchHashChain =
-        literalMatchUtf8 == null ? null : HashChain.compile(literalMatchUtf8);
+    this.literalMatchHashChain = this.matchDescriptor.hashChain();
     this.hasLazy = hasLazy;
     this.hasAlternation = hasAlternation;
     this.hasNullableAlternation = hasNullableAlternation;
@@ -2562,7 +2561,110 @@ public final class Pattern implements Serializable {
    * String#indexOf} before running the full engine.
    */
   private static PrefixResult extractPrefix(Regexp re) {
-    return extractPrefixFromCandidate(firstPrefixCandidate(re));
+    PrefixResult direct = extractPrefixFromCandidate(firstPrefixCandidate(re));
+    return direct.prefix() != null ? direct : extractUnicodeFoldedPrefix(re);
+  }
+
+  /** Extracts a required prefix represented as a sequence of Unicode simple-fold classes. */
+  private static PrefixResult extractUnicodeFoldedPrefix(Regexp re) {
+    Deque<Regexp> work = new ArrayDeque<>();
+    work.add(re);
+    StringBuilder prefix = new StringBuilder();
+    boolean sawFoldClass = false;
+
+    while (!work.isEmpty()) {
+      Regexp node = unwrapCaptures(work.removeFirst());
+      if (node == null) {
+        continue;
+      }
+      if (node.op == RegexpOp.CONCAT) {
+        for (int i = node.subs.size() - 1; i >= 0; i--) {
+          work.addFirst(node.subs.get(i));
+        }
+        continue;
+      }
+      if (isLeadingZeroWidth(node)) {
+        continue;
+      }
+
+      if (node.op == RegexpOp.CHAR_CLASS) {
+        int representative = simpleFoldClassRepresentative(node.charClass);
+        if (representative < 0) {
+          break;
+        }
+        prefix.appendCodePoint(representative);
+        sawFoldClass = true;
+        continue;
+      }
+
+      if (node.op == RegexpOp.LITERAL) {
+        if (!appendFoldCompatibleLiteral(prefix, node.rune, node.flags)) {
+          break;
+        }
+        continue;
+      }
+      if (node.op == RegexpOp.LITERAL_STRING && node.runes != null) {
+        boolean compatible = true;
+        for (int rune : node.runes) {
+          if (!appendFoldCompatibleLiteral(prefix, rune, node.flags)) {
+            compatible = false;
+            break;
+          }
+        }
+        if (compatible) {
+          continue;
+        }
+      }
+      break;
+    }
+
+    return sawFoldClass && !prefix.isEmpty()
+        ? new PrefixResult(prefix.toString().toLowerCase(Locale.ROOT), true)
+        : new PrefixResult(null, false);
+  }
+
+  private static boolean appendFoldCompatibleLiteral(StringBuilder prefix, int rune, int flags) {
+    if ((flags & ParseFlags.FOLD_CASE) == 0 && Inst.simpleFold(rune) != rune) {
+      return false;
+    }
+    prefix.appendCodePoint(rune);
+    return true;
+  }
+
+  private static int simpleFoldClassRepresentative(CharClass charClass) {
+    if (charClass == null || charClass.isEmpty()) {
+      return -1;
+    }
+    int representative = charClass.lo(0);
+    CharClass expected =
+        literalCharClass(representative, ParseFlags.FOLD_CASE | ParseFlags.UNICODE_CASE);
+    if (expected.numRanges() != charClass.numRanges()) {
+      return -1;
+    }
+    for (int i = 0; i < expected.numRanges(); i++) {
+      if (expected.lo(i) != charClass.lo(i) || expected.hi(i) != charClass.hi(i)) {
+        return -1;
+      }
+    }
+    int utf8Width = utf8Width(representative);
+    int folded = Inst.simpleFold(representative);
+    while (folded != representative) {
+      if (utf8Width(folded) != utf8Width) {
+        return -1;
+      }
+      folded = Inst.simpleFold(folded);
+    }
+    return representative;
+  }
+
+  private static int utf8Width(int codePoint) {
+    if (codePoint <= 0x7F) {
+      return 1;
+    }
+    if (codePoint <= 0x7FF) {
+      return 2;
+    }
+    return codePoint <= 0xFFFF ? 3 : 4;
   }
 
   private static PrefixResult extractPrefixFromCandidate(Regexp node) {

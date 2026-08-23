@@ -66,8 +66,8 @@ final class HashChain {
       int shift = shifts[h] & 0xFF;
 
       if (shift == 0) {
-        int litPos = last - 2;
-        int inPos = position - 2;
+        int litPos = last;
+        int inPos = position;
         while (litPos >= 0 && bytes[offset + inPos] == literal[litPos]) {
           litPos--;
           inPos--;
@@ -75,7 +75,7 @@ final class HashChain {
         if (litPos < 0) {
           return inPos + 1;
         }
-        int matched = (last - 2) - litPos;
+        int matched = last - litPos;
         work += matched + 1;
         if (WorkLimit.isExhausted(work, workLimit)) {
           return -2;

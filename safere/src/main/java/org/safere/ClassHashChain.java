@@ -105,8 +105,8 @@ final class ClassHashChain {
       int shift = shifts[h] & 0xFF;
 
       if (shift == 0) {
-        int clsPos = last - 2;
-        int inPos = position - 2;
+        int clsPos = last;
+        int inPos = position;
         while (clsPos >= 0 && classes[clsPos].contains(bytes[offset + inPos] & 0xFF)) {
           clsPos--;
           inPos--;
@@ -114,7 +114,7 @@ final class ClassHashChain {
         if (clsPos < 0) {
           return inPos + 1;
         }
-        int matched = (last - 2) - clsPos;
+        int matched = last - clsPos;
         work += matched + 1;
         if (WorkLimit.isExhausted(work, workLimit)) {
           return -2;
@@ -150,8 +150,8 @@ final class ClassHashChain {
       int shift = shifts[h] & 0xFF;
 
       if (shift == 0) {
-        int clsPos = last - 2;
-        int inPos = position - 2;
+        int clsPos = last;
+        int inPos = position;
         while (clsPos >= 0 && classes[clsPos].contains(text.charAt(inPos))) {
           clsPos--;
           inPos--;
@@ -159,7 +159,7 @@ final class ClassHashChain {
         if (clsPos < 0) {
           return inPos + 1;
         }
-        int matched = (last - 2) - clsPos;
+        int matched = last - clsPos;
         work += matched + 1;
         if (WorkLimit.isExhausted(work, workLimit)) {
           return -2;

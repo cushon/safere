@@ -78,6 +78,25 @@ class StartAcceleratorTest {
   }
 
   @Test
+  void compiledUnicodeFoldedPrefixSelectsUtf8HashChainWhenWidthsAreStable() {
+    Pattern pattern = Pattern.compile("(?iu)примир_мир:[0-9]+");
+
+    assertThat(pattern.utf8StartAccelerator())
+        .isInstanceOf(Utf8StartAccelerator.CaseInsensitiveUtf8Literal.class);
+    Utf8Matcher matcher = pattern.matcher(Utf8Input.validated("шум ПРИМИР_МИР:42".getBytes(UTF_8)));
+    assertThat(matcher.find()).isTrue();
+  }
+
+  @Test
+  void compiledUnicodeFoldedPrefixSkipsUtf8HashChainWhenFoldWidthsDiffer() {
+    Pattern pattern = Pattern.compile("(?iu)Keyword:[0-9]+");
+
+    assertThat(pattern.utf8StartAccelerator()).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    Utf8Matcher matcher = pattern.matcher(Utf8Input.validated("keyword:42".getBytes(UTF_8)));
+    assertThat(matcher.find()).isTrue();
+  }
+
+  @Test
   void fixedOffsetLiteralAcceleratesStringAndUtf8() {
     FixedOffsetLiteral fixed = new FixedOffsetLiteral("token", 2, 2, new int[] {2});
     StartDescriptor desc = descriptor(null, false, fixed, null);

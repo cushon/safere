@@ -5,7 +5,9 @@
 
 package org.safere;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Precomputed 16-bit 2-gram shift table for multilingual case-insensitive UTF-16 String search.
@@ -37,40 +39,80 @@ final class ClassHashChainUtf16 {
       return null;
     }
     int m = literal.length();
+    List<char[][]> codePointVariants = new ArrayList<>();
+    for (int i = 0; i < literal.length(); ) {
+      int codePoint = literal.codePointAt(i);
+      char[] original = Character.toChars(codePoint);
+      List<char[]> variants = new ArrayList<>();
+      int folded = codePoint;
+      do {
+        char[] foldedChars = Character.toChars(folded);
+        if (foldedChars.length != original.length) {
+          return null;
+        }
+        if (variants.stream().noneMatch(existing -> Arrays.equals(existing, foldedChars))) {
+          variants.add(foldedChars);
+        }
+        folded = Inst.simpleFold(folded);
+      } while (folded != codePoint);
+      codePointVariants.add(variants.toArray(char[][]::new));
+      i += original.length;
+    }
+
+    int[] codePointIndexForChar = new int[m];
+    int[] intraCharOffset = new int[m];
+    int charIndex = 0;
+    for (int codePointIndex = 0; codePointIndex < codePointVariants.size(); codePointIndex++) {
+      int charCount = codePointVariants.get(codePointIndex)[0].length;
+      for (int charOffset = 0; charOffset < charCount; charOffset++) {
+        codePointIndexForChar[charIndex] = codePointIndex;
+        intraCharOffset[charIndex] = charOffset;
+        charIndex++;
+      }
+    }
+
     byte[] shifts = new byte[TABLE_SIZE];
     int defaultShift = Math.min(127, m - 1);
     Arrays.fill(shifts, (byte) defaultShift);
 
     for (int i = 0; i < m - 2; i++) {
       int shiftVal = m - 2 - i;
-      char[] c0Set = foldChars(literal.charAt(i));
-      char[] c1Set = foldChars(literal.charAt(i + 1));
-      for (char b0 : c0Set) {
-        for (char b1 : c1Set) {
-          int h = hash(b0, b1);
+      int cp0 = codePointIndexForChar[i];
+      int off0 = intraCharOffset[i];
+      int cp1 = codePointIndexForChar[i + 1];
+      int off1 = intraCharOffset[i + 1];
+      if (cp0 == cp1) {
+        for (char[] variant : codePointVariants.get(cp0)) {
+          int h = hash(variant[off0], variant[off1]);
           shifts[h] = (byte) Math.min(shifts[h] & 0xFF, shiftVal);
+        }
+      } else {
+        for (char[] variant0 : codePointVariants.get(cp0)) {
+          for (char[] variant1 : codePointVariants.get(cp1)) {
+            int h = hash(variant0[off0], variant1[off1]);
+            shifts[h] = (byte) Math.min(shifts[h] & 0xFF, shiftVal);
+          }
         }
       }
     }
 
-    char[] cLast0 = foldChars(literal.charAt(m - 2));
-    char[] cLast1 = foldChars(literal.charAt(m - 1));
-    for (char b0 : cLast0) {
-      for (char b1 : cLast1) {
-        shifts[hash(b0, b1)] = 0;
+    int cpLast0 = codePointIndexForChar[m - 2];
+    int offLast0 = intraCharOffset[m - 2];
+    int cpLast1 = codePointIndexForChar[m - 1];
+    int offLast1 = intraCharOffset[m - 1];
+    if (cpLast0 == cpLast1) {
+      for (char[] variant : codePointVariants.get(cpLast0)) {
+        shifts[hash(variant[offLast0], variant[offLast1])] = 0;
+      }
+    } else {
+      for (char[] variant0 : codePointVariants.get(cpLast0)) {
+        for (char[] variant1 : codePointVariants.get(cpLast1)) {
+          shifts[hash(variant0[offLast0], variant1[offLast1])] = 0;
+        }
       }
     }
 
     return new ClassHashChainUtf16(literal, shifts, m);
-  }
-
-  private static char[] foldChars(char c) {
-    char lower = Character.toLowerCase(c);
-    char upper = Character.toUpperCase(c);
-    if (lower == upper) {
-      return new char[] {lower};
-    }
-    return new char[] {lower, upper};
   }
 
   int shiftAt(CharSequence text, int candidatePos) {
@@ -104,24 +146,10 @@ final class ClassHashChainUtf16 {
 
       if (shift == 0) {
         int candidate = position - last;
-        int litPos = last - 2;
-        int inPos = position - 2;
-        while (litPos >= 0) {
-          char tc = text.charAt(inPos);
-          char pc = literal.charAt(litPos);
-          if (tc != pc
-              && Character.toLowerCase(tc) != Character.toLowerCase(pc)
-              && Character.toUpperCase(tc) != Character.toUpperCase(pc)) {
-            break;
-          }
-          litPos--;
-          inPos--;
-        }
-        if (litPos < 0) {
+        if (Utf16.regionMatchesUnicodeIgnoreCase(text, candidate, literal)) {
           return candidate;
         }
-        int matched = (last - 2) - litPos;
-        work += matched + 1;
+        work += length;
         if (WorkLimit.isExhausted(work, workLimit)) {
           return -2;
         }
