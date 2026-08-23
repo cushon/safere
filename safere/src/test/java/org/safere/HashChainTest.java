@@ -164,4 +164,129 @@ class HashChainTest {
     // Candidate window [0..14] ends with "xy" -> not in pattern -> shifts 14
     assertThat(chc.shiftAt("k_other_words_xy_rest", 0)).isEqualTo(14);
   }
+
+  @Test
+  void shiftAtOutOfBoundsReturnsZero() {
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("keyword_to_find");
+    assertThat(chc).isNotNull();
+    assertThat(chc.shiftAt("short", 0)).isEqualTo(0);
+    assertThat(chc.shiftAt("keyword_to_find", 50)).isEqualTo(0);
+  }
+
+  @Test
+  void periodicIdentical2GramsFoundAcrossHaystacks() {
+    List<String> periodicLiterals = List.of("aaaa", "bbbbbb", "XXXXX", "11111111");
+    for (String lit : periodicLiterals) {
+      byte[] needle = lit.getBytes(UTF_8);
+      HashChain hc = HashChain.compile(needle);
+      assertThat(hc).isNotNull();
+
+      String text = "yyy" + lit + "zzz";
+      byte[] haystack = text.getBytes(UTF_8);
+      int found =
+          hc.search(haystack, 0, haystack.length, 0, WorkLimit.forRemaining(haystack.length));
+      assertThat(found).isEqualTo(3);
+    }
+  }
+
+  @Test
+  void repeatedFindAdvancesCorrectlyOnStringWithClassHashChain() {
+    Pattern pattern = Pattern.compile("(?i)apple_pie");
+    String text = "apple_pie and APPLE_PIE and Apple_Pie!";
+    Matcher matcher = pattern.matcher(text);
+
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isEqualTo(0);
+    assertThat(matcher.group()).isEqualTo("apple_pie");
+
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isEqualTo(14);
+    assertThat(matcher.group()).isEqualTo("APPLE_PIE");
+
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isEqualTo(28);
+    assertThat(matcher.group()).isEqualTo("Apple_Pie");
+
+    assertThat(matcher.find()).isFalse();
+  }
+
+  @Test
+  void classHashChain16CompileReturnsNullForShort() {
+    assertThat(ClassHashChain16.compileCaseInsensitive(null)).isNull();
+    assertThat(ClassHashChain16.compileCaseInsensitive("")).isNull();
+    assertThat(ClassHashChain16.compileCaseInsensitive("абв")).isNull();
+    assertThat(ClassHashChain16.compileCaseInsensitive("привет")).isNotNull();
+  }
+
+  @Test
+  void classHashChain16MatchesCyrillicAcrossCasing() {
+    String pattern = "привет_мир";
+    ClassHashChain16 chc16 = ClassHashChain16.compileCaseInsensitive(pattern);
+    assertThat(chc16).isNotNull();
+
+    List<String> variants = List.of("привет_мир", "ПРИВЕТ_МИР", "Привет_Мир", "пРиВеТ_мИр");
+    for (String variant : variants) {
+      for (int prefixLen = 0; prefixLen <= 16; prefixLen++) {
+        for (int suffixLen = 0; suffixLen <= 16; suffixLen++) {
+          String text = "х".repeat(prefixLen) + variant + "у".repeat(suffixLen);
+          int found = chc16.search(text, 0, WorkLimit.forRemaining(text.length()));
+          assertThat(found).as("Variant %s in %s", variant, text).isEqualTo(prefixLen);
+        }
+      }
+    }
+  }
+
+  @Test
+  void classHashChain16MatchesGermanAndGreekAcrossCasing() {
+    String germanPattern = "über_spitzen";
+    ClassHashChain16 germanChc = ClassHashChain16.compileCaseInsensitive(germanPattern);
+    assertThat(germanChc).isNotNull();
+
+    List<String> germanVariants = List.of("über_spitzen", "ÜBER_SPITZEN", "Über_Spitzen");
+    for (String variant : germanVariants) {
+      String text = "Vor dem Text " + variant + " nach dem Text";
+      int found = germanChc.search(text, 0, WorkLimit.forRemaining(text.length()));
+      assertThat(found).isEqualTo(13);
+    }
+
+    String greekPattern = "αβγδεζηθ";
+    ClassHashChain16 greekChc = ClassHashChain16.compileCaseInsensitive(greekPattern);
+    assertThat(greekChc).isNotNull();
+    assertThat(greekChc.search("Τεστ ΑΒΓΔΕΖΗΘ τέλος", 0, 1000)).isEqualTo(5);
+  }
+
+  @Test
+  void classHashChain16SurrogatePairs() {
+    String pattern = "👋🏼👋🏼👋🏼👋🏼";
+    ClassHashChain16 chc16 = ClassHashChain16.compileCaseInsensitive(pattern);
+    assertThat(chc16).isNotNull();
+
+    String text = "Prefix 👋🏼👋🏼👋🏼👋🏼 Suffix";
+    int found = chc16.search(text, 0, WorkLimit.forRemaining(text.length()));
+    assertThat(found).isEqualTo(7);
+  }
+
+  @Test
+  void classHashChain16AdversarialCollisionsTripWorkLimit() {
+    ClassHashChain16 chc16 = ClassHashChain16.compileCaseInsensitive("сбабаб");
+    assertThat(chc16).isNotNull();
+
+    String haystack = "аБаБаБ".repeat(100);
+    int result = chc16.search(haystack, 0, WorkLimit.forRemaining(haystack.length()));
+    assertThat(result).isEqualTo(-2);
+  }
+
+  @Test
+  void classHashChain16ShiftAtReturnsExpectedShifts() {
+    ClassHashChain16 chc16 = ClassHashChain16.compileCaseInsensitive("конфигурация");
+    assertThat(chc16).isNotNull();
+
+    // Matching terminal 2-gram returns 0
+    assertThat(chc16.shiftAt("КОНФИГУРАЦИЯ", 0)).isEqualTo(0);
+    assertThat(chc16.shiftAt("префикс_конфигурация", 8)).isEqualTo(0);
+
+    // Mismatched terminal 2-gram returns positive shift
+    assertThat(chc16.shiftAt("к_другие_слова_хх_конец", 0)).isGreaterThan(0);
+    assertThat(chc16.shiftAt("короткий", 50)).isEqualTo(0); // Out of bounds returns 0
+  }
 }

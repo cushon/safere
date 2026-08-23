@@ -784,6 +784,25 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(text.length() / 6 + 10);
   }
 
+  @Test
+  void classHashChain16AchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForStringInput() {
+    ClassHashChain16 chc16 =
+        ClassHashChain16.compileCaseInsensitive("конфигурация_сервера"); // M = 20
+    String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5); // 270 chars
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(chc16.search(text, 0, WorkLimit.forRemaining(text.length())))
+                    .isEqualTo(-1));
+
+    // Sublinear bound: 270 / 19 = ~14 operations (vs 270 for linear scan)
+    assertThat(work)
+        .as(
+            "ClassHashChain16 must perform sublinear work on non-ASCII case-insensitive patterns"
+                + " for String input")
+        .isLessThanOrEqualTo(text.length() / 15 + 10);
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");

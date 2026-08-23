@@ -23,10 +23,11 @@ record StartDescriptor(
     CharClassScanInfo anchoredCharClassPrefix,
     TeddyModel teddyModel,
     HashChain hashChain,
-    ClassHashChain classHashChain) {
+    ClassHashChain classHashChain,
+    ClassHashChain16 classHashChain16) {
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
 
   StartDescriptor(
       String prefix,
@@ -49,7 +50,20 @@ record StartDescriptor(
         prefix != null && !prefixFoldCase
             ? HashChain.compile(prefix.getBytes(StandardCharsets.UTF_8))
             : null,
-        prefix != null && prefixFoldCase ? ClassHashChain.compileCaseInsensitive(prefix) : null);
+        compileClassHashChain(prefix, prefixFoldCase),
+        compileClassHashChain16(prefix, prefixFoldCase));
+  }
+
+  private static ClassHashChain compileClassHashChain(String prefix, boolean foldCase) {
+    return prefix != null && foldCase && Ascii.isAscii(prefix)
+        ? ClassHashChain.compileCaseInsensitive(prefix)
+        : null;
+  }
+
+  private static ClassHashChain16 compileClassHashChain16(String prefix, boolean foldCase) {
+    return prefix != null && foldCase && !Ascii.isAscii(prefix)
+        ? ClassHashChain16.compileCaseInsensitive(prefix)
+        : null;
   }
 
   boolean hasStartAcceleration() {

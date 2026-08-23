@@ -55,6 +55,19 @@ final class Ascii {
     return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
   }
 
+  /** Returns true if all characters in the CharSequence are ASCII (<= 127). */
+  static boolean isAscii(CharSequence cs) {
+    if (cs == null) {
+      return true;
+    }
+    for (int i = 0; i < cs.length(); i++) {
+      if (cs.charAt(i) > 127) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** Returns true if the code point is an ASCII digit. */
   static boolean isDigit(int r) {
     return r >= '0' && r <= '9';

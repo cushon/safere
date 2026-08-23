@@ -24,7 +24,10 @@ sealed interface StringStartAccelerator {
     }
     if (descriptor.prefix() != null) {
       return new Literal(
-          descriptor.prefix(), descriptor.prefixFoldCase(), descriptor.classHashChain());
+          descriptor.prefix(),
+          descriptor.prefixFoldCase(),
+          descriptor.classHashChain(),
+          descriptor.classHashChain16());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
@@ -75,8 +78,13 @@ sealed interface StringStartAccelerator {
     private final char anchorLow;
     private final char anchorHigh;
     private final ClassHashChain classHashChain;
+    private final ClassHashChain16 classHashChain16;
 
-    Literal(String prefix, boolean prefixFoldCase, ClassHashChain classHashChain) {
+    Literal(
+        String prefix,
+        boolean prefixFoldCase,
+        ClassHashChain classHashChain,
+        ClassHashChain16 classHashChain16) {
       this.prefix = prefix;
       this.prefixFoldCase = prefixFoldCase;
       if (prefixFoldCase && prefix != null && !prefix.isEmpty()) {
@@ -84,13 +92,25 @@ sealed interface StringStartAccelerator {
         char anchor = prefix.charAt(anchorOffset);
         this.anchorLow = Ascii.toLowerCase(anchor);
         this.anchorHigh = Ascii.toUpperCase(anchor);
-        this.classHashChain =
-            classHashChain != null ? classHashChain : ClassHashChain.compileCaseInsensitive(prefix);
+        if (Ascii.isAscii(prefix)) {
+          this.classHashChain =
+              classHashChain != null
+                  ? classHashChain
+                  : ClassHashChain.compileCaseInsensitive(prefix);
+          this.classHashChain16 = null;
+        } else {
+          this.classHashChain = null;
+          this.classHashChain16 =
+              classHashChain16 != null
+                  ? classHashChain16
+                  : ClassHashChain16.compileCaseInsensitive(prefix);
+        }
       } else {
         this.anchorOffset = 0;
         this.anchorLow = 0;
         this.anchorHigh = 0;
         this.classHashChain = null;
+        this.classHashChain16 = null;
       }
     }
 
@@ -111,7 +131,14 @@ sealed interface StringStartAccelerator {
     public int findCandidate(String text, int fromIndex, boolean unixLines) {
       if (prefixFoldCase) {
         return Matcher.indexOfIgnoreCase(
-            text, prefix, anchorOffset, anchorLow, anchorHigh, classHashChain, fromIndex);
+            text,
+            prefix,
+            anchorOffset,
+            anchorLow,
+            anchorHigh,
+            classHashChain,
+            classHashChain16,
+            fromIndex);
       }
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record(Math.max(0, text.length() - fromIndex));

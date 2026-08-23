@@ -32,10 +32,11 @@ record MatchDescriptor(
     CharClassMatchInfo charClassMatch,
     int minMatchLength,
     HashChain hashChain,
-    ClassHashChain classHashChain) {
+    ClassHashChain classHashChain,
+    ClassHashChain16 classHashChain16) {
 
   static final MatchDescriptor NONE =
-      new MatchDescriptor(null, false, null, null, null, 0, null, null);
+      new MatchDescriptor(null, false, null, null, null, 0, null, null, null);
 
   MatchDescriptor(
       String literalMatch,
@@ -54,9 +55,20 @@ record MatchDescriptor(
         literalMatch != null && !literalFoldCase
             ? HashChain.compile(literalMatch.getBytes(StandardCharsets.UTF_8))
             : null,
-        literalMatch != null && literalFoldCase
-            ? ClassHashChain.compileCaseInsensitive(literalMatch)
-            : null);
+        compileClassHashChain(literalMatch, literalFoldCase),
+        compileClassHashChain16(literalMatch, literalFoldCase));
+  }
+
+  private static ClassHashChain compileClassHashChain(String literal, boolean foldCase) {
+    return literal != null && foldCase && Ascii.isAscii(literal)
+        ? ClassHashChain.compileCaseInsensitive(literal)
+        : null;
+  }
+
+  private static ClassHashChain16 compileClassHashChain16(String literal, boolean foldCase) {
+    return literal != null && foldCase && !Ascii.isAscii(literal)
+        ? ClassHashChain16.compileCaseInsensitive(literal)
+        : null;
   }
 
   boolean hasFastPath() {

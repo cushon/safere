@@ -1013,7 +1013,8 @@ public final class Pattern implements Serializable {
               ? createLiteralFallbackRunner(regionActive)
               : Matcher.FallbackPreparedRunner.INSTANCE,
           matchDescriptor.hashChain(),
-          matchDescriptor.classHashChain());
+          matchDescriptor.classHashChain(),
+          matchDescriptor.classHashChain16());
     }
 
     CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
@@ -3665,7 +3666,7 @@ public final class Pattern implements Serializable {
           }
           boolean childFoldCase = (c.flags & ParseFlags.FOLD_CASE) != 0;
           if (c.op == RegexpOp.LITERAL) {
-            if (Ascii.toLowerCase(c.rune) != Ascii.toUpperCase(c.rune)) {
+            if (Character.toLowerCase(c.rune) != Character.toUpperCase(c.rune)) {
               if (!foldCaseInitialized) {
                 foldCase = childFoldCase;
                 foldCaseInitialized = true;
@@ -3675,7 +3676,7 @@ public final class Pattern implements Serializable {
             }
           } else if (c.op == RegexpOp.LITERAL_STRING && c.runes != null) {
             for (int r : c.runes) {
-              if (Ascii.toLowerCase(r) != Ascii.toUpperCase(r)) {
+              if (Character.toLowerCase(r) != Character.toUpperCase(r)) {
                 if (!foldCaseInitialized) {
                   foldCase = childFoldCase;
                   foldCaseInitialized = true;
