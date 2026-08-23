@@ -1203,13 +1203,20 @@ public final class Matcher implements MatchResult {
 
     Prog prog = parentPattern.prog();
     InputScanner scanner = activeScanner();
+    boolean preferCaptureEngine = shouldPreferCaptureEngine(prog, scanner);
     // Medium path: use DFA to check if an anchored match exists.
-    if (enginePathOptions().dfa() && dfaSupportsProgram(parentPattern.flatDfaProg())) {
+    if (!preferCaptureEngine
+        && enginePathOptions().dfa()
+        && dfaSupportsProgram(parentPattern.flatDfaProg())) {
       diagnosticParticipation(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
       Dfa.SearchResult dfaResult = searchForwardDfa(dfa(false), scanner, true, false);
       if (dfaResult != null && !dfaResult.matched()) {
         diagnosticBoundary(MatchStrategy.DFA);
         return applyFailedMatchResult();
+      }
+      if (dfaResult != null && prog.numLoopRegs() == 0) {
+        diagnosticBoundary(MatchStrategy.DFA);
+        return applyDeferredMatchResult(0, dfaResult.pos(), prog.numCaptures(), true, false);
       }
       if (dfaResult == null) {
         diagnosticDecision(
@@ -1665,7 +1672,7 @@ public final class Matcher implements MatchResult {
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
-          int idx = accelerator.findCandidate(utf8Scanner, searchFrom);
+          int idx = Utf8StartAccelerator.findNextCandidate(accelerator, utf8Scanner, searchFrom);
           if (idx < 0) {
             if (strategy != null) {
               diagnosticBoundary(strategy);
@@ -1683,7 +1690,9 @@ public final class Matcher implements MatchResult {
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
-          int idx = accelerator.findCandidate(text, searchFrom, prog.unixLines());
+          int idx =
+              StringStartAccelerator.findNextCandidate(
+                  accelerator, text, searchFrom, prog.unixLines());
           if (idx < 0) {
             if (strategy != null) {
               diagnosticBoundary(strategy);
@@ -4537,7 +4546,9 @@ public final class Matcher implements MatchResult {
     if (options.startAcceleration() && text != null && !prog.anchorStart()) {
       StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
       if (accelerator != null) {
-        int idx = accelerator.findCandidate(text, fromIndex, prog.unixLines());
+        int idx =
+            StringStartAccelerator.findNextCandidate(
+                accelerator, text, fromIndex, prog.unixLines());
         if (idx < 0) {
           return -1L;
         }
