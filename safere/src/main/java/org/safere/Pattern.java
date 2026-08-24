@@ -759,7 +759,7 @@ public final class Pattern implements Serializable {
     if (enginePathOptions.startAcceleration()
         && utf8StartAccelerator != null
         && !prog.anchorStart()) {
-      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
+      searchStart = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
       if (searchStart < 0) {
         return false;
       }
@@ -833,7 +833,7 @@ public final class Pattern implements Serializable {
       if (strategy != null) {
         diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
-      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
+      searchStart = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
       if (searchStart < 0) {
         if (strategy != null) {
           diagnostics.boundary(strategy);
@@ -3277,12 +3277,15 @@ public final class Pattern implements Serializable {
         endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
     String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
     CharClassScanInfo ccPrefix = startDescriptor != null ? startDescriptor.charClassPrefix() : null;
-    boolean hasStartLiteral =
-        startDescriptor != null
-            && (startDescriptor.prefix() != null || startDescriptor.leadingExpansion() != null);
-    String requiredLiteral = !hasStartLiteral ? extractRequiredLiteral(metadataAst) : null;
+    boolean hasLeadingExpansion =
+        startDescriptor != null && startDescriptor.leadingExpansion() != null;
+    String suffixStr = endAnchoredSuffix != null ? endAnchoredSuffix.suffix() : null;
+    String requiredLiteral =
+        !anchorStart && !hasLeadingExpansion
+            ? extractRequiredLiteral(metadataAst, prefix, suffixStr)
+            : null;
     CharClassScanInfo requiredMatchClass = null;
-    if (prefix == null && endAnchoredCharClass == null) {
+    if (!anchorStart && prefix == null && endAnchoredCharClass == null) {
       if (ccPrefix == null) {
         requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
       } else {
@@ -3537,8 +3540,13 @@ public final class Pattern implements Serializable {
    * alternation and optional repetition, so the result can only reject inputs that cannot match.
    */
   private static String extractRequiredLiteral(Regexp re) {
-    String longest = null;
-    int longestScore = 0;
+    return extractRequiredLiteral(re, null, null);
+  }
+
+  private static String extractRequiredLiteral(
+      Regexp re, String excludePrefix, String excludeSuffix) {
+    String best = null;
+    int bestScore = 0;
     Deque<Regexp> pending = new ArrayDeque<>();
     pending.addLast(re);
     while (!pending.isEmpty()) {
@@ -3562,17 +3570,20 @@ public final class Pattern implements Serializable {
               && node.runes != null
               && node.runes.length >= 2) {
             String candidate = new String(node.runes, 0, node.runes.length);
-            int candidateScore = RarityOracle.literalSelectivityScore(candidate);
-            if (longest == null || candidateScore > longestScore) {
-              longest = candidate;
-              longestScore = candidateScore;
+            if ((excludePrefix == null || !candidate.equals(excludePrefix))
+                && (excludeSuffix == null || !candidate.equals(excludeSuffix))) {
+              int candidateScore = RarityOracle.literalSelectivityScore(candidate);
+              if (best == null || candidateScore > bestScore) {
+                best = candidate;
+                bestScore = candidateScore;
+              }
             }
           }
         }
         default -> {}
       }
     }
-    return longest;
+    return best;
   }
 
   /**

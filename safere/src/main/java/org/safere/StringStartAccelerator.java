@@ -23,13 +23,16 @@ sealed interface StringStartAccelerator {
       return null;
     }
     if (descriptor.prefix() != null) {
-      return new Literal(descriptor.prefix(), descriptor.prefixFoldCase());
+      if (descriptor.prefixFoldCase()) {
+        return CaseInsensitiveLiteral.create(descriptor.prefix());
+      }
+      return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
     }
     if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
-      return new CharClass(descriptor.charClassPrefix());
+      return CharClass.create(descriptor.charClassPrefix());
     }
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {
       return new LineAnchor(descriptor.lineAnchor());
@@ -49,12 +52,6 @@ sealed interface StringStartAccelerator {
   }
 
   /**
-   * Finds the next candidate match start position at or after {@code fromIndex}. Returns negative
-   * if definitely not found.
-   */
-  int findCandidate(String text, int fromIndex, boolean unixLines);
-
-  /**
    * Finds the next candidate match start position at or after {@code fromIndex} using
    * pattern-matched devirtualization.
    *
@@ -67,6 +64,7 @@ sealed interface StringStartAccelerator {
       StringStartAccelerator accelerator, String text, int fromIndex, boolean unixLines) {
     return switch (accelerator) {
       case Literal lit -> lit.findCandidate(text, fromIndex, unixLines);
+      case CaseInsensitiveLiteral cil -> cil.findCandidate(text, fromIndex, unixLines);
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
@@ -79,37 +77,10 @@ sealed interface StringStartAccelerator {
     return AcceleratorPolicy.DEFAULT;
   }
 
-  final class Literal implements StringStartAccelerator {
-    private final String prefix;
-    private final boolean prefixFoldCase;
-    private final int[] failure;
-    private final int anchorOffset;
-    private final char anchorLow;
-    private final char anchorHigh;
+  record Literal(String prefix) implements StringStartAccelerator {
 
-    Literal(String prefix, boolean prefixFoldCase) {
-      this.prefix = prefix;
-      this.prefixFoldCase = prefixFoldCase;
-      if (prefixFoldCase && prefix != null && !prefix.isEmpty()) {
-        this.failure = Ascii.ignoreCaseFailure(prefix);
-        this.anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
-        char anchor = prefix.charAt(anchorOffset);
-        this.anchorLow = Ascii.toLowerCase(anchor);
-        this.anchorHigh = Ascii.toUpperCase(anchor);
-      } else {
-        this.failure = null;
-        this.anchorOffset = 0;
-        this.anchorLow = 0;
-        this.anchorHigh = 0;
-      }
-    }
-
-    public String prefix() {
-      return prefix;
-    }
-
-    public boolean prefixFoldCase() {
-      return prefixFoldCase;
+    static Literal create(String prefix) {
+      return new Literal(prefix);
     }
 
     @Override
@@ -117,12 +88,7 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
-      if (prefixFoldCase) {
-        return Matcher.indexOfIgnoreCase(
-            text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
-      }
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       int idx = text.indexOf(prefix, fromIndex);
       if (WorkCounterConfig.ENABLED) {
         int scanned = idx >= 0 ? idx - fromIndex + prefix.length() : text.length() - fromIndex;
@@ -132,21 +98,22 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class FixedOffset implements StringStartAccelerator {
-    private final FixedOffsetLiteral fixedOffset;
-    private final CharClassScanInfo firstCharClass;
+  // The failure table is immutable pattern metadata; array identity and value semantics are unused.
+  @SuppressWarnings("ArrayRecordComponent")
+  record CaseInsensitiveLiteral(
+      String prefix, int[] failure, int anchorOffset, char anchorLow, char anchorHigh)
+      implements StringStartAccelerator {
 
-    FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo firstCharClass) {
-      this.fixedOffset = fixedOffset;
-      this.firstCharClass = firstCharClass;
-    }
-
-    public FixedOffsetLiteral fixedOffset() {
-      return fixedOffset;
-    }
-
-    public CharClassScanInfo firstCharClass() {
-      return firstCharClass;
+    static CaseInsensitiveLiteral create(String prefix) {
+      if (prefix == null || prefix.isEmpty()) {
+        return new CaseInsensitiveLiteral(prefix, null, 0, '\0', '\0');
+      }
+      int[] failure = Ascii.ignoreCaseFailure(prefix);
+      int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
+      char anchor = prefix.charAt(anchorOffset);
+      char anchorLow = Ascii.toLowerCase(anchor);
+      char anchorHigh = Ascii.toUpperCase(anchor);
+      return new CaseInsensitiveLiteral(prefix, failure, anchorOffset, anchorLow, anchorHigh);
     }
 
     @Override
@@ -154,8 +121,21 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
+      return Matcher.indexOfIgnoreCase(
+          text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
+    }
+  }
+
+  record FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo firstCharClass)
+      implements StringStartAccelerator {
+
     @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
+    }
+
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       return nextFixedOffsetCandidate(text, fixedOffset, firstCharClass, fromIndex);
     }
 
@@ -226,17 +206,13 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class CharClass implements StringStartAccelerator {
-    private final CharClassScanInfo scanInfo;
-    private final boolean[] asciiTable;
+  // The lookup table is immutable pattern metadata; array identity and value semantics are unused.
+  @SuppressWarnings("ArrayRecordComponent")
+  record CharClass(CharClassScanInfo scanInfo, boolean[] asciiTable)
+      implements StringStartAccelerator {
 
-    CharClass(CharClassScanInfo scanInfo) {
-      this.scanInfo = scanInfo;
-      this.asciiTable = buildAsciiTable(scanInfo);
-    }
-
-    public CharClassScanInfo scanInfo() {
-      return scanInfo;
+    static CharClass create(CharClassScanInfo scanInfo) {
+      return new CharClass(scanInfo, buildAsciiTable(scanInfo));
     }
 
     @Override
@@ -244,8 +220,7 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.CHAR_CLASS;
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       return indexOfCharClass(text, asciiTable, scanInfo.ranges(), scanInfo.isAscii(), fromIndex);
     }
 
@@ -307,24 +282,14 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  final class LineAnchor implements StringStartAccelerator {
-    private final StartAcceleration startAcceleration;
-
-    LineAnchor(StartAcceleration startAcceleration) {
-      this.startAcceleration = startAcceleration;
-    }
-
-    public StartAcceleration startAcceleration() {
-      return startAcceleration;
-    }
+  record LineAnchor(StartAcceleration startAcceleration) implements StringStartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
       return AcceleratorPolicy.LINE_ANCHOR;
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       return nextAcceleratedStart(text, startAcceleration, fromIndex, unixLines);
     }
 
@@ -393,8 +358,7 @@ sealed interface StringStartAccelerator {
       return new AcceleratorPolicy(16, 4, false, inner.policy().strategy());
     }
 
-    @Override
-    public int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       int searchPos = Math.max(0, fromIndex);
       int textLen = text.length();
       while (searchPos < textLen) {

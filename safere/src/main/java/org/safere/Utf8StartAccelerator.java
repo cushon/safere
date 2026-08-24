@@ -54,12 +54,6 @@ sealed interface Utf8StartAccelerator {
   }
 
   /**
-   * Finds the next candidate match start position at or after {@code fromIndex}. Returns negative
-   * if definitely not found.
-   */
-  int findCandidate(Utf8InputScanner scanner, int fromIndex);
-
-  /**
    * Finds the next candidate match start position at or after {@code pos} using pattern-matched
    * devirtualization.
    *
@@ -99,8 +93,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (prefixUtf8 != null) {
         return scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts, fromIndex);
       }
@@ -132,8 +125,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       return scanner.indexOfIgnoreCase(
           prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }
@@ -147,8 +139,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefix, fromIndex);
     }
 
@@ -203,8 +194,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.CHAR_CLASS;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (scanInfo == null) {
         return fromIndex;
       }
@@ -243,8 +233,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       VectorScanProvider provider = VectorScanProviders.providerForTeddyLength(scanner.length());
       if (provider == null) {
         return fromIndex;
@@ -283,8 +272,7 @@ sealed interface Utf8StartAccelerator {
       return new AcceleratorPolicy(16, 4, false, inner.policy().strategy());
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       int searchPos = Math.max(0, fromIndex);
       int textLen = scanner.length();
       while (searchPos < textLen) {
