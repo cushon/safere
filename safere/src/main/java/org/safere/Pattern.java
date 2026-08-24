@@ -140,6 +140,7 @@ public final class Pattern implements Serializable {
   private final transient CharClassScanInfo charClassPrefix;
   private final transient CharClassScanInfo anchoredCharClassPrefix;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
+  private final transient MultiLiteralInfo multiLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
   private final transient EnginePathOptions enginePathOptions;
@@ -314,6 +315,7 @@ public final class Pattern implements Serializable {
     this.charClassPrefix = startDescriptor.charClassPrefix();
     this.anchoredCharClassPrefix = startDescriptor.anchoredCharClassPrefix();
     this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
+    this.multiLiteral = startDescriptor.multiLiteral();
     this.utf8StartAccelerator =
         Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
     this.stringStartAccelerator =
@@ -488,12 +490,23 @@ public final class Pattern implements Serializable {
         prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
     CharClassScanInfo ccPrefix = (prefix == null) ? extractCharClassPrefix(metadataAst) : null;
     String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
+    MultiLiteralInfo multiLiteral =
+        VectorScanProviders.multiLiteralProviderAvailable()
+                && altLiterals != null
+                && altLiterals.length >= 2
+                && altLiterals.length <= 4
+            ? MultiLiteralInfo.create(altLiterals)
+            : null;
     TeddyModel teddyModel = null;
     if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
       teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
     }
     StartAcceleration startAcceleration =
-        (prefix == null && ccPrefix == null && fixedOffsetLiteral == null && teddyModel == null)
+        (prefix == null
+                && ccPrefix == null
+                && fixedOffsetLiteral == null
+                && multiLiteral == null
+                && teddyModel == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
@@ -509,6 +522,7 @@ public final class Pattern implements Serializable {
     if (prefix == null
         && fixedOffsetLiteral == null
         && ccPrefix == null
+        && multiLiteral == null
         && startAcceleration == null
         && anchoredPrefix == null
         && anchoredCharClassPrefix == null
@@ -523,6 +537,7 @@ public final class Pattern implements Serializable {
         startAcceleration,
         anchoredPrefix,
         anchoredCharClassPrefix,
+        multiLiteral,
         teddyModel);
   }
 
@@ -667,7 +682,7 @@ public final class Pattern implements Serializable {
     if (enginePathOptions.startAcceleration()
         && utf8StartAccelerator != null
         && !prog.anchorStart()) {
-      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
+      searchStart = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
       if (searchStart < 0) {
         return false;
       }
@@ -741,7 +756,7 @@ public final class Pattern implements Serializable {
       if (strategy != null) {
         diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
-      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
+      searchStart = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
       if (searchStart < 0) {
         if (strategy != null) {
           diagnostics.boundary(strategy);
@@ -1359,6 +1374,11 @@ public final class Pattern implements Serializable {
   /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
   FixedOffsetLiteral fixedOffsetLiteral() {
     return fixedOffsetLiteral;
+  }
+
+  /** Returns metadata for 2-6 keyword literal alternation acceleration, or {@code null}. */
+  MultiLiteralInfo multiLiteral() {
+    return multiLiteral;
   }
 
   /** Returns the compiled UTF-8 start-position accelerator strategy, or {@code null}. */
@@ -3189,9 +3209,11 @@ public final class Pattern implements Serializable {
         endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
     String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
     CharClassScanInfo ccPrefix = startDescriptor != null ? startDescriptor.charClassPrefix() : null;
-    String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
+    String suffixStr = endAnchoredSuffix != null ? endAnchoredSuffix.suffix() : null;
+    String requiredLiteral =
+        !anchorStart ? extractRequiredLiteral(metadataAst, prefix, suffixStr) : null;
     CharClassScanInfo requiredMatchClass = null;
-    if (prefix == null && endAnchoredCharClass == null) {
+    if (!anchorStart && prefix == null && endAnchoredCharClass == null) {
       if (ccPrefix == null) {
         requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
       } else {
@@ -3446,8 +3468,13 @@ public final class Pattern implements Serializable {
    * alternation and optional repetition, so the result can only reject inputs that cannot match.
    */
   private static String extractRequiredLiteral(Regexp re) {
-    String longest = null;
-    int longestScore = 0;
+    return extractRequiredLiteral(re, null, null);
+  }
+
+  private static String extractRequiredLiteral(
+      Regexp re, String excludePrefix, String excludeSuffix) {
+    String best = null;
+    int bestScore = 0;
     Deque<Regexp> pending = new ArrayDeque<>();
     pending.addLast(re);
     while (!pending.isEmpty()) {
@@ -3471,17 +3498,20 @@ public final class Pattern implements Serializable {
               && node.runes != null
               && node.runes.length >= 2) {
             String candidate = new String(node.runes, 0, node.runes.length);
-            int candidateScore = RarityOracle.literalSelectivityScore(candidate);
-            if (longest == null || candidateScore > longestScore) {
-              longest = candidate;
-              longestScore = candidateScore;
+            if ((excludePrefix == null || !candidate.equals(excludePrefix))
+                && (excludeSuffix == null || !candidate.equals(excludeSuffix))) {
+              int candidateScore = RarityOracle.literalSelectivityScore(candidate);
+              if (best == null || candidateScore > bestScore) {
+                best = candidate;
+                bestScore = candidateScore;
+              }
             }
           }
         }
         default -> {}
       }
     }
-    return longest;
+    return best;
   }
 
   /**

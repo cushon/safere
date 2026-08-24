@@ -1,6 +1,6 @@
 ---
 name: safere-pr-review-scout
-description: "Run a serialized background sweep of open SafeRE GitHub PRs: skip drafts, track reviewed PR head SHAs and discussion changes, assess PR intent against implementation, run the review-fix-loop skill for P2+ findings, reproduce optimization benchmark claims against current main, and write durable reports and artifacts without pushing or commenting."
+description: "Run a serialized background sweep of open SafeRE GitHub PRs: skip drafts, track reviewed PR head SHAs and discussion changes, assess PR intent and merge ordering, run the review-fix-loop skill for P2+ findings, reproduce optimization benchmark claims against current main, and write self-contained durable reports and artifacts without pushing or commenting."
 ---
 
 # SafeRE PR Review Scout
@@ -153,6 +153,60 @@ Also inspect linked issues when the PR body or discussion clearly references the
 needed to understand the PR's intent.
 
 Process selected PRs in increasing PR number order so the oldest open PRs are reviewed first.
+
+## Self-Contained Report Scope
+
+Every run report is a current decision-support snapshot of all open trusted non-draft PRs, not only
+a log of PRs reviewed during that run. The human reviewer may not have read any earlier scout
+report.
+
+- Include every trusted non-draft PR returned by discovery in the report summary and in a detailed
+  PR section.
+- When a PR is eligible for review, replace its prior assessment with the completed assessment from
+  the current run.
+- When a PR is fresh enough to skip, carry forward and consolidate its most recent still-valid
+  assessment, recommendation, copy/paste review text, local-fix references, and benchmark evidence
+  into the new report. Do not merely link to or tell the human to read an older report.
+- Carry evidence forward only after discovery confirms that the PR remains open and non-draft and
+  that its head SHA, discussion timestamp, and reviewed base SHA satisfy the normal skip rules. If
+  any freshness key changed, review the PR instead.
+- Exclude merged, closed, and draft PRs. Include open deferred PRs with their defer reason.
+- Keep carried-forward author-facing text coherent from the public PR discussion and human-review
+  cutoff. Do not describe it as old, carried forward, or unchanged in the copy/paste comment unless
+  that history is meaningful in the public discussion.
+
+The report may identify internally which sections were reviewed in this run and which reused valid
+evidence, but it must contain all information the human needs to decide and comment without opening
+an earlier scout report.
+
+## Merge Ordering Assessment
+
+After the per-PR assessments are current, give the human a practical merge-order recommendation for
+the open trusted non-draft PRs in the report. Check:
+
+- explicit stacked-PR or base-branch relationships;
+- commit ancestry between PR heads;
+- semantic dependencies, such as one PR changing data or behavior that another PR accelerates;
+- shared production APIs and files that make conflicts likely; and
+- whether each branch already conflicts with current `origin/main` independently of the other open
+  PRs.
+
+Distinguish three cases clearly:
+
+- **Required ordering:** one PR actually depends on another and should not merge first.
+- **Recommended ordering:** the PRs are logically independent, but an order will produce a cleaner
+  integration, benchmark the final behavior, or reduce repeated conflict resolution.
+- **Independent:** either order is reasonable despite possible file overlap.
+
+Do not infer a dependency from overlapping files alone. Explain the specific behavior, API, or
+conflict that supports each recommendation. Separate conflicts already caused by current main from
+conflicts likely to arise between the open PRs. If useful, provide a concrete sequence with
+parenthesized groups for PRs that can land in either order. Account for unresolved review feedback
+and local fixes that still need to be pushed; do not present a PR as merge-ready merely to make the
+sequence tidy.
+
+Refresh open/merged state before finalizing this section so PRs merged during a long scout run are
+not included in the remaining sequence.
 
 ## Classification
 
@@ -328,33 +382,43 @@ git diff <post-merge-pre-fix-head>..HEAD > <artifact-dir>/review-fixes.patch
      that ... I've pushed a commit that fixes it."
 
 9. Update the durable report and state after each PR, not only at the end. Update that PR's row in
-   the report's PR Summary table at the same checkpoint. If the sweep is interrupted, completed
-   PRs should still be discoverable.
+   the report's PR Summary table at the same checkpoint while preserving its reviewer-owned `Done`
+   value. If the sweep is interrupted, completed PRs should still be discoverable.
 
 ## Report Format
 
-Append every reviewed PR to the run report. Also update
-`$HOME/.codex/safere-pr-review/LATEST.md` with a pointer to the latest run report.
+Include every open trusted non-draft PR in the run report, using the current run's assessment for
+reviewed PRs and a self-contained copy of the latest still-valid assessment for skipped PRs. Also
+update `$HOME/.codex/safere-pr-review/LATEST.md` with a pointer to the latest run report.
 
 At the top of the run report, after any report title or run metadata and before other report
-sections, include a compact decision-oriented summary of every trusted PR represented in the
-report. Keep each assessment to one brief sentence or phrase. Make the PR text in each row an
+sections, include a compact decision-oriented summary of every open trusted non-draft PR. Keep each
+assessment to one brief sentence or phrase. Make the PR text in each row an
 internal link to that PR's detailed section. Use an explicit `pr-<number>` HTML anchor immediately
 before every detailed PR heading so the link remains stable regardless of punctuation or Unicode
 in the PR title. Include reviewed, blocked, and deferred PRs; do not include untrusted PRs because
-they were not inspected and therefore have no assessment.
+they were not inspected and therefore have no assessment. Make `Done` the first column. Leave it
+empty when creating a row so the human reviewer can enter `Y` after handling the PR. The column is
+reviewer-owned: never fill it in or infer completion, and preserve any existing value when updating
+a row in the same report.
 
 ```markdown
 ## PR Summary
 
-| PR | Brief Assessment | Recommendation |
-|---|---|---|
-| [PR #123: Optimize matching](#pr-123) | Correct after local fixes; claimed gains reproduced. | Can merge |
-| [PR #124: Revise parser API](#pr-124) | The public API shape needs a maintainer decision. | Focus human review |
+| Done | PR | Brief Assessment | Recommendation |
+|---|---|---|---|
+|  | [PR #123: Optimize matching](#pr-123) | Correct after local fixes; claimed gains reproduced. | Can merge |
+|  | [PR #124: Revise parser API](#pr-124) | The public API shape needs a maintainer decision. | Focus human review |
 ```
 
 Update the summary row whenever its detailed PR section changes. The summary is an index and a
 quick decision aid, not a substitute for the evidence in the detailed section.
+
+Immediately after the PR Summary, include a `Merge Ordering` section covering only PRs that remain
+open and non-draft when the report is finalized. State whether any hard dependencies exist, give a
+recommended sequence or independent groups when useful, and explain the specific semantic or
+conflict rationale. Also identify branches that already need current main merged independently of
+the recommended inter-PR order.
 
 If any open non-draft PRs are skipped because the author is not trusted, include this section near
 the top of the run report:
@@ -533,6 +597,18 @@ review, tests, or benchmarks. If conflicts require product/design judgment, mark
 and continue with the next PR. Read the PR description, comments, reviews, and linked issue context
 needed to understand intent. Assess whether the PR idea makes sense for SafeRE and whether the
 implementation matches that intent.
+
+Make the resulting report self-contained. Include a summary row and detailed section for every open
+trusted non-draft PR, including PRs skipped because their prior review is still fresh. For each
+skipped PR, copy and consolidate its latest still-valid assessment, recommendation, copy/paste
+review text, fix references, and benchmark evidence into the new report; do not require the human
+to read an earlier report. Exclude merged, closed, and draft PRs.
+
+After the PR assessments are current, add a merge-order recommendation for the PRs that remain open.
+Check explicit stacking, commit ancestry, semantic dependencies, shared APIs and production files,
+and conflicts with current main. Distinguish required ordering from optional conflict-minimizing
+ordering and genuinely independent PRs. Give a practical sequence when useful, explain every
+constraint, and do not infer a dependency from file overlap alone.
 
 Run $review-fix-loop for P2-or-higher findings in an isolated worktree. Do not push branches, post
 comments, close issues, or publish review text. Local worktrees, local branches, local commits,

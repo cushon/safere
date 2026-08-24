@@ -201,6 +201,35 @@ class DiagnosticsTest {
   }
 
   @Test
+  void compositeRejectPrefilterReplacementReportsTheChildThatRejected() {
+    Pattern.setDiagnostics(diagnostics);
+
+    for (MatchOperation operation :
+        List.of(MatchOperation.REPLACE_FIRST, MatchOperation.REPLACE_ALL)) {
+      Pattern pattern = Pattern.compile("foo.*bar.*[0-9]$");
+      Matcher matcher = pattern.matcher("foo---7");
+
+      String result =
+          operation == MatchOperation.REPLACE_FIRST
+              ? matcher.replaceFirst("replacement")
+              : matcher.replaceAll("replacement");
+
+      assertThat(result).isEqualTo("foo---7");
+      assertThat(operationsFor(pattern))
+          .singleElement()
+          .satisfies(
+              event -> {
+                assertThat(event.operation()).isEqualTo(operation);
+                assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.LITERAL);
+                assertThat(event.auxiliaryStrategies())
+                    .containsExactly(
+                        new StrategyParticipation(
+                            MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER));
+              });
+    }
+  }
+
+  @Test
   void ordinaryReplacementLoopSuppressesNestedFindEvents() {
     Pattern.setDiagnostics(diagnostics);
     EnginePathOptions exactOnly =
