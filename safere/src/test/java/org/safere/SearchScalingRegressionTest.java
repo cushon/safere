@@ -1051,6 +1051,21 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void reverseAnchorSelectivityAvoidsIntermediateNoiseStalls() {
+    Pattern pattern = Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org");
+    String noise =
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. ".repeat(100);
+    String input = noise + "department/99@support.internal.org" + noise;
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isTrue());
+
+    assertThat(work)
+        .as("Selective reverse anchor must avoid scanning intermediate noise words")
+        .isLessThan(500);
+  }
+
+  @Test
   void reverseAnchorIsLinearAcrossFindIteration() {
     Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
     assertRepeatedFindWorkIsLinear(

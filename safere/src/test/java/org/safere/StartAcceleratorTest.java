@@ -551,6 +551,51 @@ class StartAcceleratorTest {
         .isEqualTo(34);
   }
 
+  @Test
+  void reverseAnchorSelectsMostSelectiveSuffixAnchor() {
+    Pattern pattern = Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org");
+    StartDescriptor desc = pattern.startDescriptor();
+    assertThat(desc).isInstanceOf(StartDescriptor.ReverseAnchor.class);
+    StartDescriptor.ReverseAnchor ra = (StartDescriptor.ReverseAnchor) desc;
+    assertThat(ra.anchorDescriptor()).isInstanceOf(StartDescriptor.Literal.class);
+    assertThat(((StartDescriptor.Literal) ra.anchorDescriptor()).prefix())
+        .isEqualTo("@support.internal.org");
+
+    String input = "noise prefix before department/99@support.internal.org trailing noise";
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.ReverseAnchor.class);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 0, false)).isEqualTo(20);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.ReverseAnchor.class);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 0))
+        .isEqualTo(20);
+  }
+
+  @Test
+  void reverseAnchorSelectsRarestInfixOverShortTail() {
+    Pattern pattern = Pattern.compile("[a-z]+/[0-9]+_SPECIAL_AUTH_TOKEN_[a-z]{1,3}");
+    StartDescriptor desc = pattern.startDescriptor();
+    assertThat(desc).isInstanceOf(StartDescriptor.ReverseAnchor.class);
+    StartDescriptor.ReverseAnchor ra = (StartDescriptor.ReverseAnchor) desc;
+    assertThat(ra.anchorDescriptor()).isInstanceOf(StartDescriptor.Literal.class);
+    assertThat(((StartDescriptor.Literal) ra.anchorDescriptor()).prefix())
+        .isEqualTo("_SPECIAL_AUTH_TOKEN_");
+  }
+
+  @Test
+  void reverseAnchorPreservesLeftmostFirstWithFalsePositives() {
+    Pattern pattern = Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org");
+    String input = "noise invalid/notdigit@support.internal.org valid/123@support.internal.org";
+    Matcher safereMatcher = pattern.matcher(input);
+    assertThat(safereMatcher.find()).isTrue();
+    java.util.regex.Matcher jdkMatcher =
+        java.util.regex.Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org").matcher(input);
+    assertThat(jdkMatcher.find()).isTrue();
+    assertThat(safereMatcher.start()).isEqualTo(jdkMatcher.start());
+    assertThat(safereMatcher.end()).isEqualTo(jdkMatcher.end());
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");

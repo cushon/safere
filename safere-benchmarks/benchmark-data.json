@@ -209,7 +209,7 @@
       "recipe": {
         "kind": "suffixToLength",
         "prefixUnit": "The quick brown fox jumps over the lazy dog. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. Sed cursus ante dapibus diam. ",
-        "suffix": "Contact support directly at department/alert99@support.internal.org for any system assistance.",
+        "suffix": "Contact support directly at department/99@support.internal.org for any system assistance.",
         "length": 4096
       },
       "shared": true

@@ -944,7 +944,9 @@ public final class Matcher implements MatchResult {
 
   private boolean prefixOrCharClassCannotMatch(int searchFrom) {
     StartDescriptor desc = parentPattern.startDescriptor();
-    if (desc instanceof StartDescriptor.Literal lit && !lit.prefixFoldCase() && lit.prefix() != null) {
+    if (desc instanceof StartDescriptor.Literal lit
+        && !lit.prefixFoldCase()
+        && lit.prefix() != null) {
       if (text != null) {
         if (!text.startsWith(lit.prefix(), searchFrom)) {
           if (WorkCounterConfig.ENABLED) {
@@ -957,7 +959,8 @@ public final class Matcher implements MatchResult {
           return true;
         }
       }
-    } else if (desc instanceof StartDescriptor.HasCharClassPrefix hcc && hcc.charClassPrefix() != null) {
+    } else if (desc instanceof StartDescriptor.HasCharClassPrefix hcc
+        && hcc.charClassPrefix() != null) {
       CharClassScanInfo cc = hcc.charClassPrefix();
       if (text != null) {
         if (searchFrom >= text.length()) {
@@ -998,7 +1001,8 @@ public final class Matcher implements MatchResult {
           return true;
         }
       }
-    } else if (desc instanceof StartDescriptor.CharClass cc && cc.anchoredCharClassPrefix() != null) {
+    } else if (desc instanceof StartDescriptor.CharClass cc
+        && cc.anchoredCharClassPrefix() != null) {
       CharClassScanInfo ccScan = cc.anchoredCharClassPrefix();
       if (text != null) {
         if (searchFrom >= text.length()) {

@@ -644,7 +644,12 @@ public final class Pattern implements Serializable {
       return null;
     }
 
-    for (int anchorIdx = re.nsub() - 1; anchorIdx > startIdx; anchorIdx--) {
+    int bestScore = 0;
+    StartDescriptor bestAnchorDesc = null;
+    Prog bestReverseProg = null;
+    int bestMinLength = 0;
+
+    for (int anchorIdx = startIdx + 1; anchorIdx < re.nsub(); anchorIdx++) {
       List<Regexp> tailSubs = re.subs.subList(anchorIdx, re.nsub());
       Regexp tail = tailSubs.size() == 1 ? tailSubs.getFirst() : Regexp.concat(tailSubs, 0);
 
@@ -656,7 +661,8 @@ public final class Pattern implements Serializable {
         continue;
       }
 
-      if (!isSelectiveReverseAnchor(anchorDesc)) {
+      int score = reverseAnchorSelectivityScore(anchorDesc);
+      if (score <= bestScore) {
         continue;
       }
 
@@ -680,32 +686,47 @@ public final class Pattern implements Serializable {
       int minTailLen = extractMinMatchLength(tail);
       int minLength = minPrefixLen + minTailLen;
 
-      return new StartDescriptor.ReverseAnchor(anchorDesc, reverseProg, minLength);
+      bestScore = score;
+      bestAnchorDesc = anchorDesc;
+      bestReverseProg = reverseProg;
+      bestMinLength = minLength;
+    }
+
+    if (bestAnchorDesc != null && bestReverseProg != null) {
+      return new StartDescriptor.ReverseAnchor(bestAnchorDesc, bestReverseProg, bestMinLength);
     }
 
     return null;
   }
 
-  private static boolean isSelectiveReverseAnchor(StartDescriptor desc) {
+  private static int reverseAnchorSelectivityScore(StartDescriptor desc) {
     if (desc == null) {
-      return false;
+      return 0;
     }
     return switch (desc) {
       case StartDescriptor.Literal lit -> {
         String prefix = lit.prefix();
         if (prefix == null || prefix.isEmpty()) {
-          yield false;
+          yield 0;
         }
-        if (prefix.length() >= 2) {
-          yield true;
+        if (prefix.length() < 2 && RarityOracle.byteRarity(prefix.charAt(0)) < 40) {
+          yield 0;
         }
-        char c = prefix.charAt(0);
-        yield RarityOracle.byteRarity(c) >= 40;
+        yield RarityOracle.literalSelectivityScore(prefix);
       }
-      case StartDescriptor.HasTeddyModel htm -> true;
-      case StartDescriptor.FixedOffset fo -> true;
-      default -> false;
+      case StartDescriptor.HasTeddyModel htm -> 80;
+      case StartDescriptor.FixedOffset fo -> {
+        if (fo.fixedOffsetLiteral() != null && fo.fixedOffsetLiteral().literal() != null) {
+          yield RarityOracle.literalSelectivityScore(fo.fixedOffsetLiteral().literal());
+        }
+        yield 40;
+      }
+      default -> 0;
     };
+  }
+
+  private static boolean isSelectiveReverseAnchor(StartDescriptor desc) {
+    return reverseAnchorSelectivityScore(desc) > 0;
   }
 
   private static boolean isSelectiveLeadingExpansionAnchor(StartDescriptor desc) {
@@ -880,11 +901,13 @@ public final class Pattern implements Serializable {
       return matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
     }
     if (prog.anchorStart()) {
-      if (startDescriptor instanceof StartDescriptor.Literal lit && lit.anchoredPrefixUtf8() != null) {
+      if (startDescriptor instanceof StartDescriptor.Literal lit
+          && lit.anchoredPrefixUtf8() != null) {
         if (!scanner.startsWith(lit.anchoredPrefixUtf8(), 0)) {
           return false;
         }
-      } else if (startDescriptor instanceof StartDescriptor.CharClass cc && cc.anchoredCharClassPrefix() != null) {
+      } else if (startDescriptor instanceof StartDescriptor.CharClass cc
+          && cc.anchoredCharClassPrefix() != null) {
         if (scanner.length() == 0) {
           return false;
         }
@@ -943,13 +966,15 @@ public final class Pattern implements Serializable {
       return matched;
     }
     if (prog.anchorStart()) {
-      if (startDescriptor instanceof StartDescriptor.Literal lit && lit.anchoredPrefixUtf8() != null) {
+      if (startDescriptor instanceof StartDescriptor.Literal lit
+          && lit.anchoredPrefixUtf8() != null) {
         if (!scanner.startsWith(lit.anchoredPrefixUtf8(), 0)) {
           diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.LITERAL);
           return false;
         }
-      } else if (startDescriptor instanceof StartDescriptor.CharClass cc && cc.anchoredCharClassPrefix() != null) {
+      } else if (startDescriptor instanceof StartDescriptor.CharClass cc
+          && cc.anchoredCharClassPrefix() != null) {
         if (scanner.length() == 0) {
           diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);

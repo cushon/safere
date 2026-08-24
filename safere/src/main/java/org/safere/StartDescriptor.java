@@ -72,8 +72,7 @@ sealed interface StartDescriptor
       StartDescriptor innerDescriptor)
       implements StartDescriptor {}
 
-  record ReverseAnchor(
-      StartDescriptor anchorDescriptor, Prog reversePrefixProg, int minLength)
+  record ReverseAnchor(StartDescriptor anchorDescriptor, Prog reversePrefixProg, int minLength)
       implements StartDescriptor {}
 
   enum None implements StartDescriptor {
