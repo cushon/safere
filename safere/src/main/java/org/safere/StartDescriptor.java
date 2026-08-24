@@ -22,10 +22,17 @@ record StartDescriptor(
     CharClassScanInfo anchoredCharClassPrefix,
     MultiLiteralInfo multiLiteral,
     TeddyModel teddyModel,
+    LeadingExpansion leadingExpansion,
     ClassHashChain classHashChain) {
 
+  record LeadingExpansion(
+      CharClassScanInfo leadingClass,
+      int minRepetition,
+      int maxRepetition,
+      StartDescriptor innerDescriptor) {}
+
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
 
   StartDescriptor(
       String prefix,
@@ -36,7 +43,8 @@ record StartDescriptor(
       String anchoredPrefix,
       CharClassScanInfo anchoredCharClassPrefix,
       MultiLiteralInfo multiLiteral,
-      TeddyModel teddyModel) {
+      TeddyModel teddyModel,
+      LeadingExpansion leadingExpansion) {
     this(
         prefix,
         prefixFoldCase,
@@ -47,6 +55,7 @@ record StartDescriptor(
         anchoredCharClassPrefix,
         multiLiteral,
         teddyModel,
+        leadingExpansion,
         compileClassHashChain(prefix, prefixFoldCase));
   }
 
@@ -60,6 +69,7 @@ record StartDescriptor(
         || charClassPrefix != null
         || lineAnchor != null
         || multiLiteral != null
-        || teddyModel != null;
+        || teddyModel != null
+        || leadingExpansion != null;
   }
 }

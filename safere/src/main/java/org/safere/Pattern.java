@@ -142,6 +142,7 @@ public final class Pattern implements Serializable {
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
   private final transient MultiLiteralInfo multiLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
+  private final transient StartDescriptor startDescriptor;
   private final transient StringStartAccelerator stringStartAccelerator;
   private final transient EnginePathOptions enginePathOptions;
   private final transient Matcher.PreparedMatchRunner defaultPreparedMatchRunner;
@@ -316,6 +317,7 @@ public final class Pattern implements Serializable {
     this.anchoredCharClassPrefix = startDescriptor.anchoredCharClassPrefix();
     this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
     this.multiLiteral = startDescriptor.multiLiteral();
+    this.startDescriptor = startDescriptor != null ? startDescriptor : StartDescriptor.NONE;
     this.utf8StartAccelerator =
         Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
     this.stringStartAccelerator =
@@ -480,6 +482,11 @@ public final class Pattern implements Serializable {
   }
 
   private static StartDescriptor extractStartDescriptor(Regexp metadataAst) {
+    return extractStartDescriptor(metadataAst, true);
+  }
+
+  private static StartDescriptor extractStartDescriptor(
+      Regexp metadataAst, boolean allowLeadingExpansion) {
     PrefixResult prefixResult = extractPrefix(metadataAst);
     String prefix = prefixResult.prefix();
     boolean prefixFoldCase = prefixResult.foldCase();
@@ -516,6 +523,17 @@ public final class Pattern implements Serializable {
         anchoredPrefix == null && anchoredCandidate != null
             ? extractCharClassPrefix(anchoredCandidate)
             : null;
+    StartDescriptor.LeadingExpansion leadingExpansion =
+        (allowLeadingExpansion
+                && prefix == null
+                && fixedOffsetLiteral == null
+                && teddyModel == null)
+            ? extractLeadingExpansion(metadataAst)
+            : null;
+    if (leadingExpansion != null) {
+      ccPrefix = null;
+      startAcceleration = null;
+    }
     if (prefix == null
         && fixedOffsetLiteral == null
         && ccPrefix == null
@@ -523,7 +541,8 @@ public final class Pattern implements Serializable {
         && startAcceleration == null
         && anchoredPrefix == null
         && anchoredCharClassPrefix == null
-        && teddyModel == null) {
+        && teddyModel == null
+        && leadingExpansion == null) {
       return StartDescriptor.NONE;
     }
     return new StartDescriptor(
@@ -535,7 +554,91 @@ public final class Pattern implements Serializable {
         anchoredPrefix,
         anchoredCharClassPrefix,
         multiLiteral,
-        teddyModel);
+        teddyModel,
+        leadingExpansion);
+  }
+
+  private static StartDescriptor.LeadingExpansion extractLeadingExpansion(Regexp re) {
+    if (re == null) {
+      return null;
+    }
+    re = unwrapCaptures(re);
+    if (re == null || re.op != RegexpOp.CONCAT || re.nsub() < 2) {
+      return null;
+    }
+
+    int idx = 0;
+    while (idx < re.nsub() && isLeadingZeroWidth(re.subs.get(idx))) {
+      idx++;
+    }
+    if (idx >= re.nsub() - 1) {
+      return null;
+    }
+
+    Regexp first = unwrapCaptures(re.subs.get(idx));
+    if (first == null) {
+      return null;
+    }
+
+    int minRepetition;
+    int maxRepetition;
+    Regexp repeated;
+    if (first.op == RegexpOp.STAR) {
+      minRepetition = 0;
+      maxRepetition = Integer.MAX_VALUE;
+      repeated = unwrapCaptures(first.sub());
+    } else if (first.op == RegexpOp.PLUS) {
+      minRepetition = 1;
+      maxRepetition = Integer.MAX_VALUE;
+      repeated = unwrapCaptures(first.sub());
+    } else if (first.op == RegexpOp.REPEAT) {
+      minRepetition = first.min;
+      maxRepetition = first.max == -1 ? Integer.MAX_VALUE : first.max;
+      repeated = unwrapCaptures(first.sub());
+    } else {
+      return null;
+    }
+
+    if (repeated == null || repeated.op == RegexpOp.ANY_CHAR || repeated.op == RegexpOp.ANY_BYTE) {
+      return null;
+    }
+
+    CharClassScanInfo leadingClass;
+    if (repeated.op == RegexpOp.CHAR_CLASS
+        && repeated.charClass != null
+        && !repeated.charClass.isEmpty()) {
+      leadingClass = CharClassScanInfo.fromCharClass(repeated.charClass);
+    } else if (repeated.op == RegexpOp.LITERAL) {
+      leadingClass =
+          CharClassScanInfo.fromCharClass(literalCharClass(repeated.rune, repeated.flags));
+    } else {
+      return null;
+    }
+
+    if (leadingClass == null) {
+      return null;
+    }
+
+    int numRunes = 0;
+    int[] ranges = leadingClass.ranges();
+    if (ranges != null) {
+      for (int i = 0; i < ranges.length; i += 2) {
+        numRunes += (ranges[i + 1] - ranges[i] + 1);
+      }
+    }
+    if (numRunes > 150_000) {
+      return null;
+    }
+
+    List<Regexp> tailSubs = re.subs.subList(idx + 1, re.nsub());
+    Regexp tail = tailSubs.size() == 1 ? tailSubs.getFirst() : Regexp.concat(tailSubs, 0);
+
+    StartDescriptor inner = extractStartDescriptor(tail, false);
+    if (inner == null || !inner.hasStartAcceleration() || inner.leadingExpansion() != null) {
+      return null;
+    }
+
+    return new StartDescriptor.LeadingExpansion(leadingClass, minRepetition, maxRepetition, inner);
   }
 
   /**
@@ -1347,6 +1450,10 @@ public final class Pattern implements Serializable {
    */
   CharClassScanInfo charClassPrefix() {
     return charClassPrefix;
+  }
+
+  StartDescriptor startDescriptor() {
+    return startDescriptor;
   }
 
   String anchoredPrefix() {
@@ -3302,9 +3409,13 @@ public final class Pattern implements Serializable {
         endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
     String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
     CharClassScanInfo ccPrefix = startDescriptor != null ? startDescriptor.charClassPrefix() : null;
+    boolean hasLeadingExpansion =
+        startDescriptor != null && startDescriptor.leadingExpansion() != null;
     String suffixStr = endAnchoredSuffix != null ? endAnchoredSuffix.suffix() : null;
     String requiredLiteral =
-        !anchorStart ? extractRequiredLiteral(metadataAst, prefix, suffixStr) : null;
+        !anchorStart && !hasLeadingExpansion
+            ? extractRequiredLiteral(metadataAst, prefix, suffixStr)
+            : null;
     CharClassScanInfo requiredMatchClass = null;
     if (!anchorStart && prefix == null && endAnchoredCharClass == null) {
       if (ccPrefix == null) {

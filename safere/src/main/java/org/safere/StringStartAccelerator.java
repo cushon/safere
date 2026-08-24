@@ -37,6 +37,17 @@ sealed interface StringStartAccelerator {
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {
       return new LineAnchor(descriptor.lineAnchor());
     }
+    if (descriptor.leadingExpansion() != null) {
+      StringStartAccelerator inner =
+          create(descriptor.leadingExpansion().innerDescriptor(), hasWordBoundary);
+      if (inner != null) {
+        return new LeadingExpansion(
+            descriptor.leadingExpansion().leadingClass(),
+            descriptor.leadingExpansion().minRepetition(),
+            descriptor.leadingExpansion().maxRepetition(),
+            inner);
+      }
+    }
     return null;
   }
 
@@ -57,6 +68,7 @@ sealed interface StringStartAccelerator {
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
+      case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
     };
   }
 
@@ -77,10 +89,12 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
+      int idx = text.indexOf(prefix, fromIndex);
       if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record(Math.max(0, text.length() - fromIndex));
+        int scanned = idx >= 0 ? idx - fromIndex + prefix.length() : text.length() - fromIndex;
+        WorkCounter.record(Math.max(0, scanned));
       }
-      return text.indexOf(prefix, fromIndex);
+      return idx;
     }
   }
 
@@ -332,6 +346,53 @@ sealed interface StringStartAccelerator {
           || prev == '\u2028'
           || prev == '\u2029'
           || (prev == '\r' && text.charAt(pos) != '\n');
+    }
+  }
+
+  record LeadingExpansion(
+      CharClassScanInfo leadingClass,
+      int minRepetition,
+      int maxRepetition,
+      StringStartAccelerator inner)
+      implements StringStartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return new AcceleratorPolicy(16, 4, false, inner.policy().strategy());
+    }
+
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
+      int searchPos = Math.max(0, fromIndex);
+      int textLen = text.length();
+      while (searchPos < textLen) {
+        int innerMatch =
+            StringStartAccelerator.findNextCandidate(inner, text, searchPos, unixLines);
+        if (innerMatch < 0) {
+          return -1;
+        }
+        int start = innerMatch;
+        int count = 0;
+        while (start > fromIndex) {
+          int cp = text.codePointBefore(start);
+          int cpStart = start - Character.charCount(cp);
+          if (cpStart < fromIndex) {
+            break;
+          }
+          if (!leadingClass.contains(cp)) {
+            break;
+          }
+          if (count + 1 > maxRepetition) {
+            break;
+          }
+          count++;
+          start = cpStart;
+        }
+        if (count >= minRepetition) {
+          return start;
+        }
+        searchPos = innerMatch + 1;
+      }
+      return -1;
     }
   }
 }
