@@ -261,5 +261,113 @@ final class ByteVectorScan {
     return -1;
   }
 
+  static int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int[] anchorRanges,
+      int minLength,
+      int start) {
+    return indexOfMultiLiteral(
+        bytes,
+        offset,
+        length,
+        literals,
+        anchorChars,
+        anchorOffsets,
+        anchorRanges,
+        minLength,
+        null,
+        start);
+  }
+
+  static int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int[] anchorRanges,
+      int minLength,
+      TeddyModel teddyModel,
+      int start) {
+    int numLits = literals.length;
+    if (numLits == 0 || length < minLength) {
+      return -1;
+    }
+    int pos = Math.max(0, start);
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
+    int observedBytes = 0;
+    long estimatedVerificationBytes = 0;
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen;
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
+      VectorMask<Byte> matchMask = matches(inputVec, anchorRanges);
+
+      if (teddyModel != null && MultiLiteralSelectionPolicy.shouldObserve(observedBytes)) {
+        observedBytes += vectorLen;
+        estimatedVerificationBytes += (long) matchMask.trueCount() * minLength;
+        if (MultiLiteralSelectionPolicy.prefersTeddy(estimatedVerificationBytes, observedBytes)) {
+          return TeddyVectorScan.indexOfTeddyUtf8(bytes, offset, length, teddyModel, pos);
+        }
+      }
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int matchIndex = pos + bit;
+          for (int i = 0; i < numLits; i++) {
+            int candidatePos = matchIndex - anchorOffsets[i];
+            String lit = literals[i];
+            if (candidatePos >= start
+                && candidatePos + lit.length() <= length
+                && (bytes[offset + matchIndex] & 0xFF) == (anchorChars[i] & 0xFF)) {
+              if (WorkCounterConfig.ENABLED) {
+                WorkCounter.record(lit.length());
+              }
+              if (Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
+                return candidatePos;
+              }
+              verificationWork += lit.length();
+              if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+                return VectorScanProvider.UNSUPPORTED;
+              }
+            }
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int scalarLimit = length - minLength;
+    for (; pos <= scalarLimit; pos++) {
+      int value = bytes[offset + pos] & 0xFF;
+      for (int i = 0; i < numLits; i++) {
+        String lit = literals[i];
+        if (value == anchorChars[i] && pos + lit.length() <= length) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(lit.length());
+          }
+          if (Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
+            return pos;
+          }
+        }
+      }
+      verificationWork += minLength;
+      if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+        return VectorScanProvider.UNSUPPORTED;
+      }
+    }
+    return -1;
+  }
+
   private ByteVectorScan() {}
 }
