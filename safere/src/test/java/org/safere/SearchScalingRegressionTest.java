@@ -1066,6 +1066,19 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void disjointRareInfixRejectsWithoutScanningPrefixNoise() {
+    Pattern pattern = Pattern.compile("GET\\s+[a-z0-9/]+/[a-f0-9]{32}/rare_admin_token");
+    String noise = "GET /index.html HTTP/1.1\nGET /static/style.css HTTP/1.1\n".repeat(500);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(noise).find()).isFalse());
+
+    assertThat(work)
+        .as("Disjoint rare infix prefilter must reject without entering DFA on GET prefixes")
+        .isLessThan(200);
+  }
+
+  @Test
   void reverseAnchorIsLinearAcrossFindIteration() {
     Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
     assertRepeatedFindWorkIsLinear(

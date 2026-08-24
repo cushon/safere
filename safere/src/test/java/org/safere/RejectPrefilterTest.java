@@ -358,4 +358,32 @@ class RejectPrefilterTest {
     // "abc" is already the start prefix, so requiredLiteral should not duplicate "abc"
     assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
   }
+
+  @Test
+  void rejectPrefilterSubsumedByMatchingReverseAnchor() {
+    Pattern p = Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org");
+    assertThat(p.startDescriptor()).isInstanceOf(StartDescriptor.ReverseAnchor.class);
+    assertThat(p.rejectPrefilter()).isNull();
+    assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
+  }
+
+  @Test
+  void rejectPrefilterSubsumedByMatchingLeadingExpansion() {
+    Pattern p = Pattern.compile("\\w+@gmail\\.com");
+    assertThat(p.startDescriptor()).isInstanceOf(StartDescriptor.LeadingExpansion.class);
+    assertThat(p.rejectPrefilter()).isNull();
+    assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
+  }
+
+  @Test
+  void rejectPrefilterRetainedWhenInfixIsDisjointAndRarer() {
+    Pattern p = Pattern.compile("GET\\s+[a-z0-9/]+/[a-f0-9]{32}/rare_admin_token");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("GET");
+    assertThat(p.rejectDescriptor().requiredLiteral()).isEqualTo("/rare_admin_token");
+    assertThat(p.rejectPrefilter()).isNotNull();
+
+    String noise = "GET /index.html HTTP/1.1\n".repeat(100);
+    assertThat(p.rejectPrefilter().canReject(null, noise, 0, EnginePathOptions.allEnabled()))
+        .isTrue();
+  }
 }

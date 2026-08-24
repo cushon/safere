@@ -3399,19 +3399,16 @@ public final class Pattern implements Serializable {
     SuffixInfo endAnchoredSuffix = extractEndAnchoredSuffix(metadataAst, flags);
     EndAnchoredCharClassInfo endAnchoredCharClass =
         endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
-    String prefix = startDescriptor instanceof StartDescriptor.Literal lit ? lit.prefix() : null;
+    String startAnchorNeedle = extractStartAnchorNeedle(startDescriptor);
     CharClassScanInfo ccPrefix =
         startDescriptor instanceof StartDescriptor.HasCharClassPrefix hcc
             ? hcc.charClassPrefix()
             : null;
-    boolean hasLeadingExpansion = startDescriptor instanceof StartDescriptor.LeadingExpansion;
     String suffixStr = endAnchoredSuffix != null ? endAnchoredSuffix.suffix() : null;
     String requiredLiteral =
-        !anchorStart && !hasLeadingExpansion
-            ? extractRequiredLiteral(metadataAst, prefix, suffixStr)
-            : null;
+        !anchorStart ? extractRequiredLiteral(metadataAst, startAnchorNeedle, suffixStr) : null;
     CharClassScanInfo requiredMatchClass = null;
-    if (!anchorStart && prefix == null && endAnchoredCharClass == null) {
+    if (!anchorStart && startAnchorNeedle == null && endAnchoredCharClass == null) {
       if (ccPrefix == null) {
         requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
       } else {
@@ -3432,7 +3429,7 @@ public final class Pattern implements Serializable {
       }
     }
     DisjointRequiredLiterals disjointRequiredLiterals =
-        (!anchorStart && prefix == null && requiredLiteral == null)
+        (!anchorStart && startAnchorNeedle == null && requiredLiteral == null)
             ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
             : null;
     if (requiredLiteral == null
@@ -3696,8 +3693,13 @@ public final class Pattern implements Serializable {
               && node.runes != null
               && node.runes.length >= 2) {
             String candidate = new String(node.runes, 0, node.runes.length);
-            if ((excludePrefix == null || !candidate.equals(excludePrefix))
-                && (excludeSuffix == null || !candidate.equals(excludeSuffix))) {
+            boolean isSubsumedByPrefix =
+                excludePrefix != null
+                    && (excludePrefix.contains(candidate) || candidate.contains(excludePrefix));
+            boolean isSubsumedBySuffix =
+                excludeSuffix != null
+                    && (excludeSuffix.contains(candidate) || candidate.contains(excludeSuffix));
+            if (!isSubsumedByPrefix && !isSubsumedBySuffix) {
               int candidateScore = RarityOracle.literalSelectivityScore(candidate);
               if (best == null || candidateScore > bestScore) {
                 best = candidate;
@@ -3710,6 +3712,38 @@ public final class Pattern implements Serializable {
       }
     }
     return best;
+  }
+
+  private static String extractStartAnchorNeedle(StartDescriptor desc) {
+    if (desc == null) {
+      return null;
+    }
+    return switch (desc) {
+      case StartDescriptor.Literal lit -> lit.prefix();
+      case StartDescriptor.ReverseAnchor ra -> {
+        if (ra.anchorDescriptor() instanceof StartDescriptor.Literal lit) {
+          yield lit.prefix();
+        }
+        if (ra.anchorDescriptor() instanceof StartDescriptor.FixedOffset fo
+            && fo.fixedOffsetLiteral() != null) {
+          yield fo.fixedOffsetLiteral().literal();
+        }
+        yield null;
+      }
+      case StartDescriptor.LeadingExpansion le -> {
+        if (le.innerDescriptor() instanceof StartDescriptor.Literal lit) {
+          yield lit.prefix();
+        }
+        if (le.innerDescriptor() instanceof StartDescriptor.FixedOffset fo
+            && fo.fixedOffsetLiteral() != null) {
+          yield fo.fixedOffsetLiteral().literal();
+        }
+        yield null;
+      }
+      case StartDescriptor.FixedOffset fo when fo.fixedOffsetLiteral() != null ->
+          fo.fixedOffsetLiteral().literal();
+      default -> null;
+    };
   }
 
   /**
