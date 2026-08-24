@@ -31,12 +31,20 @@ final class FindSequenceFuzzer {
     assertFindSequence("(?:a{2,}|(?:.|\\B){1,2}){1,2}", "baax");
   }
 
+  @Test
+  void leadingExpansionDoesNotCrossSplitSurrogateFindStart() {
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip("[\\x{1F600}]+b", 0);
+
+    pattern.matcher("😀bX😀b").find(1);
+  }
+
   @FuzzTest(maxDuration = "30s")
   void sequence(FuzzedDataProvider data) {
     String regex;
     int flags;
     String input;
-    switch (data.consumeInt(0, 6)) {
+    boolean splitSurrogateFindStart = false;
+    switch (data.consumeInt(0, 7)) {
       case 0 -> {
         regex = nestedCapturingGroups(data.consumeInt(0, 512)) + "*";
         flags = 0;
@@ -75,11 +83,21 @@ final class FindSequenceFuzzer {
         flags = 0;
         input = data.consumeBoolean() ? "baax" : data.consumeString(16);
       }
+      case 7 -> {
+        String quantifier = data.pickValue(List.of("*", "+", "{1,2}"));
+        regex = "[\\x{1F600}]" + quantifier + "b";
+        flags = 0;
+        input = "😀b" + data.consumeString(16) + "😀b";
+        splitSurrogateFindStart = true;
+      }
       default -> throw new AssertionError();
     }
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
     if (pattern == null) {
       return;
+    }
+    if (splitSurrogateFindStart) {
+      pattern.matcher(input).find(1);
     }
 
     FuzzSupport.MatcherPair findWalker = pattern.matcher(input);
