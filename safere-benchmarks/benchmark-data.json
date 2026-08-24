@@ -205,7 +205,27 @@
       "shared": true
     },
     {
+      "id": "crossEngine.RegexBenchmark.emailPathFind.input",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "The quick brown fox jumps over the lazy dog. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. Sed cursus ante dapibus diam. ",
+        "suffix": "Contact support directly at department/alert99@support.internal.org for any system assistance.",
+        "length": 4096
+      },
+      "shared": true
+    },
+    {
       "id": "crossEngine.RegexBenchmark.tokenSuffixFind.input",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "timestamp=2026-08-24T12:00:00Z level=INFO module=engine message=\"processing request packet chunk 0x4f2a\"\n",
+        "suffix": "target_service_node=node987-staging status=READY",
+        "length": 4096
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.RegexBenchmark.serviceNodeFind.input",
       "recipe": {
         "kind": "suffixToLength",
         "prefixUnit": "timestamp=2026-08-24T12:00:00Z level=INFO module=engine message=\"processing request packet chunk 0x4f2a\"\n",
@@ -2705,6 +2725,24 @@
       }
     },
     {
+      "id": "RegexBenchmark.emailPathFind",
+      "operation": "find",
+      "patterns": [
+        "[a-z]+/[0-9]+@support\\.internal\\.org"
+      ],
+      "inputs": [
+        "crossEngine.RegexBenchmark.emailPathFind.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "RegexBenchmark.tokenSuffixFind",
       "operation": "find",
       "patterns": [
@@ -2712,6 +2750,24 @@
       ],
       "inputs": [
         "crossEngine.RegexBenchmark.tokenSuffixFind.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "RegexBenchmark.serviceNodeFind",
+      "operation": "find",
+      "patterns": [
+        "[a-z]+[0-9]+-staging"
+      ],
+      "inputs": [
+        "crossEngine.RegexBenchmark.serviceNodeFind.input"
       ],
       "resultConsumption": "boolean",
       "measurement": {
