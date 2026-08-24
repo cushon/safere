@@ -1357,43 +1357,6 @@
       "shared": true
     },
     {
-      "id": "utf8.hashChain.caseInsensitiveKeyword.match.{size}",
-      "axes": {
-        "size": [
-          64,
-          256,
-          512,
-          599,
-          600,
-          1024
-        ]
-      },
-      "recipe": {
-        "kind": "suffixToLength",
-        "prefixUnit": "other_random_words ",
-        "suffix": "KEYWORD_TO_FIND",
-        "length": "{size}"
-      }
-    },
-    {
-      "id": "utf8.hashChain.caseInsensitiveKeyword.noMatch.{size}",
-      "axes": {
-        "size": [
-          64,
-          256,
-          512,
-          599,
-          600,
-          1024
-        ]
-      },
-      "recipe": {
-        "kind": "repeatToLength",
-        "unit": "other_random_words ",
-        "length": "{size}"
-      }
-    },
-    {
       "id": "realWorldRegex.boundedNameMatch.match.{size}",
       "axes": {
         "size": [
@@ -3396,83 +3359,6 @@
           10000,
           100000
         ]
-      },
-      "requirements": []
-    },
-    {
-      "id": "Utf8HashChainBenchmark.caseInsensitiveKeywordFind.{matchLabel}.{size}",
-      "operation": "find",
-      "patterns": [
-        "(?i)keyword_to_find"
-      ],
-      "inputs": [
-        "utf8.hashChain.caseInsensitiveKeyword.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
-      "inputRepresentationReason": "Measures the short-input hash-chain path when UTF-8 bytes already exist.",
-      "resultConsumption": "boolean",
-      "measurement": {
-        "mode": "averageTime",
-        "timingUnit": "nanoseconds",
-        "constraints": [
-          "prematerializedInput"
-        ]
-      },
-      "axes": {
-        "matchLabel": [
-          "match",
-          "noMatch"
-        ],
-        "size": [
-          64,
-          256,
-          512,
-          599,
-          600,
-          1024
-        ]
-      },
-      "requirements": []
-    },
-    {
-      "id": "Utf8HashChainBenchmark.caseInsensitiveKeywordReplaceAll.{matchLabel}.{size}",
-      "operation": "replaceAll",
-      "patterns": [
-        "(?i)keyword_to_find"
-      ],
-      "inputs": [
-        "utf8.hashChain.caseInsensitiveKeyword.{matchLabel}.{size}"
-      ],
-      "inputRepresentations": [
-        "preexistingUtf8"
-      ],
-      "inputRepresentationReason": "Measures the short-input hash-chain path when UTF-8 bytes already exist.",
-      "resultConsumption": "string",
-      "measurement": {
-        "mode": "averageTime",
-        "timingUnit": "nanoseconds",
-        "constraints": [
-          "prematerializedInput"
-        ]
-      },
-      "axes": {
-        "matchLabel": [
-          "match",
-          "noMatch"
-        ],
-        "size": [
-          64,
-          256,
-          512,
-          599,
-          600,
-          1024
-        ]
-      },
-      "arguments": {
-        "replacement": ""
       },
       "requirements": []
     },
