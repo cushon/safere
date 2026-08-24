@@ -29,16 +29,18 @@ record MatchDescriptor(
     CharClassScanInfo singleCharClass,
     KeywordAlternation keywordAlternation,
     CharClassMatchInfo charClassMatch,
-    int minMatchLength) {
+    int minMatchLength,
+    ShiftDfa shiftDfa) {
 
-  static final MatchDescriptor NONE = new MatchDescriptor(null, false, null, null, null, 0);
+  static final MatchDescriptor NONE = new MatchDescriptor(null, false, null, null, null, 0, null);
 
   boolean hasFastPath() {
     return literalMatch != null
         || singleCharClass != null
         || keywordAlternation != null
         || charClassMatch != null
-        || minMatchLength > 0;
+        || minMatchLength > 0
+        || shiftDfa != null;
   }
 
   boolean hasFindFastPath() {

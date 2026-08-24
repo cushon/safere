@@ -4540,6 +4540,7 @@ public final class Matcher implements MatchResult {
       permits LiteralPreparedRunner,
           SingleCharClassPreparedRunner,
           KeywordAlternationPreparedRunner,
+          ShiftDfaPreparedRunner,
           OnePassAnchoredPreparedRunner,
           FallbackPreparedRunner {
     boolean find(Matcher matcher, boolean regionActive);
@@ -4856,6 +4857,71 @@ public final class Matcher implements MatchResult {
     }
   }
 
+  static final class ShiftDfaPreparedRunner implements PreparedMatchRunner {
+    private final ShiftDfa shiftDfa;
+
+    ShiftDfaPreparedRunner(ShiftDfa shiftDfa) {
+      this.shiftDfa = shiftDfa;
+    }
+
+    @Override
+    public boolean find(Matcher matcher, boolean regionActive) {
+      return matcher.doFindCore(regionActive);
+    }
+
+    @Override
+    public boolean matches(Matcher matcher) {
+      InputScanner scanner = matcher.activeScanner();
+      int len = scanner.length();
+      if (matcher.regionStart != 0
+          || matcher.regionEnd != len
+          || matcher.transparentBounds
+          || !matcher.anchoringBounds) {
+        return matcher.matchesCore();
+      }
+      matcher.capturesResolved = true;
+      boolean matched;
+      if (matcher.text != null) {
+        matched = shiftDfa.matches(matcher.text, 0, len);
+      } else if (scanner instanceof Utf8InputScanner utf8Scanner) {
+        matched = shiftDfa.matches(utf8Scanner, 0, len);
+      } else {
+        return matcher.matchesCore();
+      }
+      matcher.diagnosticBoundary(MatchStrategy.SHIFT_DFA);
+      if (matched) {
+        return matcher.applyDeferredMatchResult(0, len, 1, true, true);
+      }
+      return matcher.applyFailedMatchResult();
+    }
+
+    @Override
+    public boolean lookingAt(Matcher matcher) {
+      InputScanner scanner = matcher.activeScanner();
+      int len = scanner.length();
+      if (matcher.regionStart != 0
+          || matcher.regionEnd != len
+          || matcher.transparentBounds
+          || !matcher.anchoringBounds) {
+        return matcher.lookingAtCore();
+      }
+      matcher.capturesResolved = true;
+      int matchEnd;
+      if (matcher.text != null) {
+        matchEnd = shiftDfa.lookingAt(matcher.text, 0, len);
+      } else if (scanner instanceof Utf8InputScanner utf8Scanner) {
+        matchEnd = shiftDfa.lookingAt(utf8Scanner, 0, len);
+      } else {
+        return matcher.lookingAtCore();
+      }
+      matcher.diagnosticBoundary(MatchStrategy.SHIFT_DFA);
+      if (matchEnd >= 0) {
+        return matcher.applyDeferredMatchResult(0, matchEnd, 1, true, true);
+      }
+      return matcher.applyFailedMatchResult();
+    }
+  }
+
   static final class OnePassAnchoredPreparedRunner implements PreparedMatchRunner {
     private final int numCaptures;
 
@@ -4921,7 +4987,10 @@ public final class Matcher implements MatchResult {
       matcher.capturesResolved = true;
       Pattern pattern = matcher.parentPattern;
       Prog prog = pattern.prog();
-      if (pattern.canOnePassPrimary() && !prog.hasGraphemeSemantics()) {
+      if (pattern.canOnePassPrimary()
+          && !prog.hasGraphemeSemantics()
+          && !prog.anchorEnd()
+          && !prog.dollarAnchorEnd()) {
         matcher.diagnosticBoundary(MatchStrategy.ONE_PASS);
         if (pattern.numGroups() > 0) {
           matcher.diagnosticCapture(MatchStrategy.ONE_PASS);

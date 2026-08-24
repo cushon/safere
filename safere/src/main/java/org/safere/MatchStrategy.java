@@ -11,6 +11,7 @@ public enum MatchStrategy {
   LITERAL,
   CHARACTER_CLASS,
   KEYWORD,
+  SHIFT_DFA,
   ONE_PASS,
   DFA,
   BIT_STATE,

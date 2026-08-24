@@ -384,6 +384,55 @@ class EnginePathEquivalenceTest {
     assertEquivalent(regex, input, forcedDfa);
   }
 
+  @Test
+  @DisplayName("Shift DFA matches and lookingAt equivalent to canonical engine")
+  void shiftDfaEquivalence() {
+    EnginePathOptions forcedShift =
+        EnginePathOptions.builder()
+            .shiftDfa(true)
+            .dfa(false)
+            .onePass(false)
+            .bitState(false)
+            .build();
+
+    EnginePathOptions disabledShift = EnginePathOptions.builder().shiftDfa(false).build();
+
+    String[] patterns = {
+      "true|false",
+      "null",
+      "[0-9]{1,4}",
+      "[a-zA-Z_][a-zA-Z0-9_]*",
+      "[0-9]{4}-[0-9]{2}",
+      "[\\x00-\\x21\\x23-\\x7F]*\"",
+      "abc|abd|xyz"
+    };
+
+    String[] inputs = {
+      "true",
+      "false",
+      "null",
+      "1234",
+      "99",
+      "_identifier123",
+      "2026-08",
+      "some_text\"",
+      "abc",
+      "xyz",
+      "mismatch",
+      "",
+      "12345",
+      "truee",
+      "2026-8"
+    };
+
+    for (String pattern : patterns) {
+      for (String input : inputs) {
+        assertEquivalent(pattern, input, forcedShift);
+        assertEquivalent(pattern, input, disabledShift);
+      }
+    }
+  }
+
   private static MatchTrace operationTrace(Matcher matcher, Operation operation) {
     boolean matched =
         switch (operation) {
