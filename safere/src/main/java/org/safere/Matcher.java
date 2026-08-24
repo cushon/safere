@@ -2891,6 +2891,24 @@ public final class Matcher implements MatchResult {
   private String replaceImpl(String replacement, int limit) {
     Objects.requireNonNull(replacement, "replacement");
     reset();
+    if (!parentPattern.prog().anchorStart()) {
+      RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+      if (rejectPrefilter != null && text != null) {
+        InputScanner scanner = activeScanner();
+        EnginePathOptions options = enginePathOptions();
+        MatchStrategy rejectionStrategy =
+            rejectPrefilter instanceof RejectPrefilter.Composite composite
+                ? composite.rejectionStrategy(scanner, text, searchFrom, options)
+                : rejectPrefilter.canReject(scanner, text, searchFrom, options)
+                    ? rejectPrefilter.strategy()
+                    : null;
+        if (rejectionStrategy != null) {
+          diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+          diagnosticBoundary(rejectionStrategy);
+          return text;
+        }
+      }
+    }
     LazyTemplate template = new LazyTemplate(replacement, groupCount());
     String literalResult = literalReplaceFastPath(template, limit);
     if (literalResult != null) {
@@ -4436,6 +4454,14 @@ public final class Matcher implements MatchResult {
   }
 
   int findSplitPositions(int limit, SplitBuffer buffer) {
+    if (!parentPattern.prog().anchorStart()) {
+      RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+      if (rejectPrefilter != null && text != null) {
+        if (rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())) {
+          return 0;
+        }
+      }
+    }
     int last = 0;
     int searchFrom = 0;
     int textLen = text.length();
