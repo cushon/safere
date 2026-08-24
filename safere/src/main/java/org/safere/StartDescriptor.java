@@ -22,7 +22,8 @@ record StartDescriptor(
     CharClassScanInfo anchoredCharClassPrefix,
     MultiLiteralInfo multiLiteral,
     TeddyModel teddyModel,
-    LeadingExpansion leadingExpansion) {
+    LeadingExpansion leadingExpansion,
+    ReverseAnchor reverseAnchor) {
 
   record LeadingExpansion(
       CharClassScanInfo leadingClass,
@@ -30,27 +31,10 @@ record StartDescriptor(
       int maxRepetition,
       StartDescriptor innerDescriptor) {}
 
-  static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null);
+  record ReverseAnchor(StartDescriptor anchorDescriptor, Prog reversePrefixProg, int minLength) {}
 
-  StartDescriptor(
-      String prefix,
-      boolean prefixFoldCase,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      CharClassScanInfo charClassPrefix,
-      StartAcceleration lineAnchor) {
-    this(
-        prefix,
-        prefixFoldCase,
-        fixedOffsetLiteral,
-        charClassPrefix,
-        lineAnchor,
-        null,
-        null,
-        null,
-        null,
-        null);
-  }
+  static final StartDescriptor NONE =
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
 
   boolean hasStartAcceleration() {
     return prefix != null
@@ -59,6 +43,7 @@ record StartDescriptor(
         || lineAnchor != null
         || multiLiteral != null
         || teddyModel != null
-        || leadingExpansion != null;
+        || leadingExpansion != null
+        || reverseAnchor != null;
   }
 }

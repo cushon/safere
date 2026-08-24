@@ -514,6 +514,45 @@ class StartAcceleratorTest {
     assertThatCode(() -> Pattern.compile(regex.toString())).doesNotThrowAnyException();
   }
 
+  @Test
+  void reverseAnchorAcceleratesStringAndUtf8ForSuffixLiterals() {
+    Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
+    StartDescriptor desc = pattern.startDescriptor();
+    assertThat(desc.hasStartAcceleration()).isTrue();
+    assertThat(desc.reverseAnchor()).isNotNull();
+
+    String input = "noise prefix before user123@gmail.com trailing noise";
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.ReverseAnchor.class);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 0, false)).isEqualTo(20);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 21, false)).isEqualTo(21);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 25, false)).isEqualTo(-1);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 38, false)).isEqualTo(-1);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.ReverseAnchor.class);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 0))
+        .isEqualTo(20);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 21))
+        .isEqualTo(21);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 25))
+        .isEqualTo(-1);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 38))
+        .isEqualTo(-1);
+  }
+
+  @Test
+  void reverseAnchorRejectsInvalidPrefixBeforeAnchor() {
+    Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
+    String input = "noise prefix before !!!@gmail.com user123@gmail.com";
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 0, false)).isEqualTo(34);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 0))
+        .isEqualTo(34);
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");

@@ -482,11 +482,11 @@ public final class Pattern implements Serializable {
   }
 
   private static StartDescriptor extractStartDescriptor(Regexp metadataAst) {
-    return extractStartDescriptor(metadataAst, true);
+    return extractStartDescriptor(metadataAst, true, true);
   }
 
   private static StartDescriptor extractStartDescriptor(
-      Regexp metadataAst, boolean allowLeadingExpansion) {
+      Regexp metadataAst, boolean allowLeadingExpansion, boolean allowReverseAnchor) {
     PrefixResult prefixResult = extractPrefix(metadataAst);
     String prefix = prefixResult.prefix();
     boolean prefixFoldCase = prefixResult.foldCase();
@@ -534,6 +534,21 @@ public final class Pattern implements Serializable {
       ccPrefix = null;
       startAcceleration = null;
     }
+    StartDescriptor.ReverseAnchor reverseAnchor =
+        (allowReverseAnchor
+                && prefix == null
+                && fixedOffsetLiteral == null
+                && multiLiteral == null
+                && teddyModel == null
+                && leadingExpansion == null
+                && startAcceleration == null
+                && anchoredPrefix == null
+                && anchoredCharClassPrefix == null)
+            ? extractReverseAnchor(metadataAst)
+            : null;
+    if (reverseAnchor != null) {
+      ccPrefix = null;
+    }
     if (prefix == null
         && fixedOffsetLiteral == null
         && ccPrefix == null
@@ -542,7 +557,8 @@ public final class Pattern implements Serializable {
         && anchoredPrefix == null
         && anchoredCharClassPrefix == null
         && teddyModel == null
-        && leadingExpansion == null) {
+        && leadingExpansion == null
+        && reverseAnchor == null) {
       return StartDescriptor.NONE;
     }
     return new StartDescriptor(
@@ -555,7 +571,8 @@ public final class Pattern implements Serializable {
         anchoredCharClassPrefix,
         multiLiteral,
         teddyModel,
-        leadingExpansion);
+        leadingExpansion,
+        reverseAnchor);
   }
 
   private static StartDescriptor.LeadingExpansion extractLeadingExpansion(Regexp re) {
@@ -633,12 +650,150 @@ public final class Pattern implements Serializable {
     List<Regexp> tailSubs = re.subs.subList(idx + 1, re.nsub());
     Regexp tail = tailSubs.size() == 1 ? tailSubs.getFirst() : Regexp.concat(tailSubs, 0);
 
-    StartDescriptor inner = extractStartDescriptor(tail, false);
-    if (inner == null || !inner.hasStartAcceleration() || inner.leadingExpansion() != null) {
+    StartDescriptor inner = extractStartDescriptor(tail, false, false);
+    if (inner == null
+        || !inner.hasStartAcceleration()
+        || inner.leadingExpansion() != null
+        || !isSelectiveLeadingExpansionAnchor(inner)) {
       return null;
     }
 
     return new StartDescriptor.LeadingExpansion(leadingClass, minRepetition, maxRepetition, inner);
+  }
+
+  private static StartDescriptor.ReverseAnchor extractReverseAnchor(Regexp re) {
+    if (re == null) {
+      return null;
+    }
+    re = unwrapCaptures(re);
+    if (re == null || re.op != RegexpOp.CONCAT || re.nsub() < 2) {
+      return null;
+    }
+
+    int startIdx = 0;
+    while (startIdx < re.nsub() && isLeadingZeroWidth(re.subs.get(startIdx))) {
+      startIdx++;
+    }
+    if (startIdx >= re.nsub() - 1) {
+      return null;
+    }
+
+    for (int anchorIdx = re.nsub() - 1; anchorIdx > startIdx; anchorIdx--) {
+      List<Regexp> tailSubs = re.subs.subList(anchorIdx, re.nsub());
+      Regexp tail = tailSubs.size() == 1 ? tailSubs.getFirst() : Regexp.concat(tailSubs, 0);
+
+      StartDescriptor anchorDesc = extractStartDescriptor(tail, false, false);
+      if (anchorDesc == null
+          || !anchorDesc.hasStartAcceleration()
+          || anchorDesc.leadingExpansion() != null
+          || anchorDesc.reverseAnchor() != null) {
+        continue;
+      }
+
+      if (!isSelectiveReverseAnchor(anchorDesc)) {
+        continue;
+      }
+
+      List<Regexp> prefixSubs = re.subs.subList(startIdx, anchorIdx);
+      Regexp prefix = prefixSubs.size() == 1 ? prefixSubs.getFirst() : Regexp.concat(prefixSubs, 0);
+
+      int minPrefixLen = extractMinMatchLength(prefix);
+      if (minPrefixLen < 1) {
+        continue;
+      }
+
+      if (containsWildcardOrZeroWidth(prefix)) {
+        continue;
+      }
+
+      Prog reverseProg = Compiler.compileForDfa(prefix, true);
+      if (reverseProg == null) {
+        continue;
+      }
+
+      int minTailLen = extractMinMatchLength(tail);
+      int minLength = minPrefixLen + minTailLen;
+
+      return new StartDescriptor.ReverseAnchor(anchorDesc, reverseProg, minLength);
+    }
+
+    return null;
+  }
+
+  private static boolean isSelectiveReverseAnchor(StartDescriptor desc) {
+    if (desc == null) {
+      return false;
+    }
+    if (desc.prefix() != null) {
+      String prefix = desc.prefix();
+      if (prefix.length() >= 2) {
+        return true;
+      }
+      if (!prefix.isEmpty()) {
+        char c = prefix.charAt(0);
+        return RarityOracle.byteRarity(c) >= 40;
+      }
+    }
+    if (desc.multiLiteral() != null || desc.teddyModel() != null) {
+      return true;
+    }
+    if (desc.fixedOffsetLiteral() != null) {
+      return true;
+    }
+    return false;
+  }
+
+  private static boolean isSelectiveLeadingExpansionAnchor(StartDescriptor desc) {
+    if (isSelectiveReverseAnchor(desc)) {
+      return true;
+    }
+    if (desc.charClassPrefix() != null) {
+      int numRunes = 0;
+      int[] ranges = desc.charClassPrefix().ranges();
+      if (ranges != null) {
+        for (int i = 0; i < ranges.length; i += 2) {
+          numRunes += (ranges[i + 1] - ranges[i] + 1);
+        }
+      }
+      return numRunes > 0 && numRunes <= 8;
+    }
+    return false;
+  }
+
+  private static boolean containsWildcardOrZeroWidth(Regexp re) {
+    if (re == null) {
+      return false;
+    }
+    re = unwrapCaptures(re);
+    if (re == null) {
+      return false;
+    }
+    return switch (re.op) {
+      case ANY_CHAR,
+          ANY_BYTE,
+          BEGIN_LINE,
+          END_LINE,
+          BEGIN_TEXT,
+          END_TEXT,
+          WORD_BOUNDARY,
+          NO_WORD_BOUNDARY,
+          GRAPHEME_CLUSTER_BOUNDARY,
+          GRAPHEME_CLUSTER ->
+          true;
+      case STAR, PLUS, QUEST, REPEAT, CAPTURE, NON_CAPTURE ->
+          containsWildcardOrZeroWidth(re.sub());
+      case CONCAT, ALTERNATE -> {
+        if (re.subs != null) {
+          for (Regexp sub : re.subs) {
+            if (containsWildcardOrZeroWidth(sub)) {
+              yield true;
+            }
+          }
+        }
+        yield false;
+      }
+      default -> false;
+    };
   }
 
   /**

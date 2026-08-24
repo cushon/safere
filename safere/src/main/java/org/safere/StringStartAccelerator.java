@@ -48,6 +48,16 @@ sealed interface StringStartAccelerator {
             inner);
       }
     }
+    if (descriptor.reverseAnchor() != null) {
+      StringStartAccelerator inner =
+          create(descriptor.reverseAnchor().anchorDescriptor(), hasWordBoundary);
+      if (inner != null && descriptor.reverseAnchor().reversePrefixProg() != null) {
+        Dfa revDfa = Dfa.createReverse(descriptor.reverseAnchor().reversePrefixProg());
+        if (revDfa != null) {
+          return new ReverseAnchor(inner, revDfa, descriptor.reverseAnchor().minLength());
+        }
+      }
+    }
     return null;
   }
 
@@ -69,6 +79,7 @@ sealed interface StringStartAccelerator {
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
       case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
+      case ReverseAnchor ra -> ra.findCandidate(text, fromIndex, unixLines);
     };
   }
 
@@ -388,6 +399,35 @@ sealed interface StringStartAccelerator {
           return start;
         }
         searchPos = innerMatch + 1;
+      }
+      return -1;
+    }
+  }
+
+  record ReverseAnchor(StringStartAccelerator anchor, Dfa reverseDfa, int minLength)
+      implements StringStartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return new AcceleratorPolicy(16, 4, false, anchor.policy().strategy());
+    }
+
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
+      int searchPos = Math.max(0, fromIndex);
+      int textLen = text.length();
+      int minBound = Math.max(0, fromIndex);
+      while (searchPos <= textLen - minLength) {
+        int anchorPos =
+            StringStartAccelerator.findNextCandidate(anchor, text, searchPos, unixLines);
+        if (anchorPos < 0) {
+          return -1;
+        }
+        Dfa.SearchResult revResult =
+            reverseDfa.doSearchReverse(text, anchorPos, minBound, true, true);
+        if (revResult != null && revResult.matched() && !revResult.ambiguous()) {
+          return revResult.pos();
+        }
+        searchPos = anchorPos + 1;
       }
       return -1;
     }

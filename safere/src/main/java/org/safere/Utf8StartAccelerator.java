@@ -55,6 +55,16 @@ sealed interface Utf8StartAccelerator {
             inner);
       }
     }
+    if (descriptor.reverseAnchor() != null) {
+      Utf8StartAccelerator inner =
+          create(descriptor.reverseAnchor().anchorDescriptor(), hasWordBoundary);
+      if (inner != null && descriptor.reverseAnchor().reversePrefixProg() != null) {
+        Dfa revDfa = Dfa.createReverse(descriptor.reverseAnchor().reversePrefixProg());
+        if (revDfa != null) {
+          return new ReverseAnchor(inner, revDfa, descriptor.reverseAnchor().minLength());
+        }
+      }
+    }
     return null;
   }
 
@@ -77,6 +87,7 @@ sealed interface Utf8StartAccelerator {
       case Teddy t -> t.findCandidate(scanner, pos);
       case MultiLiteral ml -> ml.findCandidate(scanner, pos);
       case LeadingExpansion le -> le.findCandidate(scanner, pos);
+      case ReverseAnchor ra -> ra.findCandidate(scanner, pos);
     };
   }
 
@@ -364,6 +375,34 @@ sealed interface Utf8StartAccelerator {
             }
           }
         }
+      }
+      return -1;
+    }
+  }
+
+  record ReverseAnchor(Utf8StartAccelerator anchor, Dfa reverseDfa, int minLength)
+      implements Utf8StartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return new AcceleratorPolicy(16, 4, false, anchor.policy().strategy());
+    }
+
+    int findCandidate(Utf8InputScanner scanner, int pos) {
+      int searchPos = Math.max(0, pos);
+      int textLen = scanner.length();
+      int minBound = Math.max(0, pos);
+      while (searchPos <= textLen - minLength) {
+        int anchorPos = Utf8StartAccelerator.findNextCandidate(anchor, scanner, searchPos);
+        if (anchorPos < 0) {
+          return -1;
+        }
+        Dfa.SearchResult revResult =
+            reverseDfa.doSearchReverse(scanner, anchorPos, minBound, true, true);
+        if (revResult != null && revResult.matched() && !revResult.ambiguous()) {
+          return revResult.pos();
+        }
+        searchPos = anchorPos + 1;
       }
       return -1;
     }

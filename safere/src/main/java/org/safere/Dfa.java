@@ -266,6 +266,13 @@ final class Dfa {
     return new Setup(boundaries, numClasses, asciiClassMap);
   }
 
+  static Dfa createReverse(Prog reverseProg) {
+    if (reverseProg == null) {
+      return null;
+    }
+    return new Dfa(reverseProg, DEFAULT_MAX_STATES, buildSetup(reverseProg), true);
+  }
+
   Dfa(Prog prog, int maxStates, Setup setup, boolean longest) {
     this(prog, maxStates, setup, longest, null, null);
   }

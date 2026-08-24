@@ -1035,4 +1035,32 @@ class SearchScalingRegressionTest {
                 ::find,
         "UTF-8");
   }
+
+  @Test
+  void reverseAnchorFindOnSparseMatchHasSublinearWork() {
+    Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
+    String noise = "the quick brown fox jumps over the lazy dog. ".repeat(200);
+    String input = noise + "contactuser123@gmail.com" + noise;
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isTrue());
+
+    assertThat(work)
+        .as("Reverse anchor find on sparse match must avoid scanning prefix noise")
+        .isLessThan(500);
+  }
+
+  @Test
+  void reverseAnchorIsLinearAcrossFindIteration() {
+    Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("user1@gmail.com user2@gmail.com ".repeat(size))::find, "String");
+    assertRepeatedFindWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted(
+                        "user1@gmail.com user2@gmail.com ".repeat(size).getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
 }
