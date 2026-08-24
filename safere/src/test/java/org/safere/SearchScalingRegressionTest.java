@@ -767,6 +767,51 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void unicodeCaseInsensitiveLinearChainUsesOnePassForSubmatchExtraction() {
+    // (?iu) triggers inst.foldCase = true on literal runes (e.g. Kelvin sign K <-> K <-> k)
+    Pattern pattern = Pattern.compile("(?iu)key:([0-9]+)");
+    assertThat(pattern.canOnePassSubmatch()).isTrue();
+    assertThat(pattern.onePass()).isNotNull();
+
+    String input = "prefix noise KEY:98765 trailing text";
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(0)).isEqualTo("KEY:98765");
+              assertThat(matcher.group(1)).isEqualTo("98765");
+            });
+    assertThat(groupReadWork)
+        .as(
+            "Unicode case-insensitive linear chain submatch extraction must run in OnePass with"
+                + " zero NFA allocations")
+        .isLessThanOrEqualTo(30);
+  }
+
+  @Test
+  void unanchoredLinearChainSubmatchWorkIsBoundedByMatchSlice() {
+    Pattern pattern = Pattern.compile("([a-z]+)@([a-z]+)\\.com");
+    String prefix = "noise ".repeat(500);
+    String match = "alice@google.com";
+    String suffix = " trailing".repeat(500);
+    String input = prefix + match + suffix;
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(1)).isEqualTo("alice");
+              assertThat(matcher.group(2)).isEqualTo("google");
+            });
+    assertThat(groupReadWork)
+        .as(
+            "Submatch extraction work must be strictly bounded by match slice length, not haystack"
+                + " length")
+        .isLessThanOrEqualTo(match.length() * 2L + 20);
+  }
+
+  @Test
   void directDfaStartStateAcceleratesUnanchoredAlternationOnString() {
     Prog prog = Compiler.compile(Parser.parse("apple|banana|cherry", ParseFlags.MATCH_NL));
     Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
@@ -888,5 +933,106 @@ class SearchScalingRegressionTest {
     } catch (ClassNotFoundException e) {
       return false;
     }
+  }
+
+  @Test
+  void leadingWhitespaceCharClassExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
+    String input2000 = "a".repeat(2_000);
+    String input10000 = "a".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion char class find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("   [123] ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void leadingWhitespaceCharClassExpansionIsLinearForUtf8Input() {
+    Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
+    byte[] input2000 = "a".repeat(2_000).getBytes(UTF_8);
+    byte[] input10000 = "a".repeat(10_000).getBytes(UTF_8);
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input2000)).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input10000)).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion char class find on UTF-8 should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher(Utf8Input.trusted("   [123] ".repeat(size).getBytes(UTF_8)))::find,
+        "UTF-8");
+  }
+
+  @Test
+  void leadingWhitespaceLiteralExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s+https?://\\w+");
+    String input2000 = "a".repeat(2_000);
+    String input10000 = "a".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion literal find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("  http://example ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void leadingWhitespaceMultiLiteralExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s*(?:apple|banana|cherry)");
+    String input2000 = "x".repeat(2_000);
+    String input10000 = "x".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion multi-literal find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void leadingUnicodeExpansionIsLinearForStringAndUtf8Input() {
+    Pattern pattern = Pattern.compile("[\\u00e9\\u00e8]+:target");
+    String input2000 = "x".repeat(2_000);
+    String input10000 = "x".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion unicode find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("  \u00e9\u00e9:target ".repeat(size))::find, "String");
+    assertRepeatedFindWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted("  \u00e9\u00e9:target ".repeat(size).getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
   }
 }
