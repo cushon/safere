@@ -767,6 +767,20 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void multiLiteralPrefilterOnDenseCandidateNoiseIsBoundedByWorkLimit() {
+    Pattern pattern = Pattern.compile("APPLE|BANANA|CHERRY");
+    byte[] noise = "A B C A B C ".repeat(10_000).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("Multi-literal candidate verification must be bounded by WorkLimit on dense noise")
+        .isLessThan(500);
+  }
+
+  @Test
   void matchesWithCapturesDefersNfaWorkUntilGroupIsRead() {
     // Non-OnePass pattern due to ambiguous repetition where b is part of [a-z]
     Pattern pattern = Pattern.compile("([a-z]+)b([a-z]+)");
@@ -814,6 +828,22 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(50);
     assertThat(matcher.group(0)).isEqualTo("application:12345");
     assertThat(matcher.group(1)).isEqualTo("12345");
+  }
+
+  @Test
+  void multiLiteralPrefilterDoesNotRestartScalarVerificationAfterLateDenseCandidates() {
+    int literalLength = 512;
+    Pattern pattern =
+        Pattern.compile("A".repeat(literalLength - 1) + "B|" + "B".repeat(literalLength - 1) + "C");
+    byte[] noise = ("x".repeat(256) + "A".repeat(8_192)).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("WorkLimit exhaustion must resume with the normal matcher without a scalar rescan")
+        .isLessThan((long) noise.length * 10);
   }
 
   private static boolean isVectorApiAvailable() {
