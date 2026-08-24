@@ -3008,7 +3008,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.versionList.{matchLabel}.{size}",
@@ -3053,7 +3055,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.malformedEntity.{matchLabel}.{size}",
@@ -3086,7 +3090,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.markupEntity.{matchLabel}.{size}",
@@ -3218,7 +3224,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.blockedTags1.{matchLabel}.{size}",
@@ -3263,7 +3271,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.blockedTags2.{matchLabel}.{size}",
@@ -3308,7 +3318,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.overlappingUrl.{matchLabel}.{size}",
@@ -3353,7 +3365,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.caseInsensitiveKeyword.{matchLabel}.{size}",
@@ -3394,7 +3408,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.caseInsensitiveKeywordFind.{matchLabel}.{size}",
@@ -3432,7 +3448,9 @@
           100000
         ]
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.boundedNameMatch.{matchLabel}.{size}",
@@ -3473,7 +3491,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.templateTagMatch.{matchLabel}.{size}",
@@ -3518,7 +3538,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.sparseUrl.{matchLabel}.{size}",
@@ -3551,7 +3573,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.unprefixedWordBoundary.{matchLabel}.{size}",
@@ -3766,7 +3790,9 @@
       "arguments": {
         "replacement": "xyz"
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.greedyOnePass.{matchLabel}.{size}",
@@ -3840,7 +3866,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.turnTitleWhitespaceCjk.{matchLabel}.{size}",
@@ -3881,7 +3909,9 @@
       "arguments": {
         "replacement": ""
       },
-      "requirements": []
+      "requirements": [
+
+      ]
     },
     {
       "id": "RealWorldRegexBenchmark.runBenchmark.cjkSearch.{matchLabel}.{size}",
@@ -7087,7 +7117,9 @@
       "inputs": [
         "pathological.text.10"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -7111,7 +7143,9 @@
       "inputs": [
         "pathological.text.15"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -7135,7 +7169,9 @@
       "inputs": [
         "pathological.text.20"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "expected": {
         "type": "boolean",
@@ -8338,7 +8374,9 @@
       "inputs": [
         "utf8.captureFree.asciiEarly"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8357,7 +8395,9 @@
       "inputs": [
         "utf8.captureFree.asciiLate"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8376,7 +8416,9 @@
       "inputs": [
         "utf8.captureFree.asciiNoMatch"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8395,7 +8437,9 @@
       "inputs": [
         "utf8.captureFree.multibyteEarly"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8414,7 +8458,9 @@
       "inputs": [
         "utf8.captureFree.multibyteLate"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8433,7 +8479,9 @@
       "inputs": [
         "utf8.captureFree.multibyteNoMatch"
       ],
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8456,7 +8504,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8479,7 +8529,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8502,7 +8554,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8525,7 +8579,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8548,7 +8604,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8571,7 +8629,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures matching when UTF-8 bytes already exist; String decoding is outside this workload boundary.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8594,7 +8654,9 @@
         "javaString"
       ],
       "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8617,7 +8679,9 @@
         "javaString"
       ],
       "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8640,7 +8704,9 @@
         "javaString"
       ],
       "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8663,7 +8729,9 @@
         "javaString"
       ],
       "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8686,7 +8754,9 @@
         "javaString"
       ],
       "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8709,7 +8779,9 @@
         "javaString"
       ],
       "inputRepresentationReason": "Measures the Java String matching path; the paired captureFreeBytes workload covers preexisting UTF-8.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8877,7 +8949,8 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures matching within a byte-offset window over preexisting UTF-8 input.",
-      "arguments": {},
+      "arguments": {
+      },
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8960,7 +9033,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE required-class rejection over preexisting UTF-8 bytes.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -8983,7 +9058,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE single-ASCII required-class rejection over preexisting UTF-8 bytes.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9006,7 +9083,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE contiguous-ASCII class start acceleration over preexisting UTF-8 bytes.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9029,7 +9108,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Controls for SafeRE literal start acceleration over the same preexisting UTF-8 bytes.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9052,7 +9133,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures a short UTF-8 search whose first byte is in a two-member ASCII prefix class.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9075,7 +9158,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures a short UTF-8 search whose first candidate is in a contiguous ASCII prefix range.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9098,7 +9183,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures fixed prefix-class metadata cost when a short UTF-8 input contains no pair member.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9121,7 +9208,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures fixed prefix-class metadata cost when a short UTF-8 input contains no range member.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9144,7 +9233,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Controls for a long absent pair scan where input traversal dominates fixed prefix metadata cost.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9167,7 +9258,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Controls for a long absent range scan where input traversal dominates fixed prefix metadata cost.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9190,7 +9283,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Controls for a pair candidate near the end of a long UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9213,7 +9308,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Controls for a range candidate near the end of a long UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9236,7 +9333,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures repeated UTF-8 searches with pair-prefix candidates approximately every 128 bytes.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -9259,7 +9358,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures repeated UTF-8 searches with range-prefix candidates approximately every 128 bytes.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -9282,7 +9383,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures repeated UTF-8 searches over dense two-member ASCII prefix candidates.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -9305,7 +9408,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures repeated UTF-8 searches over dense contiguous-range prefix candidates.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -9329,7 +9434,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Compares fixed-offset phone-pattern rejection over Java strings and preexisting UTF-8 in realistic text containing unrelated digits but no slash.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9353,7 +9460,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Compares fixed-offset candidate filtering over Java strings and preexisting UTF-8 when unrelated digits and slashes are present.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9385,7 +9494,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Compares Java-string and preexisting-UTF-8 searches for planted phone numbers at several realistic match densities.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9417,7 +9528,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Compares repeated Java-string and UTF-8 find cost for planted phone numbers at several match densities.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -9441,7 +9554,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Provides Java-string and UTF-8 dense synthetic controls where neither digit nor slash filtering is selective.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "integer",
       "measurement": {
         "mode": "averageTime",
@@ -9464,7 +9579,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE required-class rejection over preexisting UTF-8 bytes.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9490,7 +9607,9 @@
         "javaString"
       ],
       "inputRepresentationReason": "Measures the paired SafeRE required-class rejection path over a Java String.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9513,7 +9632,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9536,7 +9657,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9559,7 +9682,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9582,7 +9707,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9605,7 +9732,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9628,7 +9757,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9651,7 +9782,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures SafeRE byte-scanning behavior over preexisting UTF-8 input.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -9871,7 +10004,8 @@
       "inputs": [
         "diagnostics.tinyLiteralMatches"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "matches",
         "listener": "disabled",
@@ -9899,7 +10033,8 @@
       "inputs": [
         "diagnostics.tinyLiteralFindHit"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "find",
         "listener": "disabled",
@@ -9927,7 +10062,8 @@
       "inputs": [
         "diagnostics.tinyLiteralFindMiss"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "find",
         "listener": "disabled",
@@ -9955,7 +10091,8 @@
       "inputs": [
         "diagnostics.onePassMatches"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "matches",
         "listener": "disabled",
@@ -9983,7 +10120,8 @@
       "inputs": [
         "diagnostics.dfaLongFind"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "find",
         "listener": "disabled",
@@ -10011,7 +10149,8 @@
       "inputs": [
         "diagnostics.bitStateShortMatches"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "matches",
         "listener": "disabled",
@@ -10039,7 +10178,8 @@
       "inputs": [
         "diagnostics.nfaLongMatches"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "matches",
         "listener": "disabled",
@@ -10067,7 +10207,8 @@
       "inputs": [
         "diagnostics.dfaSparseReplaceAll"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "replaceAll",
         "listener": "disabled",
@@ -10095,7 +10236,8 @@
       "inputs": [
         "diagnostics.charClassDenseReplaceAll"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "replaceAll",
         "listener": "disabled",
@@ -10123,7 +10265,8 @@
       "inputs": [
         "diagnostics.charClassNoMatchReplaceAll"
       ],
-      "axes": {},
+      "axes": {
+      },
       "arguments": {
         "action": "replaceAll",
         "listener": "disabled",
@@ -10840,7 +10983,9 @@
         "javaString"
       ],
       "inputRepresentationReason": "Measures single character class find fast-path throughput over non-matching input strings.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -11315,7 +11460,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures Unicode alphabetic prefix acceleration scanning over non-matching digits.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -11366,7 +11513,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures Unicode alphabetic prefix acceleration scanning to a late non-ASCII match.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -11417,7 +11566,9 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures CJK prefix acceleration scanning over non-matching English prose.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
@@ -11468,13 +11619,40 @@
         "preexistingUtf8"
       ],
       "inputRepresentationReason": "Measures CJK prefix acceleration scanning to a late CJK match.",
-      "requirements": [],
+      "requirements": [
+
+      ],
       "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "UnicodeCaseFoldingBenchmark.linearChainCapture",
+      "operation": "matchesGroupLengthSum",
+      "patterns": [
+        "^(?iu)([a-z]+)://([^:/]+):([0-9]+)$"
+      ],
+      "inputs": [
+        "onePassScaling.withCaptures.4096"
+      ],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "groups": [
+          1,
+          2,
+          3
         ]
       }
     },
