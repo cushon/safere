@@ -49,7 +49,7 @@ class CrossEngineBenchmarkPlanTest {
             "HttpBenchmark.httpFull",
             "SearchScalingBenchmark.searchEasyFail.1024",
             "FanoutBenchmark.fanoutUnicode.1024");
-    assertThat(ids).hasSize(586);
+    assertThat(ids).hasSize(588);
   }
 
   @Test
@@ -78,9 +78,9 @@ class CrossEngineBenchmarkPlanTest {
                   .map(CrossEngineBenchmarkPlan.Trial::variant))
           .containsAnyOf(RegexEngineVariant.SAFERE_STRING, RegexEngineVariant.SAFERE_UTF8);
     }
-    assertThat(allTrials).hasSize(2356);
+    assertThat(allTrials).hasSize(2366);
     assertThat(plan.exclusions()).hasSize(574);
-    assertThat(accounted).hasSize(586 * RegexEngineVariant.values().length);
+    assertThat(accounted).hasSize(588 * RegexEngineVariant.values().length);
   }
 
   @Test
@@ -124,7 +124,7 @@ class CrossEngineBenchmarkPlanTest {
             second.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(1695);
+        .hasSize(1705);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
@@ -499,8 +499,8 @@ class CrossEngineBenchmarkPlanTest {
         .allMatch(runner -> !runner.trialIds().isEmpty())
         .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
         .doesNotHaveDuplicates()
-        .hasSize(2395);
-    assertThat(plan.reportPlan().trials()).hasSize(2395);
+        .hasSize(2405);
+    assertThat(plan.reportPlan().trials()).hasSize(2405);
     assertThat(plan.reportPlan().exclusions()).isNotEmpty().doesNotHaveDuplicates();
     assertThat(
             plan.reportPlan(true).trials().stream()
