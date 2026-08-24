@@ -21,14 +21,31 @@ record StartDescriptor(
     StartAcceleration lineAnchor,
     String anchoredPrefix,
     CharClassScanInfo anchoredCharClassPrefix,
+    MultiLiteralInfo multiLiteral,
     TeddyModel teddyModel,
-    HashChain hashChain,
     ClassHashChain classHashChain,
-    ClassHashChainUtf16 classHashChainUtf16,
-    ClassHashChainUtf8 classHashChainUtf8) {
+    ClassHashChainUtf16 classHashChainUtf16) {
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
+
+  StartDescriptor(
+      String prefix,
+      boolean prefixFoldCase,
+      FixedOffsetLiteral fixedOffsetLiteral,
+      CharClassScanInfo charClassPrefix,
+      StartAcceleration lineAnchor) {
+    this(
+        prefix,
+        prefixFoldCase,
+        fixedOffsetLiteral,
+        charClassPrefix,
+        lineAnchor,
+        null,
+        null,
+        null,
+        null);
+  }
 
   StartDescriptor(
       String prefix,
@@ -38,6 +55,7 @@ record StartDescriptor(
       StartAcceleration lineAnchor,
       String anchoredPrefix,
       CharClassScanInfo anchoredCharClassPrefix,
+      MultiLiteralInfo multiLiteral,
       TeddyModel teddyModel) {
     this(
         prefix,
@@ -47,13 +65,10 @@ record StartDescriptor(
         lineAnchor,
         anchoredPrefix,
         anchoredCharClassPrefix,
+        multiLiteral,
         teddyModel,
-        prefix != null && !prefixFoldCase
-            ? HashChain.compile(prefix.getBytes(StandardCharsets.UTF_8))
-            : null,
         compileClassHashChain(prefix, prefixFoldCase),
-        compileClassHashChainUtf16(prefix, prefixFoldCase),
-        compileClassHashChainUtf8(prefix, prefixFoldCase));
+        compileClassHashChainUtf16(prefix, prefixFoldCase));
   }
 
   private static ClassHashChain compileClassHashChain(String prefix, boolean foldCase) {
@@ -68,17 +83,12 @@ record StartDescriptor(
         : null;
   }
 
-  private static ClassHashChainUtf8 compileClassHashChainUtf8(String prefix, boolean foldCase) {
-    return prefix != null && foldCase && !Ascii.isAscii(prefix)
-        ? ClassHashChainUtf8.compileCaseInsensitive(prefix)
-        : null;
-  }
-
   boolean hasStartAcceleration() {
     return prefix != null
         || fixedOffsetLiteral != null
         || charClassPrefix != null
         || lineAnchor != null
+        || multiLiteral != null
         || teddyModel != null;
   }
 }

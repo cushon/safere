@@ -173,7 +173,7 @@ class StartAcceleratorTest {
       FixedOffsetLiteral fixedOffsetLiteral,
       CharClassScanInfo charClassPrefix) {
     return new StartDescriptor(
-        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, null, null, null, null);
+        prefix, prefixFoldCase, fixedOffsetLiteral, charClassPrefix, null, null, null, null, null);
   }
 
   @Test
@@ -301,8 +301,94 @@ class StartAcceleratorTest {
     assertThat(unacceleratedPat.utf8StartAccelerator()).isNull();
   }
 
+  @Test
+  void multiLiteralWithSharedPrefixReturnsNullAndFallsBackToTeddyOrNone() {
+    MultiLiteralInfo info = MultiLiteralInfo.create(new String[] {"cat", "car"});
+    assertThat(info).as("MultiLiteralInfo must reject colliding initial anchor chars").isNull();
+
+    MultiLiteralInfo distinctInfo = MultiLiteralInfo.create(new String[] {"cat", "dog", "fox"});
+    assertThat(distinctInfo).isNotNull();
+    assertThat(distinctInfo.literals()).containsExactly("cat", "dog", "fox");
+  }
+
+  @Test
+  void multiLiteralScanReturnsUnsupportedWhenWorkLimitExhaustedOnNoise() {
+    if (!isVectorApiAvailable()) {
+      return;
+    }
+    String[] literals = new String[] {"APPLE", "BANANA", "CHERRY"};
+    MultiLiteralInfo info = MultiLiteralInfo.create(literals);
+    assertThat(info).isNotNull();
+
+    byte[] denseNoise = "A B C A B C ".repeat(1000).getBytes(UTF_8);
+
+    int result =
+        ByteVectorScan.indexOfMultiLiteral(
+            denseNoise,
+            0,
+            denseNoise.length,
+            info.literals(),
+            info.anchorChars(),
+            info.anchorOffsets(),
+            info.anchorRanges(),
+            info.minLength(),
+            0);
+
+    assertThat(result)
+        .as("Dense candidate false positives must exhaust WorkLimit and return UNSUPPORTED")
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+  }
+
+  @Test
+  void adaptiveTeddySelectionUsesEstimatedCandidateVerificationCost() {
+    assertThat(MultiLiteralSelectionPolicy.prefersTeddy(5L * 7, 64)).isTrue();
+    assertThat(MultiLiteralSelectionPolicy.prefersTeddy(4L * 7, 64)).isFalse();
+    assertThat(MultiLiteralSelectionPolicy.prefersTeddy(16L * 7, 256)).isFalse();
+    assertThat(MultiLiteralSelectionPolicy.prefersTeddy(19L * 7, 256)).isTrue();
+    assertThat(MultiLiteralSelectionPolicy.shouldObserve(255)).isTrue();
+    assertThat(MultiLiteralSelectionPolicy.shouldObserve(256)).isFalse();
+  }
+
+  @Test
+  void adaptiveTeddySelectionPreservesTheEarliestLiteralMatch() {
+    if (!isVectorApiAvailable()) {
+      return;
+    }
+    String[] literals = new String[] {"blossom", "sparkling", "twilight"};
+    MultiLiteralInfo info = MultiLiteralInfo.create(literals);
+    TeddyModel teddyModel = TeddyModel.compile(literals, 64);
+    assertThat(info).isNotNull();
+    assertThat(teddyModel).isNotNull();
+    String prefix = "b s t ".repeat(12);
+    byte[] input = (prefix + "sparkling then blossom").getBytes(UTF_8);
+
+    int result =
+        ByteVectorScan.indexOfMultiLiteral(
+            input,
+            0,
+            input.length,
+            info.literals(),
+            info.anchorChars(),
+            info.anchorOffsets(),
+            info.anchorRanges(),
+            info.minLength(),
+            teddyModel,
+            0);
+
+    assertThat(result).isEqualTo(prefix.length());
+  }
+
   private static Utf8InputScanner utf8Scanner(String text) {
     byte[] bytes = text.getBytes(UTF_8);
     return new Utf8InputScanner(bytes, 0, bytes.length);
+  }
+
+  private static boolean isVectorApiAvailable() {
+    try {
+      Class.forName("jdk.incubator.vector.ByteVector");
+      return true;
+    } catch (ClassNotFoundException | LinkageError e) {
+      return false;
+    }
   }
 }

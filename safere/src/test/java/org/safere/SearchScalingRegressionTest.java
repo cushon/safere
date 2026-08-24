@@ -767,6 +767,7 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+<<<<<<< HEAD
   void hashChainAchievesSublinearWorkOnExactLiteral() {
     Pattern pattern = Pattern.compile("content-length-header"); // M = 21, threshold = 840B
     byte[] bytes = "x".repeat(800).getBytes(UTF_8);
@@ -837,29 +838,6 @@ class SearchScalingRegressionTest {
   }
 
   @Test
-  void classHashChainUtf8AchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForUtf8Input() {
-    // Keep every simple-fold equivalent at the same UTF-8 width so this test exercises the
-    // supported hash-chain path rather than the ordinary Unicode fallback.
-    ClassHashChainUtf8 chcUtf8 = ClassHashChainUtf8.compileCaseInsensitive("примир_примир_примир");
-    assertThat(chcUtf8).isNotNull();
-    String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5);
-    byte[] bytes = text.getBytes(UTF_8);
-    long work =
-        WorkCounter.countForTesting(
-            () ->
-                assertThat(
-                        chcUtf8.search(
-                            bytes, 0, bytes.length, 0, WorkLimit.forRemaining(bytes.length)))
-                    .isEqualTo(-1));
-
-    assertThat(work)
-        .as(
-            "ClassHashChainUtf8 must perform sublinear work on non-ASCII case-insensitive patterns"
-                + " for UTF-8 input")
-        .isLessThanOrEqualTo(bytes.length / 15 + 10);
-  }
-
-  @Test
   void hybridCaseInsensitiveSearchIsImmuneToFalseAnchorStormsForStringInput() {
     Pattern pattern = Pattern.compile("(?i)keyword_to_find"); // anchor is 'k' / 'K'
     String text = "k_other_words_".repeat(20); // 280 chars with 20 'k' false anchors
@@ -870,6 +848,20 @@ class SearchScalingRegressionTest {
     assertThat(work)
         .as("Hybrid search with shiftAt must avoid quadratic work on false anchor floods")
         .isLessThanOrEqualTo(text.length() * 2);
+  }
+
+  @Test
+  void multiLiteralPrefilterOnDenseCandidateNoiseIsBoundedByWorkLimit() {
+    Pattern pattern = Pattern.compile("APPLE|BANANA|CHERRY");
+    byte[] noise = "A B C A B C ".repeat(10_000).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("Multi-literal candidate verification must be bounded by WorkLimit on dense noise")
+        .isLessThan(500);
   }
 
   @Test
@@ -920,6 +912,22 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(50);
     assertThat(matcher.group(0)).isEqualTo("application:12345");
     assertThat(matcher.group(1)).isEqualTo("12345");
+  }
+
+  @Test
+  void multiLiteralPrefilterDoesNotRestartScalarVerificationAfterLateDenseCandidates() {
+    int literalLength = 512;
+    Pattern pattern =
+        Pattern.compile("A".repeat(literalLength - 1) + "B|" + "B".repeat(literalLength - 1) + "C");
+    byte[] noise = ("x".repeat(256) + "A".repeat(8_192)).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("WorkLimit exhaustion must resume with the normal matcher without a scalar rescan")
+        .isLessThan((long) noise.length * 10);
   }
 
   private static boolean isVectorApiAvailable() {

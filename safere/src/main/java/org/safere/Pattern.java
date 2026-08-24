@@ -139,6 +139,7 @@ public final class Pattern implements Serializable {
   private final transient CharClassScanInfo charClassPrefix;
   private final transient CharClassScanInfo anchoredCharClassPrefix;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
+  private final transient MultiLiteralInfo multiLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
   private final transient EnginePathOptions enginePathOptions;
@@ -312,6 +313,7 @@ public final class Pattern implements Serializable {
     this.charClassPrefix = startDescriptor.charClassPrefix();
     this.anchoredCharClassPrefix = startDescriptor.anchoredCharClassPrefix();
     this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
+    this.multiLiteral = startDescriptor.multiLiteral();
     this.utf8StartAccelerator =
         Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
     this.stringStartAccelerator =
@@ -483,12 +485,23 @@ public final class Pattern implements Serializable {
         prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
     CharClassScanInfo ccPrefix = (prefix == null) ? extractCharClassPrefix(metadataAst) : null;
     String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
+    MultiLiteralInfo multiLiteral =
+        VectorScanProviders.multiLiteralProviderAvailable()
+                && altLiterals != null
+                && altLiterals.length >= 2
+                && altLiterals.length <= 4
+            ? MultiLiteralInfo.create(altLiterals)
+            : null;
     TeddyModel teddyModel = null;
     if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
       teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
     }
     StartAcceleration startAcceleration =
-        (prefix == null && ccPrefix == null && fixedOffsetLiteral == null && teddyModel == null)
+        (prefix == null
+                && ccPrefix == null
+                && fixedOffsetLiteral == null
+                && multiLiteral == null
+                && teddyModel == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
@@ -504,6 +517,7 @@ public final class Pattern implements Serializable {
     if (prefix == null
         && fixedOffsetLiteral == null
         && ccPrefix == null
+        && multiLiteral == null
         && startAcceleration == null
         && anchoredPrefix == null
         && anchoredCharClassPrefix == null
@@ -518,6 +532,7 @@ public final class Pattern implements Serializable {
         startAcceleration,
         anchoredPrefix,
         anchoredCharClassPrefix,
+        multiLiteral,
         teddyModel);
   }
 
@@ -1335,6 +1350,11 @@ public final class Pattern implements Serializable {
   /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
   FixedOffsetLiteral fixedOffsetLiteral() {
     return fixedOffsetLiteral;
+  }
+
+  /** Returns metadata for 2-6 keyword literal alternation acceleration, or {@code null}. */
+  MultiLiteralInfo multiLiteral() {
+    return multiLiteral;
   }
 
   /** Returns the compiled UTF-8 start-position accelerator strategy, or {@code null}. */
