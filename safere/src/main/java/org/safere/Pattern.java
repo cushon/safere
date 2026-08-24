@@ -3938,7 +3938,7 @@ public final class Pattern implements Serializable {
           boolean childFoldCase = (c.flags & ParseFlags.FOLD_CASE) != 0;
           switch (c.op) {
             case LITERAL -> {
-              if (Character.toLowerCase(c.rune) != Character.toUpperCase(c.rune)) {
+              if (Inst.simpleFold(c.rune) != c.rune) {
                 if (!foldCaseInitialized) {
                   foldCase = childFoldCase;
                   foldCaseInitialized = true;
@@ -3953,7 +3953,7 @@ public final class Pattern implements Serializable {
                 return LiteralResult.NONE;
               }
               for (int r : c.runes) {
-                if (Character.toLowerCase(r) != Character.toUpperCase(r)) {
+                if (Inst.simpleFold(r) != r) {
                   if (!foldCaseInitialized) {
                     foldCase = childFoldCase;
                     foldCaseInitialized = true;

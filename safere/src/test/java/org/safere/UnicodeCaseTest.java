@@ -103,6 +103,33 @@ class UnicodeCaseTest {
     assertThat(m.group()).isEqualTo("ϴϴ");
   }
 
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {"ß|ẞ", "ﬅ|ﬆ"})
+  void asciiCaseInsensitivePrefixKeepsNonAsciiLiteralCaseSensitive(
+      String patternCharacter, String foldedCharacter) {
+    String input = "A" + foldedCharacter;
+
+    assertThat(Pattern.compile("(?i:a" + patternCharacter + ")").matcher(input).find()).isFalse();
+    assertThat(Pattern.compile("(?i:a(?u:" + patternCharacter + "))").matcher(input).find())
+        .isTrue();
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {"ϑ|ϴ", "ß|ẞ", "ﬅ|ﬆ"})
+  void replacementFindsSingleCodeUnitUnicodeFoldedPrefix(
+      String patternCharacter, String foldedCharacter) {
+    Pattern pattern = Pattern.compile("(?iu)" + patternCharacter + ".");
+    String input = "--" + foldedCharacter + "x--" + foldedCharacter + "y--";
+
+    assertThat(pattern.matcher(input).replaceFirst("z"))
+        .isEqualTo("--z--" + foldedCharacter + "y--");
+    assertThat(pattern.matcher(input).replaceAll("z")).isEqualTo("--z--z--");
+  }
+
   @Test
   void splitWithUnicodeCase() {
     Pattern p = Pattern.compile("café", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);

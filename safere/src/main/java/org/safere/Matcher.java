@@ -2241,7 +2241,9 @@ public final class Matcher implements MatchResult {
       return Math.min(Math.max(0, fromIndex), text.length());
     }
     if (prefixLen == 1) {
-      return Ascii.indexOfIgnoreCase(text, prefix.charAt(0), fromIndex);
+      return Ascii.isAscii(prefix)
+          ? Ascii.indexOfIgnoreCase(text, prefix.charAt(0), fromIndex)
+          : Utf16.indexOfUnicodeIgnoreCase(text, prefix, fromIndex);
     }
     int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen);
     char anchor = prefix.charAt(anchorOffset);

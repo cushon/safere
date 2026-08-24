@@ -7,15 +7,35 @@ package org.safere.fuzz;
 
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
+import java.util.List;
 
 final class ReplacementFuzzer {
 
   @FuzzTest(maxDuration = "30s")
   void replacement(FuzzedDataProvider data) {
-    String regex = data.consumeString(256);
-    int flags = FuzzSupport.consumeFlags(data);
-    String input = data.consumeString(2048);
-    String replacement = data.consumeRemainingAsString();
+    String regex;
+    int flags;
+    String input;
+    String replacement;
+    if (data.consumeBoolean()) {
+      List<String> patternCharacters = List.of("\u03D1", "\u00DF", "\uFB05");
+      List<String> foldedCharacters = List.of("\u03F4", "\u1E9E", "\uFB06");
+      int variant = data.consumeInt(0, patternCharacters.size() - 1);
+      String suffix = data.pickValue(List.of(".", "[xy]", "(?:x|y)"));
+      regex = "(?iu)" + patternCharacters.get(variant) + suffix;
+      flags = 0;
+      input =
+          data.consumeString(32)
+              + foldedCharacters.get(variant)
+              + data.pickValue(List.of("x", "y"))
+              + data.consumeString(32);
+      replacement = data.consumeString(32);
+    } else {
+      regex = data.consumeString(256);
+      flags = FuzzSupport.consumeFlags(data);
+      input = data.consumeString(2048);
+      replacement = data.consumeRemainingAsString();
+    }
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
     if (pattern == null) {
       return;
