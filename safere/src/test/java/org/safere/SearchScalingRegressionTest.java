@@ -816,6 +816,23 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void directDfaStartStateAcceleratesUnanchoredAlternationOnString() {
+    Prog prog = Compiler.compile(Parser.parse("apple|banana|cherry", ParseFlags.MATCH_NL));
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    String input = "x".repeat(10_000) + "cherry";
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              Dfa.SearchResult res = dfa.doSearch(input, false, false);
+              assertThat(res).isNotNull();
+              assertThat(res.matched()).isTrue();
+            });
+    assertThat(work)
+        .as("Direct DFA start state acceleration must scan input linearly")
+        .isLessThanOrEqualTo(input.length() + 20);
+  }
+
+  @Test
   void multiLiteralPrefilterOnDenseCandidateNoiseIsBoundedByWorkLimit() {
     Pattern pattern = Pattern.compile("APPLE|BANANA|CHERRY");
     byte[] noise = "A B C A B C ".repeat(10_000).getBytes(UTF_8);
@@ -860,6 +877,24 @@ class SearchScalingRegressionTest {
     assertThat(work)
         .as("Non-matching input in matches() must reject in linear DFA steps without NFA work")
         .isLessThanOrEqualTo(input.length() + 20);
+  }
+
+  @Test
+  void directDfaStartStateAcceleratesUnanchoredAlternationOnUtf8() {
+    Prog prog = Compiler.compile(Parser.parse("apple|banana|cherry", ParseFlags.MATCH_NL));
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    byte[] input = ("x".repeat(10_000) + "cherry").getBytes(UTF_8);
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              Dfa.SearchResult res =
+                  dfa.doSearch(new Utf8InputScanner(input, 0, input.length), 0, false, false);
+              assertThat(res).isNotNull();
+              assertThat(res.matched()).isTrue();
+            });
+    assertThat(work)
+        .as("Direct DFA start state acceleration on UTF-8 must scan input linearly")
+        .isLessThanOrEqualTo(input.length + 20);
   }
 
   @Test
