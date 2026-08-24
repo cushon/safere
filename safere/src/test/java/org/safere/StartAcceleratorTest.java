@@ -155,6 +155,7 @@ class StartAcceleratorTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
