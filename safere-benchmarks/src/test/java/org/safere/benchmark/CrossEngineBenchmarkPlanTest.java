@@ -46,10 +46,12 @@ class CrossEngineBenchmarkPlanTest {
             "RegexBenchmark.literalMatch",
             "ApplicationBenchmark.uuidValidation",
             "RealWorldRegexBenchmark.runBenchmark.mapFieldPath.match.1000",
+            "Utf8HashChainBenchmark.caseInsensitiveKeywordFind.noMatch.599",
+            "Utf8HashChainBenchmark.caseInsensitiveKeywordReplaceAll.match.600",
             "HttpBenchmark.httpFull",
             "SearchScalingBenchmark.searchEasyFail.1024",
             "FanoutBenchmark.fanoutUnicode.1024");
-    assertThat(ids).hasSize(585);
+    assertThat(ids).hasSize(609);
   }
 
   @Test
@@ -78,9 +80,9 @@ class CrossEngineBenchmarkPlanTest {
                   .map(CrossEngineBenchmarkPlan.Trial::variant))
           .containsAnyOf(RegexEngineVariant.SAFERE_STRING, RegexEngineVariant.SAFERE_UTF8);
     }
-    assertThat(allTrials).hasSize(2352);
-    assertThat(plan.exclusions()).hasSize(573);
-    assertThat(accounted).hasSize(585 * RegexEngineVariant.values().length);
+    assertThat(allTrials).hasSize(2376);
+    assertThat(plan.exclusions()).hasSize(669);
+    assertThat(accounted).hasSize(609 * RegexEngineVariant.values().length);
   }
 
   @Test
@@ -124,7 +126,7 @@ class CrossEngineBenchmarkPlanTest {
             second.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(1691);
+        .hasSize(1715);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
@@ -499,8 +501,8 @@ class CrossEngineBenchmarkPlanTest {
         .allMatch(runner -> !runner.trialIds().isEmpty())
         .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
         .doesNotHaveDuplicates()
-        .hasSize(2391);
-    assertThat(plan.reportPlan().trials()).hasSize(2391);
+        .hasSize(2415);
+    assertThat(plan.reportPlan().trials()).hasSize(2415);
     assertThat(plan.reportPlan().exclusions()).isNotEmpty().doesNotHaveDuplicates();
     assertThat(
             plan.reportPlan(true).trials().stream()
