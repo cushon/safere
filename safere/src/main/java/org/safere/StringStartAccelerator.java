@@ -24,8 +24,7 @@ sealed interface StringStartAccelerator {
     }
     if (descriptor.prefix() != null) {
       if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(
-            descriptor.prefix(), descriptor.classHashChain(), descriptor.classHashChainUtf16());
+        return CaseInsensitiveLiteral.create(descriptor.prefix(), descriptor.classHashChain());
       }
       return Literal.create(descriptor.prefix());
     }
@@ -90,30 +89,20 @@ sealed interface StringStartAccelerator {
       int anchorOffset,
       char anchorLow,
       char anchorHigh,
-      ClassHashChain classHashChain,
-      ClassHashChainUtf16 classHashChainUtf16)
+      ClassHashChain classHashChain)
       implements StringStartAccelerator {
 
-    static CaseInsensitiveLiteral create(
-        String prefix, ClassHashChain classHashChain, ClassHashChainUtf16 classHashChainUtf16) {
+    static CaseInsensitiveLiteral create(String prefix, ClassHashChain classHashChain) {
       if (prefix == null || prefix.isEmpty()) {
-        return new CaseInsensitiveLiteral(prefix, 0, '\0', '\0', null, null);
+        return new CaseInsensitiveLiteral(prefix, 0, '\0', '\0', null);
       }
       int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
       char anchor = prefix.charAt(anchorOffset);
       char anchorLow = Ascii.toLowerCase(anchor);
       char anchorHigh = Ascii.toUpperCase(anchor);
-      if (Ascii.isAscii(prefix)) {
-        ClassHashChain chain =
-            classHashChain != null ? classHashChain : ClassHashChain.compileCaseInsensitive(prefix);
-        return new CaseInsensitiveLiteral(prefix, anchorOffset, anchorLow, anchorHigh, chain, null);
-      }
-      ClassHashChainUtf16 utf16Chain =
-          classHashChainUtf16 != null
-              ? classHashChainUtf16
-              : ClassHashChainUtf16.compileCaseInsensitive(prefix);
-      return new CaseInsensitiveLiteral(
-          prefix, anchorOffset, anchorLow, anchorHigh, null, utf16Chain);
+      ClassHashChain chain =
+          classHashChain != null ? classHashChain : ClassHashChain.compileCaseInsensitive(prefix);
+      return new CaseInsensitiveLiteral(prefix, anchorOffset, anchorLow, anchorHigh, chain);
     }
 
     @Override
@@ -123,14 +112,7 @@ sealed interface StringStartAccelerator {
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
       return Matcher.indexOfIgnoreCase(
-          text,
-          prefix,
-          anchorOffset,
-          anchorLow,
-          anchorHigh,
-          classHashChain,
-          classHashChainUtf16,
-          fromIndex);
+          text, prefix, anchorOffset, anchorLow, anchorHigh, classHashChain, fromIndex);
     }
   }
 

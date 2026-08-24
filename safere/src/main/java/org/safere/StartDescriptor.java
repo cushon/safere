@@ -5,7 +5,6 @@
 
 package org.safere;
 
-import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.FixedOffsetLiteral;
 import org.safere.Pattern.StartAcceleration;
 
@@ -23,11 +22,10 @@ record StartDescriptor(
     CharClassScanInfo anchoredCharClassPrefix,
     MultiLiteralInfo multiLiteral,
     TeddyModel teddyModel,
-    ClassHashChain classHashChain,
-    ClassHashChainUtf16 classHashChainUtf16) {
+    ClassHashChain classHashChain) {
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null);
 
   StartDescriptor(
       String prefix,
@@ -67,20 +65,11 @@ record StartDescriptor(
         anchoredCharClassPrefix,
         multiLiteral,
         teddyModel,
-        compileClassHashChain(prefix, prefixFoldCase),
-        compileClassHashChainUtf16(prefix, prefixFoldCase));
+        compileClassHashChain(prefix, prefixFoldCase));
   }
 
   private static ClassHashChain compileClassHashChain(String prefix, boolean foldCase) {
-    return prefix != null && foldCase && Ascii.isAscii(prefix)
-        ? ClassHashChain.compileCaseInsensitive(prefix)
-        : null;
-  }
-
-  private static ClassHashChainUtf16 compileClassHashChainUtf16(String prefix, boolean foldCase) {
-    return prefix != null && foldCase && !Ascii.isAscii(prefix)
-        ? ClassHashChainUtf16.compileCaseInsensitive(prefix)
-        : null;
+    return prefix != null && foldCase ? ClassHashChain.compileCaseInsensitive(prefix) : null;
   }
 
   boolean hasStartAcceleration() {

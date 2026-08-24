@@ -31,7 +31,8 @@ class RejectPrefilterTest {
     assertThat(lit.strategy()).isEqualTo(MatchStrategy.LITERAL);
     assertThat(lit.literal()).isEqualTo("needle");
     assertThat(lit.utf8()).isEqualTo("needle".getBytes(UTF_8));
-    assertThat(lit.hashChain()).isNotNull();
+    assertThat(lit.failure()).isNotNull();
+    assertThat(lit.shifts()).isNotNull();
 
     EnginePathOptions options = EnginePathOptions.allEnabled();
 

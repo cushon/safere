@@ -24,15 +24,9 @@ sealed interface Utf8StartAccelerator {
     }
     if (descriptor.prefix() != null) {
       if (descriptor.prefixFoldCase()) {
-        if (Ascii.isAscii(descriptor.prefix())) {
-          return CaseInsensitiveLiteral.create(descriptor.prefix(), descriptor.classHashChain());
-        }
-        if (descriptor.classHashChainUtf8() != null) {
-          return new CaseInsensitiveUtf8Literal(descriptor.classHashChainUtf8());
-        }
-        return null;
+        return CaseInsensitiveLiteral.create(descriptor.prefix());
       }
-      return Literal.create(descriptor.prefix(), descriptor.hashChain());
+      return Literal.create(descriptor.prefix());
     }
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
@@ -67,7 +61,6 @@ sealed interface Utf8StartAccelerator {
     return switch (accelerator) {
       case Literal lit -> lit.findCandidate(scanner, pos);
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
-      case CaseInsensitiveUtf8Literal ciul -> ciul.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
       case CharClass cc -> cc.findCandidate(scanner, pos);
       case Teddy t -> t.findCandidate(scanner, pos);
@@ -81,11 +74,12 @@ sealed interface Utf8StartAccelerator {
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record Literal(byte[] prefixUtf8, HashChain hashChain) implements Utf8StartAccelerator {
+  record Literal(byte[] prefixUtf8, int[] prefixUtf8Failure, int[] prefixUtf8Shifts)
+      implements Utf8StartAccelerator {
 
-    static Literal create(String prefix, HashChain hashChain) {
+    static Literal create(String prefix) {
       byte[] utf8 = prefix.getBytes(StandardCharsets.UTF_8);
-      return new Literal(utf8, hashChain != null ? hashChain : HashChain.compile(utf8));
+      return new Literal(utf8, Pattern.literalFailure(utf8), Pattern.literalShifts(utf8));
     }
 
     @Override
@@ -95,7 +89,7 @@ sealed interface Utf8StartAccelerator {
 
     int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (prefixUtf8 != null) {
-        return scanner.indexOf(prefixUtf8, hashChain, fromIndex);
+        return scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts, fromIndex);
       }
       return fromIndex;
     }
@@ -103,14 +97,10 @@ sealed interface Utf8StartAccelerator {
 
   @SuppressWarnings("ArrayRecordComponent")
   record CaseInsensitiveLiteral(
-      String prefix,
-      int anchorOffset,
-      byte anchorLow,
-      byte anchorHigh,
-      ClassHashChain classHashChain)
+      String prefix, int[] failure, int anchorOffset, byte anchorLow, byte anchorHigh)
       implements Utf8StartAccelerator {
 
-    static Utf8StartAccelerator create(String prefix, ClassHashChain classHashChain) {
+    static Utf8StartAccelerator create(String prefix) {
       for (int i = 0; i < prefix.length(); i++) {
         if (prefix.charAt(i) > 127) {
           return null;
@@ -121,11 +111,7 @@ sealed interface Utf8StartAccelerator {
       byte low = (byte) Ascii.toLowerCase(anchor);
       byte high = (byte) Ascii.toUpperCase(anchor);
       return new CaseInsensitiveLiteral(
-          prefix,
-          anchorOffset,
-          low,
-          high,
-          classHashChain != null ? classHashChain : ClassHashChain.compileCaseInsensitive(prefix));
+          prefix, Ascii.ignoreCaseFailure(prefix), anchorOffset, low, high);
     }
 
     @Override
@@ -135,20 +121,7 @@ sealed interface Utf8StartAccelerator {
 
     int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       return scanner.indexOfIgnoreCase(
-          prefix, anchorOffset, anchorLow, anchorHigh, classHashChain, fromIndex);
-    }
-  }
-
-  record CaseInsensitiveUtf8Literal(ClassHashChainUtf8 classHashChainUtf8)
-      implements Utf8StartAccelerator {
-
-    @Override
-    public AcceleratorPolicy policy() {
-      return AcceleratorPolicy.LITERAL;
-    }
-
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      return scanner.indexOfIgnoreCaseUtf8(classHashChainUtf8, fromIndex);
+          prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }
   }
 
@@ -173,7 +146,11 @@ sealed interface Utf8StartAccelerator {
       int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
       while (literalFrom <= scanner.length()) {
         int literalStart =
-            scanner.indexOf(fixedOffsetLiteral.utf8(), fixedOffsetLiteral.hashChain(), literalFrom);
+            scanner.indexOf(
+                fixedOffsetLiteral.utf8(),
+                fixedOffsetLiteral.failure(),
+                fixedOffsetLiteral.shifts(),
+                literalFrom);
         if (literalStart < 0) {
           return -1;
         }

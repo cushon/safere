@@ -5,7 +5,6 @@
 
 package org.safere;
 
-import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.CharClassMatchInfo;
 import org.safere.Pattern.KeywordAlternation;
 
@@ -31,13 +30,9 @@ record MatchDescriptor(
     KeywordAlternation keywordAlternation,
     CharClassMatchInfo charClassMatch,
     int minMatchLength,
-    HashChain hashChain,
-    ClassHashChain classHashChain,
-    ClassHashChainUtf16 classHashChainUtf16,
-    ClassHashChainUtf8 classHashChainUtf8) {
+    ClassHashChain classHashChain) {
 
-  static final MatchDescriptor NONE =
-      new MatchDescriptor(null, false, null, null, null, 0, null, null, null, null);
+  static final MatchDescriptor NONE = new MatchDescriptor(null, false, null, null, null, 0, null);
 
   MatchDescriptor(
       String literalMatch,
@@ -53,30 +48,11 @@ record MatchDescriptor(
         keywordAlternation,
         charClassMatch,
         minMatchLength,
-        literalMatch != null && !literalFoldCase
-            ? HashChain.compile(literalMatch.getBytes(StandardCharsets.UTF_8))
-            : null,
-        compileClassHashChain(literalMatch, literalFoldCase),
-        compileClassHashChainUtf16(literalMatch, literalFoldCase),
-        compileClassHashChainUtf8(literalMatch, literalFoldCase));
+        compileClassHashChain(literalMatch, literalFoldCase));
   }
 
   private static ClassHashChain compileClassHashChain(String literal, boolean foldCase) {
-    return literal != null && foldCase && Ascii.isAscii(literal)
-        ? ClassHashChain.compileCaseInsensitive(literal)
-        : null;
-  }
-
-  private static ClassHashChainUtf16 compileClassHashChainUtf16(String literal, boolean foldCase) {
-    return literal != null && foldCase && !Ascii.isAscii(literal)
-        ? ClassHashChainUtf16.compileCaseInsensitive(literal)
-        : null;
-  }
-
-  private static ClassHashChainUtf8 compileClassHashChainUtf8(String literal, boolean foldCase) {
-    return literal != null && foldCase && !Ascii.isAscii(literal)
-        ? ClassHashChainUtf8.compileCaseInsensitive(literal)
-        : null;
+    return literal != null && foldCase ? ClassHashChain.compileCaseInsensitive(literal) : null;
   }
 
   boolean hasFastPath() {

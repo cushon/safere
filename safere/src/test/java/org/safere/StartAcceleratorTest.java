@@ -89,37 +89,9 @@ class StartAcceleratorTest {
     assertThat(Utf8StartAccelerator.findNextCandidate(singleUtf8, utf8Scanner("xxxa"), 0))
         .isEqualTo(3);
 
-    // Non-ASCII case-insensitive prefix (length >= 4) is accelerated via ClassHashChainUtf8
+    // Non-ASCII case-insensitive prefix falls back (null)
     StartDescriptor nonAsciiDesc = descriptor("café", true, null, null);
-    Utf8StartAccelerator nonAsciiUtf8 = Utf8StartAccelerator.create(nonAsciiDesc, false);
-    assertThat(nonAsciiUtf8).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveUtf8Literal.class);
-    assertThat(Utf8StartAccelerator.findNextCandidate(nonAsciiUtf8, utf8Scanner("xxxCAFÉ"), 0))
-        .isEqualTo(3);
-    assertThat(Utf8StartAccelerator.findNextCandidate(nonAsciiUtf8, utf8Scanner("xxxcafé"), 0))
-        .isEqualTo(3);
-
-    // Short non-ASCII case-insensitive prefix (< 4 chars) falls back to null
-    StartDescriptor shortNonAsciiDesc = descriptor("é", true, null, null);
-    assertThat(Utf8StartAccelerator.create(shortNonAsciiDesc, false)).isNull();
-  }
-
-  @Test
-  void compiledUnicodeFoldedPrefixSelectsUtf8HashChainWhenWidthsAreStable() {
-    Pattern pattern = Pattern.compile("(?iu)примир_мир:[0-9]+");
-
-    assertThat(pattern.utf8StartAccelerator())
-        .isInstanceOf(Utf8StartAccelerator.CaseInsensitiveUtf8Literal.class);
-    Utf8Matcher matcher = pattern.matcher(Utf8Input.validated("шум ПРИМИР_МИР:42".getBytes(UTF_8)));
-    assertThat(matcher.find()).isTrue();
-  }
-
-  @Test
-  void compiledUnicodeFoldedPrefixSkipsUtf8HashChainWhenFoldWidthsDiffer() {
-    Pattern pattern = Pattern.compile("(?iu)Keyword:[0-9]+");
-
-    assertThat(pattern.utf8StartAccelerator()).isInstanceOf(Utf8StartAccelerator.CharClass.class);
-    Utf8Matcher matcher = pattern.matcher(Utf8Input.validated("keyword:42".getBytes(UTF_8)));
-    assertThat(matcher.find()).isTrue();
+    assertThat(Utf8StartAccelerator.create(nonAsciiDesc, false)).isNull();
   }
 
   @Test

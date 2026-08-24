@@ -767,40 +767,6 @@ class SearchScalingRegressionTest {
   }
 
   @Test
-<<<<<<< HEAD
-  void hashChainAchievesSublinearWorkOnExactLiteral() {
-    Pattern pattern = Pattern.compile("content-length-header"); // M = 21, threshold = 840B
-    byte[] bytes = "x".repeat(800).getBytes(UTF_8);
-    Utf8Input input = Utf8Input.trusted(bytes);
-
-    long work =
-        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
-
-    // 800 / 20 = ~40 operations (vs 800 operations for linear scan)
-    assertThat(work)
-        .as("HashChain must perform sublinear work bounded by N / (M - 1)")
-        .isLessThanOrEqualTo(bytes.length / 20 + 10);
-  }
-
-  @Test
-  void classHashChainAchievesSublinearWorkOnCaseInsensitiveLiteral() {
-    Pattern pattern =
-        Pattern.compile(
-            "(?i)content_length_header"); // M = 7 for prefix "content", threshold = 280B
-    byte[] bytes =
-        "The quick brown fox jumps over the lazy dog. ".repeat(5).getBytes(UTF_8); // 225 bytes
-    Utf8Input input = Utf8Input.trusted(bytes);
-
-    long work =
-        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
-
-    // 225 / 6 = ~37 operations (vs 225 operations for linear scan)
-    assertThat(work)
-        .as("Class-HashChain must perform sublinear work on case-insensitive patterns")
-        .isLessThanOrEqualTo(bytes.length / 6 + 10);
-  }
-
-  @Test
   void classHashChainAchievesSublinearWorkOnCaseInsensitiveLiteralForStringInput() {
     ClassHashChain chc = ClassHashChain.compileCaseInsensitive("content_length_header");
     String text = "The quick brown fox jumps over the lazy dog. ".repeat(5); // 225 chars
@@ -819,20 +785,19 @@ class SearchScalingRegressionTest {
   }
 
   @Test
-  void classHashChainUtf16AchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForStringInput() {
-    ClassHashChainUtf16 chcUtf16 =
-        ClassHashChainUtf16.compileCaseInsensitive("конфигурация_сервера"); // M = 20
+  void classHashChainAchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForStringInput() {
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("конфигурация_сервера"); // M = 20
     String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5); // 270 chars
     long work =
         WorkCounter.countForTesting(
             () ->
-                assertThat(chcUtf16.search(text, 0, WorkLimit.forRemaining(text.length())))
+                assertThat(chc.search(text, 0, WorkLimit.forRemaining(text.length())))
                     .isEqualTo(-1));
 
     // Sublinear bound: 270 / 19 = ~14 operations (vs 270 for linear scan)
     assertThat(work)
         .as(
-            "ClassHashChainUtf16 must perform sublinear work on non-ASCII case-insensitive patterns"
+            "ClassHashChain must perform sublinear work on non-ASCII case-insensitive patterns"
                 + " for String input")
         .isLessThanOrEqualTo(text.length() / 15 + 10);
   }

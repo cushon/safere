@@ -14,6 +14,7 @@ import java.util.Arrays;
 final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   private static final int REPLACEMENT_CHARACTER = 0xFFFD;
   private static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
+  private static final int BOYER_MOORE_HORSPOOL_BATCH_SIZE = 2;
   private static final int MULTI_RANGE_SWAR_MINIMUM_LENGTH = 64;
   private static final int MULTI_RANGE_SWAR_SCALAR_PROLOGUE_LENGTH = Long.BYTES;
   private static final int VECTOR_SCALAR_PROLOGUE_LENGTH = Integer.BYTES;
@@ -370,41 +371,37 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
-  int indexOf(byte[] literal) {
-    return indexOf(literal, null, 0);
+  int indexOf(byte[] literal, int[] failure, int[] shifts) {
+    return indexOf(literal, failure, shifts, 0);
   }
 
-  int indexOf(byte[] literal, int start) {
-    return indexOf(literal, null, start);
-  }
-
-  int indexOf(byte[] literal, HashChain hashChain, int start) {
+  int indexOf(byte[] literal, int[] failure, int[] shifts, int start) {
     if (literal.length == 0) {
       return start;
-    }
-    if (hashChain != null && remaining(start) < ByteSwarScan.filterThreshold(literal.length)) {
-      int result =
-          hashChain.search(bytes, offset, length, start, WorkLimit.forRemaining(remaining(start)));
-      if (result >= -1) {
-        return result;
-      }
     }
     if (!WorkCounterConfig.ENABLED) {
       if (literal.length == 1) {
         return indexOfByte(literal[0], start);
       }
-      // Below the filter threshold, 2-gram HashChain avoids SWAR's setup cost and scalar tail.
-      // Above the threshold, SWAR's 8-positions-per-step throughput dominates. Only the -2
-      // "work budget exhausted" sentinel falls through to the linear-time KMP scan below.
-      int result =
-          remaining(start) >= ByteSwarScan.filterThreshold(literal.length)
-              ? ByteSwarScan.indexOfFiltered(bytes, offset, length, literal, start)
-              : indexOfLinear(literal, start);
-      if (result >= -1) {
-        return result;
+      if (shifts != null) {
+        // Both searches beat the linear scan, but they win over different ranges. The skip loop
+        // reaches the end of a short input in a handful of steps, while the candidate filter has
+        // to pay for its wider setup and finish with a scalar tail. Once the input is long enough
+        // for the filter's eight-positions-per-step throughput to dominate that fixed cost, it
+        // wins by a growing margin. The crossover scales with the literal length, since a longer
+        // literal lets the skip loop advance further per step.
+        int result =
+            remaining(start) >= ByteSwarScan.filterThreshold(literal.length)
+                ? ByteSwarScan.indexOfFiltered(bytes, offset, length, literal, start)
+                : boundedBoyerMooreHorspool(literal, shifts, start);
+        // A match index or a trusted -1; only the -2 "work budget exhausted" sentinel falls
+        // through to the linear-time scan below.
+        if (result >= -1) {
+          return result;
+        }
       }
     }
-    return indexOfLinear(literal, start);
+    return indexOfLinear(literal, failure, start);
   }
 
   private int remaining(int start) {
@@ -412,8 +409,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   }
 
   /** Knuth-Morris-Pratt scan, linear in the input length regardless of the literal. */
-  int indexOfLinear(byte[] literal, int start) {
-    int[] failure = Pattern.literalFailure(literal);
+  private int indexOfLinear(byte[] literal, int[] failure, int start) {
     return indexOfLinear(bytes, offset, length, literal, failure, start);
   }
 
@@ -438,36 +434,11 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
-  int indexOfIgnoreCaseUtf8(ClassHashChainUtf8 classHashChainUtf8, int start) {
-    if (classHashChainUtf8 == null) {
-      return -1;
-    }
-    int result =
-        classHashChainUtf8.search(
-            bytes, offset, length, start, WorkLimit.forRemaining(remaining(start)));
-    // The accelerator interface has no work-exhausted sentinel. Returning the original start
-    // lets the normal matcher continue without skipping any possible match.
-    return result == -2 ? start : result;
-  }
-
   int indexOfIgnoreCase(
-      String prefix,
-      int anchorOffset,
-      byte anchorLow,
-      byte anchorHigh,
-      ClassHashChain classHashChain,
-      int start) {
+      String prefix, int[] failure, int anchorOffset, byte anchorLow, byte anchorHigh, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return start;
-    }
-    if (classHashChain != null && remaining(start) < ByteSwarScan.filterThreshold(prefixLen)) {
-      int result =
-          classHashChain.search(
-              bytes, offset, length, start, WorkLimit.forRemaining(remaining(start)));
-      if (result >= -1) {
-        return result;
-      }
     }
     if (!WorkCounterConfig.ENABLED) {
       if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
@@ -493,8 +464,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         return swarResult;
       }
     }
-    return indexOfLinearIgnoreCase(
-        bytes, offset, length, prefix, Ascii.ignoreCaseFailure(prefix), start);
+    return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
   }
 
   static int indexOfLinearIgnoreCase(
@@ -553,6 +523,46 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return contiguous
         ? ByteSwarScan.indexOfByteRange(bytes, offset, length, first, last, start)
         : indexOfAsciiClassScalar(asciiClass, start);
+  }
+
+  /**
+   * Boyer-Moore-Horspool with a bad-character skip table, used for inputs too short to amortize the
+   * candidate filter's setup.
+   *
+   * @return the index of the first match, {@code -1} if the literal is absent, or {@code -2} if the
+   *     work budget was exhausted before either could be established
+   */
+  private int boundedBoyerMooreHorspool(byte[] literal, int[] shifts, int start) {
+    int last = literal.length - 1;
+    int position = start + last;
+    long work = 0;
+    long workLimit = WorkLimit.forRemaining(remaining(start));
+    while (position < length) {
+      // Keep two dependent skip steps under one outer backedge. C2 otherwise leaves this loop
+      // scalar when it is compiled alongside the candidate-filter path, adding a backedge and
+      // safepoint poll to every skip.
+      for (int step = 0; step < BOYER_MOORE_HORSPOOL_BATCH_SIZE && position < length; step++) {
+        int literalPosition = last;
+        int inputPosition = position;
+        while (literalPosition >= 0 && bytes[offset + inputPosition] == literal[literalPosition]) {
+          if (WorkLimit.isExhausted(work, workLimit)) {
+            return -2;
+          }
+          work++;
+          literalPosition--;
+          inputPosition--;
+        }
+        if (literalPosition < 0) {
+          return inputPosition + 1;
+        }
+        if (WorkLimit.isExhausted(work, workLimit)) {
+          return -2;
+        }
+        position += shifts[bytes[offset + position] & 0xFF];
+        work++;
+      }
+    }
+    return -1;
   }
 
   private int indexOfAsciiClassScalar(AsciiBitmap asciiClass, int start) {

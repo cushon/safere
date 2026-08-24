@@ -2251,17 +2251,9 @@ public final class Matcher implements MatchResult {
 
   static int indexOfIgnoreCase(
       String text, String prefix, int anchorOffset, char low, char high, int fromIndex) {
-    ClassHashChain classHashChain = null;
-    ClassHashChainUtf16 classHashChainUtf16 = null;
-    if (prefix.length() >= 4) {
-      if (Ascii.isAscii(prefix)) {
-        classHashChain = ClassHashChain.compileCaseInsensitive(prefix);
-      } else {
-        classHashChainUtf16 = ClassHashChainUtf16.compileCaseInsensitive(prefix);
-      }
-    }
-    return indexOfIgnoreCase(
-        text, prefix, anchorOffset, low, high, classHashChain, classHashChainUtf16, fromIndex);
+    ClassHashChain classHashChain =
+        prefix.length() >= 4 ? ClassHashChain.compileCaseInsensitive(prefix) : null;
+    return indexOfIgnoreCase(text, prefix, anchorOffset, low, high, classHashChain, fromIndex);
   }
 
   static int indexOfIgnoreCase(
@@ -2271,7 +2263,6 @@ public final class Matcher implements MatchResult {
       char low,
       char high,
       ClassHashChain classHashChain,
-      ClassHashChainUtf16 classHashChainUtf16,
       int fromIndex) {
     int prefixLen = prefix.length();
     switch (prefixLen) {
@@ -2287,13 +2278,13 @@ public final class Matcher implements MatchResult {
     }
     int length = text.length();
     int pos = Math.max(0, fromIndex);
-    if (classHashChainUtf16 != null) {
-      long limit = WorkLimit.forRemaining(length - pos);
-      int result = classHashChainUtf16.search(text, pos, limit);
-      return result == -2 ? Utf16.indexOfUnicodeIgnoreCase(text, prefix, pos) : result;
-    }
     boolean isAsciiPrefix = Ascii.isAscii(prefix);
     if (!isAsciiPrefix) {
+      if (classHashChain != null) {
+        long limit = WorkLimit.forRemaining(length - pos);
+        int result = classHashChain.search(text, pos, limit);
+        return result == -2 ? Utf16.indexOfUnicodeIgnoreCase(text, prefix, pos) : result;
+      }
       return Utf16.indexOfUnicodeIgnoreCase(text, prefix, pos);
     }
     long verificationWork = 0;
@@ -3479,7 +3470,6 @@ public final class Matcher implements MatchResult {
     char anchorLow = 0;
     char anchorHigh = 0;
     ClassHashChain classHashChain = null;
-    ClassHashChainUtf16 classHashChainUtf16 = null;
     if (foldCase) {
       PreparedMatchRunner runner = parentPattern.preparedMatchRunner(false);
       if (runner instanceof LiteralPreparedRunner literalRunner) {
@@ -3487,7 +3477,6 @@ public final class Matcher implements MatchResult {
         anchorLow = literalRunner.anchorLow();
         anchorHigh = literalRunner.anchorHigh();
         classHashChain = literalRunner.classHashChain();
-        classHashChainUtf16 = literalRunner.classHashChainUtf16();
       } else {
         int literalLen = literal.length();
         if (literalLen == 1) {
@@ -3502,7 +3491,6 @@ public final class Matcher implements MatchResult {
         }
         MatchDescriptor descriptor = parentPattern.matchDescriptor();
         classHashChain = descriptor.classHashChain();
-        classHashChainUtf16 = descriptor.classHashChainUtf16();
       }
     }
 
@@ -3512,14 +3500,7 @@ public final class Matcher implements MatchResult {
     int matchStart =
         foldCase
             ? indexOfIgnoreCase(
-                text,
-                literal,
-                anchorOffset,
-                anchorLow,
-                anchorHigh,
-                classHashChain,
-                classHashChainUtf16,
-                searchFrom)
+                text, literal, anchorOffset, anchorLow, anchorHigh, classHashChain, searchFrom)
             : indexOfReplacementLiteral(literal, searchFrom);
     if (matchStart == -1) {
       if (accumulator != null) {
@@ -3568,14 +3549,7 @@ public final class Matcher implements MatchResult {
       matchStart =
           foldCase
               ? indexOfIgnoreCase(
-                  text,
-                  literal,
-                  anchorOffset,
-                  anchorLow,
-                  anchorHigh,
-                  classHashChain,
-                  classHashChainUtf16,
-                  searchFrom)
+                  text, literal, anchorOffset, anchorLow, anchorHigh, classHashChain, searchFrom)
               : indexOfReplacementLiteral(literal, searchFrom);
     } while (matchStart != -1);
 
@@ -4668,9 +4642,9 @@ public final class Matcher implements MatchResult {
     private final String literal;
     private final boolean foldCase;
     private final byte[] literalUtf8;
-    private final HashChain hashChain;
+    private final int[] failure;
+    private final int[] shifts;
     private final ClassHashChain classHashChain;
-    private final ClassHashChainUtf16 classHashChainUtf16;
     private final int anchorOffset;
     private final char anchorLow;
     private final char anchorHigh;
@@ -4683,28 +4657,21 @@ public final class Matcher implements MatchResult {
         String literal,
         boolean foldCase,
         byte[] literalUtf8,
+        int[] failure,
+        int[] shifts,
         boolean isStartAnchored,
         PreparedMatchRunner fallback,
-        HashChain hashChain,
-        ClassHashChain classHashChain,
-        ClassHashChainUtf16 classHashChainUtf16) {
+        ClassHashChain classHashChain) {
       this.literal = literal;
       this.foldCase = foldCase;
       this.literalUtf8 = literalUtf8;
-      this.hashChain =
-          hashChain != null
-              ? hashChain
-              : (literalUtf8 != null ? HashChain.compile(literalUtf8) : null);
-      boolean isAscii = foldCase && literal != null && Ascii.isAscii(literal);
+      this.failure = failure;
+      this.shifts = shifts;
       this.classHashChain =
           classHashChain != null
               ? classHashChain
-              : (isAscii ? ClassHashChain.compileCaseInsensitive(literal) : null);
-      this.classHashChainUtf16 =
-          classHashChainUtf16 != null
-              ? classHashChainUtf16
-              : (foldCase && literal != null && !isAscii
-                  ? ClassHashChainUtf16.compileCaseInsensitive(literal)
+              : (foldCase && literal != null
+                  ? ClassHashChain.compileCaseInsensitive(literal)
                   : null);
       int literalLen = literal != null ? literal.length() : 0;
       if (foldCase && literalLen > 0) {
@@ -4746,10 +4713,6 @@ public final class Matcher implements MatchResult {
       return classHashChain;
     }
 
-    ClassHashChainUtf16 classHashChainUtf16() {
-      return classHashChainUtf16;
-    }
-
     @Override
     public boolean find(Matcher matcher, boolean regionActive) {
       if (isStartAnchored && matcher.searchFrom > 0) {
@@ -4773,11 +4736,10 @@ public final class Matcher implements MatchResult {
                 anchorLow,
                 anchorHigh,
                 classHashChain,
-                classHashChainUtf16,
                 matcher.searchFrom);
         matchLength = matchLengthChars;
       } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
-        idx = utf8Scanner.indexOf(literalUtf8, hashChain, matcher.searchFrom);
+        idx = utf8Scanner.indexOf(literalUtf8, failure, shifts, matcher.searchFrom);
         matchLength = matchLengthBytes;
       } else if (matcher.text != null) {
         if (WorkCounterConfig.ENABLED) {
