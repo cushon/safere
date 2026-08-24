@@ -162,9 +162,9 @@ class BenchmarkInputMaterializerTest {
         .hasSize(40);
     JsonObject executionPlan = manifest.getAsJsonObject("executionPlan");
     assertThat(executionPlan.get("version").getAsInt()).isEqualTo(1);
-    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(676);
+    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(682);
     assertThat(executionPlan.get("engineCount").getAsInt()).isEqualTo(10);
-    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(6_760);
+    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(6_820);
     assertThat(
             executionEntry(
                     executionPlan, "UnicodeCompileBenchmark.compile.word.0@dotnet_nonbacktracking")
@@ -182,15 +182,8 @@ class BenchmarkInputMaterializerTest {
                 .getAsString())
         .isEqualTo("unsupportedSyntax");
     for (String input : new String[] {"absent", "late"}) {
-      JsonObject dotnetAlphabetic =
-          executionEntry(
-              executionPlan,
-              "UnicodePrefixBenchmark.alphabetic." + input + ".1024@dotnet_nonbacktracking");
-      assertThat(dotnetAlphabetic.get("status").getAsString()).isEqualTo("excluded");
-      assertThat(dotnetAlphabetic.getAsJsonObject("exclusion").get("reason").getAsString())
-          .contains("Alphabetic");
-
-      for (String engineId : new String[] {"re2_cpp", "go_regexp", "pcre2_jit"}) {
+      for (String engineId :
+          new String[] {"re2_cpp", "go_regexp", "pcre2_jit", "dotnet_nonbacktracking"}) {
         JsonObject excludedAlphabetic =
             executionEntry(
                 executionPlan, "UnicodePrefixBenchmark.alphabetic." + input + ".1024@" + engineId);
@@ -243,7 +236,7 @@ class BenchmarkInputMaterializerTest {
                   .getAsString())
           .isEqualTo("[\\u4E00-\\u9FFF]+[0-9]+");
     }
-    assertThat(resolvedData.getAsJsonArray("workloads")).hasSize(347);
+    assertThat(resolvedData.getAsJsonArray("workloads")).hasSize(353);
     for (JsonElement engineElement : executionPlan.getAsJsonArray("engines")) {
       String engineId = engineElement.getAsJsonObject().get("id").getAsString();
       assertThat(
@@ -255,7 +248,7 @@ class BenchmarkInputMaterializerTest {
                           Set.of("runnable", "excluded")
                               .contains(planEntry.get("status").getAsString())))
           .as(engineId)
-          .hasSize(676);
+          .hasSize(682);
     }
     assertThat(
             executionPlan.getAsJsonArray("entries").asList().stream()
