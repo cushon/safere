@@ -652,15 +652,14 @@ class Utf8InputScannerTest {
 
   @Test
   void boyerMooreHorspoolCompletesMatchWithoutExhaustionWhenWinningCandidateMatches() {
-    byte[] needle = "abcde".getBytes(UTF_8);
+    byte[] needle = "baa".getBytes(UTF_8);
     int[] shifts = literalShifts(needle);
-    // Haystack has prefix noise followed by match:
-    // With hoisted work checking, the inner loop verifies all 5 characters of the true match
-    // without aborting.
-    byte[] haystack = ("noise " + "abcde").getBytes(UTF_8);
+    // The failed candidates consume the work budget before the final candidate. With hoisted work
+    // checking, the inner loop completes the true match without aborting partway through it.
+    byte[] haystack = "aaaaaaaaabaa".getBytes(UTF_8);
     Utf8InputScanner scanner = new Utf8InputScanner(haystack);
 
-    assertThat(scanner.boundedBoyerMooreHorspool(needle, shifts, 0)).isEqualTo(6);
+    assertThat(scanner.boundedBoyerMooreHorspool(needle, shifts, 0)).isEqualTo(9);
   }
 
   private static List<Integer> traceForward(Utf8InputScanner scanner) {
