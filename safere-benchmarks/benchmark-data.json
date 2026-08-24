@@ -195,6 +195,26 @@
       "shared": true
     },
     {
+      "id": "crossEngine.RegexBenchmark.emailFindDoc.input",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "The quick brown fox jumps over the lazy dog. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. Sed cursus ante dapibus diam. ",
+        "suffix": "Contact support directly at service_alerts123@support.internal.org for any system assistance.",
+        "length": 4096
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.RegexBenchmark.tokenSuffixFind.input",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "timestamp=2026-08-24T12:00:00Z level=INFO module=engine message=\"processing request packet chunk 0x4f2a\"\n",
+        "suffix": "target_service_node=node987-staging status=READY",
+        "length": 4096
+      },
+      "shared": true
+    },
+    {
       "id": "crossEngine.ApplicationBenchmark.uuidValidation.input.0",
       "recipe": {
         "kind": "literal",
@@ -2656,6 +2676,42 @@
       ],
       "inputs": [
         "crossEngine.RegexBenchmark.emailFind.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "RegexBenchmark.emailFindDoc",
+      "operation": "find",
+      "patterns": [
+        "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}"
+      ],
+      "inputs": [
+        "crossEngine.RegexBenchmark.emailFindDoc.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "RegexBenchmark.tokenSuffixFind",
+      "operation": "find",
+      "patterns": [
+        "[a-z]+[0-9]+-(?:prod|staging|canary)"
+      ],
+      "inputs": [
+        "crossEngine.RegexBenchmark.tokenSuffixFind.input"
       ],
       "resultConsumption": "boolean",
       "measurement": {
