@@ -808,7 +808,10 @@ class SearchScalingRegressionTest {
 
   @Test
   void classHashChainUtf8AchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForUtf8Input() {
-    ClassHashChainUtf8 chcUtf8 = ClassHashChainUtf8.compileCaseInsensitive("конфигурация_сервера");
+    // Keep every simple-fold equivalent at the same UTF-8 width so this test exercises the
+    // supported hash-chain path rather than the ordinary Unicode fallback.
+    ClassHashChainUtf8 chcUtf8 = ClassHashChainUtf8.compileCaseInsensitive("примир_примир_примир");
+    assertThat(chcUtf8).isNotNull();
     String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5);
     byte[] bytes = text.getBytes(UTF_8);
     long work =
