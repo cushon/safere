@@ -347,6 +347,36 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void requiredInfixLiteralRejectsDensePrefixNoiseWithSinglePassWork() {
+    // Prefix "{Link:" is common (appears 1,000 times).
+    // Infix "<<!nav>>" is rare and absent.
+    Pattern pattern = Pattern.compile("(\\{Link:[^}]*?)<<!nav>>([^}]*?\\})");
+    String input = "{Link: target=home_page, category=general, priority=high}\n".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    assertThat(work)
+        .as(
+            "Infix literal prefilter must reject dense-prefix noise in a single pass without DFA"
+                + " churn")
+        .isLessThanOrEqualTo(input.length() + 100);
+  }
+
+  @Test
+  void requiredInfixLiteralRejectsDensePrefixNoiseInSplitWithSinglePassWork() {
+    Pattern pattern = Pattern.compile("(\\{Link:[^}]*?)<<!nav>>([^}]*?\\})");
+    String input = "{Link: target=home_page, category=general, priority=high}\n".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.split(input)).containsExactly(input));
+
+    assertThat(work)
+        .as("Split must reject dense-prefix noise in a single pass without DFA churn")
+        .isLessThanOrEqualTo(input.length() + 100);
+  }
+
+  @Test
   void literalSelectivityScoringIsLinearInPatternSize() {
     long smallerWork = WorkCounter.countForTesting(() -> Pattern.compile(selectivityPattern(100)));
     long largerWork = WorkCounter.countForTesting(() -> Pattern.compile(selectivityPattern(400)));
@@ -736,6 +766,166 @@ class SearchScalingRegressionTest {
         "String");
   }
 
+  @Test
+  void unicodeCaseInsensitiveLinearChainUsesOnePassForSubmatchExtraction() {
+    // (?iu) triggers inst.foldCase = true on literal runes (e.g. Kelvin sign K <-> K <-> k)
+    Pattern pattern = Pattern.compile("(?iu)key:([0-9]+)");
+    assertThat(pattern.canOnePassSubmatch()).isTrue();
+    assertThat(pattern.onePass()).isNotNull();
+
+    String input = "prefix noise KEY:98765 trailing text";
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(0)).isEqualTo("KEY:98765");
+              assertThat(matcher.group(1)).isEqualTo("98765");
+            });
+    assertThat(groupReadWork)
+        .as(
+            "Unicode case-insensitive linear chain submatch extraction must run in OnePass with"
+                + " zero NFA allocations")
+        .isLessThanOrEqualTo(30);
+  }
+
+  @Test
+  void unanchoredLinearChainSubmatchWorkIsBoundedByMatchSlice() {
+    Pattern pattern = Pattern.compile("([a-z]+)@([a-z]+)\\.com");
+    String prefix = "noise ".repeat(500);
+    String match = "alice@google.com";
+    String suffix = " trailing".repeat(500);
+    String input = prefix + match + suffix;
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(1)).isEqualTo("alice");
+              assertThat(matcher.group(2)).isEqualTo("google");
+            });
+    assertThat(groupReadWork)
+        .as(
+            "Submatch extraction work must be strictly bounded by match slice length, not haystack"
+                + " length")
+        .isLessThanOrEqualTo(match.length() * 2L + 20);
+  }
+
+  @Test
+  void directDfaStartStateAcceleratesUnanchoredAlternationOnString() {
+    Prog prog = Compiler.compile(Parser.parse("apple|banana|cherry", ParseFlags.MATCH_NL));
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    String input = "x".repeat(10_000) + "cherry";
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              Dfa.SearchResult res = dfa.doSearch(input, false, false);
+              assertThat(res).isNotNull();
+              assertThat(res.matched()).isTrue();
+            });
+    assertThat(work)
+        .as("Direct DFA start state acceleration must scan input linearly")
+        .isLessThanOrEqualTo(input.length() + 20);
+  }
+
+  @Test
+  void multiLiteralPrefilterOnDenseCandidateNoiseIsBoundedByWorkLimit() {
+    Pattern pattern = Pattern.compile("APPLE|BANANA|CHERRY");
+    byte[] noise = "A B C A B C ".repeat(10_000).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("Multi-literal candidate verification must be bounded by WorkLimit on dense noise")
+        .isLessThan(500);
+  }
+
+  @Test
+  void matchesWithCapturesDefersNfaWorkUntilGroupIsRead() {
+    // Non-OnePass pattern due to ambiguous repetition where b is part of [a-z]
+    Pattern pattern = Pattern.compile("([a-z]+)b([a-z]+)");
+    String input = "helloworldbwelcome";
+    Matcher matcher = pattern.matcher(input);
+    long matchWork = WorkCounter.countForTesting(() -> assertThat(matcher.matches()).isTrue());
+    assertThat(matcher.group(0)).isEqualTo(input);
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(1)).isEqualTo("helloworld");
+              assertThat(matcher.group(2)).isEqualTo("welcome");
+            });
+    assertThat(matchWork)
+        .as("matches() must only run forward DFA work without eager NFA state building")
+        .isLessThanOrEqualTo(input.length() * 2L + 20);
+    assertThat(groupReadWork)
+        .as("Submatch extraction happens on-demand when group(k) is read")
+        .isLessThanOrEqualTo(input.length() * 5L + 20);
+  }
+
+  @Test
+  void matchesWithCapturesRejectsNonMatchingInputInLinearWork() {
+    Pattern pattern = Pattern.compile("([a-z]+)b([a-z]+)");
+    String input = "x".repeat(10_000);
+    Matcher matcher = pattern.matcher(input);
+    long work = WorkCounter.countForTesting(() -> assertThat(matcher.matches()).isFalse());
+    assertThat(work)
+        .as("Non-matching input in matches() must reject in linear DFA steps without NFA work")
+        .isLessThanOrEqualTo(input.length() + 20);
+  }
+
+  @Test
+  void directDfaStartStateAcceleratesUnanchoredAlternationOnUtf8() {
+    Prog prog = Compiler.compile(Parser.parse("apple|banana|cherry", ParseFlags.MATCH_NL));
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    byte[] input = ("x".repeat(10_000) + "cherry").getBytes(UTF_8);
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              Dfa.SearchResult res =
+                  dfa.doSearch(new Utf8InputScanner(input, 0, input.length), 0, false, false);
+              assertThat(res).isNotNull();
+              assertThat(res.matched()).isTrue();
+            });
+    assertThat(work)
+        .as("Direct DFA start state acceleration on UTF-8 must scan input linearly")
+        .isLessThanOrEqualTo(input.length + 20);
+  }
+
+  @Test
+  void lookingAtWithCapturesDefersNfaWorkUntilGroupIsRead() {
+    // Non-OnePass pattern due to overlapping alternation branches
+    Pattern pattern = Pattern.compile("(?:apple|application|apply):([0-9]+)");
+    String input = "application:12345 " + "x".repeat(10_000);
+    Matcher matcher = pattern.matcher(input);
+    long lookingAtWork =
+        WorkCounter.countForTesting(() -> assertThat(matcher.lookingAt()).isTrue());
+    assertThat(lookingAtWork)
+        .as(
+            "lookingAt() must only execute DFA prefix scan bounded by matched prefix, not trailing"
+                + " 10k chars")
+        .isLessThanOrEqualTo(50);
+    assertThat(matcher.group(0)).isEqualTo("application:12345");
+    assertThat(matcher.group(1)).isEqualTo("12345");
+  }
+
+  @Test
+  void multiLiteralPrefilterDoesNotRestartScalarVerificationAfterLateDenseCandidates() {
+    int literalLength = 512;
+    Pattern pattern =
+        Pattern.compile("A".repeat(literalLength - 1) + "B|" + "B".repeat(literalLength - 1) + "C");
+    byte[] noise = ("x".repeat(256) + "A".repeat(8_192)).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("WorkLimit exhaustion must resume with the normal matcher without a scalar rescan")
+        .isLessThan((long) noise.length * 10);
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");
@@ -743,5 +933,106 @@ class SearchScalingRegressionTest {
     } catch (ClassNotFoundException e) {
       return false;
     }
+  }
+
+  @Test
+  void leadingWhitespaceCharClassExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
+    String input2000 = "a".repeat(2_000);
+    String input10000 = "a".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion char class find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("   [123] ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void leadingWhitespaceCharClassExpansionIsLinearForUtf8Input() {
+    Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
+    byte[] input2000 = "a".repeat(2_000).getBytes(UTF_8);
+    byte[] input10000 = "a".repeat(10_000).getBytes(UTF_8);
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input2000)).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input10000)).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion char class find on UTF-8 should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher(Utf8Input.trusted("   [123] ".repeat(size).getBytes(UTF_8)))::find,
+        "UTF-8");
+  }
+
+  @Test
+  void leadingWhitespaceLiteralExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s+https?://\\w+");
+    String input2000 = "a".repeat(2_000);
+    String input10000 = "a".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion literal find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("  http://example ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void leadingWhitespaceMultiLiteralExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s*(?:apple|banana|cherry)");
+    String input2000 = "x".repeat(2_000);
+    String input10000 = "x".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion multi-literal find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void leadingUnicodeExpansionIsLinearForStringAndUtf8Input() {
+    Pattern pattern = Pattern.compile("[\\u00e9\\u00e8]+:target");
+    String input2000 = "x".repeat(2_000);
+    String input10000 = "x".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion unicode find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("  \u00e9\u00e9:target ".repeat(size))::find, "String");
+    assertRepeatedFindWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted("  \u00e9\u00e9:target ".repeat(size).getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
   }
 }

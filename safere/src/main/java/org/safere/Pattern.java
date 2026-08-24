@@ -140,7 +140,9 @@ public final class Pattern implements Serializable {
   private final transient CharClassScanInfo charClassPrefix;
   private final transient CharClassScanInfo anchoredCharClassPrefix;
   private final transient FixedOffsetLiteral fixedOffsetLiteral;
+  private final transient MultiLiteralInfo multiLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
+  private final transient StartDescriptor startDescriptor;
   private final transient StringStartAccelerator stringStartAccelerator;
   private final transient EnginePathOptions enginePathOptions;
   private final transient Matcher.PreparedMatchRunner defaultPreparedMatchRunner;
@@ -314,6 +316,8 @@ public final class Pattern implements Serializable {
     this.charClassPrefix = startDescriptor.charClassPrefix();
     this.anchoredCharClassPrefix = startDescriptor.anchoredCharClassPrefix();
     this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
+    this.multiLiteral = startDescriptor.multiLiteral();
+    this.startDescriptor = startDescriptor != null ? startDescriptor : StartDescriptor.NONE;
     this.utf8StartAccelerator =
         Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
     this.stringStartAccelerator =
@@ -478,6 +482,11 @@ public final class Pattern implements Serializable {
   }
 
   private static StartDescriptor extractStartDescriptor(Regexp metadataAst) {
+    return extractStartDescriptor(metadataAst, true);
+  }
+
+  private static StartDescriptor extractStartDescriptor(
+      Regexp metadataAst, boolean allowLeadingExpansion) {
     PrefixResult prefixResult = extractPrefix(metadataAst);
     String prefix = prefixResult.prefix();
     boolean prefixFoldCase = prefixResult.foldCase();
@@ -485,12 +494,23 @@ public final class Pattern implements Serializable {
         prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
     CharClassScanInfo ccPrefix = (prefix == null) ? extractCharClassPrefix(metadataAst) : null;
     String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
+    MultiLiteralInfo multiLiteral =
+        VectorScanProviders.multiLiteralProviderAvailable()
+                && altLiterals != null
+                && altLiterals.length >= 2
+                && altLiterals.length <= 4
+            ? MultiLiteralInfo.create(altLiterals)
+            : null;
     TeddyModel teddyModel = null;
     if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
       teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
     }
     StartAcceleration startAcceleration =
-        (prefix == null && ccPrefix == null && fixedOffsetLiteral == null && teddyModel == null)
+        (prefix == null
+                && ccPrefix == null
+                && fixedOffsetLiteral == null
+                && multiLiteral == null
+                && teddyModel == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
@@ -503,13 +523,26 @@ public final class Pattern implements Serializable {
         anchoredPrefix == null && anchoredCandidate != null
             ? extractCharClassPrefix(anchoredCandidate)
             : null;
+    StartDescriptor.LeadingExpansion leadingExpansion =
+        (allowLeadingExpansion
+                && prefix == null
+                && fixedOffsetLiteral == null
+                && teddyModel == null)
+            ? extractLeadingExpansion(metadataAst)
+            : null;
+    if (leadingExpansion != null) {
+      ccPrefix = null;
+      startAcceleration = null;
+    }
     if (prefix == null
         && fixedOffsetLiteral == null
         && ccPrefix == null
+        && multiLiteral == null
         && startAcceleration == null
         && anchoredPrefix == null
         && anchoredCharClassPrefix == null
-        && teddyModel == null) {
+        && teddyModel == null
+        && leadingExpansion == null) {
       return StartDescriptor.NONE;
     }
     return new StartDescriptor(
@@ -520,7 +553,92 @@ public final class Pattern implements Serializable {
         startAcceleration,
         anchoredPrefix,
         anchoredCharClassPrefix,
-        teddyModel);
+        multiLiteral,
+        teddyModel,
+        leadingExpansion);
+  }
+
+  private static StartDescriptor.LeadingExpansion extractLeadingExpansion(Regexp re) {
+    if (re == null) {
+      return null;
+    }
+    re = unwrapCaptures(re);
+    if (re == null || re.op != RegexpOp.CONCAT || re.nsub() < 2) {
+      return null;
+    }
+
+    int idx = 0;
+    while (idx < re.nsub() && isLeadingZeroWidth(re.subs.get(idx))) {
+      idx++;
+    }
+    if (idx >= re.nsub() - 1) {
+      return null;
+    }
+
+    Regexp first = unwrapCaptures(re.subs.get(idx));
+    if (first == null) {
+      return null;
+    }
+
+    int minRepetition;
+    int maxRepetition;
+    Regexp repeated;
+    if (first.op == RegexpOp.STAR) {
+      minRepetition = 0;
+      maxRepetition = Integer.MAX_VALUE;
+      repeated = unwrapCaptures(first.sub());
+    } else if (first.op == RegexpOp.PLUS) {
+      minRepetition = 1;
+      maxRepetition = Integer.MAX_VALUE;
+      repeated = unwrapCaptures(first.sub());
+    } else if (first.op == RegexpOp.REPEAT) {
+      minRepetition = first.min;
+      maxRepetition = first.max == -1 ? Integer.MAX_VALUE : first.max;
+      repeated = unwrapCaptures(first.sub());
+    } else {
+      return null;
+    }
+
+    if (repeated == null || repeated.op == RegexpOp.ANY_CHAR || repeated.op == RegexpOp.ANY_BYTE) {
+      return null;
+    }
+
+    CharClassScanInfo leadingClass;
+    if (repeated.op == RegexpOp.CHAR_CLASS
+        && repeated.charClass != null
+        && !repeated.charClass.isEmpty()) {
+      leadingClass = CharClassScanInfo.fromCharClass(repeated.charClass);
+    } else if (repeated.op == RegexpOp.LITERAL) {
+      leadingClass =
+          CharClassScanInfo.fromCharClass(literalCharClass(repeated.rune, repeated.flags));
+    } else {
+      return null;
+    }
+
+    if (leadingClass == null) {
+      return null;
+    }
+
+    int numRunes = 0;
+    int[] ranges = leadingClass.ranges();
+    if (ranges != null) {
+      for (int i = 0; i < ranges.length; i += 2) {
+        numRunes += (ranges[i + 1] - ranges[i] + 1);
+      }
+    }
+    if (numRunes > 150_000) {
+      return null;
+    }
+
+    List<Regexp> tailSubs = re.subs.subList(idx + 1, re.nsub());
+    Regexp tail = tailSubs.size() == 1 ? tailSubs.getFirst() : Regexp.concat(tailSubs, 0);
+
+    StartDescriptor inner = extractStartDescriptor(tail, false);
+    if (inner == null || !inner.hasStartAcceleration() || inner.leadingExpansion() != null) {
+      return null;
+    }
+
+    return new StartDescriptor.LeadingExpansion(leadingClass, minRepetition, maxRepetition, inner);
   }
 
   /**
@@ -664,7 +782,7 @@ public final class Pattern implements Serializable {
     if (enginePathOptions.startAcceleration()
         && utf8StartAccelerator != null
         && !prog.anchorStart()) {
-      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
+      searchStart = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
       if (searchStart < 0) {
         return false;
       }
@@ -738,7 +856,7 @@ public final class Pattern implements Serializable {
       if (strategy != null) {
         diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
       }
-      searchStart = utf8StartAccelerator.findCandidate(scanner, 0);
+      searchStart = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
       if (searchStart < 0) {
         if (strategy != null) {
           diagnostics.boundary(strategy);
@@ -1333,6 +1451,10 @@ public final class Pattern implements Serializable {
     return charClassPrefix;
   }
 
+  StartDescriptor startDescriptor() {
+    return startDescriptor;
+  }
+
   String anchoredPrefix() {
     return anchoredPrefix;
   }
@@ -1348,6 +1470,11 @@ public final class Pattern implements Serializable {
   /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
   FixedOffsetLiteral fixedOffsetLiteral() {
     return fixedOffsetLiteral;
+  }
+
+  /** Returns metadata for 2-6 keyword literal alternation acceleration, or {@code null}. */
+  MultiLiteralInfo multiLiteral() {
+    return multiLiteral;
   }
 
   /** Returns the compiled UTF-8 start-position accelerator strategy, or {@code null}. */
@@ -3178,9 +3305,15 @@ public final class Pattern implements Serializable {
         endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
     String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
     CharClassScanInfo ccPrefix = startDescriptor != null ? startDescriptor.charClassPrefix() : null;
-    String requiredLiteral = prefix == null ? extractRequiredLiteral(metadataAst) : null;
+    boolean hasLeadingExpansion =
+        startDescriptor != null && startDescriptor.leadingExpansion() != null;
+    String suffixStr = endAnchoredSuffix != null ? endAnchoredSuffix.suffix() : null;
+    String requiredLiteral =
+        !anchorStart && !hasLeadingExpansion
+            ? extractRequiredLiteral(metadataAst, prefix, suffixStr)
+            : null;
     CharClassScanInfo requiredMatchClass = null;
-    if (prefix == null && endAnchoredCharClass == null) {
+    if (!anchorStart && prefix == null && endAnchoredCharClass == null) {
       if (ccPrefix == null) {
         requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
       } else {
@@ -3435,8 +3568,13 @@ public final class Pattern implements Serializable {
    * alternation and optional repetition, so the result can only reject inputs that cannot match.
    */
   private static String extractRequiredLiteral(Regexp re) {
-    String longest = null;
-    int longestScore = 0;
+    return extractRequiredLiteral(re, null, null);
+  }
+
+  private static String extractRequiredLiteral(
+      Regexp re, String excludePrefix, String excludeSuffix) {
+    String best = null;
+    int bestScore = 0;
     Deque<Regexp> pending = new ArrayDeque<>();
     pending.addLast(re);
     while (!pending.isEmpty()) {
@@ -3460,17 +3598,20 @@ public final class Pattern implements Serializable {
               && node.runes != null
               && node.runes.length >= 2) {
             String candidate = new String(node.runes, 0, node.runes.length);
-            int candidateScore = RarityOracle.literalSelectivityScore(candidate);
-            if (longest == null || candidateScore > longestScore) {
-              longest = candidate;
-              longestScore = candidateScore;
+            if ((excludePrefix == null || !candidate.equals(excludePrefix))
+                && (excludeSuffix == null || !candidate.equals(excludeSuffix))) {
+              int candidateScore = RarityOracle.literalSelectivityScore(candidate);
+              if (best == null || candidateScore > bestScore) {
+                best = candidate;
+                bestScore = candidateScore;
+              }
             }
           }
         }
         default -> {}
       }
     }
-    return longest;
+    return best;
   }
 
   /**

@@ -31,6 +31,11 @@ sealed interface Utf8StartAccelerator {
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
     }
+    if (descriptor.multiLiteral() != null
+        && !hasWordBoundary
+        && VectorScanProviders.multiLiteralProviderAvailable()) {
+      return new MultiLiteral(descriptor.multiLiteral(), descriptor.teddyModel());
+    }
     if (descriptor.teddyModel() != null
         && !hasWordBoundary
         && VectorScanProviders.teddyProviderAvailable()) {
@@ -39,14 +44,19 @@ sealed interface Utf8StartAccelerator {
     if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
       return new CharClass(descriptor.charClassPrefix());
     }
+    if (descriptor.leadingExpansion() != null) {
+      Utf8StartAccelerator inner =
+          create(descriptor.leadingExpansion().innerDescriptor(), hasWordBoundary);
+      if (inner != null) {
+        return new LeadingExpansion(
+            descriptor.leadingExpansion().leadingClass(),
+            descriptor.leadingExpansion().minRepetition(),
+            descriptor.leadingExpansion().maxRepetition(),
+            inner);
+      }
+    }
     return null;
   }
-
-  /**
-   * Finds the next candidate match start position at or after {@code fromIndex}. Returns negative
-   * if definitely not found.
-   */
-  int findCandidate(Utf8InputScanner scanner, int fromIndex);
 
   /**
    * Finds the next candidate match start position at or after {@code pos} using pattern-matched
@@ -65,6 +75,8 @@ sealed interface Utf8StartAccelerator {
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
       case CharClass cc -> cc.findCandidate(scanner, pos);
       case Teddy t -> t.findCandidate(scanner, pos);
+      case MultiLiteral ml -> ml.findCandidate(scanner, pos);
+      case LeadingExpansion le -> le.findCandidate(scanner, pos);
     };
   }
 
@@ -87,8 +99,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (prefixUtf8 != null) {
         return scanner.indexOf(prefixUtf8, prefixUtf8Failure, prefixUtf8Shifts, fromIndex);
       }
@@ -120,8 +131,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       return scanner.indexOfIgnoreCase(
           prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }
@@ -135,8 +145,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefix, fromIndex);
     }
 
@@ -191,8 +200,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.CHAR_CLASS;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       if (scanInfo == null) {
         return fromIndex;
       }
@@ -231,8 +239,7 @@ sealed interface Utf8StartAccelerator {
       return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
     }
 
-    @Override
-    public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       VectorScanProvider provider = VectorScanProviders.providerForTeddyLength(scanner.length());
       if (provider == null) {
         return fromIndex;
@@ -252,6 +259,109 @@ sealed interface Utf8StartAccelerator {
           if (i + lit.length() <= len
               && Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
             return i;
+          }
+        }
+      }
+      return -1;
+    }
+  }
+
+  record LeadingExpansion(
+      CharClassScanInfo leadingClass,
+      int minRepetition,
+      int maxRepetition,
+      Utf8StartAccelerator inner)
+      implements Utf8StartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return new AcceleratorPolicy(16, 4, false, inner.policy().strategy());
+    }
+
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      int searchPos = Math.max(0, fromIndex);
+      int textLen = scanner.length();
+      while (searchPos < textLen) {
+        int innerMatch = Utf8StartAccelerator.findNextCandidate(inner, scanner, searchPos);
+        if (innerMatch < 0) {
+          return -1;
+        }
+        int start = innerMatch;
+        int count = 0;
+        while (start > fromIndex) {
+          int cp = scanner.singleUnitCodePointBefore(start);
+          int prevPos;
+          if (cp >= 0) {
+            prevPos = start - 1;
+          } else {
+            long decoded = scanner.decodeBackward(start);
+            cp = InputScanner.codePoint(decoded);
+            prevPos = InputScanner.position(decoded);
+          }
+          if (!leadingClass.contains(cp)) {
+            break;
+          }
+          if (count + 1 > maxRepetition) {
+            break;
+          }
+          count++;
+          start = prevPos;
+        }
+        if (count >= minRepetition) {
+          return start;
+        }
+        searchPos = innerMatch + 1;
+      }
+      return -1;
+    }
+  }
+
+  record MultiLiteral(MultiLiteralInfo info, TeddyModel teddyModel)
+      implements Utf8StartAccelerator {
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
+    }
+
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      VectorScanProvider provider =
+          VectorScanProviders.providerForMultiLiteralLength(scanner.length());
+      if (provider != null) {
+        int idx =
+            provider.indexOfMultiLiteral(
+                scanner.bytes(),
+                scanner.offset(),
+                scanner.length(),
+                info.literals(),
+                info.anchorChars(),
+                info.anchorOffsets(),
+                info.anchorRanges(),
+                info.minLength(),
+                teddyModel,
+                fromIndex);
+        if (idx != VectorScanProvider.UNSUPPORTED) {
+          return idx;
+        }
+        return fromIndex;
+      }
+      return findScalar(scanner, fromIndex);
+    }
+
+    private int findScalar(Utf8InputScanner scanner, int fromIndex) {
+      int len = scanner.length();
+      int minLen = info.minLength();
+      String[] literals = info.literals();
+      byte[] bytes = scanner.bytes();
+      int offset = scanner.offset();
+      for (int i = fromIndex; i <= len - minLen; i++) {
+        for (String lit : literals) {
+          if (i + lit.length() <= len) {
+            if (WorkCounterConfig.ENABLED) {
+              WorkCounter.record(lit.length());
+            }
+            if (Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
+              return i;
+            }
           }
         }
       }

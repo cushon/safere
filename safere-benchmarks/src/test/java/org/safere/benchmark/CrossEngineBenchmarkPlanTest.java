@@ -8,6 +8,7 @@ package org.safere.benchmark;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -48,7 +49,7 @@ class CrossEngineBenchmarkPlanTest {
             "HttpBenchmark.httpFull",
             "SearchScalingBenchmark.searchEasyFail.1024",
             "FanoutBenchmark.fanoutUnicode.1024");
-    assertThat(ids).hasSize(580);
+    assertThat(ids).hasSize(606);
   }
 
   @Test
@@ -77,9 +78,9 @@ class CrossEngineBenchmarkPlanTest {
                   .map(CrossEngineBenchmarkPlan.Trial::variant))
           .containsAnyOf(RegexEngineVariant.SAFERE_STRING, RegexEngineVariant.SAFERE_UTF8);
     }
-    assertThat(allTrials).hasSize(2166);
-    assertThat(plan.exclusions()).hasSize(734);
-    assertThat(accounted).hasSize(580 * RegexEngineVariant.values().length);
+    assertThat(allTrials).hasSize(2448);
+    assertThat(plan.exclusions()).hasSize(582);
+    assertThat(accounted).hasSize(606 * RegexEngineVariant.values().length);
   }
 
   @Test
@@ -123,14 +124,14 @@ class CrossEngineBenchmarkPlanTest {
             second.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(1516);
+        .hasSize(1787);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
             second.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS).stream()
                 .map(CrossEngineBenchmarkPlan.Trial::id)
                 .toList())
-        .hasSize(578);
+        .hasSize(589);
     assertThat(first.trials(CrossEngineWorkload.TimingGroup.MILLISECONDS))
         .extracting(CrossEngineBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
@@ -163,12 +164,36 @@ class CrossEngineBenchmarkPlanTest {
             BenchmarkOperation.LOOKING_AT,
             BenchmarkOperation.MATCHER_RESET_FIND,
             BenchmarkOperation.MATCHER_REGION_FIND,
-            BenchmarkOperation.FIND_GROUP_PRESENT)
+            BenchmarkOperation.FIND_GROUP_PRESENT,
+            BenchmarkOperation.REPLACE_FIRST,
+            BenchmarkOperation.REPLACE_ALL,
+            BenchmarkOperation.REPLACE_ALL_LENGTH_SUM,
+            BenchmarkOperation.MANUAL_REPLACE_ALL)
         .doesNotContain(
             BenchmarkOperation.CAPTURE_GROUPS,
             BenchmarkOperation.FIND_GROUP,
-            BenchmarkOperation.REPLACE_ALL,
             BenchmarkOperation.SPLIT_LENGTH_SUM);
+  }
+
+  @Test
+  void utf8ReplacementTrialsCoverGenericBenchmarkFamilies() {
+    CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
+
+    assertThat(
+            List.of(
+                    plan.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS),
+                    plan.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
+                .stream()
+                .flatMap(List::stream)
+                .filter(trial -> trial.variant() == RegexEngineVariant.SAFERE_UTF8)
+                .map(CrossEngineBenchmarkPlan.Trial::id))
+        .contains(
+            "ApplicationBenchmark.secretRedaction@safere-utf8",
+            "RealWorldRegexBenchmark.runBenchmark.markupImageLink.match.1000@safere-utf8",
+            "ReplaceBenchmark.literalReplaceFirst@safere-utf8",
+            "ReplaceBenchmark.pigLatinReplaceAll@safere-utf8",
+            "ReplaceBenchmark.anchoredReplace@safere-utf8",
+            "ReplaceBenchmark.manualReplaceAll@safere-utf8");
   }
 
   @Test
@@ -289,6 +314,51 @@ class CrossEngineBenchmarkPlanTest {
     }
     assertThat(plan.resolve("MatcherApiBenchmark.resetAndFind@re2-ffm-string-conversion"))
         .isNotNull();
+  }
+
+  @Test
+  void utf8ReplacementOperationsPrepareAndRunThroughTheGenericAdapter() {
+    CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
+    Blackhole blackhole =
+        new Blackhole(
+            "Today's password is swordfish. I understand instantiating Blackholes directly is"
+                + " dangerous.");
+    for (String id :
+        List.of(
+            "ReplaceBenchmark.literalReplaceFirst@safere-utf8",
+            "ReplaceBenchmark.pigLatinReplaceAll@safere-utf8",
+            "ReplaceBenchmark.manualReplaceAll@safere-utf8",
+            "ApplicationBenchmark.secretRedaction@safere-utf8",
+            "RealWorldRegexBenchmark.runBenchmark.markupImageLink.match.1000@safere-utf8")) {
+      CrossEngineBenchmarkPlan.Trial trial = plan.resolve(id);
+      try (CrossEngineTrialRunner runner =
+          CrossEngineTrialRunner.prepare(id, trial.workload().timingGroup())) {
+        runner.run(blackhole);
+      }
+    }
+  }
+
+  @Test
+  void utf8ReplacementAdapterExpandsLiteralNumberedAndNamedTemplates() {
+    RegexEngineVariant variant = RegexEngineVariant.SAFERE_UTF8;
+    RegexEngineVariant.RegexInput input =
+        new RegexEngineVariant.Utf8RegexInput(
+            org.safere.Utf8Input.trusted("alpha=one&beta=two".getBytes(StandardCharsets.UTF_8)));
+
+    try (RegexEngineVariant.CompiledRegex literal = variant.compile("&");
+        RegexEngineVariant.CompiledRegex numbered = variant.compile("([a-z]+)=([a-z]+)");
+        RegexEngineVariant.CompiledRegex named =
+            variant.compile("(?<key>[a-z]+)=(?<value>[a-z]+)")) {
+      assertThat(literal.replaceFirst(input, variant.prepareReplacement(";")).validationValue())
+          .isEqualTo("alpha=one;beta=two");
+      assertThat(numbered.replaceAll(input, variant.prepareReplacement("$2:$1")).validationValue())
+          .isEqualTo("one:alpha&two:beta");
+      assertThat(
+              named
+                  .replaceAll(input, variant.prepareReplacement("${key}=[${value}]"))
+                  .validationValue())
+          .isEqualTo("alpha=[one]&beta=[two]");
+    }
   }
 
   @Test
@@ -429,8 +499,8 @@ class CrossEngineBenchmarkPlanTest {
         .allMatch(runner -> !runner.trialIds().isEmpty())
         .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
         .doesNotHaveDuplicates()
-        .hasSize(2205);
-    assertThat(plan.reportPlan().trials()).hasSize(2205);
+        .hasSize(2487);
+    assertThat(plan.reportPlan().trials()).hasSize(2487);
     assertThat(plan.reportPlan().exclusions()).isNotEmpty().doesNotHaveDuplicates();
     assertThat(
             plan.reportPlan(true).trials().stream()
