@@ -56,11 +56,11 @@ sealed interface Utf8StartAccelerator {
         }
         yield null;
       }
-      case StartDescriptor.LineAnchor la -> null;
-      case StartDescriptor.MultiLiteral ml -> null;
-      case StartDescriptor.Teddy td -> null;
-      case StartDescriptor.CharClass cc -> null;
-      case StartDescriptor.None none -> null;
+      case StartDescriptor.LineAnchor unusedLa -> null;
+      case StartDescriptor.MultiLiteral unusedMl -> null;
+      case StartDescriptor.Teddy unusedTd -> null;
+      case StartDescriptor.CharClass unusedCc -> null;
+      case StartDescriptor.None unusedNone -> null;
     };
   }
 

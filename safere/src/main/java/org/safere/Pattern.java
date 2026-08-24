@@ -712,7 +712,7 @@ public final class Pattern implements Serializable {
         }
         yield RarityOracle.literalSelectivityScore(prefix);
       }
-      case StartDescriptor.HasTeddyModel htm -> 80;
+      case StartDescriptor.HasTeddyModel unusedHtm -> 80;
       case StartDescriptor.FixedOffset fo -> {
         if (fo.fixedOffsetLiteral() != null && fo.fixedOffsetLiteral().literal() != null) {
           yield RarityOracle.literalSelectivityScore(fo.fixedOffsetLiteral().literal());
