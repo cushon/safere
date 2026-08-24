@@ -32,7 +32,7 @@ class BenchmarkInputMaterializerTest {
     Map<String, byte[]> first = BenchmarkInputMaterializer.materialize(benchmarkData);
     Map<String, byte[]> second = BenchmarkInputMaterializer.materialize(benchmarkData);
 
-    assertThat(first).hasSize(400);
+    assertThat(first).hasSize(405);
     assertThat(second.keySet()).containsExactlyElementsOf(first.keySet());
     first.forEach((id, bytes) -> assertThat(second.get(id)).as(id).containsExactly(bytes));
     assertThat(text(first, "crossEngine.RegexBenchmark.literalMatch.input")).isEqualTo("hello");
@@ -162,9 +162,9 @@ class BenchmarkInputMaterializerTest {
         .hasSize(40);
     JsonObject executionPlan = manifest.getAsJsonObject("executionPlan");
     assertThat(executionPlan.get("version").getAsInt()).isEqualTo(1);
-    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(663);
+    assertThat(executionPlan.get("workloadCount").getAsInt()).isEqualTo(668);
     assertThat(executionPlan.get("engineCount").getAsInt()).isEqualTo(10);
-    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(6_630);
+    assertThat(executionPlan.getAsJsonArray("entries")).hasSize(6_680);
     assertThat(
             executionEntry(
                     executionPlan, "UnicodeCompileBenchmark.compile.word.0@dotnet_nonbacktracking")
@@ -243,7 +243,7 @@ class BenchmarkInputMaterializerTest {
                   .getAsString())
           .isEqualTo("[\\u4E00-\\u9FFF]+[0-9]+");
     }
-    assertThat(resolvedData.getAsJsonArray("workloads")).hasSize(344);
+    assertThat(resolvedData.getAsJsonArray("workloads")).hasSize(349);
     for (JsonElement engineElement : executionPlan.getAsJsonArray("engines")) {
       String engineId = engineElement.getAsJsonObject().get("id").getAsString();
       assertThat(
@@ -255,7 +255,7 @@ class BenchmarkInputMaterializerTest {
                           Set.of("runnable", "excluded")
                               .contains(planEntry.get("status").getAsString())))
           .as(engineId)
-          .hasSize(663);
+          .hasSize(668);
     }
     assertThat(
             executionPlan.getAsJsonArray("entries").asList().stream()
