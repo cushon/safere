@@ -700,10 +700,8 @@ public final class Pattern implements Serializable {
   }
 
   private static int reverseAnchorSelectivityScore(StartDescriptor desc) {
-    if (desc == null) {
-      return 0;
-    }
     return switch (desc) {
+      case null -> 0;
       case StartDescriptor.Literal lit -> {
         String prefix = lit.prefix();
         if (prefix == null || prefix.isEmpty()) {
@@ -3715,33 +3713,13 @@ public final class Pattern implements Serializable {
   }
 
   private static String extractStartAnchorNeedle(StartDescriptor desc) {
-    if (desc == null) {
-      return null;
-    }
     return switch (desc) {
+      case null -> null;
       case StartDescriptor.Literal lit -> lit.prefix();
-      case StartDescriptor.ReverseAnchor ra -> {
-        if (ra.anchorDescriptor() instanceof StartDescriptor.Literal lit) {
-          yield lit.prefix();
-        }
-        if (ra.anchorDescriptor() instanceof StartDescriptor.FixedOffset fo
-            && fo.fixedOffsetLiteral() != null) {
-          yield fo.fixedOffsetLiteral().literal();
-        }
-        yield null;
-      }
-      case StartDescriptor.LeadingExpansion le -> {
-        if (le.innerDescriptor() instanceof StartDescriptor.Literal lit) {
-          yield lit.prefix();
-        }
-        if (le.innerDescriptor() instanceof StartDescriptor.FixedOffset fo
-            && fo.fixedOffsetLiteral() != null) {
-          yield fo.fixedOffsetLiteral().literal();
-        }
-        yield null;
-      }
       case StartDescriptor.FixedOffset fo when fo.fixedOffsetLiteral() != null ->
           fo.fixedOffsetLiteral().literal();
+      case StartDescriptor.ReverseAnchor ra -> extractStartAnchorNeedle(ra.anchorDescriptor());
+      case StartDescriptor.LeadingExpansion le -> extractStartAnchorNeedle(le.innerDescriptor());
       default -> null;
     };
   }
