@@ -182,15 +182,8 @@ class BenchmarkInputMaterializerTest {
                 .getAsString())
         .isEqualTo("unsupportedSyntax");
     for (String input : new String[] {"absent", "late"}) {
-      JsonObject dotnetAlphabetic =
-          executionEntry(
-              executionPlan,
-              "UnicodePrefixBenchmark.alphabetic." + input + ".1024@dotnet_nonbacktracking");
-      assertThat(dotnetAlphabetic.get("status").getAsString()).isEqualTo("excluded");
-      assertThat(dotnetAlphabetic.getAsJsonObject("exclusion").get("reason").getAsString())
-          .contains("Alphabetic");
-
-      for (String engineId : new String[] {"re2_cpp", "go_regexp", "pcre2_jit"}) {
+      for (String engineId :
+          new String[] {"re2_cpp", "go_regexp", "pcre2_jit", "dotnet_nonbacktracking"}) {
         JsonObject excludedAlphabetic =
             executionEntry(
                 executionPlan, "UnicodePrefixBenchmark.alphabetic." + input + ".1024@" + engineId);
