@@ -122,25 +122,16 @@ public final class Pattern implements Serializable {
   private final transient Regexp ast;
 
   private final transient Map<String, Integer> namedGroups;
-  private final transient String prefix;
-  private final transient boolean prefixFoldCase;
   private final transient MatchDescriptor matchDescriptor;
   private final transient byte[] literalMatchUtf8;
   private final transient int[] literalMatchFailure;
   private final transient int[] literalMatchShifts;
-  private final transient byte[] prefixUtf8;
-  private final transient String anchoredPrefix;
-  private final transient byte[] anchoredPrefixUtf8;
   private final transient boolean hasLazy;
   private final transient boolean hasAlternation;
   private final transient boolean hasNullableAlternation;
   private final transient boolean canMatchEmpty;
   private final transient boolean startsWithGraphemeClusterBoundary;
   private final transient boolean hasInternalGraphemeClusterBoundary;
-  private final transient CharClassScanInfo charClassPrefix;
-  private final transient CharClassScanInfo anchoredCharClassPrefix;
-  private final transient FixedOffsetLiteral fixedOffsetLiteral;
-  private final transient MultiLiteralInfo multiLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StartDescriptor startDescriptor;
   private final transient StringStartAccelerator stringStartAccelerator;
@@ -263,7 +254,6 @@ public final class Pattern implements Serializable {
       boolean hasInternalGraphemeClusterBoundary,
       RejectDescriptor rejectDescriptor,
       EnginePathOptions enginePathOptions) {
-    this.patternId = nextPatternId();
     this.pattern = pattern;
     this.flags = flags;
     this.prog = prog;
@@ -287,20 +277,10 @@ public final class Pattern implements Serializable {
       this.flatProg = null;
       this.flatDfaProg = null;
     }
-
     this.ast = ast;
     this.namedGroups = namedGroups;
-    this.prefix = startDescriptor.prefix();
-    this.prefixFoldCase = startDescriptor.prefixFoldCase();
-    this.prefixUtf8 =
-        startDescriptor.prefix() == null || startDescriptor.prefix().isEmpty()
-            ? null
-            : startDescriptor.prefix().getBytes(StandardCharsets.UTF_8);
-    this.anchoredPrefix = startDescriptor.anchoredPrefix();
-    this.anchoredPrefixUtf8 =
-        anchoredPrefix == null || anchoredPrefix.isEmpty()
-            ? null
-            : anchoredPrefix.getBytes(StandardCharsets.UTF_8);
+    this.startDescriptor =
+        startDescriptor != null ? startDescriptor : StartDescriptor.None.INSTANCE;
     this.matchDescriptor = matchDescriptor != null ? matchDescriptor : MatchDescriptor.NONE;
     String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
@@ -313,20 +293,16 @@ public final class Pattern implements Serializable {
     this.canMatchEmpty = canMatchEmpty;
     this.startsWithGraphemeClusterBoundary = startsWithGraphemeClusterBoundary;
     this.hasInternalGraphemeClusterBoundary = hasInternalGraphemeClusterBoundary;
-    this.charClassPrefix = startDescriptor.charClassPrefix();
-    this.anchoredCharClassPrefix = startDescriptor.anchoredCharClassPrefix();
-    this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
-    this.multiLiteral = startDescriptor.multiLiteral();
-    this.startDescriptor = startDescriptor != null ? startDescriptor : StartDescriptor.NONE;
     this.utf8StartAccelerator =
-        Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
+        Utf8StartAccelerator.create(this.startDescriptor, prog.hasWordBoundary());
     this.stringStartAccelerator =
-        StringStartAccelerator.create(startDescriptor, prog.hasWordBoundary());
+        StringStartAccelerator.create(this.startDescriptor, prog.hasWordBoundary());
     this.enginePathOptions = enginePathOptions;
     this.rejectDescriptor = rejectDescriptor != null ? rejectDescriptor : RejectDescriptor.NONE;
     this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
     this.defaultPreparedMatchRunner = createPreparedRunner(false);
     this.regionPreparedMatchRunner = createPreparedRunner(true);
+    this.patternId = nextPatternId();
 
     // Eagerly compute analysis and setup to avoid latency spikes on first use.
     if (shouldEagerlyBuildOnePass()) {
@@ -487,13 +463,33 @@ public final class Pattern implements Serializable {
 
   private static StartDescriptor extractStartDescriptor(
       Regexp metadataAst, boolean allowLeadingExpansion, boolean allowReverseAnchor) {
+    if (metadataAst == null) {
+      return StartDescriptor.None.INSTANCE;
+    }
+
+    // Literal prefix (exact match or unanchored text search)
     PrefixResult prefixResult = extractPrefix(metadataAst);
     String prefix = prefixResult.prefix();
     boolean prefixFoldCase = prefixResult.foldCase();
-    FixedOffsetLiteral fixedOffsetLiteral =
-        prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
-    CharClassScanInfo ccPrefix = (prefix == null) ? extractCharClassPrefix(metadataAst) : null;
-    String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
+    Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
+    PrefixResult anchoredPrefixResult = extractPrefixFromCandidate(anchoredCandidate);
+    String anchoredPrefix =
+        anchoredPrefixResult.prefix() != null && !anchoredPrefixResult.foldCase()
+            ? anchoredPrefixResult.prefix()
+            : null;
+    if (prefix != null || anchoredPrefix != null) {
+      return new StartDescriptor.Literal(prefix, prefixFoldCase, anchoredPrefix);
+    }
+
+    // Fixed offset literal
+    FixedOffsetLiteral fixedOffsetLiteral = extractFixedOffsetLiteral(metadataAst);
+    if (fixedOffsetLiteral != null) {
+      CharClassScanInfo ccPrefix = extractCharClassPrefix(metadataAst);
+      return new StartDescriptor.FixedOffset(fixedOffsetLiteral, ccPrefix);
+    }
+
+    // Multi-literal and Teddy alternation models
+    String[] altLiterals = extractLiteralAlternation(metadataAst);
     MultiLiteralInfo multiLiteral =
         VectorScanProviders.multiLiteralProviderAvailable()
                 && altLiterals != null
@@ -501,78 +497,48 @@ public final class Pattern implements Serializable {
                 && altLiterals.length <= 4
             ? MultiLiteralInfo.create(altLiterals)
             : null;
-    TeddyModel teddyModel = null;
-    if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
-      teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
+    TeddyModel teddyModel =
+        altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32
+            ? TeddyModel.compileForSelectedProvider(altLiterals)
+            : null;
+    if (multiLiteral != null) {
+      return new StartDescriptor.MultiLiteral(multiLiteral, teddyModel);
     }
-    StartAcceleration startAcceleration =
-        (prefix == null
-                && ccPrefix == null
-                && fixedOffsetLiteral == null
-                && multiLiteral == null
-                && teddyModel == null)
-            ? extractStartAcceleration(metadataAst)
-            : null;
-    Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
-    PrefixResult anchoredPrefixResult = extractPrefixFromCandidate(anchoredCandidate);
-    String anchoredPrefix =
-        anchoredPrefixResult.prefix() != null && !anchoredPrefixResult.foldCase()
-            ? anchoredPrefixResult.prefix()
-            : null;
+    if (teddyModel != null) {
+      return new StartDescriptor.Teddy(teddyModel);
+    }
+
+    // Leading nullable or bounded character class repetition
+    if (allowLeadingExpansion) {
+      StartDescriptor.LeadingExpansion leadingExpansion = extractLeadingExpansion(metadataAst);
+      if (leadingExpansion != null) {
+        return leadingExpansion;
+      }
+    }
+
+    // Reverse suffix or inner anchor
+    if (allowReverseAnchor) {
+      StartDescriptor.ReverseAnchor reverseAnchor = extractReverseAnchor(metadataAst);
+      if (reverseAnchor != null) {
+        return reverseAnchor;
+      }
+    }
+
+    // Character class prefix
+    CharClassScanInfo ccPrefix = extractCharClassPrefix(metadataAst);
     CharClassScanInfo anchoredCharClassPrefix =
-        anchoredPrefix == null && anchoredCandidate != null
-            ? extractCharClassPrefix(anchoredCandidate)
-            : null;
-    StartDescriptor.LeadingExpansion leadingExpansion =
-        (allowLeadingExpansion
-                && prefix == null
-                && fixedOffsetLiteral == null
-                && teddyModel == null)
-            ? extractLeadingExpansion(metadataAst)
-            : null;
-    if (leadingExpansion != null) {
-      ccPrefix = null;
-      startAcceleration = null;
+        anchoredCandidate != null ? extractCharClassPrefix(anchoredCandidate) : null;
+    if (ccPrefix != null || anchoredCharClassPrefix != null) {
+      return new StartDescriptor.CharClass(ccPrefix, anchoredCharClassPrefix);
     }
-    StartDescriptor.ReverseAnchor reverseAnchor =
-        (allowReverseAnchor
-                && prefix == null
-                && fixedOffsetLiteral == null
-                && multiLiteral == null
-                && teddyModel == null
-                && leadingExpansion == null
-                && startAcceleration == null
-                && anchoredPrefix == null
-                && anchoredCharClassPrefix == null)
-            ? extractReverseAnchor(metadataAst)
-            : null;
-    if (reverseAnchor != null) {
-      ccPrefix = null;
+
+    // Line start anchor
+    StartAcceleration startAcceleration = extractStartAcceleration(metadataAst);
+    if (startAcceleration != null) {
+      return new StartDescriptor.LineAnchor(startAcceleration);
     }
-    if (prefix == null
-        && fixedOffsetLiteral == null
-        && ccPrefix == null
-        && multiLiteral == null
-        && startAcceleration == null
-        && anchoredPrefix == null
-        && anchoredCharClassPrefix == null
-        && teddyModel == null
-        && leadingExpansion == null
-        && reverseAnchor == null) {
-      return StartDescriptor.NONE;
-    }
-    return new StartDescriptor(
-        prefix,
-        prefixFoldCase,
-        fixedOffsetLiteral,
-        ccPrefix,
-        startAcceleration,
-        anchoredPrefix,
-        anchoredCharClassPrefix,
-        multiLiteral,
-        teddyModel,
-        leadingExpansion,
-        reverseAnchor);
+
+    return StartDescriptor.None.INSTANCE;
   }
 
   private static StartDescriptor.LeadingExpansion extractLeadingExpansion(Regexp re) {
@@ -653,7 +619,7 @@ public final class Pattern implements Serializable {
     StartDescriptor inner = extractStartDescriptor(tail, false, false);
     if (inner == null
         || !inner.hasStartAcceleration()
-        || inner.leadingExpansion() != null
+        || inner instanceof StartDescriptor.LeadingExpansion
         || !isSelectiveLeadingExpansionAnchor(inner)) {
       return null;
     }
@@ -685,8 +651,8 @@ public final class Pattern implements Serializable {
       StartDescriptor anchorDesc = extractStartDescriptor(tail, false, false);
       if (anchorDesc == null
           || !anchorDesc.hasStartAcceleration()
-          || anchorDesc.leadingExpansion() != null
-          || anchorDesc.reverseAnchor() != null) {
+          || anchorDesc instanceof StartDescriptor.LeadingExpansion
+          || anchorDesc instanceof StartDescriptor.ReverseAnchor) {
         continue;
       }
 
@@ -724,32 +690,31 @@ public final class Pattern implements Serializable {
     if (desc == null) {
       return false;
     }
-    if (desc.prefix() != null) {
-      String prefix = desc.prefix();
-      if (prefix.length() >= 2) {
-        return true;
-      }
-      if (!prefix.isEmpty()) {
+    return switch (desc) {
+      case StartDescriptor.Literal lit -> {
+        String prefix = lit.prefix();
+        if (prefix == null || prefix.isEmpty()) {
+          yield false;
+        }
+        if (prefix.length() >= 2) {
+          yield true;
+        }
         char c = prefix.charAt(0);
-        return RarityOracle.byteRarity(c) >= 40;
+        yield RarityOracle.byteRarity(c) >= 40;
       }
-    }
-    if (desc.multiLiteral() != null || desc.teddyModel() != null) {
-      return true;
-    }
-    if (desc.fixedOffsetLiteral() != null) {
-      return true;
-    }
-    return false;
+      case StartDescriptor.HasTeddyModel htm -> true;
+      case StartDescriptor.FixedOffset fo -> true;
+      default -> false;
+    };
   }
 
   private static boolean isSelectiveLeadingExpansionAnchor(StartDescriptor desc) {
     if (isSelectiveReverseAnchor(desc)) {
       return true;
     }
-    if (desc.charClassPrefix() != null) {
+    if (desc instanceof StartDescriptor.HasCharClassPrefix hcc && hcc.charClassPrefix() != null) {
       int numRunes = 0;
-      int[] ranges = desc.charClassPrefix().ranges();
+      int[] ranges = hcc.charClassPrefix().ranges();
       if (ranges != null) {
         for (int i = 0; i < ranges.length; i += 2) {
           numRunes += (ranges[i + 1] - ranges[i] + 1);
@@ -780,8 +745,7 @@ public final class Pattern implements Serializable {
           GRAPHEME_CLUSTER_BOUNDARY,
           GRAPHEME_CLUSTER ->
           true;
-      case STAR, PLUS, QUEST, REPEAT, CAPTURE, NON_CAPTURE ->
-          containsWildcardOrZeroWidth(re.sub());
+      case STAR, PLUS, QUEST, REPEAT, CAPTURE, NON_CAPTURE -> containsWildcardOrZeroWidth(re.sub());
       case CONCAT, ALTERNATE -> {
         if (re.subs != null) {
           for (Regexp sub : re.subs) {
@@ -916,16 +880,16 @@ public final class Pattern implements Serializable {
       return matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
     }
     if (prog.anchorStart()) {
-      if (anchoredPrefixUtf8 != null) {
-        if (!scanner.startsWith(anchoredPrefixUtf8, 0)) {
+      if (startDescriptor instanceof StartDescriptor.Literal lit && lit.anchoredPrefixUtf8() != null) {
+        if (!scanner.startsWith(lit.anchoredPrefixUtf8(), 0)) {
           return false;
         }
-      } else if (anchoredCharClassPrefix != null) {
+      } else if (startDescriptor instanceof StartDescriptor.CharClass cc && cc.anchoredCharClassPrefix() != null) {
         if (scanner.length() == 0) {
           return false;
         }
         int cp = scanner.codePointAt(0);
-        if (!anchoredCharClassPrefix.contains(cp)) {
+        if (!cc.anchoredCharClassPrefix().contains(cp)) {
           return false;
         }
       }
@@ -979,20 +943,20 @@ public final class Pattern implements Serializable {
       return matched;
     }
     if (prog.anchorStart()) {
-      if (anchoredPrefixUtf8 != null) {
-        if (!scanner.startsWith(anchoredPrefixUtf8, 0)) {
+      if (startDescriptor instanceof StartDescriptor.Literal lit && lit.anchoredPrefixUtf8() != null) {
+        if (!scanner.startsWith(lit.anchoredPrefixUtf8(), 0)) {
           diagnostics.participate(MatchStrategy.LITERAL, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.LITERAL);
           return false;
         }
-      } else if (anchoredCharClassPrefix != null) {
+      } else if (startDescriptor instanceof StartDescriptor.CharClass cc && cc.anchoredCharClassPrefix() != null) {
         if (scanner.length() == 0) {
           diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
           return false;
         }
         int cp = scanner.codePointAt(0);
-        if (!anchoredCharClassPrefix.contains(cp)) {
+        if (!cc.anchoredCharClassPrefix().contains(cp)) {
           diagnostics.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.REJECT_PREFILTER);
           diagnostics.boundary(MatchStrategy.CHARACTER_CLASS);
           return false;
@@ -1584,52 +1548,8 @@ public final class Pattern implements Serializable {
     return !hasLazy && !matchDescriptor.hasFindFastPath();
   }
 
-  /**
-   * Returns the literal prefix for this pattern, or {@code null} if the pattern has no fixed
-   * literal prefix. Used for prefix acceleration in {@link Matcher#doFind()}.
-   */
-  String prefix() {
-    return prefix;
-  }
-
-  /** Returns whether the prefix should be matched case-insensitively. */
-  boolean prefixFoldCase() {
-    return prefixFoldCase;
-  }
-
-  /**
-   * Returns a {@link CharClassScanInfo} of the character-class prefix, or {@code null} if the
-   * pattern has no character-class prefix. Used for prefix acceleration in {@link Matcher#doFind()}
-   * when no literal prefix exists.
-   */
-  CharClassScanInfo charClassPrefix() {
-    return charClassPrefix;
-  }
-
   StartDescriptor startDescriptor() {
     return startDescriptor;
-  }
-
-  String anchoredPrefix() {
-    return anchoredPrefix;
-  }
-
-  byte[] anchoredPrefixUtf8() {
-    return anchoredPrefixUtf8;
-  }
-
-  CharClassScanInfo anchoredCharClassPrefix() {
-    return anchoredCharClassPrefix;
-  }
-
-  /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
-  FixedOffsetLiteral fixedOffsetLiteral() {
-    return fixedOffsetLiteral;
-  }
-
-  /** Returns metadata for 2-6 keyword literal alternation acceleration, or {@code null}. */
-  MultiLiteralInfo multiLiteral() {
-    return multiLiteral;
   }
 
   /** Returns the compiled UTF-8 start-position accelerator strategy, or {@code null}. */
@@ -1764,10 +1684,6 @@ public final class Pattern implements Serializable {
 
   int[] literalMatchShifts() {
     return literalMatchShifts;
-  }
-
-  byte[] prefixUtf8() {
-    return prefixUtf8;
   }
 
   /** Returns {@code true} if this pattern is a simple literal with no metacharacters. */
@@ -3458,10 +3374,12 @@ public final class Pattern implements Serializable {
     SuffixInfo endAnchoredSuffix = extractEndAnchoredSuffix(metadataAst, flags);
     EndAnchoredCharClassInfo endAnchoredCharClass =
         endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
-    String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
-    CharClassScanInfo ccPrefix = startDescriptor != null ? startDescriptor.charClassPrefix() : null;
-    boolean hasLeadingExpansion =
-        startDescriptor != null && startDescriptor.leadingExpansion() != null;
+    String prefix = startDescriptor instanceof StartDescriptor.Literal lit ? lit.prefix() : null;
+    CharClassScanInfo ccPrefix =
+        startDescriptor instanceof StartDescriptor.HasCharClassPrefix hcc
+            ? hcc.charClassPrefix()
+            : null;
+    boolean hasLeadingExpansion = startDescriptor instanceof StartDescriptor.LeadingExpansion;
     String suffixStr = endAnchoredSuffix != null ? endAnchoredSuffix.suffix() : null;
     String requiredLiteral =
         !anchorStart && !hasLeadingExpansion

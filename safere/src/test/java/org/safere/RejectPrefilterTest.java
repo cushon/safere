@@ -316,7 +316,7 @@ class RejectPrefilterTest {
   @Test
   void requiredInfixLiteralRetainedWhenPrefixPresent() {
     Pattern p = Pattern.compile("(\\{Link:[^}]*?)<<!nav>>([^}]*?\\})");
-    assertThat(p.prefix()).isEqualTo("{Link:");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("{Link:");
     assertThat(p.rejectDescriptor().requiredLiteral()).isEqualTo("<<!nav>>");
     assertThat(p.rejectPrefilter()).isNotNull();
 
@@ -339,7 +339,7 @@ class RejectPrefilterTest {
   @Test
   void requiredLiteralPrefersDistinctCandidateOverPrefix() {
     Pattern p = Pattern.compile("(?s)<meta_start>.*?<meta_end>");
-    assertThat(p.prefix()).isEqualTo("<meta_start>");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("<meta_start>");
     // Even though "<meta_start>" is longer than "<meta_end>", extractRequiredLiteral
     // should skip the prefix and select "<meta_end>".
     assertThat(p.rejectDescriptor().requiredLiteral()).isEqualTo("<meta_end>");
@@ -354,7 +354,7 @@ class RejectPrefilterTest {
   @Test
   void identicalPrefixAndRequiredLiteralDeduplicated() {
     Pattern p = Pattern.compile("abc[0-9]+");
-    assertThat(p.prefix()).isEqualTo("abc");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("abc");
     // "abc" is already the start prefix, so requiredLiteral should not duplicate "abc"
     assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
   }

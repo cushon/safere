@@ -18,10 +18,10 @@ class StartAcceleratorTest {
   @Test
   void nullAndNoneDescriptorsProduceNullAccelerators() {
     assertThat(StringStartAccelerator.create(null, false)).isNull();
-    assertThat(StringStartAccelerator.create(StartDescriptor.NONE, false)).isNull();
+    assertThat(StringStartAccelerator.create(StartDescriptor.None.INSTANCE, false)).isNull();
     assertThat(Utf8StartAccelerator.create(null, false)).isNull();
-    assertThat(Utf8StartAccelerator.create(StartDescriptor.NONE, false)).isNull();
-    assertThat(StartDescriptor.NONE.hasStartAcceleration()).isFalse();
+    assertThat(Utf8StartAccelerator.create(StartDescriptor.None.INSTANCE, false)).isNull();
+    assertThat(StartDescriptor.None.INSTANCE.hasStartAcceleration()).isFalse();
   }
 
   @Test
@@ -115,8 +115,7 @@ class StartAcceleratorTest {
 
   @Test
   void charClassPrefixAcceleratesStringAndUtf8() {
-    CharClassScanInfo pairScanInfo = Pattern.compile("[ab]").charClassPrefix();
-    StartDescriptor descPair = descriptor(null, false, null, pairScanInfo);
+    StartDescriptor descPair = Pattern.compile("[ab]").startDescriptor();
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(descPair, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
@@ -131,8 +130,7 @@ class StartAcceleratorTest {
     assertThat(Utf8StartAccelerator.findNextCandidate(utf8PairAcc, utf8Scanner("xxxb"), 0))
         .isEqualTo(3);
 
-    CharClassScanInfo multiScanInfo = Pattern.compile("[abcd]").charClassPrefix();
-    StartDescriptor descMulti = descriptor(null, false, null, multiScanInfo);
+    StartDescriptor descMulti = Pattern.compile("[abcd]").startDescriptor();
     Utf8StartAccelerator utf8MultiAcc = Utf8StartAccelerator.create(descMulti, false);
     assertThat(utf8MultiAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
     assertThat(utf8MultiAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
@@ -145,18 +143,16 @@ class StartAcceleratorTest {
       boolean prefixFoldCase,
       FixedOffsetLiteral fixedOffsetLiteral,
       CharClassScanInfo charClassPrefix) {
-    return new StartDescriptor(
-        prefix,
-        prefixFoldCase,
-        fixedOffsetLiteral,
-        charClassPrefix,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null);
+    if (prefix != null) {
+      return new StartDescriptor.Literal(prefix, prefixFoldCase, null);
+    }
+    if (fixedOffsetLiteral != null) {
+      return new StartDescriptor.FixedOffset(fixedOffsetLiteral, charClassPrefix);
+    }
+    if (charClassPrefix != null) {
+      return new StartDescriptor.CharClass(charClassPrefix, null);
+    }
+    return StartDescriptor.None.INSTANCE;
   }
 
   @Test
@@ -371,7 +367,7 @@ class StartAcceleratorTest {
     Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
     StartDescriptor desc = pattern.startDescriptor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.leadingExpansion()).isNotNull();
+    assertThat(desc).isInstanceOf(StartDescriptor.LeadingExpansion.class);
 
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
@@ -405,7 +401,7 @@ class StartAcceleratorTest {
     Pattern pattern = Pattern.compile("\\s+https?://\\w+");
     StartDescriptor desc = pattern.startDescriptor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.leadingExpansion()).isNotNull();
+    assertThat(desc).isInstanceOf(StartDescriptor.LeadingExpansion.class);
 
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
@@ -434,9 +430,10 @@ class StartAcceleratorTest {
     Pattern pattern = Pattern.compile("[\\u00e9\\u00e8]+:target");
     StartDescriptor desc = pattern.startDescriptor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.leadingExpansion()).isNotNull();
-    assertThat(desc.leadingExpansion().minRepetition()).isEqualTo(1);
-    assertThat(desc.leadingExpansion().maxRepetition()).isEqualTo(Integer.MAX_VALUE);
+    assertThat(desc).isInstanceOf(StartDescriptor.LeadingExpansion.class);
+    StartDescriptor.LeadingExpansion expansion = (StartDescriptor.LeadingExpansion) desc;
+    assertThat(expansion.minRepetition()).isEqualTo(1);
+    assertThat(expansion.maxRepetition()).isEqualTo(Integer.MAX_VALUE);
 
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
@@ -476,7 +473,7 @@ class StartAcceleratorTest {
     Pattern pattern = Pattern.compile("[\\x{1F600}\\x{1F601}]+:target");
     StartDescriptor desc = pattern.startDescriptor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.leadingExpansion()).isNotNull();
+    assertThat(desc).isInstanceOf(StartDescriptor.LeadingExpansion.class);
 
     String emoji4 =
         new StringBuilder("abc")
@@ -520,7 +517,7 @@ class StartAcceleratorTest {
     Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
     StartDescriptor desc = pattern.startDescriptor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.reverseAnchor()).isNotNull();
+    assertThat(desc).isInstanceOf(StartDescriptor.ReverseAnchor.class);
 
     String input = "noise prefix before user123@gmail.com trailing noise";
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();

@@ -665,7 +665,10 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean literalRegionMatches(String literal, int offset, int length) {
-    if (parentPattern.literalFoldCase() || parentPattern.prefixFoldCase()) {
+    boolean prefixFold =
+        parentPattern.startDescriptor() instanceof StartDescriptor.Literal lit
+            && lit.prefixFoldCase();
+    if (parentPattern.literalFoldCase() || prefixFold) {
       return Ascii.regionMatchesIgnoreCase(text, offset, literal, length);
     }
     return text.regionMatches(false, offset, literal, 0, length);
@@ -940,21 +943,22 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean prefixOrCharClassCannotMatch(int searchFrom) {
-    if (parentPattern.prefix() != null && !parentPattern.prefixFoldCase()) {
+    StartDescriptor desc = parentPattern.startDescriptor();
+    if (desc instanceof StartDescriptor.Literal lit && !lit.prefixFoldCase() && lit.prefix() != null) {
       if (text != null) {
-        if (!text.startsWith(parentPattern.prefix(), searchFrom)) {
+        if (!text.startsWith(lit.prefix(), searchFrom)) {
           if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(parentPattern.prefix().length());
+            WorkCounter.record(lit.prefix().length());
           }
           return true;
         }
       } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
-        if (!utf8Scanner.startsWith(parentPattern.prefixUtf8(), searchFrom)) {
+        if (!utf8Scanner.startsWith(lit.prefixUtf8(), searchFrom)) {
           return true;
         }
       }
-    } else if (parentPattern.charClassPrefix() != null) {
-      CharClassScanInfo cc = parentPattern.charClassPrefix();
+    } else if (desc instanceof StartDescriptor.HasCharClassPrefix hcc && hcc.charClassPrefix() != null) {
+      CharClassScanInfo cc = hcc.charClassPrefix();
       if (text != null) {
         if (searchFrom >= text.length()) {
           return true;
@@ -980,27 +984,28 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean anchoredPrefixOrCharClassCannotMatch(int searchFrom) {
-    if (parentPattern.anchoredPrefix() != null) {
+    StartDescriptor desc = parentPattern.startDescriptor();
+    if (desc instanceof StartDescriptor.Literal lit && lit.anchoredPrefix() != null) {
       if (text != null) {
-        if (!text.startsWith(parentPattern.anchoredPrefix(), searchFrom)) {
+        if (!text.startsWith(lit.anchoredPrefix(), searchFrom)) {
           if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(parentPattern.anchoredPrefix().length());
+            WorkCounter.record(lit.anchoredPrefix().length());
           }
           return true;
         }
       } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
-        if (!utf8Scanner.startsWith(parentPattern.anchoredPrefixUtf8(), searchFrom)) {
+        if (!utf8Scanner.startsWith(lit.anchoredPrefixUtf8(), searchFrom)) {
           return true;
         }
       }
-    } else if (parentPattern.anchoredCharClassPrefix() != null) {
-      CharClassScanInfo cc = parentPattern.anchoredCharClassPrefix();
+    } else if (desc instanceof StartDescriptor.CharClass cc && cc.anchoredCharClassPrefix() != null) {
+      CharClassScanInfo ccScan = cc.anchoredCharClassPrefix();
       if (text != null) {
         if (searchFrom >= text.length()) {
           return true;
         }
         int cp = text.codePointAt(searchFrom);
-        if (!cc.contains(cp)) {
+        if (!ccScan.contains(cp)) {
           if (WorkCounterConfig.ENABLED) {
             WorkCounter.record(1);
           }
@@ -1011,7 +1016,7 @@ public final class Matcher implements MatchResult {
           return true;
         }
         int cp = utf8Scanner.codePointAt(searchFrom);
-        if (!cc.contains(cp)) {
+        if (!ccScan.contains(cp)) {
           return true;
         }
       }
@@ -1025,7 +1030,7 @@ public final class Matcher implements MatchResult {
 
     if (prefixOrCharClassCannotMatch(0) || anchoredPrefixOrCharClassCannotMatch(0)) {
       MatchStrategy strat =
-          parentPattern.prefix() != null || parentPattern.anchoredPrefix() != null
+          parentPattern.startDescriptor() instanceof StartDescriptor.Literal
               ? MatchStrategy.LITERAL
               : MatchStrategy.CHARACTER_CLASS;
       diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
@@ -1194,7 +1199,7 @@ public final class Matcher implements MatchResult {
 
     if (prefixOrCharClassCannotMatch(0) || anchoredPrefixOrCharClassCannotMatch(0)) {
       MatchStrategy strat =
-          parentPattern.prefix() != null || parentPattern.anchoredPrefix() != null
+          parentPattern.startDescriptor() instanceof StartDescriptor.Literal
               ? MatchStrategy.LITERAL
               : MatchStrategy.CHARACTER_CLASS;
       diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
@@ -1427,7 +1432,7 @@ public final class Matcher implements MatchResult {
       }
       if (anchoredPrefixOrCharClassCannotMatch(0)) {
         MatchStrategy strategy =
-            parentPattern.anchoredPrefix() != null
+            parentPattern.startDescriptor() instanceof StartDescriptor.Literal
                 ? MatchStrategy.LITERAL
                 : MatchStrategy.CHARACTER_CLASS;
         diagnosticParticipation(strategy, StrategyRole.REJECT_PREFILTER);
@@ -1636,7 +1641,7 @@ public final class Matcher implements MatchResult {
       }
       if (anchoredPrefixOrCharClassCannotMatch(searchFrom)) {
         MatchStrategy strat =
-            parentPattern.anchoredPrefix() != null
+            parentPattern.startDescriptor() instanceof StartDescriptor.Literal
                 ? MatchStrategy.LITERAL
                 : MatchStrategy.CHARACTER_CLASS;
         diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
@@ -2982,8 +2987,13 @@ public final class Matcher implements MatchResult {
     diagnosticParticipation(MatchStrategy.DFA, StrategyRole.CANDIDATE_VERIFICATION);
 
     boolean isStartAnchored = parentPattern.prog().anchorStart();
-    String prefix = parentPattern.prefix();
-    boolean foldCase = parentPattern.prefixFoldCase();
+    String prefix =
+        parentPattern.startDescriptor() instanceof StartDescriptor.Literal lit
+            ? lit.prefix()
+            : null;
+    boolean foldCase =
+        parentPattern.startDescriptor() instanceof StartDescriptor.Literal lit
+            && lit.prefixFoldCase();
     boolean hasStartAcceleration =
         enginePathOptions().startAcceleration() && prefix != null && !isStartAnchored;
     int startPos = searchFrom;

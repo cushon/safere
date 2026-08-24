@@ -19,53 +19,49 @@ sealed interface Utf8StartAccelerator {
    * acceleration strategy applies.
    */
   static Utf8StartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
-    if (descriptor == null || !descriptor.hasStartAcceleration()) {
+    if (descriptor == null) {
       return null;
     }
-    if (descriptor.prefix() != null) {
-      if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(descriptor.prefix());
+    return switch (descriptor) {
+      case StartDescriptor.Literal lit ->
+          lit.prefix() == null
+              ? null
+              : (lit.prefixFoldCase()
+                  ? CaseInsensitiveLiteral.create(lit.prefix())
+                  : Literal.create(lit.prefix()));
+      case StartDescriptor.FixedOffset fix ->
+          new FixedOffset(fix.fixedOffsetLiteral(), fix.charClassPrefix());
+      case StartDescriptor.MultiLiteral ml
+          when !hasWordBoundary && VectorScanProviders.multiLiteralProviderAvailable() ->
+          new MultiLiteral(ml.multiLiteral(), ml.teddyModel());
+      case StartDescriptor.Teddy td
+          when !hasWordBoundary && VectorScanProviders.teddyProviderAvailable() ->
+          new Teddy(td.teddyModel());
+      case StartDescriptor.CharClass cc when !hasWordBoundary && cc.charClassPrefix() != null ->
+          new CharClass(cc.charClassPrefix());
+      case StartDescriptor.LeadingExpansion le -> {
+        Utf8StartAccelerator inner = create(le.innerDescriptor(), hasWordBoundary);
+        yield inner == null
+            ? null
+            : new LeadingExpansion(
+                le.leadingClass(), le.minRepetition(), le.maxRepetition(), inner);
       }
-      return Literal.create(descriptor.prefix());
-    }
-    if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
-    }
-    if (descriptor.multiLiteral() != null
-        && !hasWordBoundary
-        && VectorScanProviders.multiLiteralProviderAvailable()) {
-      return new MultiLiteral(descriptor.multiLiteral(), descriptor.teddyModel());
-    }
-    if (descriptor.teddyModel() != null
-        && !hasWordBoundary
-        && VectorScanProviders.teddyProviderAvailable()) {
-      return new Teddy(descriptor.teddyModel());
-    }
-    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
-      return new CharClass(descriptor.charClassPrefix());
-    }
-    if (descriptor.leadingExpansion() != null) {
-      Utf8StartAccelerator inner =
-          create(descriptor.leadingExpansion().innerDescriptor(), hasWordBoundary);
-      if (inner != null) {
-        return new LeadingExpansion(
-            descriptor.leadingExpansion().leadingClass(),
-            descriptor.leadingExpansion().minRepetition(),
-            descriptor.leadingExpansion().maxRepetition(),
-            inner);
-      }
-    }
-    if (descriptor.reverseAnchor() != null) {
-      Utf8StartAccelerator inner =
-          create(descriptor.reverseAnchor().anchorDescriptor(), hasWordBoundary);
-      if (inner != null && descriptor.reverseAnchor().reversePrefixProg() != null) {
-        Dfa revDfa = Dfa.createReverse(descriptor.reverseAnchor().reversePrefixProg());
-        if (revDfa != null) {
-          return new ReverseAnchor(inner, revDfa, descriptor.reverseAnchor().minLength());
+      case StartDescriptor.ReverseAnchor ra -> {
+        Utf8StartAccelerator inner = create(ra.anchorDescriptor(), hasWordBoundary);
+        if (inner != null && ra.reversePrefixProg() != null) {
+          Dfa revDfa = Dfa.createReverse(ra.reversePrefixProg());
+          if (revDfa != null) {
+            yield new ReverseAnchor(inner, revDfa, ra.minLength());
+          }
         }
+        yield null;
       }
-    }
-    return null;
+      case StartDescriptor.LineAnchor la -> null;
+      case StartDescriptor.MultiLiteral ml -> null;
+      case StartDescriptor.Teddy td -> null;
+      case StartDescriptor.CharClass cc -> null;
+      case StartDescriptor.None none -> null;
+    };
   }
 
   /**

@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.FixedOffsetLiteral;
 import org.safere.Pattern.StartAcceleration;
 
@@ -12,38 +13,74 @@ import org.safere.Pattern.StartAcceleration;
  * Immutable descriptor capturing pre-computed start-position metadata extracted from a regular
  * expression AST.
  */
-record StartDescriptor(
-    String prefix,
-    boolean prefixFoldCase,
-    FixedOffsetLiteral fixedOffsetLiteral,
-    CharClassScanInfo charClassPrefix,
-    StartAcceleration lineAnchor,
-    String anchoredPrefix,
-    CharClassScanInfo anchoredCharClassPrefix,
-    MultiLiteralInfo multiLiteral,
-    TeddyModel teddyModel,
-    LeadingExpansion leadingExpansion,
-    ReverseAnchor reverseAnchor) {
+sealed interface StartDescriptor
+    permits StartDescriptor.Literal,
+        StartDescriptor.FixedOffset,
+        StartDescriptor.CharClass,
+        StartDescriptor.LineAnchor,
+        StartDescriptor.MultiLiteral,
+        StartDescriptor.Teddy,
+        StartDescriptor.LeadingExpansion,
+        StartDescriptor.ReverseAnchor,
+        StartDescriptor.None {
+
+  interface HasCharClassPrefix {
+    CharClassScanInfo charClassPrefix();
+  }
+
+  interface HasTeddyModel {
+    TeddyModel teddyModel();
+  }
+
+  @SuppressWarnings("ArrayRecordComponent")
+  record Literal(
+      String prefix,
+      boolean prefixFoldCase,
+      String anchoredPrefix,
+      byte[] prefixUtf8,
+      byte[] anchoredPrefixUtf8)
+      implements StartDescriptor {
+    Literal(String prefix, boolean prefixFoldCase, String anchoredPrefix) {
+      this(
+          prefix,
+          prefixFoldCase,
+          anchoredPrefix,
+          prefix == null || prefix.isEmpty() ? null : prefix.getBytes(StandardCharsets.UTF_8),
+          anchoredPrefix == null || anchoredPrefix.isEmpty()
+              ? null
+              : anchoredPrefix.getBytes(StandardCharsets.UTF_8));
+    }
+  }
+
+  record FixedOffset(FixedOffsetLiteral fixedOffsetLiteral, CharClassScanInfo charClassPrefix)
+      implements StartDescriptor, HasCharClassPrefix {}
+
+  record CharClass(CharClassScanInfo charClassPrefix, CharClassScanInfo anchoredCharClassPrefix)
+      implements StartDescriptor, HasCharClassPrefix {}
+
+  record LineAnchor(StartAcceleration lineAnchor) implements StartDescriptor {}
+
+  record MultiLiteral(MultiLiteralInfo multiLiteral, TeddyModel teddyModel)
+      implements StartDescriptor, HasTeddyModel {}
+
+  record Teddy(TeddyModel teddyModel) implements StartDescriptor, HasTeddyModel {}
 
   record LeadingExpansion(
       CharClassScanInfo leadingClass,
       int minRepetition,
       int maxRepetition,
-      StartDescriptor innerDescriptor) {}
+      StartDescriptor innerDescriptor)
+      implements StartDescriptor {}
 
-  record ReverseAnchor(StartDescriptor anchorDescriptor, Prog reversePrefixProg, int minLength) {}
+  record ReverseAnchor(
+      StartDescriptor anchorDescriptor, Prog reversePrefixProg, int minLength)
+      implements StartDescriptor {}
 
-  static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
+  enum None implements StartDescriptor {
+    INSTANCE
+  }
 
-  boolean hasStartAcceleration() {
-    return prefix != null
-        || fixedOffsetLiteral != null
-        || charClassPrefix != null
-        || lineAnchor != null
-        || multiLiteral != null
-        || teddyModel != null
-        || leadingExpansion != null
-        || reverseAnchor != null;
+  default boolean hasStartAcceleration() {
+    return !(this instanceof None);
   }
 }

@@ -19,46 +19,45 @@ sealed interface StringStartAccelerator {
    * no acceleration strategy applies.
    */
   static StringStartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
-    if (descriptor == null || !descriptor.hasStartAcceleration()) {
+    if (descriptor == null) {
       return null;
     }
-    if (descriptor.prefix() != null) {
-      if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(descriptor.prefix());
+    return switch (descriptor) {
+      case StartDescriptor.Literal lit ->
+          lit.prefix() == null
+              ? null
+              : (lit.prefixFoldCase()
+                  ? CaseInsensitiveLiteral.create(lit.prefix())
+                  : Literal.create(lit.prefix()));
+      case StartDescriptor.FixedOffset fix ->
+          new FixedOffset(fix.fixedOffsetLiteral(), fix.charClassPrefix());
+      case StartDescriptor.CharClass cc when !hasWordBoundary && cc.charClassPrefix() != null ->
+          CharClass.create(cc.charClassPrefix());
+      case StartDescriptor.LineAnchor la when !hasWordBoundary && la.lineAnchor() != null ->
+          new LineAnchor(la.lineAnchor());
+      case StartDescriptor.LeadingExpansion le -> {
+        StringStartAccelerator inner = create(le.innerDescriptor(), hasWordBoundary);
+        yield inner == null
+            ? null
+            : new LeadingExpansion(
+                le.leadingClass(), le.minRepetition(), le.maxRepetition(), inner);
       }
-      return Literal.create(descriptor.prefix());
-    }
-    if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
-    }
-    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
-      return CharClass.create(descriptor.charClassPrefix());
-    }
-    if (descriptor.lineAnchor() != null && !hasWordBoundary) {
-      return new LineAnchor(descriptor.lineAnchor());
-    }
-    if (descriptor.leadingExpansion() != null) {
-      StringStartAccelerator inner =
-          create(descriptor.leadingExpansion().innerDescriptor(), hasWordBoundary);
-      if (inner != null) {
-        return new LeadingExpansion(
-            descriptor.leadingExpansion().leadingClass(),
-            descriptor.leadingExpansion().minRepetition(),
-            descriptor.leadingExpansion().maxRepetition(),
-            inner);
-      }
-    }
-    if (descriptor.reverseAnchor() != null) {
-      StringStartAccelerator inner =
-          create(descriptor.reverseAnchor().anchorDescriptor(), hasWordBoundary);
-      if (inner != null && descriptor.reverseAnchor().reversePrefixProg() != null) {
-        Dfa revDfa = Dfa.createReverse(descriptor.reverseAnchor().reversePrefixProg());
-        if (revDfa != null) {
-          return new ReverseAnchor(inner, revDfa, descriptor.reverseAnchor().minLength());
+      case StartDescriptor.ReverseAnchor ra -> {
+        StringStartAccelerator inner = create(ra.anchorDescriptor(), hasWordBoundary);
+        if (inner != null && ra.reversePrefixProg() != null) {
+          Dfa revDfa = Dfa.createReverse(ra.reversePrefixProg());
+          if (revDfa != null) {
+            yield new ReverseAnchor(inner, revDfa, ra.minLength());
+          }
         }
+        yield null;
       }
-    }
-    return null;
+      case StartDescriptor.MultiLiteral ml -> null;
+      case StartDescriptor.Teddy td -> null;
+      case StartDescriptor.CharClass cc -> null;
+      case StartDescriptor.LineAnchor la -> null;
+      case StartDescriptor.None none -> null;
+    };
   }
 
   /**

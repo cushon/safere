@@ -51,14 +51,15 @@ class PatternInternalTest {
     Pattern p = Pattern.compile("(?:abcdef)");
 
     assertThat(p.literalMatch()).isEqualTo("abcdef");
-    assertThat(p.prefix()).isEqualTo("abcdef");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("abcdef");
   }
 
   @Test
   void transparentGroupsPreserveCharacterClassAccelerators() {
     Pattern p = Pattern.compile("(?:[A-Z]+)");
 
-    CharClassScanInfo prefix = p.charClassPrefix();
+    CharClassScanInfo prefix =
+        ((StartDescriptor.CharClass) p.startDescriptor()).charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('A')).isTrue();
     assertThat(p.matchDescriptor().charClassMatch()).isNotNull();
@@ -66,10 +67,18 @@ class PatternInternalTest {
 
   @Test
   void textStartAnchorsPreservePrefixAccelerators() {
-    assertThat(Pattern.compile("^https://.*").anchoredPrefix()).isEqualTo("https://");
-    assertThat(Pattern.compile("\\Ahttps://.*").anchoredPrefix()).isEqualTo("https://");
+    assertThat(
+            ((StartDescriptor.Literal) Pattern.compile("^https://.*").startDescriptor())
+                .anchoredPrefix())
+        .isEqualTo("https://");
+    assertThat(
+            ((StartDescriptor.Literal) Pattern.compile("\\Ahttps://.*").startDescriptor())
+                .anchoredPrefix())
+        .isEqualTo("https://");
 
-    CharClassScanInfo prefix = Pattern.compile("^[0-9]+").anchoredCharClassPrefix();
+    CharClassScanInfo prefix =
+        ((StartDescriptor.CharClass) Pattern.compile("^[0-9]+").startDescriptor())
+            .anchoredCharClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('0')).isTrue();
     assertThat(prefix.contains('9')).isTrue();
@@ -128,8 +137,8 @@ class PatternInternalTest {
     Pattern p = Pattern.compile("(?i)needle");
 
     assertThat(p.literalMatch()).isEqualTo("needle");
-    assertThat(p.prefix()).isEqualTo("needle");
-    assertThat(p.prefixFoldCase()).isTrue();
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("needle");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefixFoldCase()).isTrue();
   }
 
   @Test
@@ -137,8 +146,8 @@ class PatternInternalTest {
     Pattern p = Pattern.compile("(?i)needle\\d+");
 
     assertThat(p.literalMatch()).isNull();
-    assertThat(p.prefix()).isEqualTo("needle");
-    assertThat(p.prefixFoldCase()).isTrue();
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("needle");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefixFoldCase()).isTrue();
   }
 
   @Test
@@ -146,19 +155,23 @@ class PatternInternalTest {
     Pattern p = Pattern.compile("\\bSCRUB:begin_strip\\b(?s:.*?)\\bSCRUB:end_strip\\b");
 
     assertThat(p.literalMatch()).isNull();
-    assertThat(p.prefix()).isEqualTo("SCRUB:begin_strip");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix())
+        .isEqualTo("SCRUB:begin_strip");
   }
 
   @Test
   void leadingTextAnchorsDoNotExposeMovableLiteralPrefixAccelerator() {
-    assertThat(Pattern.compile("^SCRUB").prefix()).isNull();
-    assertThat(Pattern.compile("\\ASCRUB").prefix()).isNull();
+    assertThat(((StartDescriptor.Literal) Pattern.compile("^SCRUB").startDescriptor()).prefix())
+        .isNull();
+    assertThat(((StartDescriptor.Literal) Pattern.compile("\\ASCRUB").startDescriptor()).prefix())
+        .isNull();
   }
 
   @Test
   void alternatePrefixAcceleration() {
     Pattern p = Pattern.compile("(?:cat|dog|bird)s?");
-    CharClassScanInfo prefix = p.charClassPrefix();
+    CharClassScanInfo prefix =
+        ((StartDescriptor.CharClass) p.startDescriptor()).charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('c')).isTrue();
     assertThat(prefix.contains('d')).isTrue();
@@ -169,7 +182,8 @@ class PatternInternalTest {
   @Test
   void alternatePrefixCaseInsensitiveAcceleration() {
     Pattern p = Pattern.compile("(?i)(?:cat|dog|bird)s?");
-    CharClassScanInfo prefix = p.charClassPrefix();
+    CharClassScanInfo prefix =
+        ((StartDescriptor.CharClass) p.startDescriptor()).charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('c')).isTrue();
     assertThat(prefix.contains('C')).isTrue();
@@ -183,7 +197,8 @@ class PatternInternalTest {
   @Test
   void unicodeCharacterClassPrefixAcceleration() {
     Pattern p = Pattern.compile("[\\p{IsAlphabetic}]+");
-    CharClassScanInfo prefix = p.charClassPrefix();
+    CharClassScanInfo prefix =
+        ((StartDescriptor.CharClass) p.startDescriptor()).charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.isAscii()).isFalse();
     assertThat(prefix.contains('a')).isTrue();
@@ -198,7 +213,8 @@ class PatternInternalTest {
   void deeplyNestedRequiredQuantifierPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedRequiredPlusPattern(1_000, "[ab]"));
 
-    CharClassScanInfo prefix = p.charClassPrefix();
+    CharClassScanInfo prefix =
+        ((StartDescriptor.CharClass) p.startDescriptor()).charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('a')).isTrue();
     assertThat(prefix.contains('b')).isTrue();
@@ -209,7 +225,8 @@ class PatternInternalTest {
   void deeplyNestedAlternationPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedAlternationPattern(1_000));
 
-    CharClassScanInfo prefix = p.charClassPrefix();
+    CharClassScanInfo prefix =
+        ((StartDescriptor.CharClass) p.startDescriptor()).charClassPrefix();
     assertThat(prefix).isNotNull();
     assertThat(prefix.contains('a')).isTrue();
     assertThat(prefix.contains('b')).isTrue();
@@ -220,14 +237,15 @@ class PatternInternalTest {
   void deeplyNestedConcatPrefixExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedPrefixConcatPattern(1_000));
 
-    assertThat(p.prefix()).isEqualTo("foo");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("foo");
   }
 
   @Test
   void deeplyNestedFixedOffsetWidthExtractionIsStackSafe() {
     Pattern p = Pattern.compile(nestedFixedOffsetPattern(2_000));
 
-    assertThat(p.fixedOffsetLiteral()).isNotNull();
+    assertThat(((StartDescriptor.FixedOffset) p.startDescriptor()).fixedOffsetLiteral())
+        .isNotNull();
   }
 
   @Test
@@ -237,7 +255,9 @@ class PatternInternalTest {
       regex.append("(x)");
     }
 
-    Pattern.FixedOffsetLiteral fixed = Pattern.compile(regex.toString()).fixedOffsetLiteral();
+    Pattern.FixedOffsetLiteral fixed =
+        ((StartDescriptor.FixedOffset) Pattern.compile(regex.toString()).startDescriptor())
+            .fixedOffsetLiteral();
 
     assertThat(fixed).isNotNull();
     assertThat(fixed.literal()).hasSize(2_000);
@@ -249,8 +269,8 @@ class PatternInternalTest {
     Pattern p = Pattern.compile("(?i)i");
 
     assertThat(p.literalMatch()).isEqualTo("i");
-    assertThat(p.prefix()).isEqualTo("i");
-    assertThat(p.prefixFoldCase()).isTrue();
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefix()).isEqualTo("i");
+    assertThat(((StartDescriptor.Literal) p.startDescriptor()).prefixFoldCase()).isTrue();
   }
 
   @Test
@@ -281,7 +301,9 @@ class PatternInternalTest {
     "'[ab][cd]-xyz',          -xyz, 2"
   })
   void fixedOffsetAsciiLiteralsAreRecorded(String regex, String literal, int offset) {
-    Pattern.FixedOffsetLiteral fixedOffsetLiteral = Pattern.compile(regex).fixedOffsetLiteral();
+    Pattern.FixedOffsetLiteral fixedOffsetLiteral =
+        ((StartDescriptor.FixedOffset) Pattern.compile(regex).startDescriptor())
+            .fixedOffsetLiteral();
 
     assertThat(fixedOffsetLiteral).isNotNull();
     assertThat(fixedOffsetLiteral.literal()).isEqualTo(literal);
@@ -291,12 +313,15 @@ class PatternInternalTest {
   @ParameterizedTest
   @ValueSource(strings = {"\\d+/x", "[ab](?i:x)", "literal-prefix"})
   void variableWidthUnicodeAndOrdinaryPrefixesDoNotRecordFixedOffsetLiterals(String regex) {
-    assertThat(Pattern.compile(regex).fixedOffsetLiteral()).isNull();
+    assertThat(Pattern.compile(regex).startDescriptor())
+        .isNotInstanceOf(StartDescriptor.FixedOffset.class);
   }
 
   @Test
   void unicodeClassOffsetsAreRecordedAsNonDiscreteCodePointRanges() {
-    Pattern.FixedOffsetLiteral fixed = Pattern.compile("[αβ]/x").fixedOffsetLiteral();
+    Pattern.FixedOffsetLiteral fixed =
+        ((StartDescriptor.FixedOffset) Pattern.compile("[αβ]/x").startDescriptor())
+            .fixedOffsetLiteral();
 
     assertThat(fixed).isNotNull();
     assertThat(fixed.minOffset()).isEqualTo(1);
@@ -307,7 +332,9 @@ class PatternInternalTest {
   @Test
   void discreteMultiOffsetLiteralsAreRecorded() {
     Pattern.FixedOffsetLiteral fixed =
-        Pattern.compile("(^|[a-z])(#!customTag)").fixedOffsetLiteral();
+        ((StartDescriptor.FixedOffset)
+                Pattern.compile("(^|[a-z])(#!customTag)").startDescriptor())
+            .fixedOffsetLiteral();
     assertThat(fixed).isNotNull();
     assertThat(fixed.literal()).isEqualTo("#!customTag");
     assertThat(fixed.minOffset()).isZero();
@@ -318,7 +345,9 @@ class PatternInternalTest {
   @Test
   void boundedRangeOffsetLiteralsAreRecorded() {
     Pattern.FixedOffsetLiteral fixed =
-        Pattern.compile("\\s{0,8}renderElement\\(").fixedOffsetLiteral();
+        ((StartDescriptor.FixedOffset)
+                Pattern.compile("\\s{0,8}renderElement\\(").startDescriptor())
+            .fixedOffsetLiteral();
     assertThat(fixed).isNotNull();
     assertThat(fixed.literal()).isEqualTo("renderElement(");
     assertThat(fixed.minOffset()).isEqualTo(0);
@@ -469,7 +498,9 @@ class PatternInternalTest {
       })
   void invalidOrNullableAlternationsDoNotRecordDisjointLiterals(String regex) {
     Pattern p = Pattern.compile(regex);
-    if (p.prefix() == null && p.rejectDescriptor().requiredLiteral() == null) {
+    String prefix =
+        p.startDescriptor() instanceof StartDescriptor.Literal lit ? lit.prefix() : null;
+    if (prefix == null && p.rejectDescriptor().requiredLiteral() == null) {
       assertThat(p.requiredDisjointLiterals()).isNull();
     }
   }
@@ -591,14 +622,16 @@ class PatternInternalTest {
   @Test
   void prefixExtractionFromNestedCaptureInConcat() {
     Pattern p1 = Pattern.compile("(foo bar)baz");
-    assertThat(p1.prefix()).isEqualTo("foo bar");
+    assertThat(((StartDescriptor.Literal) p1.startDescriptor()).prefix()).isEqualTo("foo bar");
 
     Pattern p2 = Pattern.compile("(<template name>.*)");
-    assertThat(p2.prefix()).isEqualTo("<template name>");
+    assertThat(((StartDescriptor.Literal) p2.startDescriptor()).prefix())
+        .isEqualTo("<template name>");
 
     // reproducing the actual templateTagMatch pattern structure
     Pattern p3 = Pattern.compile("(<template name>.*)([^>])");
-    assertThat(p3.prefix()).isEqualTo("<template name>");
+    assertThat(((StartDescriptor.Literal) p3.startDescriptor()).prefix())
+        .isEqualTo("<template name>");
   }
 
   @Test
@@ -606,9 +639,10 @@ class PatternInternalTest {
     // "____" has length 4 with common underscores.
     // "zq" has length 2 with rare letters 'z' and 'q'.
     Pattern pattern = Pattern.compile("[0-9]{2}____[a-z]zq[a-z]");
-    assertThat(pattern.fixedOffsetLiteral()).isNotNull();
+    StartDescriptor.FixedOffset start = (StartDescriptor.FixedOffset) pattern.startDescriptor();
+    assertThat(start.fixedOffsetLiteral()).isNotNull();
     // "zq" has higher selectivity than "____"
-    assertThat(pattern.fixedOffsetLiteral().literal()).isEqualTo("zq");
+    assertThat(start.fixedOffsetLiteral().literal()).isEqualTo("zq");
   }
 
   @Test
