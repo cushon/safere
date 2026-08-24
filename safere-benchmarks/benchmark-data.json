@@ -2489,6 +2489,57 @@
         "text": "application:12345 (and trailing data that is not matched)"
       },
       "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.keyword.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "false"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.identifier.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "variable_name_",
+        "unit": "x",
+        "suffix": "",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.digitsRange.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "1234"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.stringLiteral.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "\"",
+        "length": "{size}"
+      },
+      "shared": true
     }
   ],
   "workloads": [
@@ -11517,6 +11568,108 @@
       },
       "lifecycle": {
         "matcher": "newPerInvocation"
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.keyword",
+      "operation": "matches",
+      "patterns": [
+        "true|false"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.keyword.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.identifier.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "[a-zA-Z_][a-zA-Z0-9_]*"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.identifier.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.digitsRange",
+      "operation": "matches",
+      "patterns": [
+        "[0-9]{1,4}"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.digitsRange.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.stringLiteral.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "[\\x00-\\x21\\x23-\\x7F]*\""
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.stringLiteral.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
       }
     }
   ]
