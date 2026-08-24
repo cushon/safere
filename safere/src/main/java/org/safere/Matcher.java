@@ -1203,13 +1203,20 @@ public final class Matcher implements MatchResult {
 
     Prog prog = parentPattern.prog();
     InputScanner scanner = activeScanner();
+    boolean preferCaptureEngine = shouldPreferCaptureEngine(prog, scanner);
     // Medium path: use DFA to check if an anchored match exists.
-    if (enginePathOptions().dfa() && dfaSupportsProgram(parentPattern.flatDfaProg())) {
+    if (!preferCaptureEngine
+        && enginePathOptions().dfa()
+        && dfaSupportsProgram(parentPattern.flatDfaProg())) {
       diagnosticParticipation(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
       Dfa.SearchResult dfaResult = searchForwardDfa(dfa(false), scanner, true, false);
       if (dfaResult != null && !dfaResult.matched()) {
         diagnosticBoundary(MatchStrategy.DFA);
         return applyFailedMatchResult();
+      }
+      if (dfaResult != null && prog.numLoopRegs() == 0) {
+        diagnosticBoundary(MatchStrategy.DFA);
+        return applyDeferredMatchResult(0, dfaResult.pos(), prog.numCaptures(), true, false);
       }
       if (dfaResult == null) {
         diagnosticDecision(
@@ -2829,6 +2836,24 @@ public final class Matcher implements MatchResult {
   private String replaceImpl(String replacement, int limit) {
     Objects.requireNonNull(replacement, "replacement");
     reset();
+    if (!parentPattern.prog().anchorStart()) {
+      RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+      if (rejectPrefilter != null && text != null) {
+        InputScanner scanner = activeScanner();
+        EnginePathOptions options = enginePathOptions();
+        MatchStrategy rejectionStrategy =
+            rejectPrefilter instanceof RejectPrefilter.Composite composite
+                ? composite.rejectionStrategy(scanner, text, searchFrom, options)
+                : rejectPrefilter.canReject(scanner, text, searchFrom, options)
+                    ? rejectPrefilter.strategy()
+                    : null;
+        if (rejectionStrategy != null) {
+          diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+          diagnosticBoundary(rejectionStrategy);
+          return text;
+        }
+      }
+    }
     LazyTemplate template = new LazyTemplate(replacement, groupCount());
     String literalResult = literalReplaceFastPath(template, limit);
     if (literalResult != null) {
@@ -4358,6 +4383,14 @@ public final class Matcher implements MatchResult {
   }
 
   int findSplitPositions(int limit, SplitBuffer buffer) {
+    if (!parentPattern.prog().anchorStart()) {
+      RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
+      if (rejectPrefilter != null && text != null) {
+        if (rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())) {
+          return 0;
+        }
+      }
+    }
     int last = 0;
     int searchFrom = 0;
     int textLen = text.length();

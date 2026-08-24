@@ -30,8 +30,10 @@ import java.util.Arrays;
  *       Teddy with 4-bit nibble bucket hashing) are used instead.
  * </ul>
  */
+// The arrays are immutable, privately owned scanner metadata; array identity is never observed.
 @SuppressWarnings("ArrayRecordComponent")
-record MultiLiteralInfo(String[] literals, char[] anchorChars, int[] anchorOffsets, int minLength)
+record MultiLiteralInfo(
+    String[] literals, char[] anchorChars, int[] anchorOffsets, int[] anchorRanges, int minLength)
     implements Serializable {
 
   static MultiLiteralInfo create(String[] literals) {
@@ -43,6 +45,7 @@ record MultiLiteralInfo(String[] literals, char[] anchorChars, int[] anchorOffse
     int[] anchorOffsets = new int[literals.length];
     long seen0 = 0L;
     long seen1 = 0L;
+    AsciiBitmap.Builder anchorBitmap = new AsciiBitmap.Builder();
 
     for (int i = 0; i < literals.length; i++) {
       String lit = literals[i];
@@ -69,10 +72,15 @@ record MultiLiteralInfo(String[] literals, char[] anchorChars, int[] anchorOffse
       }
       anchorOffsets[i] = 0;
       anchorChars[i] = firstChar;
+      anchorBitmap.add(anchorChars[i]);
       minLen = Math.min(minLen, lit.length());
     }
 
     return new MultiLiteralInfo(
-        Arrays.copyOf(literals, literals.length), anchorChars, anchorOffsets, minLen);
+        Arrays.copyOf(literals, literals.length),
+        anchorChars,
+        anchorOffsets,
+        anchorBitmap.build().toRanges(),
+        minLen);
   }
 }

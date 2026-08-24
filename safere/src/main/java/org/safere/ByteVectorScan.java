@@ -17,7 +17,7 @@ import jdk.incubator.vector.VectorSpecies;
  * Stateless SIMD kernels using the incubating Vector API for 1-byte sequences (UTF-8 and Latin-1).
  */
 final class ByteVectorScan {
-  static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
+  private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
   static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
     return indexOfAsciiClass(SPECIES, bytes, offset, length, ranges, start);
@@ -90,7 +90,7 @@ final class ByteVectorScan {
     return -1;
   }
 
-  static VectorMask<Byte> matches(ByteVector values, int[] ranges) {
+  private static VectorMask<Byte> matches(ByteVector values, int[] ranges) {
     VectorMask<Byte> matches = matches(values, ranges[0], ranges[1]);
     if (ranges.length >= 4) {
       matches = matches.or(matches(values, ranges[2], ranges[3]));
@@ -116,7 +116,7 @@ final class ByteVectorScan {
     return values.compare(GE, low).and(values.compare(LE, high));
   }
 
-  static boolean matches(byte value, int[] ranges) {
+  private static boolean matches(byte value, int[] ranges) {
     for (int index = 0; index < ranges.length; index += 2) {
       if (value >= (byte) ranges[index] && value <= (byte) ranges[index + 1]) {
         return true;
@@ -244,7 +244,32 @@ final class ByteVectorScan {
       String[] literals,
       char[] anchorChars,
       int[] anchorOffsets,
+      int[] anchorRanges,
       int minLength,
+      int start) {
+    return indexOfMultiLiteral(
+        bytes,
+        offset,
+        length,
+        literals,
+        anchorChars,
+        anchorOffsets,
+        anchorRanges,
+        minLength,
+        null,
+        start);
+  }
+
+  static int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int[] anchorRanges,
+      int minLength,
+      TeddyModel teddyModel,
       int start) {
     int numLits = literals.length;
     if (numLits == 0 || length < minLength) {
@@ -253,25 +278,21 @@ final class ByteVectorScan {
     int pos = Math.max(0, start);
     long verificationWork = 0;
     long workLimit = WorkLimit.forRemaining(length - pos);
+    int observedBytes = 0;
+    long estimatedVerificationBytes = 0;
     int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
 
-    ByteVector v0 = ByteVector.broadcast(SPECIES, (byte) anchorChars[0]);
-    ByteVector v1 = numLits >= 2 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[1]) : null;
-    ByteVector v2 = numLits >= 3 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[2]) : null;
-    ByteVector v3 = numLits >= 4 ? ByteVector.broadcast(SPECIES, (byte) anchorChars[3]) : null;
-
     for (; pos <= limit; pos += vectorLen) {
       ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
-      VectorMask<Byte> matchMask = inputVec.compare(EQ, v0);
-      if (numLits >= 2) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v1));
-      }
-      if (numLits >= 3) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v2));
-      }
-      if (numLits >= 4) {
-        matchMask = matchMask.or(inputVec.compare(EQ, v3));
+      VectorMask<Byte> matchMask = matches(inputVec, anchorRanges);
+
+      if (teddyModel != null && MultiLiteralSelectionPolicy.shouldObserve(observedBytes)) {
+        observedBytes += vectorLen;
+        estimatedVerificationBytes += (long) matchMask.trueCount() * minLength;
+        if (MultiLiteralSelectionPolicy.prefersTeddy(estimatedVerificationBytes, observedBytes)) {
+          return TeddyVectorScan.indexOfTeddyUtf8(bytes, offset, length, teddyModel, pos);
+        }
       }
 
       if (matchMask.anyTrue()) {
@@ -285,6 +306,9 @@ final class ByteVectorScan {
             if (candidatePos >= start
                 && candidatePos + lit.length() <= length
                 && (bytes[offset + matchIndex] & 0xFF) == (anchorChars[i] & 0xFF)) {
+              if (WorkCounterConfig.ENABLED) {
+                WorkCounter.record(lit.length());
+              }
               if (Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
                 return candidatePos;
               }
@@ -301,11 +325,16 @@ final class ByteVectorScan {
 
     int scalarLimit = length - minLength;
     for (; pos <= scalarLimit; pos++) {
+      int value = bytes[offset + pos] & 0xFF;
       for (int i = 0; i < numLits; i++) {
         String lit = literals[i];
-        if (pos + lit.length() <= length
-            && Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
-          return pos;
+        if (value == anchorChars[i] && pos + lit.length() <= length) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(lit.length());
+          }
+          if (Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
+            return pos;
+          }
         }
       }
       verificationWork += minLength;

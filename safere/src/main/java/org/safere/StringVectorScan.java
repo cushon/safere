@@ -25,8 +25,8 @@ import jdk.incubator.vector.VectorSpecies;
  * zero-copy byte array access.
  */
 final class StringVectorScan {
-  private static final VectorSpecies<Byte> BYTE_SPECIES = ByteVectorScan.SPECIES;
-  private static final VectorSpecies<Short> SHORT_SPECIES = ShortVectorScan.SPECIES;
+  private static final VectorSpecies<Byte> BYTE_SPECIES = ByteVector.SPECIES_PREFERRED;
+  private static final VectorSpecies<Short> SHORT_SPECIES = ShortVector.SPECIES_PREFERRED;
 
   static int indexOfAsciiClass(String text, int[] ranges, int start) {
     if (StringSupport.isLatin1(text) && Swar.supportsAsciiRanges(ranges, 4)) {
@@ -463,12 +463,20 @@ final class StringVectorScan {
       String[] literals,
       char[] anchorChars,
       int[] anchorOffsets,
+      int[] anchorRanges,
       int minLength,
       int start) {
     if (text == null || literals == null || literals.length == 0 || text.length() < minLength) {
       return -1;
     }
     if (StringSupport.isLatin1(text)) {
+      if (anchorRanges == null) {
+        AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
+        for (char c : anchorChars) {
+          builder.add(c);
+        }
+        anchorRanges = builder.build().toRanges();
+      }
       return ByteVectorScan.indexOfMultiLiteral(
           StringSupport.value(text),
           0,
@@ -476,6 +484,7 @@ final class StringVectorScan {
           literals,
           anchorChars,
           anchorOffsets,
+          anchorRanges,
           minLength,
           start);
     }
@@ -487,6 +496,16 @@ final class StringVectorScan {
           text, literals, anchorChars, anchorOffsets, minLength, start);
     }
     return VectorScanProvider.UNSUPPORTED;
+  }
+
+  static int indexOfMultiLiteral(
+      String text,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int minLength,
+      int start) {
+    return indexOfMultiLiteral(text, literals, anchorChars, anchorOffsets, null, minLength, start);
   }
 
   private static int indexOfMultiLiteralUtf16(

@@ -347,6 +347,36 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void requiredInfixLiteralRejectsDensePrefixNoiseWithSinglePassWork() {
+    // Prefix "{Link:" is common (appears 1,000 times).
+    // Infix "<<!nav>>" is rare and absent.
+    Pattern pattern = Pattern.compile("(\\{Link:[^}]*?)<<!nav>>([^}]*?\\})");
+    String input = "{Link: target=home_page, category=general, priority=high}\n".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    assertThat(work)
+        .as(
+            "Infix literal prefilter must reject dense-prefix noise in a single pass without DFA"
+                + " churn")
+        .isLessThanOrEqualTo(input.length() + 100);
+  }
+
+  @Test
+  void requiredInfixLiteralRejectsDensePrefixNoiseInSplitWithSinglePassWork() {
+    Pattern pattern = Pattern.compile("(\\{Link:[^}]*?)<<!nav>>([^}]*?\\})");
+    String input = "{Link: target=home_page, category=general, priority=high}\n".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.split(input)).containsExactly(input));
+
+    assertThat(work)
+        .as("Split must reject dense-prefix noise in a single pass without DFA churn")
+        .isLessThanOrEqualTo(input.length() + 100);
+  }
+
+  @Test
   void literalSelectivityScoringIsLinearInPatternSize() {
     long smallerWork = WorkCounter.countForTesting(() -> Pattern.compile(selectivityPattern(100)));
     long largerWork = WorkCounter.countForTesting(() -> Pattern.compile(selectivityPattern(400)));
@@ -734,6 +764,86 @@ class SearchScalingRegressionTest {
           return pattern.matcher(sb.toString())::find;
         },
         "String");
+  }
+
+  @Test
+  void multiLiteralPrefilterOnDenseCandidateNoiseIsBoundedByWorkLimit() {
+    Pattern pattern = Pattern.compile("APPLE|BANANA|CHERRY");
+    byte[] noise = "A B C A B C ".repeat(10_000).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("Multi-literal candidate verification must be bounded by WorkLimit on dense noise")
+        .isLessThan(500);
+  }
+
+  @Test
+  void matchesWithCapturesDefersNfaWorkUntilGroupIsRead() {
+    // Non-OnePass pattern due to ambiguous repetition where b is part of [a-z]
+    Pattern pattern = Pattern.compile("([a-z]+)b([a-z]+)");
+    String input = "helloworldbwelcome";
+    Matcher matcher = pattern.matcher(input);
+    long matchWork = WorkCounter.countForTesting(() -> assertThat(matcher.matches()).isTrue());
+    assertThat(matcher.group(0)).isEqualTo(input);
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(1)).isEqualTo("helloworld");
+              assertThat(matcher.group(2)).isEqualTo("welcome");
+            });
+    assertThat(matchWork)
+        .as("matches() must only run forward DFA work without eager NFA state building")
+        .isLessThanOrEqualTo(input.length() * 2L + 20);
+    assertThat(groupReadWork)
+        .as("Submatch extraction happens on-demand when group(k) is read")
+        .isLessThanOrEqualTo(input.length() * 5L + 20);
+  }
+
+  @Test
+  void matchesWithCapturesRejectsNonMatchingInputInLinearWork() {
+    Pattern pattern = Pattern.compile("([a-z]+)b([a-z]+)");
+    String input = "x".repeat(10_000);
+    Matcher matcher = pattern.matcher(input);
+    long work = WorkCounter.countForTesting(() -> assertThat(matcher.matches()).isFalse());
+    assertThat(work)
+        .as("Non-matching input in matches() must reject in linear DFA steps without NFA work")
+        .isLessThanOrEqualTo(input.length() + 20);
+  }
+
+  @Test
+  void lookingAtWithCapturesDefersNfaWorkUntilGroupIsRead() {
+    // Non-OnePass pattern due to overlapping alternation branches
+    Pattern pattern = Pattern.compile("(?:apple|application|apply):([0-9]+)");
+    String input = "application:12345 " + "x".repeat(10_000);
+    Matcher matcher = pattern.matcher(input);
+    long lookingAtWork =
+        WorkCounter.countForTesting(() -> assertThat(matcher.lookingAt()).isTrue());
+    assertThat(lookingAtWork)
+        .as(
+            "lookingAt() must only execute DFA prefix scan bounded by matched prefix, not trailing"
+                + " 10k chars")
+        .isLessThanOrEqualTo(50);
+    assertThat(matcher.group(0)).isEqualTo("application:12345");
+    assertThat(matcher.group(1)).isEqualTo("12345");
+  }
+
+  @Test
+  void multiLiteralPrefilterDoesNotRestartScalarVerificationAfterLateDenseCandidates() {
+    int literalLength = 512;
+    Pattern pattern =
+        Pattern.compile("A".repeat(literalLength - 1) + "B|" + "B".repeat(literalLength - 1) + "C");
+    byte[] noise = ("x".repeat(256) + "A".repeat(8_192)).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(noise)).find()).isFalse());
+
+    assertThat(work)
+        .as("WorkLimit exhaustion must resume with the normal matcher without a scalar rescan")
+        .isLessThan((long) noise.length * 10);
   }
 
   private static boolean isVectorApiAvailable() {

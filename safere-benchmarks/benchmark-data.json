@@ -702,6 +702,8 @@
       "id": "searchScaling.random.{size}",
       "axes": {
         "size": [
+          64,
+          256,
           1024,
           10240,
           102400,
@@ -2445,6 +2447,46 @@
         "prefixUnit": "The quick brown fox jumps over the lazy dog. Standard English prose without CJK characters. ",
         "suffix": "\u4f60\u597d123",
         "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.ambiguousValid.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "helloworldbwelcome"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.ambiguousInvalid.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.overlapValid.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "application:12345"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.overlapInvalid.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "applenotvalid:12345"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ValidationBenchmark.overlapLookingAt.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "application:12345 (and trailing data that is not matched)"
       },
       "shared": true
     }
@@ -4701,6 +4743,42 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.64",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.64"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.256",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.256"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.multiLiteral3Fail.1024",
       "operation": "find",
       "patterns": [
@@ -5806,11 +5884,6 @@
       "inputs": [
         "replace.anchoredReplace.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
-      "inputRepresentationReason": "The Matcher replacement fast path operates on Java strings; preexisting UTF-8 replacement uses a separate API.",
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -11223,6 +11296,119 @@
         "constraints": [
           "prematerializedInput"
         ]
+      }
+    },
+    {
+      "id": "ValidationBenchmark.ambiguousLoopMatches.match",
+      "operation": "matches",
+      "patterns": [
+        "^([a-z]+)b([a-z]+)$"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.ambiguousValid.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ValidationBenchmark.ambiguousLoopMatches.noMatch",
+      "operation": "matches",
+      "patterns": [
+        "^([a-z]+)b([a-z]+)$"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.ambiguousInvalid.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "id": "ValidationBenchmark.overlappingAlternationMatches.match",
+      "operation": "matches",
+      "patterns": [
+        "^(?:apple|application|apply):([0-9]+)$"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.overlapValid.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ValidationBenchmark.overlappingAlternationMatches.noMatch",
+      "operation": "matches",
+      "patterns": [
+        "^(?:apple|application|apply):([0-9]+)$"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.overlapInvalid.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "id": "ValidationBenchmark.overlappingLookingAt",
+      "operation": "lookingAt",
+      "patterns": [
+        "^(?:apple|application|apply):([0-9]+)"
+      ],
+      "inputs": [
+        "crossEngine.ValidationBenchmark.overlapLookingAt.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      },
+      "lifecycle": {
+        "matcher": "newPerInvocation"
       }
     }
   ]
