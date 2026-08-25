@@ -117,8 +117,20 @@ class UnicodeCaseTest {
   @ParameterizedTest
   @CsvSource(
       delimiter = '|',
-      value = {"ϑ|ϴ", "ß|ẞ"})
+      value = {"ϑ|ϴ"})
   void replacementFindsSingleCodeUnitUnicodeFoldedPrefix(
+      String patternCharacter, String foldedCharacter) {
+    assertReplacementFindsSingleCodeUnitUnicodeFoldedPrefix(patternCharacter, foldedCharacter);
+  }
+
+  @Test
+  @DisabledForCrosscheck(
+      "SafeRE follows JDK 26 Unicode folding for ß and ẞ; JDK 21 through 25 differ")
+  void replacementFindsCapitalSharpSUnicodeFoldedPrefix() {
+    assertReplacementFindsSingleCodeUnitUnicodeFoldedPrefix("ß", "ẞ");
+  }
+
+  private static void assertReplacementFindsSingleCodeUnitUnicodeFoldedPrefix(
       String patternCharacter, String foldedCharacter) {
     Pattern pattern = Pattern.compile("(?iu)" + patternCharacter + ".");
     String input = "--" + foldedCharacter + "x--" + foldedCharacter + "y--";
