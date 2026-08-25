@@ -30,9 +30,34 @@ record MatchDescriptor(
     KeywordAlternation keywordAlternation,
     CharClassMatchInfo charClassMatch,
     int minMatchLength,
+    ClassHashChain classHashChain,
     ShiftDfa shiftDfa) {
 
-  static final MatchDescriptor NONE = new MatchDescriptor(null, false, null, null, null, 0, null);
+  static final MatchDescriptor NONE =
+      new MatchDescriptor(null, false, null, null, null, 0, null, null);
+
+  MatchDescriptor(
+      String literalMatch,
+      boolean literalFoldCase,
+      CharClassScanInfo singleCharClass,
+      KeywordAlternation keywordAlternation,
+      CharClassMatchInfo charClassMatch,
+      int minMatchLength,
+      ShiftDfa shiftDfa) {
+    this(
+        literalMatch,
+        literalFoldCase,
+        singleCharClass,
+        keywordAlternation,
+        charClassMatch,
+        minMatchLength,
+        compileClassHashChain(literalMatch, literalFoldCase),
+        shiftDfa);
+  }
+
+  private static ClassHashChain compileClassHashChain(String literal, boolean foldCase) {
+    return literal != null && foldCase ? ClassHashChain.compileCaseInsensitive(literal) : null;
+  }
 
   boolean hasFastPath() {
     return literalMatch != null

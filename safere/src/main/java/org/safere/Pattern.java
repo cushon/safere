@@ -757,7 +757,7 @@ public final class Pattern implements Serializable {
       if (prog.anchorStart()) {
         return scanner.startsWith(literalMatchUtf8, 0);
       }
-      return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
+      return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts, 0) >= 0;
     }
     if (enginePathOptions.keywordAlternationFastPath()
         && matchDescriptor.keywordAlternation() != null) {
@@ -816,7 +816,7 @@ public final class Pattern implements Serializable {
       boolean matched =
           prog.anchorStart()
               ? scanner.startsWith(literalMatchUtf8, 0)
-              : scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
+              : scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts, 0) >= 0;
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }
@@ -1147,7 +1147,8 @@ public final class Pattern implements Serializable {
           prog.anchorStart(),
           matchDescriptor.literalFoldCase()
               ? createLiteralFallbackRunner(regionActive)
-              : Matcher.FallbackPreparedRunner.INSTANCE);
+              : Matcher.FallbackPreparedRunner.INSTANCE,
+          matchDescriptor.classHashChain());
     }
 
     CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
@@ -2726,7 +2727,110 @@ public final class Pattern implements Serializable {
    * String#indexOf} before running the full engine.
    */
   private static PrefixResult extractPrefix(Regexp re) {
-    return extractPrefixFromCandidate(firstPrefixCandidate(re));
+    PrefixResult direct = extractPrefixFromCandidate(firstPrefixCandidate(re));
+    return direct.prefix() != null ? direct : extractUnicodeFoldedPrefix(re);
+  }
+
+  /** Extracts a required prefix represented as a sequence of Unicode simple-fold classes. */
+  private static PrefixResult extractUnicodeFoldedPrefix(Regexp re) {
+    Deque<Regexp> work = new ArrayDeque<>();
+    work.add(re);
+    StringBuilder prefix = new StringBuilder();
+    boolean sawFoldClass = false;
+
+    while (!work.isEmpty()) {
+      Regexp node = unwrapCaptures(work.removeFirst());
+      if (node == null) {
+        continue;
+      }
+      if (node.op == RegexpOp.CONCAT) {
+        for (int i = node.subs.size() - 1; i >= 0; i--) {
+          work.addFirst(node.subs.get(i));
+        }
+        continue;
+      }
+      if (isLeadingZeroWidth(node)) {
+        continue;
+      }
+
+      if (node.op == RegexpOp.CHAR_CLASS) {
+        int representative = simpleFoldClassRepresentative(node.charClass);
+        if (representative < 0) {
+          break;
+        }
+        prefix.appendCodePoint(representative);
+        sawFoldClass = true;
+        continue;
+      }
+
+      if (node.op == RegexpOp.LITERAL) {
+        if (!appendFoldCompatibleLiteral(prefix, node.rune, node.flags)) {
+          break;
+        }
+        continue;
+      }
+      if (node.op == RegexpOp.LITERAL_STRING && node.runes != null) {
+        boolean compatible = true;
+        for (int rune : node.runes) {
+          if (!appendFoldCompatibleLiteral(prefix, rune, node.flags)) {
+            compatible = false;
+            break;
+          }
+        }
+        if (compatible) {
+          continue;
+        }
+      }
+      break;
+    }
+
+    return sawFoldClass && !prefix.isEmpty()
+        ? new PrefixResult(prefix.toString().toLowerCase(Locale.ROOT), true)
+        : new PrefixResult(null, false);
+  }
+
+  private static boolean appendFoldCompatibleLiteral(StringBuilder prefix, int rune, int flags) {
+    if ((flags & ParseFlags.FOLD_CASE) == 0 && Inst.simpleFold(rune) != rune) {
+      return false;
+    }
+    prefix.appendCodePoint(rune);
+    return true;
+  }
+
+  private static int simpleFoldClassRepresentative(CharClass charClass) {
+    if (charClass == null || charClass.isEmpty()) {
+      return -1;
+    }
+    int representative = charClass.lo(0);
+    CharClass expected =
+        literalCharClass(representative, ParseFlags.FOLD_CASE | ParseFlags.UNICODE_CASE);
+    if (expected.numRanges() != charClass.numRanges()) {
+      return -1;
+    }
+    for (int i = 0; i < expected.numRanges(); i++) {
+      if (expected.lo(i) != charClass.lo(i) || expected.hi(i) != charClass.hi(i)) {
+        return -1;
+      }
+    }
+    int utf8Width = utf8Width(representative);
+    int folded = Inst.simpleFold(representative);
+    while (folded != representative) {
+      if (utf8Width(folded) != utf8Width) {
+        return -1;
+      }
+      folded = Inst.simpleFold(folded);
+    }
+    return representative;
+  }
+
+  private static int utf8Width(int codePoint) {
+    if (codePoint <= 0x7F) {
+      return 1;
+    }
+    if (codePoint <= 0x7FF) {
+      return 2;
+    }
+    return codePoint <= 0xFFFF ? 3 : 4;
   }
 
   private static PrefixResult extractPrefixFromCandidate(Regexp node) {
@@ -3843,20 +3947,37 @@ public final class Pattern implements Serializable {
             continue;
           }
           boolean childFoldCase = (c.flags & ParseFlags.FOLD_CASE) != 0;
-          if (!foldCaseInitialized) {
-            foldCase = childFoldCase;
-            foldCaseInitialized = true;
-          } else if (childFoldCase != foldCase) {
-            return LiteralResult.NONE;
-          }
-          if (c.op == RegexpOp.LITERAL) {
-            sb.appendCodePoint(c.rune);
-          } else if (c.op == RegexpOp.LITERAL_STRING && c.runes != null) {
-            for (int r : c.runes) {
-              sb.appendCodePoint(r);
+          switch (c.op) {
+            case LITERAL -> {
+              if (Inst.simpleFold(c.rune) != c.rune) {
+                if (!foldCaseInitialized) {
+                  foldCase = childFoldCase;
+                  foldCaseInitialized = true;
+                } else if (childFoldCase != foldCase) {
+                  return LiteralResult.NONE;
+                }
+              }
+              sb.appendCodePoint(c.rune);
             }
-          } else {
-            return LiteralResult.NONE;
+            case LITERAL_STRING -> {
+              if (c.runes == null) {
+                return LiteralResult.NONE;
+              }
+              for (int r : c.runes) {
+                if (Inst.simpleFold(r) != r) {
+                  if (!foldCaseInitialized) {
+                    foldCase = childFoldCase;
+                    foldCaseInitialized = true;
+                  } else if (childFoldCase != foldCase) {
+                    return LiteralResult.NONE;
+                  }
+                }
+                sb.appendCodePoint(r);
+              }
+            }
+            default -> {
+              return LiteralResult.NONE;
+            }
           }
         }
       }

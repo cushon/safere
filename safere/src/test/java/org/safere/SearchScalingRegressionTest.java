@@ -790,6 +790,55 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void classHashChainAchievesSublinearWorkOnCaseInsensitiveLiteralForStringInput() {
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("content_length_header");
+    String text = "The quick brown fox jumps over the lazy dog. ".repeat(5); // 225 chars
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(chc.search(text, 0, WorkLimit.forRemaining(text.length())))
+                    .isEqualTo(-1));
+
+    // 225 / 6 = ~37 operations (vs 225 operations for linear scan)
+    assertThat(work)
+        .as(
+            "Class-HashChain must perform sublinear work on case-insensitive patterns for String"
+                + " input")
+        .isLessThanOrEqualTo(text.length() / 6 + 10);
+  }
+
+  @Test
+  void classHashChainAchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForStringInput() {
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("конфигурация_сервера"); // M = 20
+    String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5); // 270 chars
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(chc.search(text, 0, WorkLimit.forRemaining(text.length())))
+                    .isEqualTo(-1));
+
+    // Sublinear bound: 270 / 19 = ~14 operations (vs 270 for linear scan)
+    assertThat(work)
+        .as(
+            "ClassHashChain must perform sublinear work on non-ASCII case-insensitive patterns"
+                + " for String input")
+        .isLessThanOrEqualTo(text.length() / 15 + 10);
+  }
+
+  @Test
+  void hybridCaseInsensitiveSearchIsImmuneToFalseAnchorStormsForStringInput() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find"); // anchor is 'k' / 'K'
+    String text = "k_other_words_".repeat(20); // 280 chars with 20 'k' false anchors
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(text).find()).isFalse());
+
+    // shiftAt skips forward on false anchors, keeping work well below quadratic O(N * M)
+    assertThat(work)
+        .as("Hybrid search with shiftAt must avoid quadratic work on false anchor floods")
+        .isLessThanOrEqualTo(text.length() * 2);
+  }
+
+  @Test
   void unicodeCaseInsensitiveLinearChainUsesOnePassForSubmatchExtraction() {
     // (?iu) triggers inst.foldCase = true on literal runes (e.g. Kelvin sign K <-> K <-> k)
     Pattern pattern = Pattern.compile("(?iu)key:([0-9]+)");

@@ -465,7 +465,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         // literal lets the skip loop advance further per step.
         int result =
             remaining(start) >= ByteSwarScan.filterThreshold(literal.length)
-                ? ByteSwarScan.indexOfFiltered(bytes, offset, length, literal, failure, start)
+                ? ByteSwarScan.indexOfFiltered(bytes, offset, length, literal, start)
                 : boundedBoyerMooreHorspool(literal, shifts, start);
         // A match index or a trusted -1; only the -2 "work budget exhausted" sentinel falls
         // through to the linear-time scan below.

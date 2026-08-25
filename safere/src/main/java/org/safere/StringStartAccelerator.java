@@ -24,7 +24,7 @@ sealed interface StringStartAccelerator {
     }
     if (descriptor.prefix() != null) {
       if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(descriptor.prefix());
+        return CaseInsensitiveLiteral.create(descriptor.prefix(), descriptor.classHashChain());
       }
       return Literal.create(descriptor.prefix());
     }
@@ -98,22 +98,25 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  // The failure table is immutable pattern metadata; array identity and value semantics are unused.
-  @SuppressWarnings("ArrayRecordComponent")
   record CaseInsensitiveLiteral(
-      String prefix, int[] failure, int anchorOffset, char anchorLow, char anchorHigh)
+      String prefix,
+      int anchorOffset,
+      char anchorLow,
+      char anchorHigh,
+      ClassHashChain classHashChain)
       implements StringStartAccelerator {
 
-    static CaseInsensitiveLiteral create(String prefix) {
+    static CaseInsensitiveLiteral create(String prefix, ClassHashChain classHashChain) {
       if (prefix == null || prefix.isEmpty()) {
-        return new CaseInsensitiveLiteral(prefix, null, 0, '\0', '\0');
+        return new CaseInsensitiveLiteral(prefix, 0, '\0', '\0', null);
       }
-      int[] failure = Ascii.ignoreCaseFailure(prefix);
       int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
       char anchor = prefix.charAt(anchorOffset);
       char anchorLow = Ascii.toLowerCase(anchor);
       char anchorHigh = Ascii.toUpperCase(anchor);
-      return new CaseInsensitiveLiteral(prefix, failure, anchorOffset, anchorLow, anchorHigh);
+      ClassHashChain chain =
+          classHashChain != null ? classHashChain : ClassHashChain.compileCaseInsensitive(prefix);
+      return new CaseInsensitiveLiteral(prefix, anchorOffset, anchorLow, anchorHigh, chain);
     }
 
     @Override
@@ -123,7 +126,7 @@ sealed interface StringStartAccelerator {
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
       return Matcher.indexOfIgnoreCase(
-          text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
+          text, prefix, anchorOffset, anchorLow, anchorHigh, classHashChain, fromIndex);
     }
   }
 
