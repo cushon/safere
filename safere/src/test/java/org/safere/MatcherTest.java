@@ -91,6 +91,37 @@ class MatcherTest {
     }
 
     @Test
+    @DisplayName("lookingAt() preserves alternation and quantifier priority")
+    void lookingAtPreservesAlternationAndQuantifierPriority() {
+      String[][] cases = {
+        {"a|aa", "aa", "a"},
+        {"a|ab", "ab", "a"},
+        {"a+?", "aaa", "a"},
+        {"a{1,3}?", "aaa", "a"},
+        {"a??", "a", ""},
+        {"a+?b?", "aaab", "a"},
+        {"(?:a|ab)c?", "abc", "a"},
+        {"a??b?", "ab", ""},
+        {"a+", "aaa", "aaa"}
+      };
+
+      for (String[] testCase : cases) {
+        Matcher matcher = Pattern.compile(testCase[0]).matcher(testCase[1]);
+        assertThat(matcher.lookingAt()).as("pattern %s", testCase[0]).isTrue();
+        assertThat(matcher.group()).as("pattern %s", testCase[0]).isEqualTo(testCase[2]);
+      }
+    }
+
+    @Test
+    @DisplayName("accelerated ASCII match rejects intervening non-ASCII input")
+    void acceleratedAsciiMatchRejectsInterveningNonAsciiInput() {
+      Pattern pattern = Pattern.compile("[\\x00-\\x21\\x23-\\x7F]*\"");
+
+      assertThat(pattern.matcher("a".repeat(20) + "é\"").matches()).isFalse();
+      assertThat(pattern.matcher("😀" + "a".repeat(20) + "\"").matches()).isFalse();
+    }
+
+    @Test
     @DisplayName("discrete multi-offset shifted start acceleration matches correctly")
     void discreteMultiOffsetShiftedStartAcceleration() {
       Pattern p = Pattern.compile("(^|[^#])(#!customTag)");
