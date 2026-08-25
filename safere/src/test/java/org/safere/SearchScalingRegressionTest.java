@@ -20,6 +20,29 @@ import org.junit.jupiter.api.Test;
 class SearchScalingRegressionTest {
 
   @Test
+  void shiftDfaTransitionsAreCountedForStringInput() {
+    Pattern pattern = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
+    String input = "a".repeat(10_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).matches()).isTrue());
+
+    assertThat(work).isGreaterThanOrEqualTo(input.length());
+  }
+
+  @Test
+  void shiftDfaTransitionsAreCountedForUtf8Input() {
+    Pattern pattern = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
+    byte[] input = "a".repeat(10_000).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input)).matches()).isTrue());
+
+    assertThat(work).isGreaterThanOrEqualTo(input.length);
+  }
+
+  @Test
   void reverseDfaSuffixFailureIsConstantWorkForStringInput() {
     Pattern pattern = Pattern.compile("[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$");
     assertReverseDfaSuffixFailureIsConstantWork(size -> pattern.matcher("a".repeat(size)).find());

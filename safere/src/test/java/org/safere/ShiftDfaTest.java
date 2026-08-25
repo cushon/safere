@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -60,6 +61,25 @@ class ShiftDfaTest {
   }
 
   @Test
+  @DisplayName("UTF-8 matching honors the scanner backing-array offset")
+  void utf8MatchingHonorsScannerOffset() {
+    ShiftDfa dfa = compile("true|false");
+    byte[] storage = "xxxxfalseyyyy".getBytes(UTF_8);
+    Utf8InputScanner scanner = new Utf8InputScanner(storage, 4, 5);
+
+    assertThat(dfa.matches(scanner, 0, scanner.length())).isTrue();
+  }
+
+  @Test
+  @DisplayName("boolean-token benchmark pattern selects ShiftDfa")
+  void booleanTokenBenchmarkPatternSelectsShiftDfa() {
+    Pattern pattern = Pattern.compile("(?:true|false) ?");
+
+    assertThat(pattern.preparedMatchRunner(false))
+        .isInstanceOf(Matcher.ShiftDfaPreparedRunner.class);
+  }
+
+  @Test
   @DisplayName("quantified digits and repetition ranges")
   void quantifiedDigitsAndRepetitions() {
     ShiftDfa dfa = compile("[0-9]{1,3}");
@@ -101,22 +121,6 @@ class ShiftDfaTest {
   }
 
   @Test
-  @DisplayName("lookingAt prefix extraction")
-  void lookingAtPrefixExtraction() {
-    ShiftDfa dfa = compile("a(?:b+)c");
-    assertThat(dfa).isNotNull();
-
-    assertThat(dfa.lookingAt("abbcx", 0, 5)).isEqualTo(4);
-    assertThat(dfa.lookingAt("abbc", 0, 4)).isEqualTo(4);
-    assertThat(dfa.lookingAt("ac", 0, 2)).isEqualTo(-1);
-    assertThat(dfa.lookingAt("xabbc", 0, 5)).isEqualTo(-1);
-
-    byte[] bytes = "abbcx".getBytes(UTF_8);
-    Utf8InputScanner scanner = new Utf8InputScanner(bytes, 0, bytes.length);
-    assertThat(dfa.lookingAt(scanner, 0, 5)).isEqualTo(4);
-  }
-
-  @Test
   @DisplayName("self-loop vector acceleration via StateAccelerator")
   void stateAcceleratorSelfLoop() {
     ShiftDfa dfa = compile("[\\x00-\\x21\\x23-\\x7F]*\"");
@@ -128,6 +132,37 @@ class ShiftDfaTest {
 
     String longNonMatching = "a".repeat(1000) + "x";
     assertThat(dfa.matches(longNonMatching, 0, longNonMatching.length())).isFalse();
+  }
+
+  @Test
+  @DisplayName("non-ASCII boundaries are specific to ASCII-only acceleration")
+  void nonAsciiBoundariesAreSpecificToAsciiOnlyAcceleration() {
+    StateAccelerator accelerator = new StateAccelerator.SingleAsciiEscape('"');
+    StringInputScanner scanner = new StringInputScanner("aé\"");
+
+    assertThat(StateAccelerator.findNextEscape(accelerator, scanner, 0, scanner.length()))
+        .isEqualTo(2);
+    assertThat(
+            StateAccelerator.findNextAsciiOrNonAsciiEscape(
+                accelerator, scanner, 0, scanner.length()))
+        .isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("state acceleration stops at non-ASCII dead transitions")
+  void stateAccelerationStopsAtNonAsciiDeadTransitions() {
+    Pattern pattern = Pattern.compile("[\\x00-\\x21\\x23-\\x7F]*\"");
+    for (String nonAscii : List.of("é", "Ω", "😀")) {
+      for (int prefixLength : new int[] {0, 15, 16, 20, 64}) {
+        String input = "a".repeat(prefixLength) + nonAscii + "\"";
+        assertThat(pattern.matcher(input).matches())
+            .as("String prefix=%s nonAscii=%s", prefixLength, nonAscii)
+            .isFalse();
+        assertThat(pattern.matcher(Utf8Input.trusted(input.getBytes(UTF_8))).matches())
+            .as("UTF-8 prefix=%s nonAscii=%s", prefixLength, nonAscii)
+            .isFalse();
+      }
+    }
   }
 
   @Test

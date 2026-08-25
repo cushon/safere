@@ -120,7 +120,7 @@ class DiagnosticsTest {
             foldedUtf8LookingAt.matcher(Utf8Input.validated("FOObar".getBytes(UTF_8))).lookingAt())
         .isTrue();
     assertThat(operationsFor(foldedUtf8LookingAt).getLast().boundaryStrategy())
-        .isEqualTo(MatchStrategy.SHIFT_DFA);
+        .isEqualTo(MatchStrategy.DFA);
 
     Pattern foldedUtf8Matches = Pattern.compile("(?i)foo");
     assertThat(foldedUtf8Matches.matcher(Utf8Input.validated("FOO".getBytes(UTF_8))).matches())

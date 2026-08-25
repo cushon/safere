@@ -2563,7 +2563,7 @@
       "shared": true
     },
     {
-      "id": "crossEngine.ShiftDfaBenchmark.keyword.input",
+      "id": "crossEngine.ShiftDfaBenchmark.booleanToken.input",
       "recipe": {
         "kind": "literal",
         "text": "false"
@@ -11760,13 +11760,13 @@
       }
     },
     {
-      "id": "ShiftDfaBenchmark.keyword",
+      "id": "ShiftDfaBenchmark.booleanToken",
       "operation": "matches",
       "patterns": [
-        "true|false"
+        "(?:true|false) ?"
       ],
       "inputs": [
-        "crossEngine.ShiftDfaBenchmark.keyword.input"
+        "crossEngine.ShiftDfaBenchmark.booleanToken.input"
       ],
       "resultConsumption": "boolean",
       "measurement": {

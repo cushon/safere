@@ -44,6 +44,21 @@ final class StringInputScanner implements InputScanner {
   }
 
   @Override
+  public int indexOfAsciiOrNonAscii(int ascii, int fromIndex, int limit) {
+    int end = Math.min(limit, text.length());
+    for (int i = Math.max(0, fromIndex); i < end; i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char ch = text.charAt(i);
+      if (ch == ascii || ch >= 0x80) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  @Override
   public int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
@@ -59,6 +74,21 @@ final class StringInputScanner implements InputScanner {
   }
 
   @Override
+  public int indexOfAsciiPairOrNonAscii(int c1, int c2, int fromIndex, int limit) {
+    int end = Math.min(limit, text.length());
+    for (int i = Math.max(0, fromIndex); i < end; i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char ch = text.charAt(i);
+      if (ch == c1 || ch == c2 || ch >= 0x80) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  @Override
   public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
@@ -67,6 +97,21 @@ final class StringInputScanner implements InputScanner {
       }
       char ch = text.charAt(i);
       if (ch == c1 || ch == c2 || ch == c3) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  @Override
+  public int indexOfAsciiTripleOrNonAscii(int c1, int c2, int c3, int fromIndex, int limit) {
+    int end = Math.min(limit, text.length());
+    for (int i = Math.max(0, fromIndex); i < end; i++) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      char ch = text.charAt(i);
+      if (ch == c1 || ch == c2 || ch == c3 || ch >= 0x80) {
         return i;
       }
     }

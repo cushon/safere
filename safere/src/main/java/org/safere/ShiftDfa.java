@@ -306,7 +306,7 @@ final class ShiftDfa {
       if (accs != null && end - i >= 16) {
         StateAccelerator acc = accs[state / STATE_SHIFT_STEP];
         if (acc != null) {
-          int nextPos = StateAccelerator.findNextEscape(acc, scanner, i, end);
+          int nextPos = StateAccelerator.findNextAsciiOrNonAsciiEscape(acc, scanner, i, end);
           if (nextPos == -1) {
             break;
           }
@@ -317,6 +317,9 @@ final class ShiftDfa {
             }
           }
         }
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
       }
       char c = text.charAt(i++);
       if (c >= 128) {
@@ -341,7 +344,7 @@ final class ShiftDfa {
       if (accs != null && end - i >= 16) {
         StateAccelerator acc = accs[state / STATE_SHIFT_STEP];
         if (acc != null) {
-          int nextPos = StateAccelerator.findNextEscape(acc, scanner, i, end);
+          int nextPos = StateAccelerator.findNextAsciiOrNonAsciiEscape(acc, scanner, i, end);
           if (nextPos == -1) {
             break;
           }
@@ -353,102 +356,15 @@ final class ShiftDfa {
           }
         }
       }
-      int b = bytes[i++] & 0xFF;
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      int b = bytes[scanner.offset() + i++] & 0xFF;
       state = (int) ((tab[b] >>> state) & STATE_MASK);
       if (state == DEAD_STATE) {
         return false;
       }
     }
     return (acceptMask & (1L << state)) != 0;
-  }
-
-  /** Attempts to match a prefix starting at {@code start}. Returns match end offset, or -1. */
-  int lookingAt(String text, int start, int end) {
-    int state = initialShiftState;
-    final long[] tab = this.table;
-    final StateAccelerator[] accs = this.accelerators;
-    StringInputScanner scanner = accs != null ? new StringInputScanner(text) : null;
-    int lastMatchEnd = (acceptMask & (1L << state)) != 0 ? start : -1;
-    int i = start;
-    while (i < end) {
-      if (accs != null && end - i >= 16) {
-        StateAccelerator acc = accs[state / STATE_SHIFT_STEP];
-        if (acc != null) {
-          int nextPos = StateAccelerator.findNextEscape(acc, scanner, i, end);
-          if (nextPos == -1) {
-            if ((acceptMask & (1L << state)) != 0) {
-              lastMatchEnd = end;
-            }
-            break;
-          }
-          if (nextPos > i) {
-            i = nextPos;
-            if (i >= end) {
-              if ((acceptMask & (1L << state)) != 0) {
-                lastMatchEnd = end;
-              }
-              break;
-            }
-          }
-        }
-      }
-      char c = text.charAt(i++);
-      if (c >= 128) {
-        break;
-      }
-      state = (int) ((tab[c] >>> state) & STATE_MASK);
-      if (state == DEAD_STATE) {
-        break;
-      }
-      if ((acceptMask & (1L << state)) != 0) {
-        lastMatchEnd = i;
-      }
-    }
-    return lastMatchEnd;
-  }
-
-  /**
-   * Attempts to match a prefix on UTF-8 scanner starting at {@code start}. Returns match end
-   * offset, or -1.
-   */
-  int lookingAt(Utf8InputScanner scanner, int start, int end) {
-    int state = initialShiftState;
-    final long[] tab = this.table;
-    final StateAccelerator[] accs = this.accelerators;
-    byte[] bytes = scanner.bytes();
-    int lastMatchEnd = (acceptMask & (1L << state)) != 0 ? start : -1;
-    int i = start;
-    while (i < end) {
-      if (accs != null && end - i >= 16) {
-        StateAccelerator acc = accs[state / STATE_SHIFT_STEP];
-        if (acc != null) {
-          int nextPos = StateAccelerator.findNextEscape(acc, scanner, i, end);
-          if (nextPos == -1) {
-            if ((acceptMask & (1L << state)) != 0) {
-              lastMatchEnd = end;
-            }
-            break;
-          }
-          if (nextPos > i) {
-            i = nextPos;
-            if (i >= end) {
-              if ((acceptMask & (1L << state)) != 0) {
-                lastMatchEnd = end;
-              }
-              break;
-            }
-          }
-        }
-      }
-      int b = bytes[i++] & 0xFF;
-      state = (int) ((tab[b] >>> state) & STATE_MASK);
-      if (state == DEAD_STATE) {
-        break;
-      }
-      if ((acceptMask & (1L << state)) != 0) {
-        lastMatchEnd = i;
-      }
-    }
-    return lastMatchEnd;
   }
 }

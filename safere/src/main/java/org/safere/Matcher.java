@@ -4945,28 +4945,7 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean lookingAt(Matcher matcher) {
-      InputScanner scanner = matcher.activeScanner();
-      int len = scanner.length();
-      if (matcher.regionStart != 0
-          || matcher.regionEnd != len
-          || matcher.transparentBounds
-          || !matcher.anchoringBounds) {
-        return matcher.lookingAtCore();
-      }
-      matcher.capturesResolved = true;
-      int matchEnd;
-      if (matcher.text != null) {
-        matchEnd = shiftDfa.lookingAt(matcher.text, 0, len);
-      } else if (scanner instanceof Utf8InputScanner utf8Scanner) {
-        matchEnd = shiftDfa.lookingAt(utf8Scanner, 0, len);
-      } else {
-        return matcher.lookingAtCore();
-      }
-      matcher.diagnosticBoundary(MatchStrategy.SHIFT_DFA);
-      if (matchEnd >= 0) {
-        return matcher.applyDeferredMatchResult(0, matchEnd, 1, true, true);
-      }
-      return matcher.applyFailedMatchResult();
+      return matcher.lookingAtCore();
     }
   }
 

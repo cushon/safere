@@ -53,6 +53,7 @@ final class MatchFuzzer {
     assertZeroWidthAlternationFindsLeftmostStartJdk();
     assertZeroWidthPossessiveCaptureRetentionJdk();
     assertDfaSandwichLeftmostStartCasesMatchJdk();
+    assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(data);
 
     String regex;
     int flags;
@@ -202,6 +203,21 @@ final class MatchFuzzer {
         pattern.matcher("bbbb").find();
         pattern.matcher("ba").find();
       }
+    }
+  }
+
+  private static void assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(
+      FuzzedDataProvider data) {
+    RegressionCase regression =
+        data.pickValue(
+            List.of(
+                new RegressionCase("a+?b?", 0, List.of("aaab", "aab", "ab")),
+                new RegressionCase("(?:a|ab)c?", 0, List.of("abc", "ab", "ac")),
+                new RegressionCase("a??b?", 0, List.of("ab", "a", "b"))));
+    FuzzSupport.CompiledPattern pattern =
+        FuzzSupport.compileCompatibleOrSkip(regression.regex(), regression.flags());
+    if (pattern != null) {
+      pattern.matcher(data.pickValue(regression.inputs())).lookingAt();
     }
   }
 
