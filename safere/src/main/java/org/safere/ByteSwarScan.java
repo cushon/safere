@@ -74,6 +74,72 @@ abstract class ByteSwarScan {
     return -1;
   }
 
+  static int indexOfByteOrNonAscii(byte[] bytes, int offset, int length, byte target, int start) {
+    return indexOfBytesOrNonAscii(bytes, offset, length, target, target, target, start, 1);
+  }
+
+  static int indexOfBytePairOrNonAscii(
+      byte[] bytes, int offset, int length, byte first, byte second, int start) {
+    return indexOfBytesOrNonAscii(bytes, offset, length, first, second, second, start, 2);
+  }
+
+  static int indexOfByteTripleOrNonAscii(
+      byte[] bytes, int offset, int length, byte first, byte second, byte third, int start) {
+    return indexOfBytesOrNonAscii(bytes, offset, length, first, second, third, start, 3);
+  }
+
+  private static int indexOfBytesOrNonAscii(
+      byte[] bytes,
+      int offset,
+      int length,
+      byte first,
+      byte second,
+      byte third,
+      int start,
+      int targetCount) {
+    int position = start;
+    int wordEnd = length - Long.BYTES;
+    long repeatedFirst = (first & 0xFFL) * BYTE_ONES;
+    long repeatedSecond = (second & 0xFFL) * BYTE_ONES;
+    long repeatedThird = (third & 0xFFL) * BYTE_ONES;
+    while (position <= wordEnd) {
+      long word = (long) LONG_VIEW.get(bytes, offset + position);
+      long firstDifference = word ^ repeatedFirst;
+      long candidates = (firstDifference - BYTE_ONES) & ~firstDifference;
+      if (targetCount >= 2) {
+        long secondDifference = word ^ repeatedSecond;
+        candidates |= (secondDifference - BYTE_ONES) & ~secondDifference;
+      }
+      if (targetCount == 3) {
+        long thirdDifference = word ^ repeatedThird;
+        candidates |= (thirdDifference - BYTE_ONES) & ~thirdDifference;
+      }
+      if (((candidates | word) & BYTE_HIGH_BITS) != 0) {
+        for (int index = 0; index < Long.BYTES; index++) {
+          byte value = bytes[offset + position + index];
+          if (value < 0
+              || value == first
+              || (targetCount >= 2 && value == second)
+              || (targetCount == 3 && value == third)) {
+            return position + index;
+          }
+        }
+      }
+      position += Long.BYTES;
+    }
+    while (position < length) {
+      byte value = bytes[offset + position];
+      if (value < 0
+          || value == first
+          || (targetCount >= 2 && value == second)
+          || (targetCount == 3 && value == third)) {
+        return position;
+      }
+      position++;
+    }
+    return -1;
+  }
+
   static int indexOfIgnoreCase(byte[] bytes, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {

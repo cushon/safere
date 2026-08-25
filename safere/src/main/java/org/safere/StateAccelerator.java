@@ -48,6 +48,27 @@ sealed interface StateAccelerator {
     };
   }
 
+  /**
+   * Fast-forwards to the next ASCII escape or non-ASCII input unit for an ASCII-only automaton.
+   *
+   * <p>Unlike {@link #findNextEscape}, this must stop at non-ASCII input because the caller has not
+   * modeled non-ASCII transitions in its transition table.
+   */
+  static int findNextAsciiOrNonAsciiEscape(
+      StateAccelerator accelerator, InputScanner text, int fromIndex, int limit) {
+    return switch (accelerator) {
+      case SingleAsciiEscape single ->
+          text.indexOfAsciiOrNonAscii(single.escape(), fromIndex, limit);
+      case AsciiPairEscape pair ->
+          text.indexOfAsciiPairOrNonAscii(pair.c1(), pair.c2(), fromIndex, limit);
+      case AsciiTripleEscape triple ->
+          text.indexOfAsciiTripleOrNonAscii(
+              triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
+      case CharClassEscape cc ->
+          text.indexOfCodePointClass(cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
+    };
+  }
+
   /** Accelerator for a single escape character (e.g. quote {@code '"'} or newline {@code '\n'}). */
   record SingleAsciiEscape(int escape) implements StateAccelerator {
     @Override

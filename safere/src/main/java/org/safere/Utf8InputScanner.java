@@ -72,6 +72,26 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return (res >= 0 && res < limit) ? res : -1;
   }
 
+  @Override
+  public int indexOfAsciiOrNonAscii(int ascii, int fromIndex, int limit) {
+    int start = Math.max(0, fromIndex);
+    int scanLen = Math.min(length, limit);
+    if (start >= scanLen) {
+      return -1;
+    }
+    if (WorkCounterConfig.ENABLED) {
+      for (int position = start; position < scanLen; position++) {
+        WorkCounter.record();
+        int value = unsignedByteAt(position);
+        if (value >= 0x80 || value == ascii) {
+          return position;
+        }
+      }
+      return -1;
+    }
+    return ByteSwarScan.indexOfByteOrNonAscii(bytes, offset, scanLen, (byte) ascii, start);
+  }
+
   private int scanByte(int scanLen, byte b0, int start) {
     VectorScanProvider byteProvider = VectorScanProviders.providerForByteLength(scanLen - start);
     if (byteProvider != null) {
@@ -105,6 +125,27 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   }
 
   @Override
+  public int indexOfAsciiPairOrNonAscii(int c1, int c2, int fromIndex, int limit) {
+    int start = Math.max(0, fromIndex);
+    int scanLen = Math.min(length, limit);
+    if (start >= scanLen) {
+      return -1;
+    }
+    if (WorkCounterConfig.ENABLED) {
+      for (int position = start; position < scanLen; position++) {
+        WorkCounter.record();
+        int value = unsignedByteAt(position);
+        if (value >= 0x80 || value == c1 || value == c2) {
+          return position;
+        }
+      }
+      return -1;
+    }
+    return ByteSwarScan.indexOfBytePairOrNonAscii(
+        bytes, offset, scanLen, (byte) c1, (byte) c2, start);
+  }
+
+  @Override
   public int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit) {
     int start = Math.max(0, fromIndex);
     int scanLen = Math.min(length, limit);
@@ -123,6 +164,27 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     }
     int res = scanByteTriple(scanLen, (byte) c1, (byte) c2, (byte) c3, start);
     return (res >= 0 && res < limit) ? res : -1;
+  }
+
+  @Override
+  public int indexOfAsciiTripleOrNonAscii(int c1, int c2, int c3, int fromIndex, int limit) {
+    int start = Math.max(0, fromIndex);
+    int scanLen = Math.min(length, limit);
+    if (start >= scanLen) {
+      return -1;
+    }
+    if (WorkCounterConfig.ENABLED) {
+      for (int position = start; position < scanLen; position++) {
+        WorkCounter.record();
+        int value = unsignedByteAt(position);
+        if (value >= 0x80 || value == c1 || value == c2 || value == c3) {
+          return position;
+        }
+      }
+      return -1;
+    }
+    return ByteSwarScan.indexOfByteTripleOrNonAscii(
+        bytes, offset, scanLen, (byte) c1, (byte) c2, (byte) c3, start);
   }
 
   private int scanBytePair(int scanLen, byte b0, byte b1, int start) {
@@ -543,7 +605,7 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
    * @return the index of the first match, {@code -1} if the literal is absent, or {@code -2} if the
    *     work budget was exhausted before either could be established
    */
-  private int boundedBoyerMooreHorspool(byte[] literal, int[] shifts, int start) {
+  int boundedBoyerMooreHorspool(byte[] literal, int[] shifts, int start) {
     int last = literal.length - 1;
     int position = start + last;
     long work = 0;
@@ -556,21 +618,17 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         int literalPosition = last;
         int inputPosition = position;
         while (literalPosition >= 0 && bytes[offset + inputPosition] == literal[literalPosition]) {
-          if (WorkLimit.isExhausted(work, workLimit)) {
-            return -2;
-          }
-          work++;
           literalPosition--;
           inputPosition--;
         }
         if (literalPosition < 0) {
           return inputPosition + 1;
         }
+        work += (last - literalPosition + 1);
         if (WorkLimit.isExhausted(work, workLimit)) {
           return -2;
         }
         position += shifts[bytes[offset + position] & 0xFF];
-        work++;
       }
     }
     return -1;

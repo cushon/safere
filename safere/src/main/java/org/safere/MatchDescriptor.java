@@ -30,9 +30,11 @@ record MatchDescriptor(
     KeywordAlternation keywordAlternation,
     CharClassMatchInfo charClassMatch,
     int minMatchLength,
-    ClassHashChain classHashChain) {
+    ClassHashChain classHashChain,
+    ShiftDfa shiftDfa) {
 
-  static final MatchDescriptor NONE = new MatchDescriptor(null, false, null, null, null, 0, null);
+  static final MatchDescriptor NONE =
+      new MatchDescriptor(null, false, null, null, null, 0, null, null);
 
   MatchDescriptor(
       String literalMatch,
@@ -40,7 +42,8 @@ record MatchDescriptor(
       CharClassScanInfo singleCharClass,
       KeywordAlternation keywordAlternation,
       CharClassMatchInfo charClassMatch,
-      int minMatchLength) {
+      int minMatchLength,
+      ShiftDfa shiftDfa) {
     this(
         literalMatch,
         literalFoldCase,
@@ -48,7 +51,8 @@ record MatchDescriptor(
         keywordAlternation,
         charClassMatch,
         minMatchLength,
-        compileClassHashChain(literalMatch, literalFoldCase));
+        compileClassHashChain(literalMatch, literalFoldCase),
+        shiftDfa);
   }
 
   private static ClassHashChain compileClassHashChain(String literal, boolean foldCase) {
@@ -60,7 +64,8 @@ record MatchDescriptor(
         || singleCharClass != null
         || keywordAlternation != null
         || charClassMatch != null
-        || minMatchLength > 0;
+        || minMatchLength > 0
+        || shiftDfa != null;
   }
 
   boolean hasFindFastPath() {

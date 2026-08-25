@@ -344,7 +344,7 @@ public final class Pattern implements Serializable {
   }
 
   private static MatchDescriptor extractMatchDescriptor(
-      Regexp metadataAst, Regexp sourceAst, int flags) {
+      Regexp metadataAst, Regexp sourceAst, int flags, Prog prog) {
     LiteralResult literalMatchResult = extractLiteralMatch(metadataAst);
     String literalMatch = literalMatchResult.literal();
     boolean literalFoldCase = literalMatchResult.foldCase();
@@ -352,11 +352,13 @@ public final class Pattern implements Serializable {
     KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
     CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
     int minMatchLength = extractMinMatchLength(sourceAst);
+    ShiftDfa shiftDfa = ShiftDfa.compile(prog);
     if (literalMatch == null
         && singleCharClass == null
         && keywordAlternation == null
         && ccMatch == null
-        && minMatchLength <= 0) {
+        && minMatchLength <= 0
+        && shiftDfa == null) {
       return MatchDescriptor.NONE;
     }
     return new MatchDescriptor(
@@ -365,7 +367,8 @@ public final class Pattern implements Serializable {
         singleCharClass,
         keywordAlternation,
         ccMatch,
-        minMatchLength);
+        minMatchLength,
+        shiftDfa);
   }
 
   private static long nextPatternId() {
@@ -452,7 +455,7 @@ public final class Pattern implements Serializable {
     }
     Map<String, Integer> named = extractNamedGroups(re);
     StartDescriptor startDescriptor = extractStartDescriptor(metadataAst);
-    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, re, flags);
+    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, re, flags, compiled);
     boolean hasLazy = hasLazyQuantifiers(re);
     boolean hasAlt = hasAlternation(re);
     boolean canMatchEmpty = canMatchEmpty(re);
@@ -1166,6 +1169,10 @@ public final class Pattern implements Serializable {
           keywordAlternation, prog.numCaptures(), prog.anchorStart());
     }
 
+    if (enginePathOptions.shiftDfa() && matchDescriptor.shiftDfa() != null && numGroups() == 0) {
+      return new Matcher.ShiftDfaPreparedRunner(matchDescriptor.shiftDfa());
+    }
+
     if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
       return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
@@ -1192,7 +1199,11 @@ public final class Pattern implements Serializable {
           keywordAlternation, prog.numCaptures(), prog.anchorStart());
     }
 
-    if (enginePathOptions.onePass()) {
+    if (enginePathOptions.shiftDfa() && matchDescriptor.shiftDfa() != null && numGroups() == 0) {
+      return new Matcher.ShiftDfaPreparedRunner(matchDescriptor.shiftDfa());
+    }
+
+    if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
       return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
 

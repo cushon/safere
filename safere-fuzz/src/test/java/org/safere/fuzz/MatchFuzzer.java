@@ -54,6 +54,7 @@ final class MatchFuzzer {
     assertZeroWidthPossessiveCaptureRetentionJdk();
     assertDfaSandwichLeftmostStartCasesMatchJdk();
     assertMixedAsciiAndExactUnicodeCaseFoldingMatchesJdk(data);
+    assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(data);
 
     String regex;
     int flags;
@@ -220,6 +221,21 @@ final class MatchFuzzer {
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
     if (pattern != null) {
       pattern.matcher(input).find();
+    }
+  }
+
+  private static void assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(
+      FuzzedDataProvider data) {
+    RegressionCase regression =
+        data.pickValue(
+            List.of(
+                new RegressionCase("a+?b?", 0, List.of("aaab", "aab", "ab")),
+                new RegressionCase("(?:a|ab)c?", 0, List.of("abc", "ab", "ac")),
+                new RegressionCase("a??b?", 0, List.of("ab", "a", "b"))));
+    FuzzSupport.CompiledPattern pattern =
+        FuzzSupport.compileCompatibleOrSkip(regression.regex(), regression.flags());
+    if (pattern != null) {
+      pattern.matcher(data.pickValue(regression.inputs())).lookingAt();
     }
   }
 
