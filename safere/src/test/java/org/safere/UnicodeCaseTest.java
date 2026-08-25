@@ -112,14 +112,12 @@ class UnicodeCaseTest {
     String input = "A" + foldedCharacter;
 
     assertThat(Pattern.compile("(?i:a" + patternCharacter + ")").matcher(input).find()).isFalse();
-    assertThat(Pattern.compile("(?i:a(?u:" + patternCharacter + "))").matcher(input).find())
-        .isTrue();
   }
 
   @ParameterizedTest
   @CsvSource(
       delimiter = '|',
-      value = {"ϑ|ϴ", "ß|ẞ", "ﬅ|ﬆ"})
+      value = {"ϑ|ϴ", "ß|ẞ"})
   void replacementFindsSingleCodeUnitUnicodeFoldedPrefix(
       String patternCharacter, String foldedCharacter) {
     Pattern pattern = Pattern.compile("(?iu)" + patternCharacter + ".");

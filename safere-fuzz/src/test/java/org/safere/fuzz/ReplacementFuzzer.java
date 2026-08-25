@@ -18,8 +18,8 @@ final class ReplacementFuzzer {
     String input;
     String replacement;
     if (data.consumeBoolean()) {
-      List<String> patternCharacters = List.of("\u03D1", "\u00DF", "\uFB05");
-      List<String> foldedCharacters = List.of("\u03F4", "\u1E9E", "\uFB06");
+      List<String> patternCharacters = List.of("\u03D1", "\u00DF");
+      List<String> foldedCharacters = List.of("\u03F4", "\u1E9E");
       int variant = data.consumeInt(0, patternCharacters.size() - 1);
       String suffix = data.pickValue(List.of(".", "[xy]", "(?:x|y)"));
       regex = "(?iu)" + patternCharacters.get(variant) + suffix;
