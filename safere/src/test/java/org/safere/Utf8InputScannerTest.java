@@ -112,14 +112,14 @@ class Utf8InputScannerTest {
         storage[offset + expected] = 'z';
         Utf8InputScanner scanner = new Utf8InputScanner(storage, offset, 40);
 
-        assertThat(scanner.indexOf(new byte[] {'z'}, new int[] {0}, null))
+        assertThat(scanner.indexOf(new byte[] {'z'}, null))
             .as("offset %s, position %s", offset, expected)
             .isEqualTo(expected);
       }
     }
 
     Utf8InputScanner absent = new Utf8InputScanner("aaaaaaaa".getBytes(UTF_8));
-    assertThat(absent.indexOf(new byte[] {'z'}, new int[] {0}, null)).isEqualTo(-1);
+    assertThat(absent.indexOf(new byte[] {'z'}, null)).isEqualTo(-1);
   }
 
   @Test
@@ -348,7 +348,7 @@ class Utf8InputScannerTest {
             System.arraycopy(needle, 0, storage, offset + expected, needle.length);
             Utf8InputScanner scanner = new Utf8InputScanner(storage, offset, window);
 
-            assertThat(scanner.indexOf(needle, literalFailure(needle), literalShifts(needle)))
+            assertThat(scanner.indexOf(needle, literalShifts(needle)))
                 .as(
                     "literal %s, window %s, offset %s, position %s",
                     literal, window, offset, expected)
@@ -362,7 +362,6 @@ class Utf8InputScannerTest {
   @Test
   void multiByteLiteralSearchFindsMatchesFromEveryStartPosition() {
     byte[] needle = "cab".getBytes(UTF_8);
-    int[] failure = literalFailure(needle);
     int[] shifts = literalShifts(needle);
     // Long enough that early start positions select the filter and late ones fall back to the
     // skip loop as the remaining input shrinks past the threshold.
@@ -372,7 +371,7 @@ class Utf8InputScannerTest {
       Utf8InputScanner scanner = new Utf8InputScanner(haystack);
 
       for (int start = 0; start <= haystack.length; start++) {
-        assertThat(scanner.indexOf(needle, failure, shifts, start))
+        assertThat(scanner.indexOf(needle, shifts, start))
             .as("repeats %s, start %s", repeats, start)
             .isEqualTo(text.indexOf("cab", start));
       }
@@ -393,7 +392,7 @@ class Utf8InputScannerTest {
       Utf8InputScanner scanner = new Utf8InputScanner(text.getBytes(UTF_8));
       int start = text.isEmpty() ? 0 : random.nextInt(text.length());
 
-      assertThat(scanner.indexOf(needle, literalFailure(needle), literalShifts(needle), start))
+      assertThat(scanner.indexOf(needle, literalShifts(needle), start))
           .as("%s in %s from %s", literal, text, start)
           .isEqualTo(text.indexOf(literal, start));
     }
@@ -414,7 +413,7 @@ class Utf8InputScannerTest {
         String text = "z".repeat(prefix) + literal;
         Utf8InputScanner scanner = new Utf8InputScanner(text.getBytes(UTF_8));
 
-        assertThat(scanner.indexOf(needle, literalFailure(needle), literalShifts(needle)))
+        assertThat(scanner.indexOf(needle, literalShifts(needle)))
             .as("length %s, prefix %s", length, prefix)
             .isEqualTo(prefix);
       }
@@ -428,7 +427,6 @@ class Utf8InputScannerTest {
         List.of("", "café", "le café est chaud", "日本語のテキスト", "😀😀x", "aé😀aé😀", "z".repeat(50));
     for (String literal : literals) {
       byte[] needle = literal.getBytes(UTF_8);
-      int[] failure = literalFailure(needle);
       int[] shifts = literalShifts(needle);
       for (String text : texts) {
         // Padding pushes the same case past the threshold so both paths see non-ASCII literals.
@@ -436,7 +434,7 @@ class Utf8InputScannerTest {
             List.of(text, "\u00e9\u65e5".repeat(filterThreshold(needle.length)) + text)) {
           byte[] haystack = padded.getBytes(UTF_8);
 
-          assertThat(new Utf8InputScanner(haystack).indexOf(needle, failure, shifts))
+          assertThat(new Utf8InputScanner(haystack).indexOf(needle, shifts))
               .as("%s in %s", literal, padded)
               .isEqualTo(naiveIndexOf(haystack, needle, 0));
         }
@@ -530,22 +528,6 @@ class Utf8InputScannerTest {
     }
   }
 
-  /** Builds the KMP failure function, mirroring what {@code Pattern} precomputes per literal. */
-  private static int[] literalFailure(byte[] literal) {
-    int[] failure = new int[literal.length];
-    int matched = 0;
-    for (int index = 1; index < literal.length; index++) {
-      while (matched > 0 && literal[index] != literal[matched]) {
-        matched = failure[matched - 1];
-      }
-      if (literal[index] == literal[matched]) {
-        matched++;
-      }
-      failure[index] = matched;
-    }
-    return failure;
-  }
-
   /** Builds the bad-character skip table, mirroring what {@code Pattern} precomputes. */
   private static int[] literalShifts(byte[] literal) {
     if (literal.length < 2) {
@@ -635,9 +617,9 @@ class Utf8InputScannerTest {
     // -2
     assertThat(scanner.boundedBoyerMooreHorspool(needle, shifts, 0)).isEqualTo(-2);
 
-    // Tests that the public indexOf catches -2, falls back to linear KMP, and correctly completes
-    int[] failure = literalFailure(needle);
-    assertThat(scanner.indexOf(needle, failure, shifts, 0)).isEqualTo(-1);
+    // Tests that the public indexOf catches -2, falls back to linear Two-Way, and correctly
+    // completes
+    assertThat(scanner.indexOf(needle, shifts, 0)).isEqualTo(-1);
   }
 
   @Test

@@ -125,45 +125,146 @@ final class Ascii {
     return -1;
   }
 
-  /** Builds the KMP failure function for an ASCII case-insensitive pattern. */
-  static int[] ignoreCaseFailure(String pattern) {
-    int[] failure = new int[pattern.length()];
-    int matched = 0;
-    for (int i = 1; i < pattern.length(); i++) {
-      while (matched > 0 && !equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
-        matched = failure[matched - 1];
-      }
-      if (equalsIgnoreCase(pattern.charAt(i), pattern.charAt(matched))) {
-        matched++;
-      }
-      failure[i] = matched;
-    }
-    return failure;
-  }
-
+  /**
+   * Returns the index of {@code prefix} within {@code text} starting at {@code start}, ignoring
+   * ASCII case.
+   *
+   * <p>Uses the Crochemore-Perrin Two-Way exact matching algorithm, guaranteeing strictly linear
+   * O(N) worst-case time (<= 2N comparisons) with strictly O(1) auxiliary memory.
+   */
   static int indexOfLinearIgnoreCase(String text, String prefix, int start) {
-    return indexOfLinearIgnoreCase(text, prefix, ignoreCaseFailure(prefix), start);
-  }
-
-  /** Knuth-Morris-Pratt scan on String, strictly linear in text length regardless of pattern. */
-  static int indexOfLinearIgnoreCase(String text, String prefix, int[] failure, int start) {
-    int matched = 0;
     int prefixLen = prefix.length();
-    int length = text.length();
-    for (int position = Math.max(0, start); position < length; position++) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      char current = text.charAt(position);
-      char lower = toLowerCase(current);
-      while (matched > 0 && lower != prefix.charAt(matched)) {
-        matched = failure[matched - 1];
-      }
-      if (lower == prefix.charAt(matched)) {
-        matched++;
-        if (matched == prefixLen) {
-          return position - prefixLen + 1;
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), text.length());
+    }
+    if (prefixLen == 1) {
+      return indexOfIgnoreCase(text, prefix.charAt(0), start);
+    }
+    int textLen = text.length();
+    int s = Math.max(0, start);
+    if (s >= textLen || prefixLen > textLen - s) {
+      return -1;
+    }
+
+    // Step 1: Compute maximal suffix under <= (forward) and >= (backward) orders
+    int ms1 = -1;
+    int j = 0;
+    int k = 1;
+    int p1 = 1;
+    while (j + k < prefixLen) {
+      char a = toLowerCase(prefix.charAt(ms1 + k));
+      char b = toLowerCase(prefix.charAt(j + k));
+      if (b < a) {
+        j += k;
+        k = 1;
+        p1 = j - ms1;
+      } else if (b == a) {
+        if (k == p1) {
+          j += p1;
+          k = 1;
+        } else {
+          k++;
         }
+      } else {
+        ms1 = j++;
+        k = 1;
+        p1 = 1;
+      }
+    }
+
+    int ms2 = -1;
+    j = 0;
+    k = 1;
+    int p2 = 1;
+    while (j + k < prefixLen) {
+      char a = toLowerCase(prefix.charAt(ms2 + k));
+      char b = toLowerCase(prefix.charAt(j + k));
+      if (b > a) {
+        j += k;
+        k = 1;
+        p2 = j - ms2;
+      } else if (b == a) {
+        if (k == p2) {
+          j += p2;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms2 = j++;
+        k = 1;
+        p2 = 1;
+      }
+    }
+
+    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
+    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
+
+    boolean isPeriodic = true;
+    for (int i = 0; i < ell; i++) {
+      if (toLowerCase(prefix.charAt(i)) != toLowerCase(prefix.charAt(i + period))) {
+        isPeriodic = false;
+        break;
+      }
+    }
+
+    int memory = 0;
+    if (isPeriodic) {
+      while (s <= textLen - prefixLen) {
+        int i = Math.max(ell, memory);
+        int startI = i;
+        while (i < prefixLen && toLowerCase(prefix.charAt(i)) == toLowerCase(text.charAt(s + i))) {
+          i++;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(i - startI + (i < prefixLen ? 1 : 0));
+        }
+        if (i < prefixLen) {
+          s += (i - ell + 1);
+          memory = 0;
+          continue;
+        }
+        int jj = ell - 1;
+        int startJj = jj;
+        while (jj >= memory && toLowerCase(prefix.charAt(jj)) == toLowerCase(text.charAt(s + jj))) {
+          jj--;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
+        }
+        if (jj < memory) {
+          return s;
+        }
+        s += period;
+        memory = prefixLen - period;
+      }
+    } else {
+      int periodJump = Math.max(ell, prefixLen - ell) + 1;
+      while (s <= textLen - prefixLen) {
+        int i = ell;
+        int startI = i;
+        while (i < prefixLen && toLowerCase(prefix.charAt(i)) == toLowerCase(text.charAt(s + i))) {
+          i++;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(i - startI + (i < prefixLen ? 1 : 0));
+        }
+        if (i < prefixLen) {
+          s += (i - ell + 1);
+          continue;
+        }
+        int jj = ell - 1;
+        int startJj = jj;
+        while (jj >= 0 && toLowerCase(prefix.charAt(jj)) == toLowerCase(text.charAt(s + jj))) {
+          jj--;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
+        }
+        if (jj < 0) {
+          return s;
+        }
+        s += periodJump;
       }
     }
     return -1;
@@ -186,14 +287,19 @@ final class Ascii {
     if (low == high) {
       return text.indexOf(low, fromIndex);
     }
-    for (int i = Math.max(0, fromIndex); i < text.length(); i++) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
+    int start = Math.max(0, fromIndex);
+    int len = text.length();
+    for (int i = start; i < len; i++) {
       char value = text.charAt(i);
       if (value == low || value == high) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(i - start + 1);
+        }
         return i;
       }
+    }
+    if (WorkCounterConfig.ENABLED) {
+      WorkCounter.record(len - start);
     }
     return -1;
   }

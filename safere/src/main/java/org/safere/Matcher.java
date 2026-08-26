@@ -4683,7 +4683,6 @@ public final class Matcher implements MatchResult {
     private final String literal;
     private final boolean foldCase;
     private final byte[] literalUtf8;
-    private final int[] failure;
     private final int[] shifts;
     private final ClassHashChain classHashChain;
     private final int anchorOffset;
@@ -4698,7 +4697,6 @@ public final class Matcher implements MatchResult {
         String literal,
         boolean foldCase,
         byte[] literalUtf8,
-        int[] failure,
         int[] shifts,
         boolean isStartAnchored,
         PreparedMatchRunner fallback,
@@ -4706,7 +4704,6 @@ public final class Matcher implements MatchResult {
       this.literal = literal;
       this.foldCase = foldCase;
       this.literalUtf8 = literalUtf8;
-      this.failure = failure;
       this.shifts = shifts;
       this.classHashChain =
           classHashChain != null
@@ -4780,7 +4777,7 @@ public final class Matcher implements MatchResult {
                 matcher.searchFrom);
         matchLength = matchLengthChars;
       } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
-        idx = utf8Scanner.indexOf(literalUtf8, failure, shifts, matcher.searchFrom);
+        idx = utf8Scanner.indexOf(literalUtf8, shifts, matcher.searchFrom);
         matchLength = matchLengthBytes;
       } else if (matcher.text != null) {
         if (WorkCounterConfig.ENABLED) {

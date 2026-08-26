@@ -444,11 +444,11 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return -1;
   }
 
-  int indexOf(byte[] literal, int[] failure, int[] shifts) {
-    return indexOf(literal, failure, shifts, 0);
+  int indexOf(byte[] literal, int[] shifts) {
+    return indexOf(literal, shifts, 0);
   }
 
-  int indexOf(byte[] literal, int[] failure, int[] shifts, int start) {
+  int indexOf(byte[] literal, int[] shifts, int start) {
     if (literal.length == 0) {
       return start;
     }
@@ -474,41 +474,175 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         }
       }
     }
-    return indexOfLinear(literal, failure, start);
+    return indexOfLinear(literal, start);
   }
 
   private int remaining(int start) {
     return length - start;
   }
 
-  /** Knuth-Morris-Pratt scan, linear in the input length regardless of the literal. */
-  private int indexOfLinear(byte[] literal, int[] failure, int start) {
-    return indexOfLinear(bytes, offset, length, literal, failure, start);
+  /**
+   * Crochemore-Perrin Two-Way exact string matching algorithm.
+   *
+   * <p>Runs in strictly linear O(N) worst-case time (<= 2N comparisons) with strictly O(1)
+   * auxiliary memory.
+   */
+  private int indexOfLinear(byte[] literal, int start) {
+    return indexOfLinear(bytes, offset, length, literal, start);
   }
 
-  static int indexOfLinear(
-      byte[] bytes, int offset, int length, byte[] literal, int[] failure, int start) {
-    int matched = 0;
-    for (int position = start; position < length; position++) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      byte current = bytes[offset + position];
-      while (matched > 0 && current != literal[matched]) {
-        matched = failure[matched - 1];
-      }
-      if (current == literal[matched]) {
-        matched++;
-        if (matched == literal.length) {
-          return position - literal.length + 1;
+  static int indexOfLinear(byte[] bytes, int offset, int length, byte[] literal, int start) {
+    int literalLen = literal.length;
+    if (literalLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    if (literalLen == 1) {
+      byte target = literal[0];
+      int startIdx = Math.max(0, start);
+      for (int i = startIdx; i < length; i++) {
+        if (bytes[offset + i] == target) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(i - startIdx + 1);
+          }
+          return i;
         }
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(length - startIdx);
+      }
+      return -1;
+    }
+    int s = Math.max(0, start);
+    if (s >= length || literalLen > length - s) {
+      return -1;
+    }
+
+    // Step 1: Compute maximal suffix under <= (forward) and >= (backward) orders
+    int ms1 = -1;
+    int j = 0;
+    int k = 1;
+    int p1 = 1;
+    while (j + k < literalLen) {
+      int a = literal[ms1 + k] & 0xFF;
+      int b = literal[j + k] & 0xFF;
+      if (b < a) {
+        j += k;
+        k = 1;
+        p1 = j - ms1;
+      } else if (b == a) {
+        if (k == p1) {
+          j += p1;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms1 = j++;
+        k = 1;
+        p1 = 1;
+      }
+    }
+
+    int ms2 = -1;
+    j = 0;
+    k = 1;
+    int p2 = 1;
+    while (j + k < literalLen) {
+      int a = literal[ms2 + k] & 0xFF;
+      int b = literal[j + k] & 0xFF;
+      if (b > a) {
+        j += k;
+        k = 1;
+        p2 = j - ms2;
+      } else if (b == a) {
+        if (k == p2) {
+          j += p2;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms2 = j++;
+        k = 1;
+        p2 = 1;
+      }
+    }
+
+    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
+    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
+
+    boolean isPeriodic = true;
+    for (int i = 0; i < ell; i++) {
+      if (literal[i] != literal[i + period]) {
+        isPeriodic = false;
+        break;
+      }
+    }
+
+    int memory = 0;
+    if (isPeriodic) {
+      while (s <= length - literalLen) {
+        int i = Math.max(ell, memory);
+        int startI = i;
+        while (i < literalLen && literal[i] == bytes[offset + s + i]) {
+          i++;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
+        }
+        if (i < literalLen) {
+          s += (i - ell + 1);
+          memory = 0;
+          continue;
+        }
+        int jj = ell - 1;
+        int startJj = jj;
+        while (jj >= memory && literal[jj] == bytes[offset + s + jj]) {
+          jj--;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
+        }
+        if (jj < memory) {
+          return s;
+        }
+        s += period;
+        memory = literalLen - period;
+      }
+    } else {
+      int periodJump = Math.max(ell, literalLen - ell) + 1;
+      while (s <= length - literalLen) {
+        int i = ell;
+        int startI = i;
+        while (i < literalLen && literal[i] == bytes[offset + s + i]) {
+          i++;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
+        }
+        if (i < literalLen) {
+          s += (i - ell + 1);
+          continue;
+        }
+        int jj = ell - 1;
+        int startJj = jj;
+        while (jj >= 0 && literal[jj] == bytes[offset + s + jj]) {
+          jj--;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
+        }
+        if (jj < 0) {
+          return s;
+        }
+        s += periodJump;
       }
     }
     return -1;
   }
 
   int indexOfIgnoreCase(
-      String prefix, int[] failure, int anchorOffset, byte anchorLow, byte anchorHigh, int start) {
+      String prefix, int anchorOffset, byte anchorLow, byte anchorHigh, int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return start;
@@ -537,26 +671,161 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
         return swarResult;
       }
     }
-    return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
+    return indexOfLinearIgnoreCase(bytes, offset, length, prefix, start);
   }
 
   static int indexOfLinearIgnoreCase(
-      byte[] bytes, int offset, int length, String prefix, int[] failure, int start) {
+      byte[] bytes, int offset, int length, String prefix, int start) {
     int prefixLen = prefix.length();
-    int matched = 0;
-    for (int position = start; position < length; position++) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      int current = Ascii.toLowerCase(bytes[offset + position] & 0xFF);
-      while (matched > 0 && current != prefix.charAt(matched)) {
-        matched = failure[matched - 1];
-      }
-      if (current == prefix.charAt(matched)) {
-        matched++;
-        if (matched == prefixLen) {
-          return position - prefixLen + 1;
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    if (prefixLen == 1) {
+      byte low = (byte) Ascii.toLowerCase(prefix.charAt(0));
+      byte high = (byte) Ascii.toUpperCase(prefix.charAt(0));
+      for (int i = Math.max(0, start); i < length; i++) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
         }
+        byte b = bytes[offset + i];
+        if (b == low || b == high) {
+          return i;
+        }
+      }
+      return -1;
+    }
+    int s = Math.max(0, start);
+    if (s >= length || prefixLen > length - s) {
+      return -1;
+    }
+
+    // Step 1: Compute maximal suffix under <= (forward) and >= (backward) orders
+    int ms1 = -1;
+    int j = 0;
+    int k = 1;
+    int p1 = 1;
+    while (j + k < prefixLen) {
+      int a = Ascii.toLowerCase(prefix.charAt(ms1 + k));
+      int b = Ascii.toLowerCase(prefix.charAt(j + k));
+      if (b < a) {
+        j += k;
+        k = 1;
+        p1 = j - ms1;
+      } else if (b == a) {
+        if (k == p1) {
+          j += p1;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms1 = j++;
+        k = 1;
+        p1 = 1;
+      }
+    }
+
+    int ms2 = -1;
+    j = 0;
+    k = 1;
+    int p2 = 1;
+    while (j + k < prefixLen) {
+      int a = Ascii.toLowerCase(prefix.charAt(ms2 + k));
+      int b = Ascii.toLowerCase(prefix.charAt(j + k));
+      if (b > a) {
+        j += k;
+        k = 1;
+        p2 = j - ms2;
+      } else if (b == a) {
+        if (k == p2) {
+          j += p2;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms2 = j++;
+        k = 1;
+        p2 = 1;
+      }
+    }
+
+    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
+    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
+
+    boolean isPeriodic = true;
+    for (int i = 0; i < ell; i++) {
+      if (Ascii.toLowerCase(prefix.charAt(i)) != Ascii.toLowerCase(prefix.charAt(i + period))) {
+        isPeriodic = false;
+        break;
+      }
+    }
+
+    int memory = 0;
+    if (isPeriodic) {
+      while (s <= length - prefixLen) {
+        int i = Math.max(ell, memory);
+        int startI = i;
+        while (i < prefixLen
+            && Ascii.toLowerCase(prefix.charAt(i))
+                == Ascii.toLowerCase(bytes[offset + s + i] & 0xFF)) {
+          i++;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(i - startI + (i < prefixLen ? 1 : 0));
+        }
+        if (i < prefixLen) {
+          s += (i - ell + 1);
+          memory = 0;
+          continue;
+        }
+        int jj = ell - 1;
+        int startJj = jj;
+        while (jj >= memory
+            && Ascii.toLowerCase(prefix.charAt(jj))
+                == Ascii.toLowerCase(bytes[offset + s + jj] & 0xFF)) {
+          jj--;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
+        }
+        if (jj < memory) {
+          return s;
+        }
+        s += period;
+        memory = prefixLen - period;
+      }
+    } else {
+      int periodJump = Math.max(ell, prefixLen - ell) + 1;
+      while (s <= length - prefixLen) {
+        int i = ell;
+        int startI = i;
+        while (i < prefixLen
+            && Ascii.toLowerCase(prefix.charAt(i))
+                == Ascii.toLowerCase(bytes[offset + s + i] & 0xFF)) {
+          i++;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(i - startI + (i < prefixLen ? 1 : 0));
+        }
+        if (i < prefixLen) {
+          s += (i - ell + 1);
+          continue;
+        }
+        int jj = ell - 1;
+        int startJj = jj;
+        while (jj >= 0
+            && Ascii.toLowerCase(prefix.charAt(jj))
+                == Ascii.toLowerCase(bytes[offset + s + jj] & 0xFF)) {
+          jj--;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
+        }
+        if (jj < 0) {
+          return s;
+        }
+        s += periodJump;
       }
     }
     return -1;

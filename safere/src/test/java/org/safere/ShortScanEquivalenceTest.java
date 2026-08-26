@@ -286,9 +286,10 @@ class ShortScanEquivalenceTest {
   }
 
   @Test
-  @DisplayName("Ignore-case prefix scans use a linear failure function")
-  void ignoreCasePrefixFailureFunction() {
-    assertThat(Ascii.ignoreCaseFailure("aaaaab")).containsExactly(0, 1, 2, 3, 4, 0);
+  @DisplayName("Ignore-case prefix scans correctly locate matches via Two-Way scan")
+  void ignoreCasePrefixTwoWayScan() {
+    assertThat(Ascii.indexOfLinearIgnoreCase("aaaaabaaaaa", "aaaaab", 0)).isEqualTo(0);
+    assertThat(Ascii.indexOfLinearIgnoreCase("aaaaaa", "aaaaab", 0)).isEqualTo(-1);
   }
 
   private static int scalarIndexOfAsciiClass(byte[] input, int[] ranges, int start) {

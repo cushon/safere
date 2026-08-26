@@ -126,7 +126,6 @@ public final class Pattern implements Serializable {
   private final transient boolean prefixFoldCase;
   private final transient MatchDescriptor matchDescriptor;
   private final transient byte[] literalMatchUtf8;
-  private final transient int[] literalMatchFailure;
   private final transient int[] literalMatchShifts;
   private final transient byte[] prefixUtf8;
   private final transient String anchoredPrefix;
@@ -305,7 +304,6 @@ public final class Pattern implements Serializable {
     String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
         literalMatch == null ? null : literalMatch.getBytes(StandardCharsets.UTF_8);
-    this.literalMatchFailure = literalMatchUtf8 == null ? null : literalFailure(literalMatchUtf8);
     this.literalMatchShifts = literalMatchUtf8 == null ? null : literalShifts(literalMatchUtf8);
     this.hasLazy = hasLazy;
     this.hasAlternation = hasAlternation;
@@ -757,7 +755,7 @@ public final class Pattern implements Serializable {
       if (prog.anchorStart()) {
         return scanner.startsWith(literalMatchUtf8, 0);
       }
-      return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts, 0) >= 0;
+      return scanner.indexOf(literalMatchUtf8, literalMatchShifts, 0) >= 0;
     }
     if (enginePathOptions.keywordAlternationFastPath()
         && matchDescriptor.keywordAlternation() != null) {
@@ -820,7 +818,7 @@ public final class Pattern implements Serializable {
       boolean matched =
           prog.anchorStart()
               ? scanner.startsWith(literalMatchUtf8, 0)
-              : scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts, 0) >= 0;
+              : scanner.indexOf(literalMatchUtf8, literalMatchShifts, 0) >= 0;
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }
@@ -901,21 +899,6 @@ public final class Pattern implements Serializable {
             != null;
     diagnostics.boundary(MatchStrategy.NFA);
     return matched;
-  }
-
-  static int[] literalFailure(byte[] literal) {
-    int[] failure = new int[literal.length];
-    int matched = 0;
-    for (int index = 1; index < literal.length; index++) {
-      while (matched > 0 && literal[index] != literal[matched]) {
-        matched = failure[matched - 1];
-      }
-      if (literal[index] == literal[matched]) {
-        matched++;
-      }
-      failure[index] = matched;
-    }
-    return failure;
   }
 
   static int[] literalShifts(byte[] literal) {
@@ -1150,7 +1133,6 @@ public final class Pattern implements Serializable {
           literal,
           matchDescriptor.literalFoldCase(),
           literalMatchUtf8,
-          literalMatchFailure,
           literalMatchShifts,
           prog.anchorStart(),
           matchDescriptor.literalFoldCase()
@@ -1621,10 +1603,6 @@ public final class Pattern implements Serializable {
 
   byte[] literalMatchUtf8() {
     return literalMatchUtf8;
-  }
-
-  int[] literalMatchFailure() {
-    return literalMatchFailure;
   }
 
   int[] literalMatchShifts() {
@@ -2263,7 +2241,6 @@ public final class Pattern implements Serializable {
     private final int maxOffset;
     private final int[] discreteOffsets;
     private final byte[] utf8;
-    private final int[] failure;
     private final int[] shifts;
 
     FixedOffsetLiteral(String literal, int offset) {
@@ -2276,7 +2253,6 @@ public final class Pattern implements Serializable {
       this.maxOffset = maxOffset;
       this.discreteOffsets = discreteOffsets;
       this.utf8 = literal.getBytes(StandardCharsets.UTF_8);
-      this.failure = literalFailure(utf8);
       this.shifts = literalShifts(utf8);
     }
 
@@ -2306,10 +2282,6 @@ public final class Pattern implements Serializable {
 
     byte[] utf8() {
       return utf8;
-    }
-
-    int[] failure() {
-      return failure;
     }
 
     int[] shifts() {
@@ -3804,11 +3776,8 @@ public final class Pattern implements Serializable {
     // be pruned from the required search set.
     List<String> rawList = new ArrayList<>(literalSet);
     List<int[]> rawCodePoints = new ArrayList<>(rawList.size());
-    List<int[]> rawFailures = new ArrayList<>(rawList.size());
     for (String literal : rawList) {
-      int[] codePoints = literal.codePoints().toArray();
-      rawCodePoints.add(codePoints);
-      rawFailures.add(literalFailure(codePoints));
+      rawCodePoints.add(literal.codePoints().toArray());
     }
     Set<String> pruned = new LinkedHashSet<>();
     for (int i = 0; i < rawList.size(); i++) {
@@ -3817,8 +3786,7 @@ public final class Pattern implements Serializable {
       for (int j = 0; j < rawList.size(); j++) {
         if (i != j) {
           String s2 = rawList.get(j);
-          if (containsCodePointSequence(
-                  rawCodePoints.get(i), rawCodePoints.get(j), rawFailures.get(j))
+          if (containsCodePointSequence(rawCodePoints.get(i), rawCodePoints.get(j))
               && (s1.length() > s2.length() || (s1.length() == s2.length() && j < i))) {
             subsumed = true;
             break;
@@ -3835,33 +3803,21 @@ public final class Pattern implements Serializable {
     return pruned.toArray(new String[0]);
   }
 
-  private static int[] literalFailure(int[] literal) {
-    int[] failure = new int[literal.length];
-    int matched = 0;
-    for (int index = 1; index < literal.length; index++) {
-      while (matched > 0 && literal[index] != literal[matched]) {
-        matched = failure[matched - 1];
-      }
-      if (literal[index] == literal[matched]) {
-        matched++;
-      }
-      failure[index] = matched;
+  private static boolean containsCodePointSequence(int[] value, int[] candidate) {
+    if (candidate.length == 0) {
+      return true;
     }
-    return failure;
-  }
-
-  private static boolean containsCodePointSequence(int[] value, int[] candidate, int[] failure) {
-    int matched = 0;
-    for (int codePoint : value) {
-      while (matched > 0 && codePoint != candidate[matched]) {
-        matched = failure[matched - 1];
-      }
-      if (codePoint == candidate[matched]) {
-        matched++;
-        if (matched == candidate.length) {
-          return true;
+    if (candidate.length > value.length) {
+      return false;
+    }
+    outer:
+    for (int i = 0; i <= value.length - candidate.length; i++) {
+      for (int j = 0; j < candidate.length; j++) {
+        if (value[i + j] != candidate[j]) {
+          continue outer;
         }
       }
+      return true;
     }
     return false;
   }

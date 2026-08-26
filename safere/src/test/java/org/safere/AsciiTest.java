@@ -120,11 +120,17 @@ class AsciiTest {
   }
 
   @Test
-  void ignoreCaseFailure() {
-    assertThat(Ascii.ignoreCaseFailure("")).isEmpty();
-    assertThat(Ascii.ignoreCaseFailure("a")).containsExactly(0);
-    assertThat(Ascii.ignoreCaseFailure("aA")).containsExactly(0, 1);
-    assertThat(Ascii.ignoreCaseFailure("abAb")).containsExactly(0, 0, 1, 2);
+  void indexOfLinearIgnoreCase() {
+    assertThat(Ascii.indexOfLinearIgnoreCase("", "", 0)).isEqualTo(0);
+    assertThat(Ascii.indexOfLinearIgnoreCase("hello", "", 0)).isEqualTo(0);
+    assertThat(Ascii.indexOfLinearIgnoreCase("hello", "HELL", 0)).isEqualTo(0);
+    assertThat(Ascii.indexOfLinearIgnoreCase("hello WORLD", "world", 0)).isEqualTo(6);
+    assertThat(Ascii.indexOfLinearIgnoreCase("abAbAbab", "abab", 0)).isEqualTo(0);
+    assertThat(Ascii.indexOfLinearIgnoreCase("abAbAbab", "abab", 1)).isEqualTo(2);
+    assertThat(Ascii.indexOfLinearIgnoreCase("abAbAbab", "abab", 3)).isEqualTo(4);
+    assertThat(Ascii.indexOfLinearIgnoreCase("aaaaa", "aa", 0)).isEqualTo(0);
+    assertThat(Ascii.indexOfLinearIgnoreCase("aaaaa", "aa", 1)).isEqualTo(1);
+    assertThat(Ascii.indexOfLinearIgnoreCase("aaaaa", "ab", 0)).isEqualTo(-1);
   }
 
   @Test
