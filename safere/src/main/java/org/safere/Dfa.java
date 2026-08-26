@@ -1498,7 +1498,7 @@ final class Dfa {
           hasPositionDependentTransitions ? Math.min(textLen, posDepThreshold - 1) : textLen;
       int sId = s.id * numClasses;
       while (pos < limit) {
-        if (s.accelerator != null && (anchored || !s.isStartState) && (limit - pos >= 16)) {
+        if (s.accelerator != null && (limit - pos >= 16) && (!s.isStartState || anchored)) {
           int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, limit);
           if (nextPos == -1) {
             pos = limit;
@@ -1621,7 +1621,7 @@ final class Dfa {
           }
         }
       }
-      if (s.accelerator != null && (anchored || !s.isStartState) && (textLen - pos >= 16)) {
+      if (s.accelerator != null && (textLen - pos >= 16) && (!s.isStartState || anchored)) {
         int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, textLen);
         if (nextPos == -1) {
           pos = textLen;
