@@ -3776,8 +3776,11 @@ public final class Pattern implements Serializable {
     // be pruned from the required search set.
     List<String> rawList = new ArrayList<>(literalSet);
     List<int[]> rawCodePoints = new ArrayList<>(rawList.size());
+    List<int[]> rawFailures = new ArrayList<>(rawList.size());
     for (String literal : rawList) {
-      rawCodePoints.add(literal.codePoints().toArray());
+      int[] codePoints = literal.codePoints().toArray();
+      rawCodePoints.add(codePoints);
+      rawFailures.add(literalFailure(codePoints));
     }
     Set<String> pruned = new LinkedHashSet<>();
     for (int i = 0; i < rawList.size(); i++) {
@@ -3786,7 +3789,8 @@ public final class Pattern implements Serializable {
       for (int j = 0; j < rawList.size(); j++) {
         if (i != j) {
           String s2 = rawList.get(j);
-          if (containsCodePointSequence(rawCodePoints.get(i), rawCodePoints.get(j))
+          if (containsCodePointSequence(
+                  rawCodePoints.get(i), rawCodePoints.get(j), rawFailures.get(j))
               && (s1.length() > s2.length() || (s1.length() == s2.length() && j < i))) {
             subsumed = true;
             break;
@@ -3803,21 +3807,48 @@ public final class Pattern implements Serializable {
     return pruned.toArray(new String[0]);
   }
 
-  private static boolean containsCodePointSequence(int[] value, int[] candidate) {
+  private static int[] literalFailure(int[] literal) {
+    int[] failure = new int[literal.length];
+    int matched = 0;
+    for (int index = 1; index < literal.length; index++) {
+      while (matched > 0 && literal[index] != literal[matched]) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        matched = failure[matched - 1];
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      if (literal[index] == literal[matched]) {
+        matched++;
+      }
+      failure[index] = matched;
+    }
+    return failure;
+  }
+
+  private static boolean containsCodePointSequence(int[] value, int[] candidate, int[] failure) {
     if (candidate.length == 0) {
       return true;
     }
-    if (candidate.length > value.length) {
-      return false;
-    }
-    outer:
-    for (int i = 0; i <= value.length - candidate.length; i++) {
-      for (int j = 0; j < candidate.length; j++) {
-        if (value[i + j] != candidate[j]) {
-          continue outer;
+    int matched = 0;
+    for (int codePoint : value) {
+      while (matched > 0 && codePoint != candidate[matched]) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        matched = failure[matched - 1];
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      if (codePoint == candidate[matched]) {
+        matched++;
+        if (matched == candidate.length) {
+          return true;
         }
       }
-      return true;
     }
     return false;
   }

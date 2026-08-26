@@ -409,6 +409,18 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(smallerWork * 6);
   }
 
+  @Test
+  void disjointLiteralSubsumptionIsLinearInPatternSize() {
+    long smallerWork =
+        WorkCounter.countForTesting(() -> Pattern.compile(disjointLiteralPattern(200)));
+    long largerWork =
+        WorkCounter.countForTesting(() -> Pattern.compile(disjointLiteralPattern(800)));
+
+    assertThat(largerWork)
+        .as("Required-literal substring checks should scale linearly with pattern size")
+        .isLessThanOrEqualTo(smallerWork * 6);
+  }
+
   private static void assertConstantRejectionWork(IntPredicate find, String description) {
     long work2000 = WorkCounter.countForTesting(() -> assertThat(find.test(2_000)).isFalse());
     long work10000 = WorkCounter.countForTesting(() -> assertThat(find.test(10_000)).isFalse());
@@ -418,6 +430,12 @@ class SearchScalingRegressionTest {
     assertThat(work10000)
         .as("%s rejection work should not scale with trailing input size", description)
         .isLessThanOrEqualTo(Math.max(10, work2000 * 2));
+  }
+
+  private static String disjointLiteralPattern(int size) {
+    String longer = "x" + "a".repeat(size) + "b";
+    String shorter = "a".repeat(size / 2) + "c";
+    return "(?:" + longer + "|" + shorter + "|banana)";
   }
 
   @Test
