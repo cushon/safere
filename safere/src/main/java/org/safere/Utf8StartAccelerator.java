@@ -6,7 +6,6 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
-import org.safere.Pattern.FixedOffsetLiteral;
 
 /**
  * Encapsulates pre-computed start acceleration search strategies for finding candidate match
@@ -15,46 +14,121 @@ import org.safere.Pattern.FixedOffsetLiteral;
 sealed interface Utf8StartAccelerator {
 
   /**
-   * Creates a {@link Utf8StartAccelerator} for the given pattern descriptor, or {@code null} if no
-   * acceleration strategy applies.
+   * Creates a {@link Utf8StartAccelerator} for the given multi-anchor descriptor, or {@code null}
+   * if no acceleration strategy applies.
    */
-  static Utf8StartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
-    if (descriptor == null || !descriptor.hasStartAcceleration()) {
+  static Utf8StartAccelerator create(MultiAnchorDescriptor descriptor, boolean hasWordBoundary) {
+    return create(descriptor, hasWordBoundary, null);
+  }
+
+  /**
+   * Creates a {@link Utf8StartAccelerator} for the given multi-anchor descriptor and reverse prefix
+   * program, or {@code null} if no acceleration strategy applies.
+   */
+  static Utf8StartAccelerator create(
+      MultiAnchorDescriptor descriptor, boolean hasWordBoundary, Prog reversePrefixProg) {
+    if (descriptor == null) {
       return null;
     }
-    if (descriptor.prefix() != null) {
-      if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(descriptor.prefix());
-      }
-      return Literal.create(descriptor.prefix());
-    }
-    if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
-    }
-    if (descriptor.multiLiteral() != null
-        && !hasWordBoundary
-        && VectorScanProviders.multiLiteralProviderAvailable()) {
-      return new MultiLiteral(descriptor.multiLiteral(), descriptor.teddyModel());
-    }
-    if (descriptor.teddyModel() != null
-        && !hasWordBoundary
-        && VectorScanProviders.teddyProviderAvailable()) {
-      return new Teddy(descriptor.teddyModel());
-    }
-    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
-      return new CharClass(descriptor.charClassPrefix());
-    }
-    if (descriptor.leadingExpansion() != null) {
-      Utf8StartAccelerator inner =
-          create(descriptor.leadingExpansion().innerDescriptor(), hasWordBoundary);
-      if (inner != null) {
-        return new LeadingExpansion(
-            descriptor.leadingExpansion().leadingClass(),
-            descriptor.leadingExpansion().minRepetition(),
-            descriptor.leadingExpansion().maxRepetition(),
-            inner);
+    if (descriptor.isReverseAnchor() && reversePrefixProg != null) {
+      MultiAnchorDescriptor.Segment lastSeg = descriptor.trailingSegment();
+      if (lastSeg.anchor() instanceof MultiAnchorDescriptor.Anchor.Single single) {
+        Utf8StartAccelerator inner =
+            single.foldCase()
+                ? CaseInsensitiveLiteral.create(single.literal())
+                : Literal.create(single.literal());
+        if (inner != null) {
+          Dfa revDfa = Dfa.createReverse(reversePrefixProg);
+          if (revDfa != null) {
+            return new ReverseAnchor(inner, revDfa, descriptor.minTotalLength());
+          }
+        }
       }
     }
+
+    MultiAnchorDescriptor.Segment s0 = descriptor.firstSegment();
+    MultiAnchorDescriptor.Gap g0 = s0.gap();
+    MultiAnchorDescriptor.Anchor a0 = s0.anchor();
+
+    if (g0.kind() == MultiAnchorDescriptor.GapKind.EMPTY) {
+      if (descriptor.isStartAnchored()) {
+        if (a0 instanceof MultiAnchorDescriptor.Anchor.Single single && !single.foldCase()) {
+          return Literal.create(single.literal());
+        }
+      } else {
+        if (a0 instanceof MultiAnchorDescriptor.Anchor.Single single) {
+          return single.foldCase()
+              ? CaseInsensitiveLiteral.create(single.literal())
+              : Literal.create(single.literal());
+        } else if (a0 instanceof MultiAnchorDescriptor.Anchor.Alternation alt && !alt.foldCase()) {
+          if (alt.multiLiteral() != null
+              && VectorScanProviders.multiLiteralProviderAvailable()
+              && !hasWordBoundary) {
+            return new MultiLiteral(alt.multiLiteral(), alt.teddyModel());
+          } else if (alt.teddyModel() != null
+              && VectorScanProviders.teddyProviderAvailable()
+              && !hasWordBoundary) {
+            return new Teddy(alt.teddyModel());
+          } else if (!hasWordBoundary) {
+            CharClassScanInfo scanInfo = a0.scanInfo();
+            if (scanInfo != null) {
+              return new CharClass(scanInfo);
+            }
+          }
+        } else if (a0 instanceof MultiAnchorDescriptor.Anchor.CharClass cc
+            && !hasWordBoundary
+            && cc.scanInfo() != null) {
+          return new CharClass(cc.scanInfo());
+        }
+      }
+    }
+
+    if (g0.kind() == MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT) {
+      if (g0.maxLength() < Integer.MAX_VALUE && g0.maxLength() > 0) {
+        String lit = a0.primaryLiteral();
+        if (lit != null && !lit.isEmpty()) {
+          byte[] utf8 = lit.getBytes(StandardCharsets.UTF_8);
+          int[] failure = Pattern.literalFailure(utf8);
+          int[] shifts = Pattern.literalShifts(utf8);
+          CharClassScanInfo cc =
+              g0.scanInfo() != null
+                  ? g0.scanInfo()
+                  : (g0.charClass() != null
+                      ? CharClassScanInfo.fromAsciiBitmap(g0.charClass())
+                      : null);
+          return new FixedOffset(
+              utf8, failure, shifts, g0.minLength(), g0.maxLength(), g0.discreteOffsets(), cc);
+        }
+      } else if (g0.maxLength() == Integer.MAX_VALUE) {
+        CharClassScanInfo cc =
+            g0.scanInfo() != null
+                ? g0.scanInfo()
+                : (g0.charClass() != null
+                    ? CharClassScanInfo.fromAsciiBitmap(g0.charClass())
+                    : null);
+        if (cc != null) {
+          Utf8StartAccelerator inner =
+              a0 instanceof MultiAnchorDescriptor.Anchor.Single single
+                  ? (single.foldCase()
+                      ? CaseInsensitiveLiteral.create(single.literal())
+                      : Literal.create(single.literal()))
+                  : (a0 instanceof MultiAnchorDescriptor.Anchor.CharClass ccAnchor
+                          && ccAnchor.scanInfo() != null
+                      ? new CharClass(ccAnchor.scanInfo())
+                      : null);
+          if (inner != null) {
+            return new LeadingExpansion(cc, g0.minLength(), -1, inner);
+          }
+        }
+      }
+    }
+
+    if (a0 instanceof MultiAnchorDescriptor.Anchor.CharClass cc
+        && !hasWordBoundary
+        && cc.scanInfo() != null) {
+      return new CharClass(cc.scanInfo());
+    }
+
     return null;
   }
 
@@ -77,6 +151,7 @@ sealed interface Utf8StartAccelerator {
       case Teddy t -> t.findCandidate(scanner, pos);
       case MultiLiteral ml -> ml.findCandidate(scanner, pos);
       case LeadingExpansion le -> le.findCandidate(scanner, pos);
+      case ReverseAnchor ra -> ra.findCandidate(scanner, pos);
     };
   }
 
@@ -137,7 +212,15 @@ sealed interface Utf8StartAccelerator {
     }
   }
 
-  record FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo charClassPrefix)
+  @SuppressWarnings("ArrayRecordComponent")
+  record FixedOffset(
+      byte[] utf8,
+      int[] failure,
+      int[] shifts,
+      int minOffset,
+      int maxOffset,
+      int[] discreteOffsets,
+      CharClassScanInfo charClassPrefix)
       implements Utf8StartAccelerator {
 
     @Override
@@ -146,23 +229,31 @@ sealed interface Utf8StartAccelerator {
     }
 
     int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      return nextFixedOffsetCandidate(scanner, fixedOffset, charClassPrefix, fromIndex);
+      return nextFixedOffsetCandidate(
+          scanner,
+          utf8,
+          failure,
+          shifts,
+          minOffset,
+          maxOffset,
+          discreteOffsets,
+          charClassPrefix,
+          fromIndex);
     }
 
     private static int nextFixedOffsetCandidate(
         Utf8InputScanner scanner,
-        FixedOffsetLiteral fixedOffsetLiteral,
+        byte[] utf8,
+        int[] failure,
+        int[] shifts,
+        int minOffset,
+        int maxOffset,
+        int[] discreteOffsets,
         CharClassScanInfo charClassPrefix,
         int searchFrom) {
-      int literalFrom = searchFrom + fixedOffsetLiteral.minOffset();
-      int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
+      int literalFrom = searchFrom + minOffset;
       while (literalFrom <= scanner.length()) {
-        int literalStart =
-            scanner.indexOf(
-                fixedOffsetLiteral.utf8(),
-                fixedOffsetLiteral.failure(),
-                fixedOffsetLiteral.shifts(),
-                literalFrom);
+        int literalStart = scanner.indexOf(utf8, failure, shifts, literalFrom);
         if (literalStart < 0) {
           return -1;
         }
@@ -186,8 +277,7 @@ sealed interface Utf8StartAccelerator {
           literalFrom = literalStart + 1;
           continue;
         }
-        return Math.max(
-            searchFrom, scanner.retreatByCodePoints(literalStart, fixedOffsetLiteral.maxOffset()));
+        return Math.max(searchFrom, scanner.retreatByCodePoints(literalStart, maxOffset));
       }
       return -1;
     }
@@ -301,7 +391,7 @@ sealed interface Utf8StartAccelerator {
           if (!leadingClass.contains(cp)) {
             break;
           }
-          if (count + 1 > maxRepetition) {
+          if (maxRepetition >= 0 && count + 1 > maxRepetition) {
             break;
           }
           count++;
@@ -364,6 +454,34 @@ sealed interface Utf8StartAccelerator {
             }
           }
         }
+      }
+      return -1;
+    }
+  }
+
+  record ReverseAnchor(Utf8StartAccelerator anchor, Dfa reverseDfa, int minLength)
+      implements Utf8StartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return new AcceleratorPolicy(16, 4, false, anchor.policy().strategy());
+    }
+
+    int findCandidate(Utf8InputScanner scanner, int pos) {
+      int searchPos = Math.max(0, pos);
+      int textLen = scanner.length();
+      int minBound = Math.max(0, pos);
+      while (searchPos <= textLen - minLength) {
+        int anchorPos = Utf8StartAccelerator.findNextCandidate(anchor, scanner, searchPos);
+        if (anchorPos < 0) {
+          return -1;
+        }
+        Dfa.SearchResult revResult =
+            reverseDfa.doSearchReverse(scanner, anchorPos, minBound, true, true);
+        if (revResult != null && revResult.matched() && !revResult.ambiguous()) {
+          return revResult.pos();
+        }
+        searchPos = anchorPos + 1;
       }
       return -1;
     }

@@ -5,47 +5,54 @@
 
 package org.safere;
 
+import java.util.Objects;
 import org.safere.Pattern.DisjointRequiredLiterals;
-import org.safere.Pattern.EndAnchoredCharClassInfo;
-import org.safere.Pattern.SuffixInfo;
+import org.safere.RejectDescriptorCompiler.EndAnchoredCharClassInfo;
+import org.safere.RejectDescriptorCompiler.SuffixInfo;
 
 /**
  * Metadata extracted from a regular expression AST describing mandatory content that any match must
  * contain across the entire input (Tier 0 whole-input rejection).
  */
 record RejectDescriptor(
-    String requiredLiteral,
     CharClassScanInfo requiredCharClass,
     DisjointRequiredLiterals disjointRequiredLiterals,
     SuffixInfo endAnchoredSuffix,
-    EndAnchoredCharClassInfo endAnchoredCharClass) {
+    EndAnchoredCharClassInfo endAnchoredCharClass,
+    InfixSequence infixSequence) {
 
-  RejectDescriptor(String requiredLiteral, CharClassScanInfo requiredCharClass) {
-    this(requiredLiteral, requiredCharClass, null, null, null);
-  }
+  /** An ordered sequence of mandatory literal substrings that any match must contain in order. */
+  @SuppressWarnings("ArrayRecordComponent")
+  record InfixSequence(String[] infixes, int[] checkOrder) {
+    InfixSequence {
+      Objects.requireNonNull(infixes, "infixes");
+      Objects.requireNonNull(checkOrder, "checkOrder");
+    }
 
-  RejectDescriptor(
-      String requiredLiteral,
-      CharClassScanInfo requiredCharClass,
-      DisjointRequiredLiterals disjointRequiredLiterals) {
-    this(requiredLiteral, requiredCharClass, disjointRequiredLiterals, null, null);
-  }
+    boolean isSingle() {
+      return infixes.length == 1;
+    }
 
-  RejectDescriptor(
-      String requiredLiteral,
-      CharClassScanInfo requiredCharClass,
-      DisjointRequiredLiterals disjointRequiredLiterals,
-      SuffixInfo endAnchoredSuffix) {
-    this(requiredLiteral, requiredCharClass, disjointRequiredLiterals, endAnchoredSuffix, null);
+    String primaryLiteral() {
+      return infixes[checkOrder[0]];
+    }
+
+    static InfixSequence of(String literal) {
+      return new InfixSequence(new String[] {literal}, new int[] {0});
+    }
   }
 
   static final RejectDescriptor NONE = new RejectDescriptor(null, null, null, null, null);
 
+  String requiredLiteral() {
+    return infixSequence != null ? infixSequence.primaryLiteral() : null;
+  }
+
   boolean hasRejectionFilter() {
-    return requiredLiteral != null
-        || requiredCharClass != null
+    return requiredCharClass != null
         || disjointRequiredLiterals != null
         || endAnchoredSuffix != null
-        || endAnchoredCharClass != null;
+        || endAnchoredCharClass != null
+        || infixSequence != null;
   }
 }

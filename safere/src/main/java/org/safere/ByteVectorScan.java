@@ -45,6 +45,32 @@ final class ByteVectorScan {
     return -1;
   }
 
+  static boolean matchAsciiClassSlice(byte[] bytes, int offset, int length, int[] ranges) {
+    return matchAsciiClassSlice(SPECIES, bytes, offset, length, ranges);
+  }
+
+  static boolean matchAsciiClassSlice(
+      VectorSpecies<Byte> species, byte[] bytes, int offset, int length, int[] ranges) {
+    if (!Swar.supportsAsciiRanges(ranges, 4)) {
+      return false;
+    }
+    int position = 0;
+    int limit = species.loopBound(length);
+    for (; position < limit; position += species.length()) {
+      ByteVector values = ByteVector.fromArray(species, bytes, offset + position);
+      VectorMask<Byte> matchMask = matches(values, ranges);
+      if (!matchMask.allTrue()) {
+        return false;
+      }
+    }
+    for (; position < length; position++) {
+      if (!matches(bytes[offset + position], ranges)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   static int indexOfByte(byte[] bytes, int offset, int length, byte target, int start) {
     return indexOfByte(SPECIES, bytes, offset, length, target, start);
   }

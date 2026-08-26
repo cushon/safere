@@ -215,10 +215,16 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   }
 
   boolean startsWith(byte[] prefix, int startPos) {
+    return startsWith(prefix, startPos, false);
+  }
+
+  boolean startsWith(byte[] prefix, int startPos, boolean foldCase) {
     int prefixLen = prefix.length;
     if (startPos >= 0 && length - startPos >= prefixLen) {
       int start = offset + startPos;
-      if (Arrays.equals(bytes, start, start + prefixLen, prefix, 0, prefixLen)) {
+      if (foldCase
+          ? equalsFoldCase(bytes, start, prefix, 0, prefixLen)
+          : Arrays.equals(bytes, start, start + prefixLen, prefix, 0, prefixLen)) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(prefixLen);
         }
@@ -289,6 +295,19 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   @Override
   public int singleUnitCodePointBefore(int pos) {
     return asciiAt(pos - 1);
+  }
+
+  public boolean matchAsciiClassSlice(int from, int to, int[] ranges) {
+    int start = Math.max(0, from);
+    int end = Math.min(length, to);
+    int len = end - start;
+    if (len <= 0) {
+      return true;
+    }
+    if (scanProvider != null) {
+      return scanProvider.matchAsciiClassSlice(bytes, offset + start, len, ranges);
+    }
+    return ByteSwarScan.matchAsciiClassSlice(bytes, offset + start, len, ranges);
   }
 
   @Override

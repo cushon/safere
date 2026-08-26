@@ -17,7 +17,6 @@ class MatchDescriptorTest {
     assertThat(MatchDescriptor.NONE.hasFastPath()).isFalse();
     assertThat(MatchDescriptor.NONE.literalMatch()).isNull();
     assertThat(MatchDescriptor.NONE.singleCharClass()).isNull();
-    assertThat(MatchDescriptor.NONE.keywordAlternation()).isNull();
     assertThat(MatchDescriptor.NONE.charClassMatch()).isNull();
   }
 
@@ -49,13 +48,13 @@ class MatchDescriptorTest {
   }
 
   @Test
-  void keywordAlternationPatternProducesKeywordAlternationDescriptor() {
+  void keywordAlternationPatternProducesMultiAnchorDescriptor() {
     Pattern p = Pattern.compile("foo|bar|baz", Pattern.CASE_INSENSITIVE);
     MatchDescriptor desc = p.matchDescriptor();
-    if (desc.keywordAlternation() != null) {
-      assertThat(desc.hasFastPath()).isTrue();
-      assertThat(desc.keywordAlternation().keywords).isNotEmpty();
-    }
+    assertThat(desc.hasFastPath()).isTrue();
+    assertThat(desc.multiAnchor()).isNotNull();
+    assertThat(desc.multiAnchor().firstSegment().anchor())
+        .isInstanceOf(MultiAnchorDescriptor.Anchor.Alternation.class);
   }
 
   @Test

@@ -5,9 +5,6 @@
 
 package org.safere;
 
-import org.safere.Pattern.FixedOffsetLiteral;
-import org.safere.Pattern.StartAcceleration;
-
 /**
  * Encapsulates pre-computed start acceleration search strategies for finding candidate match
  * positions in a {@link String}.
@@ -15,39 +12,121 @@ import org.safere.Pattern.StartAcceleration;
 sealed interface StringStartAccelerator {
 
   /**
-   * Creates a {@link StringStartAccelerator} for the given pattern descriptor, or {@code null} if
-   * no acceleration strategy applies.
+   * Creates a {@link StringStartAccelerator} for the given multi-anchor descriptor, or {@code null}
+   * if no acceleration strategy applies.
    */
-  static StringStartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
-    if (descriptor == null || !descriptor.hasStartAcceleration()) {
+  static StringStartAccelerator create(MultiAnchorDescriptor descriptor, boolean hasWordBoundary) {
+    return create(descriptor, hasWordBoundary, null);
+  }
+
+  /**
+   * Creates a {@link StringStartAccelerator} for the given multi-anchor descriptor and reverse
+   * prefix program, or {@code null} if no acceleration strategy applies.
+   */
+  static StringStartAccelerator create(
+      MultiAnchorDescriptor descriptor, boolean hasWordBoundary, Prog reversePrefixProg) {
+    if (descriptor == null) {
       return null;
     }
-    if (descriptor.prefix() != null) {
-      if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(descriptor.prefix(), descriptor.classHashChain());
-      }
-      return Literal.create(descriptor.prefix());
-    }
-    if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
-    }
-    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
-      return CharClass.create(descriptor.charClassPrefix());
-    }
-    if (descriptor.lineAnchor() != null && !hasWordBoundary) {
-      return new LineAnchor(descriptor.lineAnchor());
-    }
-    if (descriptor.leadingExpansion() != null) {
-      StringStartAccelerator inner =
-          create(descriptor.leadingExpansion().innerDescriptor(), hasWordBoundary);
-      if (inner != null) {
-        return new LeadingExpansion(
-            descriptor.leadingExpansion().leadingClass(),
-            descriptor.leadingExpansion().minRepetition(),
-            descriptor.leadingExpansion().maxRepetition(),
-            inner);
+    if (descriptor.isReverseAnchor() && reversePrefixProg != null) {
+      MultiAnchorDescriptor.Segment lastSeg = descriptor.trailingSegment();
+      if (lastSeg.anchor() instanceof MultiAnchorDescriptor.Anchor.Single single) {
+        StringStartAccelerator inner =
+            single.foldCase()
+                ? CaseInsensitiveLiteral.create(single.literal(), null)
+                : Literal.create(single.literal());
+        if (inner != null) {
+          Dfa revDfa = Dfa.createReverse(reversePrefixProg);
+          if (revDfa != null) {
+            return new ReverseAnchor(inner, revDfa, descriptor.minTotalLength());
+          }
+        }
       }
     }
+
+    MultiAnchorDescriptor.Segment s0 = descriptor.firstSegment();
+    MultiAnchorDescriptor.Gap g0 = s0.gap();
+    MultiAnchorDescriptor.Anchor a0 = s0.anchor();
+
+    if (g0.kind() == MultiAnchorDescriptor.GapKind.EMPTY) {
+      if (descriptor.isStartAnchored()) {
+        if (a0 instanceof MultiAnchorDescriptor.Anchor.Single single && !single.foldCase()) {
+          return Literal.create(single.literal());
+        }
+      } else {
+        if (a0 instanceof MultiAnchorDescriptor.Anchor.Single single) {
+          return single.foldCase()
+              ? CaseInsensitiveLiteral.create(single.literal(), null)
+              : Literal.create(single.literal());
+        } else if (a0 instanceof MultiAnchorDescriptor.Anchor.Alternation alt && !alt.foldCase()) {
+          CharClassScanInfo scanInfo = a0.scanInfo();
+          if (!hasWordBoundary && scanInfo != null) {
+            return CharClass.create(scanInfo);
+          }
+        } else if (a0 instanceof MultiAnchorDescriptor.Anchor.CharClass cc
+            && !hasWordBoundary
+            && cc.scanInfo() != null) {
+          return CharClass.create(cc.scanInfo());
+        }
+      }
+    }
+
+    if (g0.kind() == MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT) {
+      if (g0.maxLength() < Integer.MAX_VALUE && g0.maxLength() > 0) {
+        String lit = a0.primaryLiteral();
+        if (lit != null && !lit.isEmpty()) {
+          CharClassScanInfo cc =
+              g0.scanInfo() != null
+                  ? g0.scanInfo()
+                  : (g0.charClass() != null
+                      ? CharClassScanInfo.fromAsciiBitmap(g0.charClass())
+                      : null);
+          return new FixedOffset(lit, g0.minLength(), g0.maxLength(), g0.discreteOffsets(), cc);
+        }
+      } else if (g0.maxLength() == Integer.MAX_VALUE) {
+        CharClassScanInfo cc =
+            g0.scanInfo() != null
+                ? g0.scanInfo()
+                : (g0.charClass() != null
+                    ? CharClassScanInfo.fromAsciiBitmap(g0.charClass())
+                    : null);
+        if (cc != null) {
+          StringStartAccelerator inner =
+              a0 instanceof MultiAnchorDescriptor.Anchor.Single single
+                  ? (single.foldCase()
+                      ? CaseInsensitiveLiteral.create(single.literal(), null)
+                      : Literal.create(single.literal()))
+                  : (a0 instanceof MultiAnchorDescriptor.Anchor.CharClass ccAnchor
+                          && ccAnchor.scanInfo() != null
+                      ? CharClass.create(ccAnchor.scanInfo())
+                      : null);
+          if (inner != null) {
+            return new LeadingExpansion(cc, g0.minLength(), -1, inner);
+          }
+        }
+      }
+    }
+
+    if (g0.kind() == MultiAnchorDescriptor.GapKind.LINE_START) {
+      if (!hasWordBoundary) {
+        AsciiBitmap asciiStart =
+            a0 instanceof MultiAnchorDescriptor.Anchor.Single single
+                    && !single.foldCase()
+                    && !single.literal().isEmpty()
+                ? AsciiBitmap.of(single.literal().charAt(0))
+                : (a0 instanceof MultiAnchorDescriptor.Anchor.CharClass cc && cc.scanInfo() != null
+                    ? new AsciiBitmap(cc.scanInfo().bitmap0(), cc.scanInfo().bitmap1())
+                    : null);
+        return new LineAnchor(asciiStart);
+      }
+    }
+
+    if (a0 instanceof MultiAnchorDescriptor.Anchor.CharClass cc
+        && !hasWordBoundary
+        && cc.scanInfo() != null) {
+      return CharClass.create(cc.scanInfo());
+    }
+
     return null;
   }
 
@@ -69,6 +148,7 @@ sealed interface StringStartAccelerator {
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
       case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
+      case ReverseAnchor ra -> ra.findCandidate(text, fromIndex, unixLines);
     };
   }
 
@@ -130,7 +210,13 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  record FixedOffset(FixedOffsetLiteral fixedOffset, CharClassScanInfo firstCharClass)
+  @SuppressWarnings("ArrayRecordComponent")
+  record FixedOffset(
+      String literal,
+      int minOffset,
+      int maxOffset,
+      int[] discreteOffsets,
+      CharClassScanInfo firstCharClass)
       implements StringStartAccelerator {
 
     @Override
@@ -139,27 +225,29 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return nextFixedOffsetCandidate(text, fixedOffset, firstCharClass, fromIndex);
+      return nextFixedOffsetCandidate(
+          text, literal, minOffset, maxOffset, discreteOffsets, firstCharClass, fromIndex);
     }
 
     private static int nextFixedOffsetCandidate(
         String text,
-        FixedOffsetLiteral fixedOffsetLiteral,
+        String literal,
+        int minOffset,
+        int maxOffset,
+        int[] discreteOffsets,
         CharClassScanInfo firstCharClass,
         int fromIndex) {
-      int minOffset = fixedOffsetLiteral.minOffset();
       if (minOffset > text.length() - fromIndex) {
         return -1;
       }
       int literalFrom = fromIndex + minOffset;
-      int[] discreteOffsets = fixedOffsetLiteral.discreteOffsets();
 
       while (literalFrom <= text.length()) {
-        int literalStart = text.indexOf(fixedOffsetLiteral.literal(), literalFrom);
+        int literalStart = text.indexOf(literal, literalFrom);
         if (WorkCounterConfig.ENABLED) {
           int scanned =
               literalStart >= 0
-                  ? literalStart - literalFrom + fixedOffsetLiteral.literal().length()
+                  ? literalStart - literalFrom + literal.length()
                   : text.length() - literalFrom;
           WorkCounter.record(Math.max(0, scanned));
         }
@@ -187,9 +275,7 @@ sealed interface StringStartAccelerator {
           literalFrom = literalStart + 1;
           continue;
         }
-        return Math.max(
-            fromIndex,
-            retreatByCodePoints(text, literalStart, fixedOffsetLiteral.maxOffset(), fromIndex));
+        return Math.max(fromIndex, retreatByCodePoints(text, literalStart, maxOffset, fromIndex));
       }
       return -1;
     }
@@ -285,7 +371,7 @@ sealed interface StringStartAccelerator {
     }
   }
 
-  record LineAnchor(StartAcceleration startAcceleration) implements StringStartAccelerator {
+  record LineAnchor(AsciiBitmap asciiStart) implements StringStartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
@@ -293,17 +379,17 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return nextAcceleratedStart(text, startAcceleration, fromIndex, unixLines);
+      return nextAcceleratedStart(text, asciiStart, fromIndex, unixLines);
     }
 
     private static int nextAcceleratedStart(
-        String text, StartAcceleration acceleration, int fromIndex, boolean unixLines) {
+        String text, AsciiBitmap asciiStart, int fromIndex, boolean unixLines) {
       int start = Math.max(0, fromIndex);
       for (int i = start; i < text.length(); i++) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
-        if (matchesStartAcceleration(text, i, acceleration, unixLines)) {
+        if (isBeginLine(text, i, unixLines) && matchesAsciiStart(text, i, asciiStart)) {
           return i;
         }
         int cp = text.codePointAt(i);
@@ -312,18 +398,11 @@ sealed interface StringStartAccelerator {
       return -1;
     }
 
-    private static boolean matchesStartAcceleration(
-        String text, int pos, StartAcceleration acceleration, boolean unixLines) {
-      boolean lineStart = isBeginLine(text, pos, unixLines);
-      boolean asciiStart = matchesAsciiStart(text, pos, acceleration.asciiStart);
-      if (acceleration.requireLineStart) {
-        return lineStart && (acceleration.asciiStart == null || asciiStart);
-      }
-      return (acceleration.allowLineStart && lineStart) || asciiStart;
-    }
-
     private static boolean matchesAsciiStart(String text, int pos, AsciiBitmap asciiStart) {
-      if (asciiStart == null || pos >= text.length()) {
+      if (asciiStart == null) {
+        return true;
+      }
+      if (pos >= text.length()) {
         return false;
       }
       char ch = text.charAt(pos);
@@ -381,7 +460,7 @@ sealed interface StringStartAccelerator {
           if (!leadingClass.contains(cp)) {
             break;
           }
-          if (count + 1 > maxRepetition) {
+          if (maxRepetition >= 0 && count + 1 > maxRepetition) {
             break;
           }
           count++;
@@ -391,6 +470,35 @@ sealed interface StringStartAccelerator {
           return start;
         }
         searchPos = innerMatch + 1;
+      }
+      return -1;
+    }
+  }
+
+  record ReverseAnchor(StringStartAccelerator anchor, Dfa reverseDfa, int minLength)
+      implements StringStartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return new AcceleratorPolicy(16, 4, false, anchor.policy().strategy());
+    }
+
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
+      int searchPos = Math.max(0, fromIndex);
+      int textLen = text.length();
+      int minBound = Math.max(0, fromIndex);
+      while (searchPos <= textLen - minLength) {
+        int anchorPos =
+            StringStartAccelerator.findNextCandidate(anchor, text, searchPos, unixLines);
+        if (anchorPos < 0) {
+          return -1;
+        }
+        Dfa.SearchResult revResult =
+            reverseDfa.doSearchReverse(text, anchorPos, minBound, true, true);
+        if (revResult != null && revResult.matched() && !revResult.ambiguous()) {
+          return revResult.pos();
+        }
+        searchPos = anchorPos + 1;
       }
       return -1;
     }

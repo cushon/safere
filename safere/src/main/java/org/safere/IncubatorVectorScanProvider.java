@@ -55,6 +55,11 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   }
 
   @Override
+  public boolean matchAsciiClassSlice(byte[] bytes, int offset, int length, int[] ranges) {
+    return ByteVectorScan.matchAsciiClassSlice(bytes, offset, length, ranges);
+  }
+
+  @Override
   public int indexOfAsciiPair(byte[] bytes, int offset, int length, byte b0, byte b1, int start) {
     return ByteVectorScan.indexOfAsciiPair(bytes, offset, length, b0, b1, start);
   }

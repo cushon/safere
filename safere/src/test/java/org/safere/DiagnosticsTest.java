@@ -562,14 +562,13 @@ class DiagnosticsTest {
   }
 
   @Test
-  void keywordAlternationReportsKeywordStrategy() {
+  void keywordAlternationReportsStrategy() {
     Pattern.setDiagnostics(diagnostics);
     Pattern pattern = Pattern.compile("(?i)\\b(error|warning|timeout|failed)\\b");
 
     assertThat(pattern.matcher("Info: Warning").find()).isTrue();
 
-    assertThat(operationsFor(pattern).getFirst().boundaryStrategy())
-        .isEqualTo(MatchStrategy.KEYWORD);
+    assertThat(operationsFor(pattern).getFirst().boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
   }
 
   @Test

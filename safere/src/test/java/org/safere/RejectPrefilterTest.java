@@ -22,17 +22,18 @@ class RejectPrefilterTest {
 
   @Test
   void literalRejectPrefilterRejectsMissingLiteral() {
-    RejectDescriptor desc = new RejectDescriptor("needle", null);
+    RejectDescriptor desc =
+        new RejectDescriptor(null, null, null, null, RejectDescriptor.InfixSequence.of("needle"));
     assertThat(desc.hasRejectionFilter()).isTrue();
 
     RejectPrefilter prefilter = RejectPrefilter.create(desc);
-    assertThat(prefilter).isInstanceOf(RejectPrefilter.Literal.class);
-    RejectPrefilter.Literal lit = (RejectPrefilter.Literal) prefilter;
-    assertThat(lit.strategy()).isEqualTo(MatchStrategy.LITERAL);
-    assertThat(lit.literal()).isEqualTo("needle");
-    assertThat(lit.utf8()).isEqualTo("needle".getBytes(UTF_8));
-    assertThat(lit.failure()).isNotNull();
-    assertThat(lit.shifts()).isNotNull();
+    assertThat(prefilter).isInstanceOf(RejectPrefilter.InfixSequence.class);
+    RejectPrefilter.InfixSequence seq = (RejectPrefilter.InfixSequence) prefilter;
+    assertThat(seq.strategy()).isEqualTo(MatchStrategy.LITERAL);
+    assertThat(seq.infixes()).containsExactly("needle");
+    assertThat(seq.utf8()[0]).isEqualTo("needle".getBytes(UTF_8));
+    assertThat(seq.failure()[0]).isNotNull();
+    assertThat(seq.shifts()[0]).isNotNull();
 
     EnginePathOptions options = EnginePathOptions.allEnabled();
 
@@ -60,7 +61,7 @@ class RejectPrefilterTest {
     long b1 = 0L;
     CharClassScanInfo scanInfo = new CharClassScanInfo.AsciiRanges(ranges, b0, b1);
 
-    RejectDescriptor desc = new RejectDescriptor(null, scanInfo);
+    RejectDescriptor desc = new RejectDescriptor(scanInfo, null, null, null, null);
     assertThat(desc.hasRejectionFilter()).isTrue();
 
     RejectPrefilter prefilter = RejectPrefilter.create(desc);
@@ -90,7 +91,9 @@ class RejectPrefilterTest {
     long b1 = 0L;
     CharClassScanInfo scanInfo = new CharClassScanInfo.AsciiRanges(ranges, b0, b1);
 
-    RejectDescriptor desc = new RejectDescriptor("token", scanInfo);
+    RejectDescriptor desc =
+        new RejectDescriptor(
+            scanInfo, null, null, null, RejectDescriptor.InfixSequence.of("token"));
     RejectPrefilter prefilter = RejectPrefilter.create(desc);
 
     assertThat(prefilter).isInstanceOf(RejectPrefilter.Composite.class);
@@ -112,7 +115,8 @@ class RejectPrefilterTest {
 
   @Test
   void diagnosticsAccumulateOnRejection() {
-    RejectDescriptor desc = new RejectDescriptor("needle", null);
+    RejectDescriptor desc =
+        new RejectDescriptor(null, null, null, null, RejectDescriptor.InfixSequence.of("needle"));
     RejectPrefilter prefilter = RejectPrefilter.create(desc);
 
     DiagnosticAccumulator accumulator = new DiagnosticAccumulator();
@@ -139,7 +143,7 @@ class RejectPrefilterTest {
   void disjointLiteralsRejectPrefilterRejectsWhenAllMissing() {
     String[] literals = new String[] {"apple", "banana", "orange"};
     Pattern.DisjointRequiredLiterals disjoint = new Pattern.DisjointRequiredLiterals(literals);
-    RejectDescriptor desc = new RejectDescriptor(null, null, disjoint);
+    RejectDescriptor desc = new RejectDescriptor(null, disjoint, null, null, null);
     assertThat(desc.hasRejectionFilter()).isTrue();
 
     RejectPrefilter.DisjointLiterals prefilter = RejectPrefilter.DisjointLiterals.create(disjoint);
@@ -165,8 +169,9 @@ class RejectPrefilterTest {
 
   @Test
   void endAnchoredSuffixRejectPrefilterRejectsMismatchedSuffix() {
-    Pattern.SuffixInfo info = new Pattern.SuffixInfo(".json", true, false);
-    RejectDescriptor desc = new RejectDescriptor(null, null, null, info);
+    RejectDescriptorCompiler.SuffixInfo info =
+        new RejectDescriptorCompiler.SuffixInfo(".json", true, false);
+    RejectDescriptor desc = new RejectDescriptor(null, null, info, null, null);
     assertThat(desc.hasRejectionFilter()).isTrue();
 
     RejectPrefilter prefilter = RejectPrefilter.create(desc);
@@ -200,9 +205,10 @@ class RejectPrefilterTest {
     assertThat(prefilter.canReject(utf8Scanner("config.yaml\u0085"), 0, options)).isTrue();
 
     // UNIX_LINES suffix prefilter
-    Pattern.SuffixInfo unixInfo = new Pattern.SuffixInfo(".json", true, true);
+    RejectDescriptorCompiler.SuffixInfo unixInfo =
+        new RejectDescriptorCompiler.SuffixInfo(".json", true, true);
     RejectPrefilter unixPrefilter =
-        RejectPrefilter.create(new RejectDescriptor(null, null, null, unixInfo));
+        RejectPrefilter.create(new RejectDescriptor(null, null, unixInfo, null, null));
     assertThat(unixPrefilter.canReject(null, "config.json\n", 0, options)).isFalse();
     assertThat(unixPrefilter.canReject(null, "config.json\r", 0, options)).isTrue();
     assertThat(unixPrefilter.canReject(null, "config.json\u0085", 0, options)).isTrue();
@@ -231,8 +237,9 @@ class RejectPrefilterTest {
 
   @Test
   void endAnchoredCaseInsensitiveSuffixRejectPrefilterRejectsMismatchedSuffix() {
-    Pattern.SuffixInfo info = new Pattern.SuffixInfo(".json", true, false, true);
-    RejectDescriptor desc = new RejectDescriptor(null, null, null, info);
+    RejectDescriptorCompiler.SuffixInfo info =
+        new RejectDescriptorCompiler.SuffixInfo(".json", true, false, true);
+    RejectDescriptor desc = new RejectDescriptor(null, null, info, null, null);
     assertThat(desc.hasRejectionFilter()).isTrue();
 
     RejectPrefilter prefilter = RejectPrefilter.create(desc);
@@ -262,9 +269,9 @@ class RejectPrefilterTest {
   void endAnchoredCharClassRejectPrefilterRejectsMismatchedInputs() {
     AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
     builder.addRange('0', '9');
-    Pattern.EndAnchoredCharClassInfo info =
-        new Pattern.EndAnchoredCharClassInfo(builder.build(), true, false);
-    RejectDescriptor desc = new RejectDescriptor(null, null, null, null, info);
+    RejectDescriptorCompiler.EndAnchoredCharClassInfo info =
+        new RejectDescriptorCompiler.EndAnchoredCharClassInfo(builder.build(), true, false);
+    RejectDescriptor desc = new RejectDescriptor(null, null, null, info, null);
     assertThat(desc.hasRejectionFilter()).isTrue();
 
     RejectPrefilter prefilter = RejectPrefilter.create(desc);
@@ -296,10 +303,10 @@ class RejectPrefilterTest {
     assertThat(prefilter.canReject(utf8Scanner("item123abc\u0085"), 0, options)).isTrue();
 
     // UNIX_LINES char class prefilter
-    Pattern.EndAnchoredCharClassInfo unixInfo =
-        new Pattern.EndAnchoredCharClassInfo(builder.build(), true, true);
+    RejectDescriptorCompiler.EndAnchoredCharClassInfo unixInfo =
+        new RejectDescriptorCompiler.EndAnchoredCharClassInfo(builder.build(), true, true);
     RejectPrefilter unixPrefilter =
-        RejectPrefilter.create(new RejectDescriptor(null, null, null, null, unixInfo));
+        RejectPrefilter.create(new RejectDescriptor(null, null, null, unixInfo, null));
     assertThat(unixPrefilter.canReject(null, "item123\n", 0, options)).isFalse();
     assertThat(unixPrefilter.canReject(null, "item123\r", 0, options)).isTrue();
     assertThat(unixPrefilter.canReject(null, "item123\u0085", 0, options)).isTrue();
@@ -316,7 +323,11 @@ class RejectPrefilterTest {
   @Test
   void requiredInfixLiteralRetainedWhenPrefixPresent() {
     Pattern p = Pattern.compile("(\\{Link:[^}]*?)<<!nav>>([^}]*?\\})");
-    assertThat(p.prefix()).isEqualTo("{Link:");
+    assertThat(
+            ((MultiAnchorDescriptor.Anchor.Single)
+                    p.matchDescriptor().multiAnchor().firstSegment().anchor())
+                .literal())
+        .isEqualTo("{Link:");
     assertThat(p.rejectDescriptor().requiredLiteral()).isEqualTo("<<!nav>>");
     assertThat(p.rejectPrefilter()).isNotNull();
 
@@ -339,7 +350,11 @@ class RejectPrefilterTest {
   @Test
   void requiredLiteralPrefersDistinctCandidateOverPrefix() {
     Pattern p = Pattern.compile("(?s)<meta_start>.*?<meta_end>");
-    assertThat(p.prefix()).isEqualTo("<meta_start>");
+    assertThat(
+            ((MultiAnchorDescriptor.Anchor.Single)
+                    p.matchDescriptor().multiAnchor().firstSegment().anchor())
+                .literal())
+        .isEqualTo("<meta_start>");
     // Even though "<meta_start>" is longer than "<meta_end>", extractRequiredLiteral
     // should skip the prefix and select "<meta_end>".
     assertThat(p.rejectDescriptor().requiredLiteral()).isEqualTo("<meta_end>");
@@ -354,8 +369,147 @@ class RejectPrefilterTest {
   @Test
   void identicalPrefixAndRequiredLiteralDeduplicated() {
     Pattern p = Pattern.compile("abc[0-9]+");
-    assertThat(p.prefix()).isEqualTo("abc");
+    assertThat(
+            ((MultiAnchorDescriptor.Anchor.Single)
+                    p.matchDescriptor().multiAnchor().firstSegment().anchor())
+                .literal())
+        .isEqualTo("abc");
     // "abc" is already the start prefix, so requiredLiteral should not duplicate "abc"
     assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
+  }
+
+  @Test
+  void multiInfixSequenceExtractsAndRejectsMissingToken() {
+    Pattern p = Pattern.compile(".*foo.*bar.*baz.*");
+    assertThat(p.rejectDescriptor().infixSequence()).isNotNull();
+    RejectDescriptor.InfixSequence seq = p.rejectDescriptor().infixSequence();
+    assertThat(seq.infixes()).containsExactly("foo", "bar", "baz");
+
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    // All tokens present in order -> not rejected
+    String matching = "header foo middle bar tail baz end";
+    assertThat(p.rejectPrefilter().canReject(null, matching, 0, options)).isFalse();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(matching), 0, options)).isFalse();
+    assertThat(p.matcher(matching).find()).isTrue();
+
+    // Missing middle token "bar" -> rejected
+    String missingBar = "header foo middle missing tail baz end";
+    assertThat(p.rejectPrefilter().canReject(null, missingBar, 0, options)).isTrue();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(missingBar), 0, options)).isTrue();
+    assertThat(p.matcher(missingBar).find()).isFalse();
+
+    // Missing last token "baz" -> rejected
+    String missingBaz = "header foo middle bar tail missing end";
+    assertThat(p.rejectPrefilter().canReject(null, missingBaz, 0, options)).isTrue();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(missingBaz), 0, options)).isTrue();
+    assertThat(p.matcher(missingBaz).find()).isFalse();
+  }
+
+  @Test
+  void multiInfixSequenceRejectsOutOfOrderTokens() {
+    Pattern p = Pattern.compile(".*ERROR.*exception.*timeout.*");
+    RejectDescriptor.InfixSequence seq = p.rejectDescriptor().infixSequence();
+    assertThat(seq).isNotNull();
+    assertThat(seq.infixes()).containsExactly("ERROR", "exception", "timeout");
+
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    // Out of order: timeout appears first, then exception, then ERROR (no valid forward sequence)
+    String outOfOrder = "Log: timeout detected during exception handling for ERROR code 500";
+    assertThat(p.rejectPrefilter().canReject(null, outOfOrder, 0, options)).isTrue();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(outOfOrder), 0, options)).isTrue();
+    assertThat(p.matcher(outOfOrder).find()).isFalse();
+
+    // In order: ERROR -> exception -> timeout
+    String inOrder = "Log: ERROR encountered: exception stack trace: timeout connecting to db";
+    assertThat(p.rejectPrefilter().canReject(null, inOrder, 0, options)).isFalse();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(inOrder), 0, options)).isFalse();
+    assertThat(p.matcher(inOrder).find()).isTrue();
+
+    // Multiple occurrences where first occurrence of timeout is early, but second is in order
+    String multipleOccurrences = "pre-timeout... ERROR ... exception ... final timeout resolved";
+    assertThat(p.rejectPrefilter().canReject(null, multipleOccurrences, 0, options)).isFalse();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(multipleOccurrences), 0, options))
+        .isFalse();
+    assertThat(p.matcher(multipleOccurrences).find()).isTrue();
+  }
+
+  @Test
+  void multiInfixSequenceSubsumesPrefixLiteral() {
+    Pattern p = Pattern.compile("GET\\s+.*?api/v1.*?admin.*?token");
+    assertThat(
+            ((MultiAnchorDescriptor.Anchor.Single)
+                    p.matchDescriptor().multiAnchor().firstSegment().anchor())
+                .literal())
+        .isEqualTo("GET");
+    RejectDescriptor.InfixSequence seq = p.rejectDescriptor().infixSequence();
+    assertThat(seq).isNotNull();
+    // "GET" is the prefix, so infixes should only contain the subsequent required literals
+    assertThat(seq.infixes()).containsExactly("api/v1", "admin", "token");
+  }
+
+  @Test
+  void multiInfixSequenceRangePartitioningEdgeCases() {
+    Pattern p = Pattern.compile(".*alpha.*beta.*gamma.*delta.*");
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    // gamma appears early, but no gamma appears after beta -> must reject
+    String earlyGammaNoLateGamma = "header gamma ... alpha ... beta ... delta";
+    assertThat(p.rejectPrefilter().canReject(null, earlyGammaNoLateGamma, 0, options)).isTrue();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(earlyGammaNoLateGamma), 0, options))
+        .isTrue();
+    assertThat(p.matcher(earlyGammaNoLateGamma).find()).isFalse();
+
+    // gamma appears early AND late -> must not reject
+    String earlyAndLateGamma = "header gamma ... alpha ... beta ... gamma ... delta";
+    assertThat(p.rejectPrefilter().canReject(null, earlyAndLateGamma, 0, options)).isFalse();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(earlyAndLateGamma), 0, options)).isFalse();
+    assertThat(p.matcher(earlyAndLateGamma).find()).isTrue();
+
+    // multiple alphas before beta
+    String multipleAlphas = "alpha 1 ... alpha 2 ... beta ... gamma ... delta";
+    assertThat(p.rejectPrefilter().canReject(null, multipleAlphas, 0, options)).isFalse();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(multipleAlphas), 0, options)).isFalse();
+    assertThat(p.matcher(multipleAlphas).find()).isTrue();
+
+    // missing delta after gamma even though delta appeared before alpha
+    String earlyDeltaOnly = "delta start ... alpha ... beta ... gamma ... end";
+    assertThat(p.rejectPrefilter().canReject(null, earlyDeltaOnly, 0, options)).isTrue();
+    assertThat(p.rejectPrefilter().canReject(utf8Scanner(earlyDeltaOnly), 0, options)).isTrue();
+    assertThat(p.matcher(earlyDeltaOnly).find()).isFalse();
+  }
+
+  @Test
+  void rejectPrefilterSubsumedByMatchingReverseAnchor() {
+    Pattern p = Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org");
+    assertThat(p.matchDescriptor().multiAnchor().isReverseAnchor()).isTrue();
+    assertThat(p.rejectPrefilter()).isNull();
+    assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
+  }
+
+  @Test
+  void rejectPrefilterSubsumedByMatchingLeadingExpansion() {
+    Pattern p = Pattern.compile("\\w+@gmail\\.com");
+    assertThat(p.matchDescriptor().multiAnchor().firstSegment().gap().kind())
+        .isEqualTo(MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT);
+    assertThat(p.rejectPrefilter()).isNull();
+    assertThat(p.rejectDescriptor().requiredLiteral()).isNull();
+  }
+
+  @Test
+  void rejectPrefilterRetainedWhenInfixIsDisjointAndRarer() {
+    Pattern p = Pattern.compile("GET\\s+[a-z0-9/]+/[a-f0-9]{32}/rare_admin_token");
+    assertThat(
+            ((MultiAnchorDescriptor.Anchor.Single)
+                    p.matchDescriptor().multiAnchor().firstSegment().anchor())
+                .literal())
+        .isEqualTo("GET");
+    assertThat(p.rejectDescriptor().requiredLiteral()).isEqualTo("/rare_admin_token");
+    assertThat(p.rejectPrefilter()).isNotNull();
+
+    String noise = "GET /index.html HTTP/1.1\n".repeat(100);
+    assertThat(p.rejectPrefilter().canReject(null, noise, 0, EnginePathOptions.allEnabled()))
+        .isTrue();
   }
 }

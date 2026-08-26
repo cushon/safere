@@ -1134,4 +1134,87 @@ class SearchScalingRegressionTest {
                 ::find,
         "UTF-8");
   }
+
+  @Test
+  void multiInfixSequenceRejectIsLinearForStringAndUtf8Input() {
+    Pattern pattern = Pattern.compile(".*ERROR.*exception.*timeout.*");
+    String input2000 = "INFO: processing packet chunk ".repeat(60);
+    String input10000 = "INFO: processing packet chunk ".repeat(300);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Multi-infix sequence rejection on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("ERROR: exception encountered: timeout\n".repeat(size))::find,
+        "String");
+    assertRepeatedFindWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted(
+                        "ERROR: exception encountered: timeout\n".repeat(size).getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
+
+  @Test
+  void reverseAnchorFindOnSparseMatchHasSublinearWork() {
+    Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
+    String noise = "the quick brown fox jumps over the lazy dog. ".repeat(200);
+    String input = noise + "contactuser123@gmail.com" + noise;
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isTrue());
+
+    assertThat(work)
+        .as("Reverse anchor find on sparse match must avoid scanning prefix noise")
+        .isLessThan(500);
+  }
+
+  @Test
+  void reverseAnchorSelectivityAvoidsIntermediateNoiseStalls() {
+    Pattern pattern = Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org");
+    String noise =
+        "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. ".repeat(100);
+    String input = noise + "department/99@support.internal.org" + noise;
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isTrue());
+
+    assertThat(work)
+        .as("Selective reverse anchor must avoid scanning intermediate noise words")
+        .isLessThan(500);
+  }
+
+  @Test
+  void disjointRareInfixRejectsWithoutScanningPrefixNoise() {
+    Pattern pattern = Pattern.compile("GET\\s+[a-z0-9/]+/[a-f0-9]{32}/rare_admin_token");
+    String noise = "GET /index.html HTTP/1.1\nGET /static/style.css HTTP/1.1\n".repeat(500);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(noise).find()).isFalse());
+
+    assertThat(work)
+        .as("Disjoint rare infix prefilter must reject without entering DFA on GET prefixes")
+        .isLessThan(200);
+  }
+
+  @Test
+  void reverseAnchorIsLinearAcrossFindIteration() {
+    Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("user1@gmail.com user2@gmail.com ".repeat(size))::find, "String");
+    assertRepeatedFindWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted(
+                        "user1@gmail.com user2@gmail.com ".repeat(size).getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
 }

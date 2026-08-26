@@ -7,8 +7,8 @@ package org.safere;
 
 import java.nio.charset.StandardCharsets;
 import org.safere.Pattern.DisjointRequiredLiterals;
-import org.safere.Pattern.EndAnchoredCharClassInfo;
-import org.safere.Pattern.SuffixInfo;
+import org.safere.RejectDescriptorCompiler.EndAnchoredCharClassInfo;
+import org.safere.RejectDescriptorCompiler.SuffixInfo;
 
 /**
  * Whole-input rejection filter (Tier 0 acceleration).
@@ -17,7 +17,7 @@ import org.safere.Pattern.SuffixInfo;
  * tokens or character classes are absent anywhere in the input.
  */
 sealed interface RejectPrefilter
-    permits RejectPrefilter.Literal,
+    permits RejectPrefilter.InfixSequence,
         RejectPrefilter.CharClass,
         RejectPrefilter.DisjointLiterals,
         RejectPrefilter.EndAnchoredSuffix,
@@ -63,8 +63,14 @@ sealed interface RejectPrefilter
         descriptor.endAnchoredCharClass() != null
             ? EndAnchoredCharClass.create(descriptor.endAnchoredCharClass())
             : null;
-    RejectPrefilter litFilter =
-        descriptor.requiredLiteral() != null ? Literal.create(descriptor.requiredLiteral()) : null;
+    RejectPrefilter seqFilter =
+        descriptor.infixSequence() != null
+            ? InfixSequence.create(descriptor.infixSequence())
+            : descriptor.requiredLiteral() != null
+                ? InfixSequence.create(
+                    new RejectDescriptor.InfixSequence(
+                        new String[] {descriptor.requiredLiteral()}, new int[] {0}))
+                : null;
     RejectPrefilter ccFilter =
         descriptor.requiredCharClass() != null
             ? CharClass.create(descriptor.requiredCharClass())
@@ -76,7 +82,7 @@ sealed interface RejectPrefilter
     int count = 0;
     if (suffixFilter != null) count++;
     if (endCcFilter != null) count++;
-    if (litFilter != null) count++;
+    if (seqFilter != null) count++;
     if (ccFilter != null) count++;
     if (disjointFilter != null) count++;
 
@@ -86,7 +92,7 @@ sealed interface RejectPrefilter
     if (count == 1) {
       if (suffixFilter != null) return suffixFilter;
       if (endCcFilter != null) return endCcFilter;
-      if (litFilter != null) return litFilter;
+      if (seqFilter != null) return seqFilter;
       if (ccFilter != null) return ccFilter;
       if (disjointFilter != null) return disjointFilter;
       return null;
@@ -99,11 +105,11 @@ sealed interface RejectPrefilter
     if (endCcFilter != null) {
       filters[idx++] = endCcFilter;
     }
-    if (litFilter != null) {
-      filters[idx++] = litFilter;
-    }
     if (ccFilter != null) {
       filters[idx++] = ccFilter;
+    }
+    if (seqFilter != null) {
+      filters[idx++] = seqFilter;
     }
     if (disjointFilter != null) {
       filters[idx] = disjointFilter;
@@ -112,14 +118,21 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record Literal(String literal, byte[] utf8, int[] failure, int[] shifts)
+  record InfixSequence(
+      String[] infixes, byte[][] utf8, int[][] failure, int[][] shifts, int[] checkOrder)
       implements RejectPrefilter {
 
-    static Literal create(String literal) {
-      byte[] utf8 = literal.getBytes(StandardCharsets.UTF_8);
-      int[] failure = Pattern.literalFailure(utf8);
-      int[] shifts = Pattern.literalShifts(utf8);
-      return new Literal(literal, utf8, failure, shifts);
+    static InfixSequence create(RejectDescriptor.InfixSequence seq) {
+      String[] infixes = seq.infixes();
+      byte[][] utf8 = new byte[infixes.length][];
+      int[][] failure = new int[infixes.length][];
+      int[][] shifts = new int[infixes.length][];
+      for (int i = 0; i < infixes.length; i++) {
+        utf8[i] = infixes[i].getBytes(StandardCharsets.UTF_8);
+        failure[i] = Pattern.literalFailure(utf8[i]);
+        shifts[i] = Pattern.literalShifts(utf8[i]);
+      }
+      return new InfixSequence(infixes, utf8, failure, shifts, seq.checkOrder());
     }
 
     @Override
@@ -129,13 +142,10 @@ sealed interface RejectPrefilter
         return false;
       }
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
-        return utf8Scanner.indexOf(utf8, failure, shifts, searchFrom) < 0;
+        return canRejectUtf8(utf8Scanner, searchFrom);
       }
       if (text != null) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(Math.max(0, text.length() - searchFrom));
-        }
-        return text.indexOf(literal, searchFrom) < 0;
+        return canRejectString(text, searchFrom);
       }
       return false;
     }
@@ -145,7 +155,174 @@ sealed interface RejectPrefilter
       if (!options.literalFastPaths()) {
         return false;
       }
-      return scanner.indexOf(utf8, failure, shifts, searchFrom) < 0;
+      return canRejectUtf8(scanner, searchFrom);
+    }
+
+    private boolean canRejectString(String text, int searchFrom) {
+      if (infixes.length == 1) {
+        int pos = text.indexOf(infixes[0], searchFrom);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(
+              pos < 0
+                  ? Math.max(0, text.length() - searchFrom)
+                  : Math.max(0, pos - searchFrom + infixes[0].length()));
+        }
+        return pos < 0;
+      }
+
+      int k = infixes.length;
+      int r0 = checkOrder[0];
+
+      // 1. Locate rarest anchor token
+      int posR0 = text.indexOf(infixes[r0], searchFrom);
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(
+            posR0 < 0
+                ? Math.max(0, text.length() - searchFrom)
+                : Math.max(0, posR0 - searchFrom + infixes[r0].length()));
+      }
+      if (posR0 < 0) {
+        return true;
+      }
+
+      int[] positions = new int[k];
+      positions[r0] = posR0;
+
+      // 2. Range-bounded downstream chain (r0 + 1 ... k - 1)
+      int cursor = posR0 + infixes[r0].length();
+      for (int j = r0 + 1; j < k; j++) {
+        int pos = text.indexOf(infixes[j], cursor);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(
+              pos < 0
+                  ? Math.max(0, text.length() - cursor)
+                  : Math.max(0, pos - cursor + infixes[j].length()));
+        }
+        if (pos < 0) {
+          return true;
+        }
+        positions[j] = pos;
+        cursor = pos + infixes[j].length();
+      }
+
+      // 3. Upstream chain (0 ... r0 - 1)
+      cursor = searchFrom;
+      for (int i = 0; i < r0; i++) {
+        int pos = text.indexOf(infixes[i], cursor);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(
+              pos < 0
+                  ? Math.max(0, text.length() - cursor)
+                  : Math.max(0, pos - cursor + infixes[i].length()));
+        }
+        if (pos < 0) {
+          return true;
+        }
+        positions[i] = pos;
+        cursor = pos + infixes[i].length();
+      }
+
+      // 4. Validate ordering between upstream tail and rarest anchor
+      if (r0 > 0 && cursor > positions[r0]) {
+        // Advance rarest anchor to next occurrence after upstream tail
+        posR0 = text.indexOf(infixes[r0], cursor);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(
+              posR0 < 0
+                  ? Math.max(0, text.length() - cursor)
+                  : Math.max(0, posR0 - cursor + infixes[r0].length()));
+        }
+        if (posR0 < 0) {
+          return true;
+        }
+        positions[r0] = posR0;
+        // Re-verify downstream chain from the advanced rarest anchor
+        cursor = posR0 + infixes[r0].length();
+        for (int j = r0 + 1; j < k; j++) {
+          if (cursor <= positions[j]) {
+            cursor = positions[j] + infixes[j].length();
+            continue;
+          }
+          int pos = text.indexOf(infixes[j], cursor);
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(
+                pos < 0
+                    ? Math.max(0, text.length() - cursor)
+                    : Math.max(0, pos - cursor + infixes[j].length()));
+          }
+          if (pos < 0) {
+            return true;
+          }
+          positions[j] = pos;
+          cursor = pos + infixes[j].length();
+        }
+      }
+
+      return false;
+    }
+
+    private boolean canRejectUtf8(Utf8InputScanner scanner, int searchFrom) {
+      if (utf8.length == 1) {
+        return scanner.indexOf(utf8[0], failure[0], shifts[0], searchFrom) < 0;
+      }
+
+      int k = utf8.length;
+      int r0 = checkOrder[0];
+
+      // 1. Locate rarest anchor token
+      int posR0 = scanner.indexOf(utf8[r0], failure[r0], shifts[r0], searchFrom);
+      if (posR0 < 0) {
+        return true;
+      }
+
+      int[] positions = new int[k];
+      positions[r0] = posR0;
+
+      // 2. Range-bounded downstream chain (r0 + 1 ... k - 1)
+      int cursor = posR0 + utf8[r0].length;
+      for (int j = r0 + 1; j < k; j++) {
+        int pos = scanner.indexOf(utf8[j], failure[j], shifts[j], cursor);
+        if (pos < 0) {
+          return true;
+        }
+        positions[j] = pos;
+        cursor = pos + utf8[j].length;
+      }
+
+      // 3. Upstream chain (0 ... r0 - 1)
+      cursor = searchFrom;
+      for (int i = 0; i < r0; i++) {
+        int pos = scanner.indexOf(utf8[i], failure[i], shifts[i], cursor);
+        if (pos < 0) {
+          return true;
+        }
+        positions[i] = pos;
+        cursor = pos + utf8[i].length;
+      }
+
+      // 4. Validate ordering between upstream tail and rarest anchor
+      if (r0 > 0 && cursor > positions[r0]) {
+        posR0 = scanner.indexOf(utf8[r0], failure[r0], shifts[r0], cursor);
+        if (posR0 < 0) {
+          return true;
+        }
+        positions[r0] = posR0;
+        cursor = posR0 + utf8[r0].length;
+        for (int j = r0 + 1; j < k; j++) {
+          if (cursor <= positions[j]) {
+            cursor = positions[j] + utf8[j].length;
+            continue;
+          }
+          int pos = scanner.indexOf(utf8[j], failure[j], shifts[j], cursor);
+          if (pos < 0) {
+            return true;
+          }
+          positions[j] = pos;
+          cursor = pos + utf8[j].length;
+        }
+      }
+
+      return false;
     }
 
     @Override
@@ -167,8 +344,23 @@ sealed interface RejectPrefilter
       if (!options.charClassMatchFastPaths()) {
         return false;
       }
-      return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
-          < 0;
+      if (scanner != null) {
+        return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
+            < 0;
+      }
+      if (text != null) {
+        int position = Math.max(0, searchFrom);
+        int bound = text.length();
+        while (position < bound) {
+          int codePoint = text.codePointAt(position);
+          if (InputScanner.classContains(ranges, bitmap0, bitmap1, codePoint)) {
+            return false;
+          }
+          position += Character.charCount(codePoint);
+        }
+        return true;
+      }
+      return false;
     }
 
     @Override
@@ -272,7 +464,7 @@ sealed interface RejectPrefilter
       int textLen = text.length();
       if (textLen >= suffixLen
           && (foldCase
-              ? text.regionMatches(true, textLen - suffixLen, suffix, 0, suffixLen)
+              ? Ascii.regionMatchesIgnoreCase(text, textLen - suffixLen, suffix, suffixLen)
               : text.endsWith(suffix))) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(suffixLen);
@@ -285,7 +477,7 @@ sealed interface RejectPrefilter
       int trailingStart = StringInputScanner.trailingLineTerminatorStart(text, unixLines, textLen);
       if (trailingStart >= suffixLen
           && (foldCase
-              ? text.regionMatches(true, trailingStart - suffixLen, suffix, 0, suffixLen)
+              ? Ascii.regionMatchesIgnoreCase(text, trailingStart - suffixLen, suffix, suffixLen)
               : text.startsWith(suffix, trailingStart - suffixLen))) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(suffixLen);

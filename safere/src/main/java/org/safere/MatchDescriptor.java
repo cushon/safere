@@ -6,7 +6,6 @@
 package org.safere;
 
 import org.safere.Pattern.CharClassMatchInfo;
-import org.safere.Pattern.KeywordAlternation;
 
 /**
  * Immutable descriptor capturing pre-computed match-execution fast-path metadata extracted from a
@@ -17,8 +16,6 @@ import org.safere.Pattern.KeywordAlternation;
  * @param singleCharClass precomputed scan data for patterns that are exactly one character class
  *     (e.g., {@code \p{javaLetter}}), allowing {@code find()} to scan directly without the full
  *     engine cascade
- * @param keywordAlternation precomputed case-insensitive keyword-alternation fast-path data, or
- *     {@code null}
  * @param charClassMatch precomputed character class data for the "repeated character class" fast
  *     path in {@code matches()} (e.g., {@code [a-zA-Z]+}, {@code \d*}), allowing {@code matches()}
  *     to bypass the engine cascade with a tight scanning loop
@@ -27,32 +24,32 @@ record MatchDescriptor(
     String literalMatch,
     boolean literalFoldCase,
     CharClassScanInfo singleCharClass,
-    KeywordAlternation keywordAlternation,
     CharClassMatchInfo charClassMatch,
     int minMatchLength,
     ClassHashChain classHashChain,
-    ShiftDfa shiftDfa) {
+    ShiftDfa shiftDfa,
+    MultiAnchorDescriptor multiAnchor) {
 
   static final MatchDescriptor NONE =
-      new MatchDescriptor(null, false, null, null, null, 0, null, null);
+      new MatchDescriptor(null, false, null, null, 0, null, null, null);
 
   MatchDescriptor(
       String literalMatch,
       boolean literalFoldCase,
       CharClassScanInfo singleCharClass,
-      KeywordAlternation keywordAlternation,
       CharClassMatchInfo charClassMatch,
       int minMatchLength,
-      ShiftDfa shiftDfa) {
+      ShiftDfa shiftDfa,
+      MultiAnchorDescriptor multiAnchor) {
     this(
         literalMatch,
         literalFoldCase,
         singleCharClass,
-        keywordAlternation,
         charClassMatch,
         minMatchLength,
         compileClassHashChain(literalMatch, literalFoldCase),
-        shiftDfa);
+        shiftDfa,
+        multiAnchor);
   }
 
   private static ClassHashChain compileClassHashChain(String literal, boolean foldCase) {
@@ -62,13 +59,15 @@ record MatchDescriptor(
   boolean hasFastPath() {
     return literalMatch != null
         || singleCharClass != null
-        || keywordAlternation != null
         || charClassMatch != null
+        || multiAnchor != null
         || minMatchLength > 0
         || shiftDfa != null;
   }
 
   boolean hasFindFastPath() {
-    return literalMatch != null || singleCharClass != null || keywordAlternation != null;
+    return literalMatch != null
+        || singleCharClass != null
+        || (multiAnchor != null && multiAnchor.isExecutableChain());
   }
 }

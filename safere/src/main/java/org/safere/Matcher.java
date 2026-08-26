@@ -21,6 +21,9 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import org.safere.MultiAnchorDescriptor.Anchor;
+import org.safere.MultiAnchorDescriptor.Gap;
+import org.safere.MultiAnchorDescriptor.GapKind;
 
 /**
  * An engine that performs match operations on a {@linkplain CharSequence character sequence} by
@@ -676,7 +679,15 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean literalRegionMatches(String literal, int offset, int length) {
-    if (parentPattern.literalFoldCase() || parentPattern.prefixFoldCase()) {
+    MultiAnchorDescriptor multi = parentPattern.matchDescriptor().multiAnchor();
+    boolean prefixFold =
+        multi != null
+            && multi.firstSegment().gap().kind() == MultiAnchorDescriptor.GapKind.EMPTY
+            && multi.firstSegment().anchor().foldCase();
+    if (parentPattern.literalFoldCase() || prefixFold) {
+      if (parentPattern.hasUnicodeCase()) {
+        return text.regionMatches(true, offset, literal, 0, length);
+      }
       return Ascii.regionMatchesIgnoreCase(text, offset, literal, length);
     }
     return text.regionMatches(false, offset, literal, 0, length);
@@ -951,39 +962,49 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean prefixOrCharClassCannotMatch(int searchFrom) {
-    if (parentPattern.prefix() != null && !parentPattern.prefixFoldCase()) {
-      if (text != null) {
-        if (!text.startsWith(parentPattern.prefix(), searchFrom)) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(parentPattern.prefix().length());
+    MultiAnchorDescriptor multi = parentPattern.matchDescriptor().multiAnchor();
+    if (multi != null) {
+      MultiAnchorDescriptor.Segment s0 = multi.firstSegment();
+      if (s0.gap().kind() == MultiAnchorDescriptor.GapKind.EMPTY) {
+        MultiAnchorDescriptor.Anchor a0 = s0.anchor();
+        if (a0 instanceof MultiAnchorDescriptor.Anchor.Single single
+            && !single.foldCase()
+            && single.literal() != null) {
+          if (text != null) {
+            if (!text.startsWith(single.literal(), searchFrom)) {
+              if (WorkCounterConfig.ENABLED) {
+                WorkCounter.record(single.literal().length());
+              }
+              return true;
+            }
+          } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
+            if (!utf8Scanner.startsWith(single.literalUtf8(), searchFrom)) {
+              return true;
+            }
           }
-          return true;
-        }
-      } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
-        if (!utf8Scanner.startsWith(parentPattern.prefixUtf8(), searchFrom)) {
-          return true;
-        }
-      }
-    } else if (parentPattern.charClassPrefix() != null) {
-      CharClassScanInfo cc = parentPattern.charClassPrefix();
-      if (text != null) {
-        if (searchFrom >= text.length()) {
-          return true;
-        }
-        int cp = text.codePointAt(searchFrom);
-        if (!cc.contains(cp)) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(1);
+        } else if (a0 instanceof MultiAnchorDescriptor.Anchor.CharClass cc
+            && cc.scanInfo() != null) {
+          CharClassScanInfo scan = cc.scanInfo();
+          if (text != null) {
+            if (searchFrom >= text.length()) {
+              return true;
+            }
+            int cp = text.codePointAt(searchFrom);
+            if (!scan.contains(cp)) {
+              if (WorkCounterConfig.ENABLED) {
+                WorkCounter.record(1);
+              }
+              return true;
+            }
+          } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
+            if (searchFrom >= utf8Scanner.length()) {
+              return true;
+            }
+            int cp = utf8Scanner.codePointAt(searchFrom);
+            if (!scan.contains(cp)) {
+              return true;
+            }
           }
-          return true;
-        }
-      } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
-        if (searchFrom >= utf8Scanner.length()) {
-          return true;
-        }
-        int cp = utf8Scanner.codePointAt(searchFrom);
-        if (!cc.contains(cp)) {
-          return true;
         }
       }
     }
@@ -991,43 +1012,7 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean anchoredPrefixOrCharClassCannotMatch(int searchFrom) {
-    if (parentPattern.anchoredPrefix() != null) {
-      if (text != null) {
-        if (!text.startsWith(parentPattern.anchoredPrefix(), searchFrom)) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(parentPattern.anchoredPrefix().length());
-          }
-          return true;
-        }
-      } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
-        if (!utf8Scanner.startsWith(parentPattern.anchoredPrefixUtf8(), searchFrom)) {
-          return true;
-        }
-      }
-    } else if (parentPattern.anchoredCharClassPrefix() != null) {
-      CharClassScanInfo cc = parentPattern.anchoredCharClassPrefix();
-      if (text != null) {
-        if (searchFrom >= text.length()) {
-          return true;
-        }
-        int cp = text.codePointAt(searchFrom);
-        if (!cc.contains(cp)) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(1);
-          }
-          return true;
-        }
-      } else if (textScanner instanceof Utf8InputScanner utf8Scanner) {
-        if (searchFrom >= utf8Scanner.length()) {
-          return true;
-        }
-        int cp = utf8Scanner.codePointAt(searchFrom);
-        if (!cc.contains(cp)) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return prefixOrCharClassCannotMatch(searchFrom);
   }
 
   /** Core matches fallback logic, operates on the (possibly substituted) {@code text} field. */
@@ -1036,7 +1021,10 @@ public final class Matcher implements MatchResult {
 
     if (prefixOrCharClassCannotMatch(0) || anchoredPrefixOrCharClassCannotMatch(0)) {
       MatchStrategy strat =
-          parentPattern.prefix() != null || parentPattern.anchoredPrefix() != null
+          parentPattern.matchDescriptor().literalMatch() != null
+                  || (parentPattern.matchDescriptor().multiAnchor() != null
+                      && parentPattern.matchDescriptor().multiAnchor().firstSegment().anchor()
+                          instanceof MultiAnchorDescriptor.Anchor.Single)
               ? MatchStrategy.LITERAL
               : MatchStrategy.CHARACTER_CLASS;
       diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
@@ -1205,7 +1193,10 @@ public final class Matcher implements MatchResult {
 
     if (prefixOrCharClassCannotMatch(0) || anchoredPrefixOrCharClassCannotMatch(0)) {
       MatchStrategy strat =
-          parentPattern.prefix() != null || parentPattern.anchoredPrefix() != null
+          parentPattern.matchDescriptor().literalMatch() != null
+                  || (parentPattern.matchDescriptor().multiAnchor() != null
+                      && parentPattern.matchDescriptor().multiAnchor().firstSegment().anchor()
+                          instanceof MultiAnchorDescriptor.Anchor.Single)
               ? MatchStrategy.LITERAL
               : MatchStrategy.CHARACTER_CLASS;
       diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
@@ -1438,7 +1429,10 @@ public final class Matcher implements MatchResult {
       }
       if (anchoredPrefixOrCharClassCannotMatch(0)) {
         MatchStrategy strategy =
-            parentPattern.anchoredPrefix() != null
+            parentPattern.matchDescriptor().literalMatch() != null
+                    || (parentPattern.matchDescriptor().multiAnchor() != null
+                        && parentPattern.matchDescriptor().multiAnchor().firstSegment().anchor()
+                            instanceof MultiAnchorDescriptor.Anchor.Single)
                 ? MatchStrategy.LITERAL
                 : MatchStrategy.CHARACTER_CLASS;
         diagnosticParticipation(strategy, StrategyRole.REJECT_PREFILTER);
@@ -1647,7 +1641,10 @@ public final class Matcher implements MatchResult {
       }
       if (anchoredPrefixOrCharClassCannotMatch(searchFrom)) {
         MatchStrategy strat =
-            parentPattern.anchoredPrefix() != null
+            parentPattern.matchDescriptor().literalMatch() != null
+                    || (parentPattern.matchDescriptor().multiAnchor() != null
+                        && parentPattern.matchDescriptor().multiAnchor().firstSegment().anchor()
+                            instanceof MultiAnchorDescriptor.Anchor.Single)
                 ? MatchStrategy.LITERAL
                 : MatchStrategy.CHARACTER_CLASS;
         diagnosticParticipation(strat, StrategyRole.REJECT_PREFILTER);
@@ -1658,10 +1655,11 @@ public final class Matcher implements MatchResult {
 
     RejectPrefilter rejectPrefilter = parentPattern.rejectPrefilter();
     if (rejectPrefilter != null && (text != null || scanner instanceof Utf8InputScanner)) {
+      InputScanner active = activeScanner();
       MatchStrategy rejectionStrategy =
           rejectPrefilter instanceof RejectPrefilter.Composite composite
-              ? composite.rejectionStrategy(scanner, text, searchFrom, options)
-              : rejectPrefilter.canReject(scanner, text, searchFrom, options)
+              ? composite.rejectionStrategy(active, text, searchFrom, options)
+              : rejectPrefilter.canReject(active, text, searchFrom, options)
                   ? rejectPrefilter.strategy()
                   : null;
       if (rejectionStrategy != null) {
@@ -2092,167 +2090,6 @@ public final class Matcher implements MatchResult {
     } else {
       return applyDeferredMatchResult(result[0], result[1], prog.numCaptures(), true, false);
     }
-  }
-
-  private boolean matchUtf8KeywordAlternationAt(
-      Pattern.KeywordAlternation keywordAlternation, int pos, int ncap) {
-    InputScanner scanner = activeScanner();
-    if (pos >= scanner.length()) {
-      return applyFailedMatchResult();
-    }
-    long match = keywordAlternation.matchAt(scanner, pos);
-    if (match < 0) {
-      return applyFailedMatchResult();
-    }
-    int keywordStart = Pattern.KeywordAlternation.matchStart(match);
-    int keywordEnd = Pattern.KeywordAlternation.matchEnd(match);
-    int[] keywordGroups = new int[2 * ncap];
-    Arrays.fill(keywordGroups, -1);
-    keywordGroups[0] = keywordAlternation.greedyWholeInput ? pos : keywordStart;
-    keywordGroups[1] = keywordAlternation.greedyWholeInput ? scanner.length() : keywordEnd;
-    if (keywordAlternation.captureGroup > 0) {
-      int group = keywordAlternation.captureGroup;
-      keywordGroups[2 * group] = keywordStart;
-      keywordGroups[2 * group + 1] = keywordEnd;
-    }
-    return applyFullMatchResult(keywordGroups);
-  }
-
-  private boolean matchKeywordAlternationAt(
-      Pattern.KeywordAlternation keywordAlternation, int pos, int ncap) {
-    if (pos >= text.length()) {
-      return applyFailedMatchResult();
-    }
-    if (WorkCounterConfig.ENABLED) {
-      WorkCounter.record();
-    }
-    char ch = text.charAt(pos);
-    if (ch < 128
-        && keywordAlternation.firstAsciiTable[Ascii.toLowerCase(ch)]
-        && isWordBoundaryAt(pos, keywordAlternation.unicodeWordBoundary)) {
-      for (String keyword : keywordAlternation.keywords) {
-        int end = pos + keyword.length();
-        if (end <= text.length()
-            && Ascii.regionMatchesIgnoreCase(text, pos, keyword, keyword.length())
-            && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
-          int[] keywordGroups = new int[2 * ncap];
-          Arrays.fill(keywordGroups, -1);
-          keywordGroups[0] = pos;
-          keywordGroups[1] = keywordAlternation.greedyWholeInput ? text.length() : end;
-          if (keywordAlternation.captureGroup > 0) {
-            int group = keywordAlternation.captureGroup;
-            keywordGroups[2 * group] = pos;
-            keywordGroups[2 * group + 1] = end;
-          }
-          return applyFullMatchResult(keywordGroups);
-        }
-      }
-    }
-    return applyFailedMatchResult();
-  }
-
-  private boolean findUtf8KeywordAlternation(
-      Pattern.KeywordAlternation keywordAlternation, int startPos, int ncap) {
-    InputScanner scanner = activeScanner();
-    int matchStart = Math.max(0, startPos);
-    long match = keywordAlternation.find(scanner, matchStart);
-    if (match < 0) {
-      return applyFailedMatchResult();
-    }
-    int keywordStart = Pattern.KeywordAlternation.matchStart(match);
-    int keywordEnd = Pattern.KeywordAlternation.matchEnd(match);
-    int[] keywordGroups = new int[2 * ncap];
-    Arrays.fill(keywordGroups, -1);
-    keywordGroups[0] = keywordAlternation.greedyWholeInput ? matchStart : keywordStart;
-    keywordGroups[1] = keywordAlternation.greedyWholeInput ? scanner.length() : keywordEnd;
-    if (keywordAlternation.captureGroup > 0) {
-      int group = keywordAlternation.captureGroup;
-      keywordGroups[2 * group] = keywordStart;
-      keywordGroups[2 * group + 1] = keywordEnd;
-    }
-    return applyFullMatchResult(keywordGroups);
-  }
-
-  private boolean findKeywordAlternation(
-      Pattern.KeywordAlternation keywordAlternation, int startPos, int ncap) {
-    if (keywordAlternation.greedyWholeInput) {
-      return findGreedyWholeInputKeywordAlternation(keywordAlternation, startPos, ncap);
-    }
-    for (int i = Math.max(0, startPos); i < text.length(); i++) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      char ch = text.charAt(i);
-      if (ch < 128
-          && keywordAlternation.firstAsciiTable[Ascii.toLowerCase(ch)]
-          && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
-        for (String keyword : keywordAlternation.keywords) {
-          int end = i + keyword.length();
-          if (end <= text.length()
-              && Ascii.regionMatchesIgnoreCase(text, i, keyword, keyword.length())
-              && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
-            int[] keywordGroups = new int[2 * ncap];
-            Arrays.fill(keywordGroups, -1);
-            keywordGroups[0] = i;
-            keywordGroups[1] = end;
-            if (keywordAlternation.captureGroup > 0) {
-              int group = keywordAlternation.captureGroup;
-              keywordGroups[2 * group] = i;
-              keywordGroups[2 * group + 1] = end;
-            }
-            return applyFullMatchResult(keywordGroups);
-          }
-        }
-      }
-      int cp = text.codePointAt(i);
-      i += Character.charCount(cp) - 1;
-    }
-    return applyFailedMatchResult();
-  }
-
-  private boolean findGreedyWholeInputKeywordAlternation(
-      Pattern.KeywordAlternation keywordAlternation, int startPos, int ncap) {
-    int matchStart = Math.max(0, startPos);
-    for (int i = text.length() - 1; i >= matchStart; i--) {
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      char ch = text.charAt(i);
-      if (ch < 128
-          && keywordAlternation.firstAsciiTable[Ascii.toLowerCase(ch)]
-          && isWordBoundaryAt(i, keywordAlternation.unicodeWordBoundary)) {
-        for (String keyword : keywordAlternation.keywords) {
-          int end = i + keyword.length();
-          if (end <= text.length()
-              && Ascii.regionMatchesIgnoreCase(text, i, keyword, keyword.length())
-              && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
-            int[] keywordGroups = new int[2 * ncap];
-            Arrays.fill(keywordGroups, -1);
-            keywordGroups[0] = matchStart;
-            keywordGroups[1] = text.length();
-            if (keywordAlternation.captureGroup > 0) {
-              int group = keywordAlternation.captureGroup;
-              keywordGroups[2 * group] = i;
-              keywordGroups[2 * group + 1] = end;
-            }
-            return applyFullMatchResult(keywordGroups);
-          }
-        }
-      }
-    }
-    return applyFailedMatchResult();
-  }
-
-  private boolean isWordBoundaryAt(int pos, boolean unicodeWordBoundary) {
-    boolean prevWord =
-        pos > 0 && isBoundaryWordChar(text.codePointBefore(pos), unicodeWordBoundary);
-    boolean nextWord =
-        pos < text.length() && isBoundaryWordChar(text.codePointAt(pos), unicodeWordBoundary);
-    return prevWord != nextWord;
-  }
-
-  private static boolean isBoundaryWordChar(int cp, boolean unicodeWordBoundary) {
-    return unicodeWordBoundary ? Nfa.isUnicodeWordChar(cp) : Nfa.isWordChar(cp);
   }
 
   /** ASCII case-insensitive indexOf for Java's default CASE_INSENSITIVE semantics. */
@@ -3058,8 +2895,15 @@ public final class Matcher implements MatchResult {
     diagnosticParticipation(MatchStrategy.DFA, StrategyRole.CANDIDATE_VERIFICATION);
 
     boolean isStartAnchored = parentPattern.prog().anchorStart();
-    String prefix = parentPattern.prefix();
-    boolean foldCase = parentPattern.prefixFoldCase();
+    MultiAnchorDescriptor multi = parentPattern.matchDescriptor().multiAnchor();
+    String prefix = null;
+    boolean foldCase = false;
+    if (multi != null
+        && multi.firstSegment().gap().kind() == MultiAnchorDescriptor.GapKind.EMPTY
+        && multi.firstSegment().anchor() instanceof MultiAnchorDescriptor.Anchor.Single single) {
+      prefix = single.literal();
+      foldCase = single.foldCase();
+    }
     boolean hasStartAcceleration =
         enginePathOptions().startAcceleration() && prefix != null && !isStartAnchored;
     int startPos = searchFrom;
@@ -4668,9 +4512,9 @@ public final class Matcher implements MatchResult {
   sealed interface PreparedMatchRunner
       permits LiteralPreparedRunner,
           SingleCharClassPreparedRunner,
-          KeywordAlternationPreparedRunner,
           ShiftDfaPreparedRunner,
           OnePassAnchoredPreparedRunner,
+          MultiAnchorPreparedRunner,
           FallbackPreparedRunner {
     boolean find(Matcher matcher, boolean regionActive);
 
@@ -4944,52 +4788,6 @@ public final class Matcher implements MatchResult {
     }
   }
 
-  static final class KeywordAlternationPreparedRunner implements PreparedMatchRunner {
-    private final Pattern.KeywordAlternation keywordAlternation;
-    private final int numCaptures;
-    private final boolean isStartAnchored;
-
-    KeywordAlternationPreparedRunner(
-        Pattern.KeywordAlternation keywordAlternation, int numCaptures, boolean isStartAnchored) {
-      this.keywordAlternation = keywordAlternation;
-      this.numCaptures = numCaptures;
-      this.isStartAnchored = isStartAnchored;
-    }
-
-    @Override
-    public boolean find(Matcher matcher, boolean regionActive) {
-      if (isStartAnchored && matcher.searchFrom > 0) {
-        return matcher.applyFailedMatchResult();
-      }
-      if (isStartAnchored) {
-        matcher.diagnosticBoundary(MatchStrategy.KEYWORD);
-        if (keywordAlternation.captureGroup > 0) {
-          matcher.diagnosticCapture(MatchStrategy.KEYWORD);
-        }
-        return matcher.text != null
-            ? matcher.matchKeywordAlternationAt(keywordAlternation, 0, numCaptures)
-            : matcher.matchUtf8KeywordAlternationAt(keywordAlternation, 0, numCaptures);
-      }
-      matcher.diagnosticBoundary(MatchStrategy.KEYWORD);
-      if (keywordAlternation.captureGroup > 0) {
-        matcher.diagnosticCapture(MatchStrategy.KEYWORD);
-      }
-      return matcher.text != null
-          ? matcher.findKeywordAlternation(keywordAlternation, matcher.searchFrom, numCaptures)
-          : matcher.findUtf8KeywordAlternation(keywordAlternation, matcher.searchFrom, numCaptures);
-    }
-
-    @Override
-    public boolean matches(Matcher matcher) {
-      return matcher.matchesCore();
-    }
-
-    @Override
-    public boolean lookingAt(Matcher matcher) {
-      return matcher.lookingAtCore();
-    }
-  }
-
   static final class ShiftDfaPreparedRunner implements PreparedMatchRunner {
     private final ShiftDfa shiftDfa;
 
@@ -5115,6 +4913,571 @@ public final class Matcher implements MatchResult {
         return matcher.applyFullMatchResult(result);
       }
       return matcher.lookingAtCore();
+    }
+  }
+
+  static final class MultiAnchorPreparedRunner implements PreparedMatchRunner {
+    private final MultiAnchorDescriptor descriptor;
+
+    MultiAnchorPreparedRunner(MultiAnchorDescriptor descriptor) {
+      this.descriptor = descriptor;
+    }
+
+    @Override
+    public boolean find(Matcher matcher, boolean regionActive) {
+      if (descriptor.isStartAnchored() && matcher.searchFrom > 0) {
+        return matcher.applyFailedMatchResult();
+      }
+
+      RejectPrefilter rejectPrefilter = matcher.parentPattern.rejectPrefilter();
+      if (rejectPrefilter != null
+          && (matcher.text != null || matcher.activeScanner() instanceof Utf8InputScanner)) {
+        InputScanner active = matcher.activeScanner();
+        MatchStrategy rejectionStrategy =
+            rejectPrefilter instanceof RejectPrefilter.Composite composite
+                ? composite.rejectionStrategy(
+                    active, matcher.text, matcher.searchFrom, matcher.enginePathOptions())
+                : rejectPrefilter.canReject(
+                        active, matcher.text, matcher.searchFrom, matcher.enginePathOptions())
+                    ? rejectPrefilter.strategy()
+                    : null;
+        if (rejectionStrategy != null) {
+          matcher.diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+          matcher.diagnosticBoundary(rejectionStrategy);
+          return matcher.applyFailedMatchResult();
+        }
+      }
+
+      matcher.diagnosticBoundary(MatchStrategy.LITERAL);
+      return matcher.text != null ? findString(matcher) : findUtf8(matcher);
+    }
+
+    private boolean findString(Matcher matcher) {
+      String text = matcher.text;
+      int textLen = text.length();
+      if (textLen < descriptor.minTotalLength()) {
+        return matcher.applyFailedMatchResult();
+      }
+
+      MultiAnchorDescriptor.Segment[] segments = descriptor.segments();
+      int k = segments.length;
+
+      int fromIndex = matcher.searchFrom;
+      MultiAnchorDescriptor.Segment s0 = segments[0];
+      MultiAnchorDescriptor.Gap g0 = s0.gap();
+      MultiAnchorDescriptor.Anchor a0 = s0.anchor();
+      int p0Min = fromIndex + g0.minLength();
+      if (p0Min + a0.minLength() > textLen) {
+        return matcher.applyFailedMatchResult();
+      }
+
+      int p0 = a0.findNext(text, p0Min);
+      if (WorkCounterConfig.ENABLED) {
+        int scanned = p0 >= 0 ? p0 - p0Min + a0.minLength() : textLen - fromIndex;
+        WorkCounter.record(Math.max(0, scanned));
+      }
+
+      while (p0 >= 0) {
+        int matchStart = g0.matchBackward(text, p0, fromIndex);
+        if (matchStart < 0 || (descriptor.isStartAnchored() && matchStart != 0)) {
+          if (descriptor.isStartAnchored()) {
+            return matcher.applyFailedMatchResult();
+          }
+          p0 = a0.findNext(text, p0 + 1);
+          continue;
+        }
+
+        int prevEnd = a0.matchForward(text, p0);
+        if (prevEnd < 0) {
+          p0 = a0.findNext(text, p0 + 1);
+          continue;
+        }
+        boolean matchValid = true;
+
+        for (int i = 1; i < k; i++) {
+          MultiAnchorDescriptor.Segment si = segments[i];
+          MultiAnchorDescriptor.Gap gap = si.gap();
+          MultiAnchorDescriptor.Anchor nextAnchor = si.anchor();
+          boolean isLast = (i == k - 1 && descriptor.trailingGap().kind() == GapKind.EMPTY);
+          int pNext =
+              findNextAnchorString(
+                  text, textLen, prevEnd, gap, nextAnchor, isLast, descriptor.isEndAnchored());
+          if (pNext < 0) {
+            matchValid = false;
+            break;
+          }
+          prevEnd = nextAnchor.matchForward(text, pNext);
+          if (prevEnd < 0) {
+            matchValid = false;
+            break;
+          }
+        }
+
+        if (matchValid) {
+          MultiAnchorDescriptor.Gap gk = descriptor.trailingGap();
+          int matchEnd = gk.matchForward(text, prevEnd, textLen);
+          if (matchEnd >= 0 && (!descriptor.isEndAnchored() || matchEnd == textLen)) {
+            return matcher.applyGroupZeroMatchResult(matchStart, matchEnd);
+          }
+        }
+
+        if (descriptor.isStartAnchored()) {
+          return matcher.applyFailedMatchResult();
+        }
+
+        p0 = segments[0].anchor().findNext(text, p0 + 1);
+      }
+
+      return matcher.applyFailedMatchResult();
+    }
+
+    private static int findNextAnchorString(
+        String text,
+        int textLen,
+        int prevEnd,
+        Gap gap,
+        Anchor nextAnchor,
+        boolean isLast,
+        boolean isEndAnchored) {
+      int minLitLen = nextAnchor.minLength();
+      int minSearchPos = prevEnd + gap.minLength();
+      if (minSearchPos + minLitLen > textLen) {
+        return -1;
+      }
+      if (isLast && isEndAnchored) {
+        int minTarget = Math.max(minSearchPos, textLen - nextAnchor.maxLength());
+        int maxTarget = textLen - minLitLen;
+        for (int target = minTarget; target <= maxTarget; target++) {
+          if (nextAnchor.matchForward(text, target) == textLen
+              && gap.matchesSlice(text, prevEnd, target)) {
+            return target;
+          }
+        }
+        return -1;
+      }
+
+      int maxStart = textLen - minLitLen;
+      if (gap.kind() == GapKind.SINGLE_LINE_ANY_STAR) {
+        int nl = text.indexOf('\n', prevEnd);
+        if (nl >= 0) {
+          maxStart = Math.min(maxStart, nl - minLitLen);
+        }
+      } else if (gap.kind() == GapKind.EMPTY) {
+        maxStart = Math.min(maxStart, prevEnd);
+      } else if (gap.kind() == GapKind.BOUNDED_CLASS_REPEAT) {
+        int cur = prevEnd;
+        while (cur < textLen
+            && cur - prevEnd < gap.maxLength()
+            && (gap.charClass() == null || gap.charClass().contains(text.charAt(cur)))) {
+          cur++;
+        }
+        maxStart = Math.min(maxStart, cur);
+      }
+
+      if (maxStart < minSearchPos) {
+        return -1;
+      }
+
+      Anchor.Single single = nextAnchor instanceof Anchor.Single s ? s : null;
+      boolean directIndexOf = single != null && !single.foldCase();
+      String singleLit = directIndexOf ? single.literal() : null;
+
+      if (gap.isGreedy()) {
+        if (directIndexOf) {
+          int lastPos = text.lastIndexOf(singleLit, maxStart);
+          while (lastPos >= minSearchPos) {
+            if (gap.matchesSlice(text, prevEnd, lastPos)) {
+              return lastPos;
+            }
+            lastPos = text.lastIndexOf(singleLit, lastPos - 1);
+          }
+          return -1;
+        } else {
+          int lastValid = -1;
+          int curPos = minSearchPos;
+          while (curPos <= maxStart) {
+            int found = nextAnchor.findNext(text, curPos);
+            if (found < 0 || found > maxStart) {
+              break;
+            }
+            if (gap.matchesSlice(text, prevEnd, found)) {
+              lastValid = found;
+            }
+            curPos = found + 1;
+          }
+          return lastValid;
+        }
+      } else {
+        int curPos = minSearchPos;
+        while (curPos <= maxStart) {
+          int found =
+              directIndexOf ? text.indexOf(singleLit, curPos) : nextAnchor.findNext(text, curPos);
+          if (found < 0 || found > maxStart) {
+            break;
+          }
+          if (gap.matchesSlice(text, prevEnd, found)) {
+            return found;
+          }
+          curPos = found + 1;
+        }
+        return -1;
+      }
+    }
+
+    private boolean findUtf8(Matcher matcher) {
+      if (!(matcher.activeScanner() instanceof Utf8InputScanner scanner)) {
+        return matcher.applyFailedMatchResult();
+      }
+      int scannerLen = scanner.length();
+      if (scannerLen < descriptor.minTotalLength()) {
+        return matcher.applyFailedMatchResult();
+      }
+
+      MultiAnchorDescriptor.Segment[] segments = descriptor.segments();
+      int k = segments.length;
+
+      int fromIndex = matcher.searchFrom;
+      MultiAnchorDescriptor.Segment s0 = segments[0];
+      MultiAnchorDescriptor.Gap g0 = s0.gap();
+      MultiAnchorDescriptor.Anchor a0 = s0.anchor();
+      int p0Min = fromIndex + g0.minLength();
+      if (p0Min + a0.minLength() > scannerLen) {
+        return matcher.applyFailedMatchResult();
+      }
+
+      int p0 = a0.findNext(scanner, p0Min);
+      if (WorkCounterConfig.ENABLED) {
+        int scanned = p0 >= 0 ? p0 - p0Min + a0.minLength() : scannerLen - fromIndex;
+        WorkCounter.record(Math.max(0, scanned));
+      }
+
+      while (p0 >= 0) {
+        int matchStart = g0.matchBackward(scanner, p0, fromIndex);
+        if (matchStart < 0 || (descriptor.isStartAnchored() && matchStart != 0)) {
+          if (descriptor.isStartAnchored()) {
+            return matcher.applyFailedMatchResult();
+          }
+          p0 = a0.findNext(scanner, p0 + 1);
+          continue;
+        }
+
+        int prevEnd = a0.matchForward(scanner, p0);
+        if (prevEnd < 0) {
+          p0 = a0.findNext(scanner, p0 + 1);
+          continue;
+        }
+        boolean matchValid = true;
+
+        for (int i = 1; i < k; i++) {
+          MultiAnchorDescriptor.Segment si = segments[i];
+          MultiAnchorDescriptor.Gap gap = si.gap();
+          MultiAnchorDescriptor.Anchor nextAnchor = si.anchor();
+          boolean isLast = (i == k - 1 && descriptor.trailingGap().kind() == GapKind.EMPTY);
+          int pNext =
+              findNextAnchorUtf8(
+                  scanner,
+                  scannerLen,
+                  prevEnd,
+                  gap,
+                  nextAnchor,
+                  isLast,
+                  descriptor.isEndAnchored());
+          if (pNext < 0) {
+            matchValid = false;
+            break;
+          }
+          prevEnd = nextAnchor.matchForward(scanner, pNext);
+          if (prevEnd < 0) {
+            matchValid = false;
+            break;
+          }
+        }
+
+        if (matchValid) {
+          MultiAnchorDescriptor.Gap gk = descriptor.trailingGap();
+          int matchEnd = gk.matchForward(scanner, prevEnd, scannerLen);
+          if (matchEnd >= 0 && (!descriptor.isEndAnchored() || matchEnd == scannerLen)) {
+            return matcher.applyGroupZeroMatchResult(matchStart, matchEnd);
+          }
+        }
+
+        if (descriptor.isStartAnchored()) {
+          return matcher.applyFailedMatchResult();
+        }
+
+        p0 = segments[0].anchor().findNext(scanner, p0 + 1);
+      }
+
+      return matcher.applyFailedMatchResult();
+    }
+
+    private static int findNextAnchorUtf8(
+        Utf8InputScanner scanner,
+        int scannerLen,
+        int prevEnd,
+        Gap gap,
+        Anchor nextAnchor,
+        boolean isLast,
+        boolean isEndAnchored) {
+      int minLitLen = nextAnchor.minLength();
+      int minSearchPos = prevEnd + gap.minLength();
+      if (minSearchPos + minLitLen > scannerLen) {
+        return -1;
+      }
+      if (isLast && isEndAnchored) {
+        int minTarget = Math.max(minSearchPos, scannerLen - nextAnchor.maxLength());
+        int maxTarget = scannerLen - minLitLen;
+        for (int target = minTarget; target <= maxTarget; target++) {
+          if (nextAnchor.matchForward(scanner, target) == scannerLen
+              && gap.matchesSlice(scanner, prevEnd, target)) {
+            return target;
+          }
+        }
+        return -1;
+      }
+
+      int maxStart = scannerLen - minLitLen;
+      if (gap.kind() == GapKind.SINGLE_LINE_ANY_STAR) {
+        int nl = scanner.indexOfAscii('\n', prevEnd, scannerLen);
+        if (nl >= 0) {
+          maxStart = Math.min(maxStart, nl - minLitLen);
+        }
+      } else if (gap.kind() == GapKind.EMPTY) {
+        maxStart = Math.min(maxStart, prevEnd);
+      } else if (gap.kind() == GapKind.BOUNDED_CLASS_REPEAT) {
+        int cur = prevEnd;
+        while (cur < scannerLen
+            && cur - prevEnd < gap.maxLength()
+            && (gap.charClass() == null || gap.charClass().contains(scanner.asciiAt(cur)))) {
+          cur++;
+        }
+        maxStart = Math.min(maxStart, cur);
+      }
+
+      if (maxStart < minSearchPos) {
+        return -1;
+      }
+
+      if (gap.isGreedy()) {
+        int lastValid = -1;
+        int curPos = minSearchPos;
+        while (curPos <= maxStart) {
+          int found = nextAnchor.findNext(scanner, curPos);
+          if (found < 0 || found > maxStart) {
+            break;
+          }
+          if (gap.matchesSlice(scanner, prevEnd, found)) {
+            lastValid = found;
+          }
+          curPos = found + 1;
+        }
+        return lastValid;
+      } else {
+        int curPos = minSearchPos;
+        while (curPos <= maxStart) {
+          int found = nextAnchor.findNext(scanner, curPos);
+          if (found < 0 || found > maxStart) {
+            break;
+          }
+          if (gap.matchesSlice(scanner, prevEnd, found)) {
+            return found;
+          }
+          curPos = found + 1;
+        }
+        return -1;
+      }
+    }
+
+    @Override
+    public boolean matches(Matcher matcher) {
+      return matchAnchored(matcher, true);
+    }
+
+    @Override
+    public boolean lookingAt(Matcher matcher) {
+      return matchAnchored(matcher, false);
+    }
+
+    private boolean matchAnchored(Matcher matcher, boolean fullMatch) {
+      if (descriptor.isStartAnchored() && matcher.searchFrom > 0) {
+        return matcher.applyFailedMatchResult();
+      }
+      matcher.capturesResolved = true;
+
+      RejectPrefilter rejectPrefilter = matcher.parentPattern.rejectPrefilter();
+      if (rejectPrefilter != null
+          && (matcher.text != null || matcher.activeScanner() instanceof Utf8InputScanner)) {
+        InputScanner active = matcher.activeScanner();
+        MatchStrategy rejectionStrategy =
+            rejectPrefilter instanceof RejectPrefilter.Composite composite
+                ? composite.rejectionStrategy(active, matcher.text, 0, matcher.enginePathOptions())
+                : rejectPrefilter.canReject(active, matcher.text, 0, matcher.enginePathOptions())
+                    ? rejectPrefilter.strategy()
+                    : null;
+        if (rejectionStrategy != null) {
+          matcher.diagnosticParticipation(rejectionStrategy, StrategyRole.REJECT_PREFILTER);
+          matcher.diagnosticBoundary(rejectionStrategy);
+          return matcher.applyFailedMatchResult();
+        }
+      }
+
+      matcher.diagnosticBoundary(MatchStrategy.LITERAL);
+
+      if (matcher.text != null) {
+        String text = matcher.text;
+        int textLen = text.length();
+        if (textLen < descriptor.minTotalLength()) {
+          return matcher.applyFailedMatchResult();
+        }
+
+        Anchor[] anchors = descriptor.anchors();
+        Gap[] gaps = descriptor.gaps();
+        int k = anchors.length;
+
+        Gap g0 = gaps[0];
+        int p0Min = g0.minLength();
+        if (p0Min + anchors[0].minLength() > textLen) {
+          return matcher.applyFailedMatchResult();
+        }
+
+        int p0 = anchors[0].findNext(text, p0Min);
+        while (p0 >= 0) {
+          int matchStart = g0.matchBackward(text, p0, 0);
+          if (matchStart != 0) {
+            if (descriptor.isStartAnchored() || g0.kind() == GapKind.EMPTY) {
+              return matcher.applyFailedMatchResult();
+            }
+            p0 = anchors[0].findNext(text, p0 + 1);
+            continue;
+          }
+
+          int prevEnd = anchors[0].matchForward(text, p0);
+          if (prevEnd < 0) {
+            p0 = anchors[0].findNext(text, p0 + 1);
+            continue;
+          }
+          boolean matchValid = true;
+
+          for (int i = 1; i < k; i++) {
+            Gap gap = gaps[i];
+            Anchor nextAnchor = anchors[i];
+            boolean isLast = (i == k - 1 && gaps[k].kind() == GapKind.EMPTY);
+            int pNext =
+                findNextAnchorString(
+                    text,
+                    textLen,
+                    prevEnd,
+                    gap,
+                    nextAnchor,
+                    isLast,
+                    fullMatch || descriptor.isEndAnchored());
+            if (pNext < 0) {
+              matchValid = false;
+              break;
+            }
+            prevEnd = nextAnchor.matchForward(text, pNext);
+            if (prevEnd < 0) {
+              matchValid = false;
+              break;
+            }
+          }
+
+          if (matchValid) {
+            Gap gk = gaps[k];
+            int matchEnd = gk.matchForward(text, prevEnd, textLen);
+            if (matchEnd >= 0
+                && (!fullMatch || matchEnd == textLen)
+                && (!descriptor.isEndAnchored() || matchEnd == textLen)) {
+              return matcher.applyGroupZeroMatchResult(0, matchEnd);
+            }
+          }
+
+          if (descriptor.isStartAnchored() || g0.kind() == GapKind.EMPTY) {
+            return matcher.applyFailedMatchResult();
+          }
+
+          p0 = anchors[0].findNext(text, p0 + 1);
+        }
+
+        return matcher.applyFailedMatchResult();
+      } else if (matcher.activeScanner() instanceof Utf8InputScanner scanner) {
+        int scannerLen = scanner.length();
+        if (scannerLen < descriptor.minTotalLength()) {
+          return matcher.applyFailedMatchResult();
+        }
+
+        Anchor[] anchors = descriptor.anchors();
+        Gap[] gaps = descriptor.gaps();
+        int k = anchors.length;
+
+        Gap g0 = gaps[0];
+        int p0Min = g0.minLength();
+        if (p0Min + anchors[0].minLength() > scannerLen) {
+          return matcher.applyFailedMatchResult();
+        }
+
+        int p0 = anchors[0].findNext(scanner, p0Min);
+        while (p0 >= 0) {
+          int matchStart = g0.matchBackward(scanner, p0, 0);
+          if (matchStart != 0) {
+            if (descriptor.isStartAnchored() || g0.kind() == GapKind.EMPTY) {
+              return matcher.applyFailedMatchResult();
+            }
+            p0 = anchors[0].findNext(scanner, p0 + 1);
+            continue;
+          }
+
+          int prevEnd = anchors[0].matchForward(scanner, p0);
+          if (prevEnd < 0) {
+            p0 = anchors[0].findNext(scanner, p0 + 1);
+            continue;
+          }
+          boolean matchValid = true;
+
+          for (int i = 1; i < k; i++) {
+            Gap gap = gaps[i];
+            Anchor nextAnchor = anchors[i];
+            boolean isLast = (i == k - 1 && gaps[k].kind() == GapKind.EMPTY);
+            int pNext =
+                findNextAnchorUtf8(
+                    scanner,
+                    scannerLen,
+                    prevEnd,
+                    gap,
+                    nextAnchor,
+                    isLast,
+                    fullMatch || descriptor.isEndAnchored());
+            if (pNext < 0) {
+              matchValid = false;
+              break;
+            }
+            prevEnd = nextAnchor.matchForward(scanner, pNext);
+            if (prevEnd < 0) {
+              matchValid = false;
+              break;
+            }
+          }
+
+          if (matchValid) {
+            Gap gk = gaps[k];
+            int matchEnd = gk.matchForward(scanner, prevEnd, scannerLen);
+            if (matchEnd >= 0
+                && (!fullMatch || matchEnd == scannerLen)
+                && (!descriptor.isEndAnchored() || matchEnd == scannerLen)) {
+              return matcher.applyGroupZeroMatchResult(0, matchEnd);
+            }
+          }
+
+          if (descriptor.isStartAnchored() || g0.kind() == GapKind.EMPTY) {
+            return matcher.applyFailedMatchResult();
+          }
+
+          p0 = anchors[0].findNext(scanner, p0 + 1);
+        }
+
+        return matcher.applyFailedMatchResult();
+      }
+      return matcher.applyFailedMatchResult();
     }
   }
 

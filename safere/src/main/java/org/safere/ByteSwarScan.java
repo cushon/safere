@@ -582,6 +582,58 @@ abstract class ByteSwarScan {
     return -1;
   }
 
+  static boolean matchAsciiClassSlice(byte[] bytes, int offset, int length, int[] ranges) {
+    int numRanges = ranges.length / 2;
+    int pos = 0;
+    int wordEnd = length - Long.BYTES;
+
+    if (numRanges <= 4 && Swar.supportsAsciiRanges(ranges, 4)) {
+      long low0 = (ranges[0] & 0xFFL) * BYTE_ONES;
+      long high0 = (ranges[1] & 0xFFL) * BYTE_ONES;
+      long low1 = numRanges > 1 ? (ranges[2] & 0xFFL) * BYTE_ONES : 0;
+      long high1 = numRanges > 1 ? (ranges[3] & 0xFFL) * BYTE_ONES : 0;
+      long low2 = numRanges > 2 ? (ranges[4] & 0xFFL) * BYTE_ONES : 0;
+      long high2 = numRanges > 2 ? (ranges[5] & 0xFFL) * BYTE_ONES : 0;
+      long low3 = numRanges > 3 ? (ranges[6] & 0xFFL) * BYTE_ONES : 0;
+      long high3 = numRanges > 3 ? (ranges[7] & 0xFFL) * BYTE_ONES : 0;
+
+      while (pos <= wordEnd) {
+        long word = (long) LONG_VIEW.get(bytes, offset + pos);
+        long values = word & ~BYTE_HIGH_BITS;
+        long ascii = ~word & BYTE_HIGH_BITS;
+        long matches = Swar.exactAsciiRangeMask(values, ascii, low0, high0);
+        if (numRanges > 1) {
+          matches |= Swar.exactAsciiRangeMask(values, ascii, low1, high1);
+        }
+        if (numRanges > 2) {
+          matches |= Swar.exactAsciiRangeMask(values, ascii, low2, high2);
+        }
+        if (numRanges > 3) {
+          matches |= Swar.exactAsciiRangeMask(values, ascii, low3, high3);
+        }
+        if (matches != BYTE_HIGH_BITS) {
+          return false;
+        }
+        pos += Long.BYTES;
+      }
+    }
+
+    for (; pos < length; pos++) {
+      int b = bytes[offset + pos] & 0xFF;
+      boolean inRange = false;
+      for (int r = 0; r < numRanges; r++) {
+        if (b >= ranges[r * 2] && b <= ranges[r * 2 + 1]) {
+          inRange = true;
+          break;
+        }
+      }
+      if (!inRange) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private static int scalarRangeCheck(
       byte[] bytes, int offset, long bitmap0, long bitmap1, int position, int limit) {
     for (; position < limit; position++) {

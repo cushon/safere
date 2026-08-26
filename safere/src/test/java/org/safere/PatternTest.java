@@ -1154,7 +1154,6 @@ class PatternTest {
     void caseInsensitiveEndAnchoredSuffixRejectsMismatchedInputs() {
       for (String regex : List.of("(?i).*\\.json$", ".*(?i:\\.json)$", "(?i).*\\.json\\z")) {
         Pattern p = Pattern.compile(regex);
-
         assertThat(p.matcher("config.json").matches()).isTrue();
         assertThat(p.matcher("config.JSON").matches()).isTrue();
         assertThat(p.matcher("config.JsOn").find()).isTrue();
@@ -1166,6 +1165,15 @@ class PatternTest {
         assertThat(p.find(Utf8Input.trusted("config.JSON".getBytes(UTF_8)))).isTrue();
         assertThat(p.find(Utf8Input.trusted("config.YAML".getBytes(UTF_8)))).isFalse();
       }
+    }
+
+    @Test
+    void testBasicDat77() {
+      Pattern p = Pattern.compile("abaa|abbaa|abbbaa|abbbbaa");
+      Matcher m = p.matcher("ababbabbbabbbabbbbabbbbaa");
+      assertThat(m.find()).isTrue();
+      assertThat(m.start()).isEqualTo(18);
+      assertThat(m.end()).isEqualTo(25);
     }
 
     @Test

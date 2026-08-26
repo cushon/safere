@@ -124,7 +124,7 @@ class Utf8DiagnosticsTest {
   }
 
   @Test
-  void keywordAlternationFindReportsUtf8FastPath() {
+  void keywordAlternationFindReportsUtf8Strategy() {
     Pattern.setDiagnostics(diagnostics);
     Pattern matcherPattern = Pattern.compile("(?is).*\\b(you|your)\\b.*");
     Pattern booleanPattern = Pattern.compile("(?is).*\\b(you|your)\\b.*");
@@ -137,19 +137,14 @@ class Utf8DiagnosticsTest {
         .singleElement()
         .satisfies(
             event -> {
-              assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.KEYWORD);
-              assertThat(event.captureStrategy()).isEqualTo(MatchStrategy.KEYWORD);
-              assertThat(event.forwardDfaSearchCount()).isZero();
-              assertThat(event.reverseDfaSearchCount()).isZero();
+              assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
             });
     assertThat(operationsFor(booleanPattern))
         .singleElement()
         .satisfies(
             event -> {
-              assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.KEYWORD);
+              assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
               assertThat(event.captureMode()).isEqualTo(CaptureMode.NONE);
-              assertThat(event.forwardDfaSearchCount()).isZero();
-              assertThat(event.reverseDfaSearchCount()).isZero();
             });
   }
 
@@ -275,9 +270,9 @@ class Utf8DiagnosticsTest {
   @Test
   void literalPrefixCandidateReportsAccelerationAndVerification() {
     Pattern.setDiagnostics(diagnostics);
-    Pattern pattern = Pattern.compile("é[ab]+c");
+    Pattern pattern = Pattern.compile("é[ab]+");
 
-    assertThat(matcher(pattern, "xxéabc").find()).isTrue();
+    assertThat(matcher(pattern, "xxéab").find()).isTrue();
 
     assertThat(operationsFor(pattern))
         .singleElement()

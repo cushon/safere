@@ -28,6 +28,11 @@ interface VectorScanProvider {
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
 
+  /** Returns whether all bytes in the slice match the ASCII ranges. */
+  default boolean matchAsciiClassSlice(byte[] bytes, int offset, int length, int[] ranges) {
+    return ByteSwarScan.matchAsciiClassSlice(bytes, offset, length, ranges);
+  }
+
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   default int indexOfAsciiPair(byte[] bytes, int offset, int length, byte b0, byte b1, int start) {
     return UNSUPPORTED;

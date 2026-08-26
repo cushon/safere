@@ -10,95 +10,93 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 import org.junit.jupiter.api.Test;
-import org.safere.Pattern.FixedOffsetLiteral;
 
 @DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
 class StartAcceleratorTest {
 
   @Test
   void nullAndNoneDescriptorsProduceNullAccelerators() {
-    assertThat(StringStartAccelerator.create(null, false)).isNull();
-    assertThat(StringStartAccelerator.create(StartDescriptor.NONE, false)).isNull();
-    assertThat(Utf8StartAccelerator.create(null, false)).isNull();
-    assertThat(Utf8StartAccelerator.create(StartDescriptor.NONE, false)).isNull();
-    assertThat(StartDescriptor.NONE.hasStartAcceleration()).isFalse();
+    assertThat(StringStartAccelerator.create((MultiAnchorDescriptor) null, false)).isNull();
+    assertThat(Utf8StartAccelerator.create((MultiAnchorDescriptor) null, false)).isNull();
   }
 
   @Test
   void literalPrefixAcceleratesStringAndUtf8() {
-    StartDescriptor desc = descriptor("needle", false, null, null);
-    assertThat(desc.hasStartAcceleration()).isTrue();
+    MultiAnchorDescriptor desc = descriptor("prefix", false, null);
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.Literal.class);
     assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
-    assertThat(
-            StringStartAccelerator.findNextCandidate(strAcc, "haystack with needle here", 0, false))
-        .isEqualTo(14);
-    assertThat(
-            StringStartAccelerator.findNextCandidate(
-                strAcc, "haystack with needle here", 15, false))
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, "xxxprefixyyy", 0, false))
+        .isEqualTo(3);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, "xxxPREFIXyyy", 0, false))
         .isEqualTo(-1);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.Literal.class);
     assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
-    assertThat(
-            Utf8StartAccelerator.findNextCandidate(
-                utf8Acc, utf8Scanner("haystack with needle here"), 0))
-        .isEqualTo(14);
-    assertThat(
-            Utf8StartAccelerator.findNextCandidate(
-                utf8Acc, utf8Scanner("haystack with needle here"), 15))
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner("xxxprefixyyy"), 0))
+        .isEqualTo(3);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner("xxxPREFIXyyy"), 0))
         .isEqualTo(-1);
+
+    // Single-char literal produces single-byte scanner
+    MultiAnchorDescriptor singleDesc = descriptor("a", false, null);
+    Utf8StartAccelerator singleUtf8 = Utf8StartAccelerator.create(singleDesc, false);
+    assertThat(singleUtf8).isInstanceOf(Utf8StartAccelerator.Literal.class);
+    assertThat(singleUtf8.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+    assertThat(Utf8StartAccelerator.findNextCandidate(singleUtf8, utf8Scanner("xxxa"), 0))
+        .isEqualTo(3);
   }
 
   @Test
-  void caseInsensitiveLiteralAcceleratesStringAndUtf8() {
-    StartDescriptor desc = descriptor("needle", true, null, null);
-    assertThat(desc.hasStartAcceleration()).isTrue();
+  void caseInsensitiveAsciiPrefixAcceleratesStringAndUtf8() {
+    MultiAnchorDescriptor desc = descriptor("prefix", true, null);
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CaseInsensitiveLiteral.class);
-    assertThat(
-            StringStartAccelerator.findNextCandidate(strAcc, "haystack with NEEDLE here", 0, false))
-        .isEqualTo(14);
+    assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, "xxxprefixyyy", 0, false))
+        .isEqualTo(3);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, "xxxPREFIXyyy", 0, false))
+        .isEqualTo(3);
 
     Utf8StartAccelerator utf8Acc = Utf8StartAccelerator.create(desc, false);
     assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
-    assertThat(utf8Acc.policy().strategy()).isEqualTo(MatchStrategy.LITERAL);
-    assertThat(utf8Acc.policy().isExactMatchCandidate()).isTrue();
-    assertThat(
-            Utf8StartAccelerator.findNextCandidate(
-                utf8Acc, utf8Scanner("haystack with NEEDLE here"), 0))
-        .isEqualTo(14);
-    assertThat(
-            Utf8StartAccelerator.findNextCandidate(
-                utf8Acc, utf8Scanner("haystack with nEeDlE here"), 0))
-        .isEqualTo(14);
-    assertThat(
-            Utf8StartAccelerator.findNextCandidate(
-                utf8Acc, utf8Scanner("haystack with needle here"), 15))
-        .isEqualTo(-1);
+    assertThat(utf8Acc.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner("xxxprefixyyy"), 0))
+        .isEqualTo(3);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner("xxxPREFIXyyy"), 0))
+        .isEqualTo(3);
 
-    // Single character case-insensitive prefix
-    StartDescriptor singleDesc = descriptor("a", true, null, null);
+    // Single-char case-insensitive produces pair scanner
+    MultiAnchorDescriptor singleDesc = descriptor("a", true, null);
     Utf8StartAccelerator singleUtf8 = Utf8StartAccelerator.create(singleDesc, false);
     assertThat(singleUtf8).isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
+    assertThat(singleUtf8.policy()).isEqualTo(AcceleratorPolicy.LITERAL);
     assertThat(Utf8StartAccelerator.findNextCandidate(singleUtf8, utf8Scanner("xxxA"), 0))
         .isEqualTo(3);
     assertThat(Utf8StartAccelerator.findNextCandidate(singleUtf8, utf8Scanner("xxxa"), 0))
         .isEqualTo(3);
 
     // Non-ASCII case-insensitive prefix falls back (null)
-    StartDescriptor nonAsciiDesc = descriptor("café", true, null, null);
+    MultiAnchorDescriptor nonAsciiDesc = descriptor("café", true, null);
     assertThat(Utf8StartAccelerator.create(nonAsciiDesc, false)).isNull();
   }
 
   @Test
   void fixedOffsetLiteralAcceleratesStringAndUtf8() {
-    FixedOffsetLiteral fixed = new FixedOffsetLiteral("token", 2, 2, new int[] {2});
-    StartDescriptor desc = descriptor(null, false, fixed, null);
+    MultiAnchorDescriptor desc =
+        new MultiAnchorDescriptor(
+            new MultiAnchorDescriptor.Segment[] {
+              new MultiAnchorDescriptor.Segment(
+                  new MultiAnchorDescriptor.Gap(
+                      MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT, 2, 2, null, true),
+                  MultiAnchorDescriptor.Anchor.Single.create("token", false))
+            },
+            MultiAnchorDescriptor.Gap.EMPTY,
+            7,
+            false);
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(desc, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.FixedOffset.class);
@@ -115,8 +113,7 @@ class StartAcceleratorTest {
 
   @Test
   void charClassPrefixAcceleratesStringAndUtf8() {
-    CharClassScanInfo pairScanInfo = Pattern.compile("[ab]").charClassPrefix();
-    StartDescriptor descPair = descriptor(null, false, null, pairScanInfo);
+    MultiAnchorDescriptor descPair = Pattern.compile("[ab]").matchDescriptor().multiAnchor();
 
     StringStartAccelerator strAcc = StringStartAccelerator.create(descPair, false);
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
@@ -131,8 +128,7 @@ class StartAcceleratorTest {
     assertThat(Utf8StartAccelerator.findNextCandidate(utf8PairAcc, utf8Scanner("xxxb"), 0))
         .isEqualTo(3);
 
-    CharClassScanInfo multiScanInfo = Pattern.compile("[abcd]").charClassPrefix();
-    StartDescriptor descMulti = descriptor(null, false, null, multiScanInfo);
+    MultiAnchorDescriptor descMulti = Pattern.compile("[abcd]").matchDescriptor().multiAnchor();
     Utf8StartAccelerator utf8MultiAcc = Utf8StartAccelerator.create(descMulti, false);
     assertThat(utf8MultiAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
     assertThat(utf8MultiAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
@@ -140,22 +136,31 @@ class StartAcceleratorTest {
         .isEqualTo(3);
   }
 
-  private static StartDescriptor descriptor(
-      String prefix,
-      boolean prefixFoldCase,
-      FixedOffsetLiteral fixedOffsetLiteral,
-      CharClassScanInfo charClassPrefix) {
-    return new StartDescriptor(
-        prefix,
-        prefixFoldCase,
-        fixedOffsetLiteral,
-        charClassPrefix,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null);
+  private static MultiAnchorDescriptor descriptor(
+      String prefix, boolean prefixFoldCase, CharClassScanInfo charClassPrefix) {
+    if (prefix != null) {
+      return new MultiAnchorDescriptor(
+          new MultiAnchorDescriptor.Segment[] {
+            new MultiAnchorDescriptor.Segment(
+                MultiAnchorDescriptor.Gap.EMPTY,
+                MultiAnchorDescriptor.Anchor.Single.create(prefix, prefixFoldCase))
+          },
+          MultiAnchorDescriptor.Gap.EMPTY,
+          prefix.length(),
+          false);
+    }
+    if (charClassPrefix != null) {
+      return new MultiAnchorDescriptor(
+          new MultiAnchorDescriptor.Segment[] {
+            new MultiAnchorDescriptor.Segment(
+                MultiAnchorDescriptor.Gap.EMPTY,
+                MultiAnchorDescriptor.Anchor.CharClass.create(charClassPrefix))
+          },
+          MultiAnchorDescriptor.Gap.EMPTY,
+          1,
+          false);
+    }
+    return null;
   }
 
   @Test
@@ -368,9 +373,10 @@ class StartAcceleratorTest {
   @Test
   void leadingWhitespaceCharClassExpansionAcceleratesStringAndUtf8() {
     Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
-    StartDescriptor desc = pattern.startDescriptor();
+    MultiAnchorDescriptor desc = pattern.matchDescriptor().multiAnchor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.leadingExpansion()).isNotNull();
+    assertThat(desc.firstSegment().gap().kind())
+        .isEqualTo(MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT);
 
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
@@ -402,9 +408,10 @@ class StartAcceleratorTest {
   @Test
   void leadingWhitespaceLiteralExpansionAcceleratesStringAndUtf8() {
     Pattern pattern = Pattern.compile("\\s+https?://\\w+");
-    StartDescriptor desc = pattern.startDescriptor();
+    MultiAnchorDescriptor desc = pattern.matchDescriptor().multiAnchor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.leadingExpansion()).isNotNull();
+    assertThat(desc.firstSegment().gap().kind())
+        .isEqualTo(MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT);
 
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
@@ -431,11 +438,13 @@ class StartAcceleratorTest {
   @Test
   void leadingBoundedUnicodeExpansionAcceleratesStringAndUtf8() {
     Pattern pattern = Pattern.compile("[\\u00e9\\u00e8]+:target");
-    StartDescriptor desc = pattern.startDescriptor();
+    MultiAnchorDescriptor desc = pattern.matchDescriptor().multiAnchor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.leadingExpansion()).isNotNull();
-    assertThat(desc.leadingExpansion().minRepetition()).isEqualTo(1);
-    assertThat(desc.leadingExpansion().maxRepetition()).isEqualTo(Integer.MAX_VALUE);
+    assertThat(desc.firstSegment().gap().kind())
+        .isEqualTo(MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT);
+    MultiAnchorDescriptor.Gap gap = desc.firstSegment().gap();
+    assertThat(gap.minLength()).isEqualTo(1);
+    assertThat(gap.maxLength()).isEqualTo(Integer.MAX_VALUE);
 
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
@@ -473,9 +482,10 @@ class StartAcceleratorTest {
   void leadingSupplementaryUnicodeExpansionAcceleratesStringAndUtf8() {
     // Supplementary code point class: U+1F600, U+1F601 (Grinning Face, Beaming Face)
     Pattern pattern = Pattern.compile("[\\x{1F600}\\x{1F601}]+:target");
-    StartDescriptor desc = pattern.startDescriptor();
+    MultiAnchorDescriptor desc = pattern.matchDescriptor().multiAnchor();
     assertThat(desc.hasStartAcceleration()).isTrue();
-    assertThat(desc.leadingExpansion()).isNotNull();
+    assertThat(desc.firstSegment().gap().kind())
+        .isEqualTo(MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT);
 
     String emoji4 =
         new StringBuilder("abc")
@@ -512,6 +522,90 @@ class StartAcceleratorTest {
     regex.append('z');
 
     assertThatCode(() -> Pattern.compile(regex.toString())).doesNotThrowAnyException();
+  }
+
+  @Test
+  void reverseAnchorAcceleratesStringAndUtf8ForSuffixLiterals() {
+    Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
+    MultiAnchorDescriptor desc = pattern.matchDescriptor().multiAnchor();
+    assertThat(desc.hasStartAcceleration()).isTrue();
+    assertThat(desc.isReverseAnchor()).isTrue();
+
+    String input = "noise prefix before user123@gmail.com trailing noise";
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.ReverseAnchor.class);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 0, false)).isEqualTo(20);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 21, false)).isEqualTo(21);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 25, false)).isEqualTo(-1);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 38, false)).isEqualTo(-1);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.ReverseAnchor.class);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 0))
+        .isEqualTo(20);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 21))
+        .isEqualTo(21);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 25))
+        .isEqualTo(-1);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 38))
+        .isEqualTo(-1);
+  }
+
+  @Test
+  void reverseAnchorRejectsInvalidPrefixBeforeAnchor() {
+    Pattern pattern = Pattern.compile("[a-z]+[0-9]+@gmail\\.com");
+    String input = "noise prefix before !!!@gmail.com user123@gmail.com";
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 0, false)).isEqualTo(34);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 0))
+        .isEqualTo(34);
+  }
+
+  @Test
+  void reverseAnchorSelectsMostSelectiveSuffixAnchor() {
+    Pattern pattern = Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org");
+    MultiAnchorDescriptor desc = pattern.matchDescriptor().multiAnchor();
+    assertThat(desc.isReverseAnchor()).isTrue();
+    assertThat(desc.firstSegment().anchor())
+        .isInstanceOf(MultiAnchorDescriptor.Anchor.Single.class);
+    assertThat(((MultiAnchorDescriptor.Anchor.Single) desc.firstSegment().anchor()).literal())
+        .isEqualTo("@support.internal.org");
+
+    String input = "noise prefix before department/99@support.internal.org trailing noise";
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.ReverseAnchor.class);
+    assertThat(StringStartAccelerator.findNextCandidate(strAcc, input, 0, false)).isEqualTo(20);
+
+    Utf8StartAccelerator utf8Acc = pattern.utf8StartAccelerator();
+    assertThat(utf8Acc).isInstanceOf(Utf8StartAccelerator.ReverseAnchor.class);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8Acc, utf8Scanner(input), 0))
+        .isEqualTo(20);
+  }
+
+  @Test
+  void reverseAnchorSelectsRarestInfixOverShortTail() {
+    Pattern pattern = Pattern.compile("[a-z]+/[0-9]+_SPECIAL_AUTH_TOKEN_[a-z]{1,3}");
+    MultiAnchorDescriptor desc = pattern.matchDescriptor().multiAnchor();
+    assertThat(desc.isReverseAnchor()).isTrue();
+    assertThat(desc.firstSegment().anchor())
+        .isInstanceOf(MultiAnchorDescriptor.Anchor.Single.class);
+    assertThat(((MultiAnchorDescriptor.Anchor.Single) desc.firstSegment().anchor()).literal())
+        .isEqualTo("_SPECIAL_AUTH_TOKEN_");
+  }
+
+  @Test
+  void reverseAnchorPreservesLeftmostFirstWithFalsePositives() {
+    Pattern pattern = Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org");
+    String input = "noise invalid/notdigit@support.internal.org valid/123@support.internal.org";
+    Matcher safereMatcher = pattern.matcher(input);
+    assertThat(safereMatcher.find()).isTrue();
+    java.util.regex.Matcher jdkMatcher =
+        java.util.regex.Pattern.compile("[a-z]+/[0-9]+@support\\.internal\\.org").matcher(input);
+    assertThat(jdkMatcher.find()).isTrue();
+    assertThat(safereMatcher.start()).isEqualTo(jdkMatcher.start());
+    assertThat(safereMatcher.end()).isEqualTo(jdkMatcher.end());
   }
 
   private static boolean isVectorApiAvailable() {
