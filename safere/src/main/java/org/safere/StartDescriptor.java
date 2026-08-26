@@ -22,7 +22,8 @@ record StartDescriptor(
     CharClassScanInfo anchoredCharClassPrefix,
     MultiLiteralInfo multiLiteral,
     TeddyModel teddyModel,
-    LeadingExpansion leadingExpansion) {
+    LeadingExpansion leadingExpansion,
+    ClassHashChain classHashChain) {
 
   record LeadingExpansion(
       CharClassScanInfo leadingClass,
@@ -31,25 +32,35 @@ record StartDescriptor(
       StartDescriptor innerDescriptor) {}
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
 
   StartDescriptor(
       String prefix,
       boolean prefixFoldCase,
       FixedOffsetLiteral fixedOffsetLiteral,
       CharClassScanInfo charClassPrefix,
-      StartAcceleration lineAnchor) {
+      StartAcceleration lineAnchor,
+      String anchoredPrefix,
+      CharClassScanInfo anchoredCharClassPrefix,
+      MultiLiteralInfo multiLiteral,
+      TeddyModel teddyModel,
+      LeadingExpansion leadingExpansion) {
     this(
         prefix,
         prefixFoldCase,
         fixedOffsetLiteral,
         charClassPrefix,
         lineAnchor,
-        null,
-        null,
-        null,
-        null,
-        null);
+        anchoredPrefix,
+        anchoredCharClassPrefix,
+        multiLiteral,
+        teddyModel,
+        leadingExpansion,
+        compileClassHashChain(prefix, prefixFoldCase));
+  }
+
+  private static ClassHashChain compileClassHashChain(String prefix, boolean foldCase) {
+    return prefix != null && foldCase ? ClassHashChain.compileCaseInsensitive(prefix) : null;
   }
 
   boolean hasStartAcceleration() {

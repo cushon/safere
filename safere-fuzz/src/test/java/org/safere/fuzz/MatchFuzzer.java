@@ -53,6 +53,8 @@ final class MatchFuzzer {
     assertZeroWidthAlternationFindsLeftmostStartJdk();
     assertZeroWidthPossessiveCaptureRetentionJdk();
     assertDfaSandwichLeftmostStartCasesMatchJdk();
+    assertMixedAsciiAndExactUnicodeCaseFoldingMatchesJdk(data);
+    assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(data);
 
     String regex;
     int flags;
@@ -202,6 +204,38 @@ final class MatchFuzzer {
         pattern.matcher("bbbb").find();
         pattern.matcher("ba").find();
       }
+    }
+  }
+
+  private static void assertMixedAsciiAndExactUnicodeCaseFoldingMatchesJdk(
+      FuzzedDataProvider data) {
+    List<String> exactCharacters = List.of("\u00DF", "\uFB05");
+    List<String> unicodeFoldedCharacters = List.of("\u1E9E", "\uFB06");
+    int variant = data.consumeInt(0, exactCharacters.size() - 1);
+    String ascii = String.valueOf((char) ('a' + data.consumeInt(0, 25)));
+    String separator = data.pickValue(List.of("", "-", "_", "0"));
+    String regex = "(?i:" + ascii + separator + exactCharacters.get(variant) + ")";
+    String input =
+        Character.toUpperCase(ascii.charAt(0)) + separator + unicodeFoldedCharacters.get(variant);
+
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
+    if (pattern != null) {
+      pattern.matcher(input).find();
+    }
+  }
+
+  private static void assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(
+      FuzzedDataProvider data) {
+    RegressionCase regression =
+        data.pickValue(
+            List.of(
+                new RegressionCase("a+?b?", 0, List.of("aaab", "aab", "ab")),
+                new RegressionCase("(?:a|ab)c?", 0, List.of("abc", "ab", "ac")),
+                new RegressionCase("a??b?", 0, List.of("ab", "a", "b"))));
+    FuzzSupport.CompiledPattern pattern =
+        FuzzSupport.compileCompatibleOrSkip(regression.regex(), regression.flags());
+    if (pattern != null) {
+      pattern.matcher(data.pickValue(regression.inputs())).lookingAt();
     }
   }
 

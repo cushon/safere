@@ -55,6 +55,19 @@ final class Ascii {
     return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z');
   }
 
+  /** Returns true if all characters in the CharSequence are ASCII (<= 127). */
+  static boolean isAscii(CharSequence cs) {
+    if (cs == null) {
+      return true;
+    }
+    for (int i = 0; i < cs.length(); i++) {
+      if (cs.charAt(i) > 127) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** Returns true if the code point is an ASCII digit. */
   static boolean isDigit(int r) {
     return r >= '0' && r <= '9';
@@ -126,6 +139,10 @@ final class Ascii {
       failure[i] = matched;
     }
     return failure;
+  }
+
+  static int indexOfLinearIgnoreCase(String text, String prefix, int start) {
+    return indexOfLinearIgnoreCase(text, prefix, ignoreCaseFailure(prefix), start);
   }
 
   /** Knuth-Morris-Pratt scan on String, strictly linear in text length regardless of pattern. */
@@ -205,7 +222,8 @@ final class Ascii {
     for (int i = startFrom; i < prefixLen; i++) {
       char c = text.charAt(offset + i);
       char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != p) {
+      char la = toLowerCase(c);
+      if (la != p && la != toLowerCase(p)) {
         return false;
       }
     }
@@ -217,7 +235,8 @@ final class Ascii {
     for (int i = 0; i < prefixLen; i++) {
       int b = bytes[offset + i] & 0xFF;
       char p = prefix.charAt(i);
-      if (b != p && toLowerCase(b) != p) {
+      int lb = toLowerCase(b);
+      if (lb != p && lb != toLowerCase(p)) {
         return false;
       }
     }

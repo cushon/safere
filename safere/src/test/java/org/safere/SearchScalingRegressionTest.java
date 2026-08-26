@@ -20,6 +20,29 @@ import org.junit.jupiter.api.Test;
 class SearchScalingRegressionTest {
 
   @Test
+  void shiftDfaTransitionsAreCountedForStringInput() {
+    Pattern pattern = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
+    String input = "a".repeat(10_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).matches()).isTrue());
+
+    assertThat(work).isGreaterThanOrEqualTo(input.length());
+  }
+
+  @Test
+  void shiftDfaTransitionsAreCountedForUtf8Input() {
+    Pattern pattern = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
+    byte[] input = "a".repeat(10_000).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input)).matches()).isTrue());
+
+    assertThat(work).isGreaterThanOrEqualTo(input.length);
+  }
+
+  @Test
   void reverseDfaSuffixFailureIsConstantWorkForStringInput() {
     Pattern pattern = Pattern.compile("[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$");
     assertReverseDfaSuffixFailureIsConstantWork(size -> pattern.matcher("a".repeat(size)).find());
@@ -439,6 +462,33 @@ class SearchScalingRegressionTest {
         "Case-insensitive literal find");
   }
 
+  @Test
+  void preselectedUtf8DfaCandidateSkipsRedundantStartScan() {
+    Pattern pattern = Pattern.compile("\\d{3}/\\d{3}/\\d{4}");
+    byte[] bytes = ("123/456/7890" + "x".repeat(100)).getBytes(UTF_8);
+    Utf8InputScanner scanner = new Utf8InputScanner(bytes, 0, bytes.length);
+    int candidate =
+        Utf8StartAccelerator.findNextCandidate(pattern.utf8StartAccelerator(), scanner, 0);
+    Dfa dfa = pattern.forwardFirstMatchDfa();
+
+    assertThat(candidate).isZero();
+    dfa.doSearch(scanner, candidate, false, false, false);
+    long ordinaryWork =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(dfa.doSearch(scanner, candidate, false, false, false).matched())
+                    .isTrue());
+    long preselectedWork =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(dfa.doSearch(scanner, candidate, false, false, true).matched())
+                    .isTrue());
+
+    assertThat(preselectedWork)
+        .as("DFA must trust a candidate already selected by the caller")
+        .isLessThan(ordinaryWork);
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);
@@ -764,6 +814,55 @@ class SearchScalingRegressionTest {
           return pattern.matcher(sb.toString())::find;
         },
         "String");
+  }
+
+  @Test
+  void classHashChainAchievesSublinearWorkOnCaseInsensitiveLiteralForStringInput() {
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("content_length_header");
+    String text = "The quick brown fox jumps over the lazy dog. ".repeat(5); // 225 chars
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(chc.search(text, 0, WorkLimit.forRemaining(text.length())))
+                    .isEqualTo(-1));
+
+    // 225 / 6 = ~37 operations (vs 225 operations for linear scan)
+    assertThat(work)
+        .as(
+            "Class-HashChain must perform sublinear work on case-insensitive patterns for String"
+                + " input")
+        .isLessThanOrEqualTo(text.length() / 6 + 10);
+  }
+
+  @Test
+  void classHashChainAchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForStringInput() {
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("конфигурация_сервера"); // M = 20
+    String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5); // 270 chars
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(chc.search(text, 0, WorkLimit.forRemaining(text.length())))
+                    .isEqualTo(-1));
+
+    // Sublinear bound: 270 / 19 = ~14 operations (vs 270 for linear scan)
+    assertThat(work)
+        .as(
+            "ClassHashChain must perform sublinear work on non-ASCII case-insensitive patterns"
+                + " for String input")
+        .isLessThanOrEqualTo(text.length() / 15 + 10);
+  }
+
+  @Test
+  void hybridCaseInsensitiveSearchIsImmuneToFalseAnchorStormsForStringInput() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find"); // anchor is 'k' / 'K'
+    String text = "k_other_words_".repeat(20); // 280 chars with 20 'k' false anchors
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(text).find()).isFalse());
+
+    // shiftAt skips forward on false anchors, keeping work well below quadratic O(N * M)
+    assertThat(work)
+        .as("Hybrid search with shiftAt must avoid quadratic work on false anchor floods")
+        .isLessThanOrEqualTo(text.length() * 2);
   }
 
   @Test
