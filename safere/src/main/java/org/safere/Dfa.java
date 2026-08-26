@@ -1477,7 +1477,7 @@ final class Dfa {
           }
         }
       }
-      if (s.accelerator != null && !s.isStartState && (textLen - pos >= 16)) {
+      if (s.accelerator != null && (!s.isStartState || anchored) && (textLen - pos >= 16)) {
         int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, textLen);
         if (nextPos == -1) {
           pos = textLen;
@@ -1603,7 +1603,7 @@ final class Dfa {
           }
         }
       }
-      if (s.accelerator != null && !s.isStartState && (textLen - pos >= 16)) {
+      if (s.accelerator != null && (textLen - pos >= 16) && (!s.isStartState || anchored)) {
         int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, textLen);
         if (nextPos == -1) {
           pos = textLen;

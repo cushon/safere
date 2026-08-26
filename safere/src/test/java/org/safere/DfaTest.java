@@ -760,4 +760,64 @@ class DfaTest {
     }
     assertThat(matches).isEqualTo(112);
   }
+
+  @Test
+  void automataDerivedAnchoredStartStateAcceleratesSelfLoop() {
+    String regex = "[^\"]*\"";
+    Regexp re = Parser.parse(regex, FLAGS | ParseFlags.DOT_NL | ParseFlags.CLASS_NL);
+    Prog prog = Compiler.compile(re);
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    InputScanner scanner = new StringInputScanner("a".repeat(100) + "\"");
+    Dfa.State s = dfa.startState(scanner, 0, true);
+    assertThat(s.accelerator).isNotNull();
+    assertThat(s.accelerator).isInstanceOf(StateAccelerator.SingleAsciiEscape.class);
+
+    Pattern pattern = Pattern.compile(regex);
+    String matching = "a\n".repeat(2048) + "\"";
+    assertThat(pattern.matcher(matching).matches()).isTrue();
+    assertThat(pattern.matcher(Utf8Input.validated(matching.getBytes(UTF_8))).matches()).isTrue();
+
+    String noMatch = "a\n".repeat(2048);
+    assertThat(pattern.matcher(noMatch).matches()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).matches()).isFalse();
+  }
+
+  @Test
+  void automataDerivedAnchoredStartStateAcceleratesPairEscapes() {
+    String regex = "[^\"]*\"";
+    Regexp re = Parser.parse(regex, FLAGS);
+    Prog prog = Compiler.compile(re);
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    InputScanner scanner = new StringInputScanner("a".repeat(100) + "\"");
+    Dfa.State s = dfa.startState(scanner, 0, true);
+    assertThat(s.accelerator).isNotNull();
+    assertThat(s.accelerator).isInstanceOf(StateAccelerator.AsciiPairEscape.class);
+
+    Pattern pattern = Pattern.compile(regex);
+    String matching = "a".repeat(4096) + "\"";
+    assertThat(pattern.matcher(matching).matches()).isTrue();
+    assertThat(pattern.matcher(Utf8Input.validated(matching.getBytes(UTF_8))).matches()).isTrue();
+
+    String noMatch = "a".repeat(4096);
+    assertThat(pattern.matcher(noMatch).matches()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).matches()).isFalse();
+  }
+
+  @Test
+  void automataDerivedInteriorStateAcceleratesSelfLoop() {
+    String regex = "prefix:\\s*[^;]+;\\s*suffix";
+    Pattern pattern = Pattern.compile(regex);
+
+    String matching = "prefix: " + "a".repeat(4096) + "; suffix";
+    assertThat(pattern.matcher(matching).find()).isTrue();
+    assertThat(pattern.matcher(matching).matches()).isTrue();
+    assertThat(pattern.matcher(Utf8Input.validated(matching.getBytes(UTF_8))).find()).isTrue();
+    assertThat(pattern.matcher(Utf8Input.validated(matching.getBytes(UTF_8))).matches()).isTrue();
+
+    String noMatch = "prefix: " + "a".repeat(4096);
+    assertThat(pattern.matcher(noMatch).find()).isFalse();
+    assertThat(pattern.matcher(noMatch).matches()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).find()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).matches()).isFalse();
+  }
 }

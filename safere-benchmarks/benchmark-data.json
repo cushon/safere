@@ -2563,6 +2563,76 @@
       "shared": true
     },
     {
+      "id": "crossEngine.DfaInteriorLoopBenchmark.quotedString.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "start \"",
+        "unit": "x",
+        "suffix": "\" end",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaLoopMatchesBenchmark.ambiguousLoop.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "1",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaInteriorLoopBenchmark.cComment.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "/*",
+        "unit": "a",
+        "suffix": "*/",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaLoopMatchesBenchmark.wildcardQuote.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "\"",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "crossEngine.ShiftDfaBenchmark.booleanToken.input",
       "recipe": {
         "kind": "literal",
@@ -11757,6 +11827,122 @@
           10000,
           100000
         ]
+      }
+    },
+    {
+      "id": "DfaInteriorLoopBenchmark.quotedString.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "\"[^\"]*\""
+      ],
+      "inputs": [
+        "crossEngine.DfaInteriorLoopBenchmark.quotedString.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaLoopMatchesBenchmark.ambiguousLoop.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "(?s)^[a-zA-Z0-9_]*[0-9][a-zA-Z0-9_]*$"
+      ],
+      "inputs": [
+        "crossEngine.DfaLoopMatchesBenchmark.ambiguousLoop.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaInteriorLoopBenchmark.cComment.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "(?s)/\\*.*?\\*/"
+      ],
+      "inputs": [
+        "crossEngine.DfaInteriorLoopBenchmark.cComment.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaLoopMatchesBenchmark.wildcardQuote.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "(?s)^.*\"$"
+      ],
+      "inputs": [
+        "crossEngine.DfaLoopMatchesBenchmark.wildcardQuote.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
       }
     },
     {
