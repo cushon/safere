@@ -9691,6 +9691,29 @@
       }
     },
     {
+      "id": "Utf8MatchingBenchmark.literalScan.longWordPrefix",
+      "operation": "find",
+      "patterns": [
+        "coolfunctionname.*"
+      ],
+      "inputs": [
+        "utf8Matching.literalScan.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Exercises the long-literal prefix through the start accelerator rather than the pure-literal fast path, matching how SQL engines rewrite LIKE-style patterns.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "Utf8MatchingBenchmark.hardFailure.1024",
       "operation": "find",
       "patterns": [
