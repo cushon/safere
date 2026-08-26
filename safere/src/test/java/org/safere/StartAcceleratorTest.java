@@ -143,6 +143,21 @@ class StartAcceleratorTest {
     StartDescriptor descMulti = descriptor(null, false, null, multiScanInfo);
     assertThat(Utf8StartAccelerator.create(descMulti, false)).isNull();
     assertThat(StringStartAccelerator.create(descMulti, false)).isNull();
+
+    CharClassScanInfo denseUnicodeScanInfo = Pattern.compile("[0-9é]").charClassPrefix();
+    StartDescriptor denseUnicode = descriptor(null, false, null, denseUnicodeScanInfo);
+    assertThat(Utf8StartAccelerator.create(denseUnicode, false)).isNull();
+    assertThat(StringStartAccelerator.create(denseUnicode, false)).isNull();
+
+    CharClassScanInfo sparseUnicodeScanInfo = Pattern.compile("[aé]").charClassPrefix();
+    StartDescriptor sparseUnicode = descriptor(null, false, null, sparseUnicodeScanInfo);
+    assertThat(Utf8StartAccelerator.create(sparseUnicode, false)).isNotNull();
+    assertThat(StringStartAccelerator.create(sparseUnicode, false)).isNotNull();
+
+    CharClassScanInfo nonAsciiScanInfo = Pattern.compile("[éê]").charClassPrefix();
+    StartDescriptor nonAscii = descriptor(null, false, null, nonAsciiScanInfo);
+    assertThat(Utf8StartAccelerator.create(nonAscii, false)).isNotNull();
+    assertThat(StringStartAccelerator.create(nonAscii, false)).isNotNull();
   }
 
   private static StartDescriptor descriptor(
@@ -165,7 +180,7 @@ class StartAcceleratorTest {
 
   @Test
   void unicodeCharClassPrefixAcceleratesStringAndUtf8() {
-    Pattern pattern = Pattern.compile("[\\p{IsAlphabetic}]+");
+    Pattern pattern = Pattern.compile("[aéĀ]+");
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
     assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
@@ -197,8 +212,7 @@ class StartAcceleratorTest {
 
   @Test
   void unicodeCharClassPrefixResumesAsciiScanningAfterNonAsciiCodePoints() {
-    StringStartAccelerator accelerator =
-        Pattern.compile("[\\p{IsAlphabetic}]+").stringStartAccelerator();
+    StringStartAccelerator accelerator = Pattern.compile("[aéĀ]+").stringStartAccelerator();
 
     assertThat(StringStartAccelerator.findNextCandidate(accelerator, "000©000", 0, false))
         .isEqualTo(-1);

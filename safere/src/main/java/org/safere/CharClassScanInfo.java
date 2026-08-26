@@ -24,11 +24,8 @@ sealed interface CharClassScanInfo {
   int[] ranges();
 
   default boolean isSelective() {
-    if (!isAscii()) {
-      return true; // Unicode classes have wide gaps in ASCII text
-    }
     int count = Long.bitCount(bitmap0()) + Long.bitCount(bitmap1());
-    return count > 0 && count <= 3;
+    return count <= 3;
   }
 
   /** Matches 1, 2, or 3 exact ASCII characters via single-instruction SIMD equality. */
