@@ -31,7 +31,9 @@ sealed interface StringStartAccelerator {
     if (descriptor.fixedOffsetLiteral() != null) {
       return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
     }
-    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
+    if (descriptor.charClassPrefix() != null
+        && !hasWordBoundary
+        && descriptor.charClassPrefix().isSelective()) {
       return CharClass.create(descriptor.charClassPrefix());
     }
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {

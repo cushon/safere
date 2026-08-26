@@ -41,7 +41,9 @@ sealed interface Utf8StartAccelerator {
         && VectorScanProviders.teddyProviderAvailable()) {
       return new Teddy(descriptor.teddyModel());
     }
-    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
+    if (descriptor.charClassPrefix() != null
+        && !hasWordBoundary
+        && descriptor.charClassPrefix().isSelective()) {
       return new CharClass(descriptor.charClassPrefix());
     }
     if (descriptor.leadingExpansion() != null) {
