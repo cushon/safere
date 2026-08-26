@@ -143,6 +143,7 @@
                         <exclude name="StartAcceleratorDifferentialTest.java"/>
                         <exclude name="StartAcceleratorTest.java"/>
                         <exclude name="TeddyModelTest.java"/>
+                        <exclude name="TwoWaySearchTest.java"/>
                         <exclude name="UnicodeJdkConsistencyTest.java"/>
                         <exclude name="UnicodeTablesTest.java"/>
                         <exclude name="Utf8AllocationScalingTest.java"/>
