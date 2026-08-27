@@ -131,13 +131,33 @@ class StartAcceleratorTest {
     assertThat(Utf8StartAccelerator.findNextCandidate(utf8PairAcc, utf8Scanner("xxxb"), 0))
         .isEqualTo(3);
 
+    CharClassScanInfo tripleScanInfo = Pattern.compile("[abc]").charClassPrefix();
+    StartDescriptor descTriple = descriptor(null, false, null, tripleScanInfo);
+    Utf8StartAccelerator utf8TripleAcc = Utf8StartAccelerator.create(descTriple, false);
+    assertThat(utf8TripleAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
+    assertThat(utf8TripleAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+    assertThat(Utf8StartAccelerator.findNextCandidate(utf8TripleAcc, utf8Scanner("xxxc"), 0))
+        .isEqualTo(3);
+
     CharClassScanInfo multiScanInfo = Pattern.compile("[abcd]").charClassPrefix();
     StartDescriptor descMulti = descriptor(null, false, null, multiScanInfo);
-    Utf8StartAccelerator utf8MultiAcc = Utf8StartAccelerator.create(descMulti, false);
-    assertThat(utf8MultiAcc).isInstanceOf(Utf8StartAccelerator.CharClass.class);
-    assertThat(utf8MultiAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
-    assertThat(Utf8StartAccelerator.findNextCandidate(utf8MultiAcc, utf8Scanner("xxxd"), 0))
-        .isEqualTo(3);
+    assertThat(Utf8StartAccelerator.create(descMulti, false)).isNull();
+    assertThat(StringStartAccelerator.create(descMulti, false)).isNull();
+
+    CharClassScanInfo denseUnicodeScanInfo = Pattern.compile("[0-9é]").charClassPrefix();
+    StartDescriptor denseUnicode = descriptor(null, false, null, denseUnicodeScanInfo);
+    assertThat(Utf8StartAccelerator.create(denseUnicode, false)).isNull();
+    assertThat(StringStartAccelerator.create(denseUnicode, false)).isNull();
+
+    CharClassScanInfo sparseUnicodeScanInfo = Pattern.compile("[aé]").charClassPrefix();
+    StartDescriptor sparseUnicode = descriptor(null, false, null, sparseUnicodeScanInfo);
+    assertThat(Utf8StartAccelerator.create(sparseUnicode, false)).isNotNull();
+    assertThat(StringStartAccelerator.create(sparseUnicode, false)).isNotNull();
+
+    CharClassScanInfo nonAsciiScanInfo = Pattern.compile("[éê]").charClassPrefix();
+    StartDescriptor nonAscii = descriptor(null, false, null, nonAsciiScanInfo);
+    assertThat(Utf8StartAccelerator.create(nonAscii, false)).isNotNull();
+    assertThat(StringStartAccelerator.create(nonAscii, false)).isNotNull();
   }
 
   private static StartDescriptor descriptor(
@@ -160,7 +180,7 @@ class StartAcceleratorTest {
 
   @Test
   void unicodeCharClassPrefixAcceleratesStringAndUtf8() {
-    Pattern pattern = Pattern.compile("[\\p{IsAlphabetic}]+");
+    Pattern pattern = Pattern.compile("[aéĀ]+");
     StringStartAccelerator strAcc = pattern.stringStartAccelerator();
     assertThat(strAcc).isInstanceOf(StringStartAccelerator.CharClass.class);
     assertThat(strAcc.policy()).isEqualTo(AcceleratorPolicy.CHAR_CLASS);
@@ -192,8 +212,7 @@ class StartAcceleratorTest {
 
   @Test
   void unicodeCharClassPrefixResumesAsciiScanningAfterNonAsciiCodePoints() {
-    StringStartAccelerator accelerator =
-        Pattern.compile("[\\p{IsAlphabetic}]+").stringStartAccelerator();
+    StringStartAccelerator accelerator = Pattern.compile("[aéĀ]+").stringStartAccelerator();
 
     assertThat(StringStartAccelerator.findNextCandidate(accelerator, "000©000", 0, false))
         .isEqualTo(-1);
@@ -263,13 +282,17 @@ class StartAcceleratorTest {
     assertThat(caseInsensitivePat.utf8StartAccelerator().policy().strategy())
         .isEqualTo(MatchStrategy.LITERAL);
 
-    Pattern charClassPat = Pattern.compile("[0-9][a-z]+");
+    Pattern charClassPat = Pattern.compile("[0-2][a-z]+");
     assertThat(charClassPat.stringStartAccelerator()).isNotNull();
     assertThat(charClassPat.utf8StartAccelerator()).isNotNull();
     assertThat(charClassPat.stringStartAccelerator().policy())
         .isEqualTo(AcceleratorPolicy.CHAR_CLASS);
     assertThat(charClassPat.utf8StartAccelerator().policy())
         .isEqualTo(AcceleratorPolicy.CHAR_CLASS);
+
+    Pattern broadCharClassPat = Pattern.compile("[0-9][a-z]+");
+    assertThat(broadCharClassPat.stringStartAccelerator()).isNull();
+    assertThat(broadCharClassPat.utf8StartAccelerator()).isNull();
 
     Pattern fixedOffsetPat = Pattern.compile("..needle");
     assertThat(fixedOffsetPat.stringStartAccelerator()).isNotNull();

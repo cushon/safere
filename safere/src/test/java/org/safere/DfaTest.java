@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Random;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -742,6 +743,22 @@ class DfaTest {
     Pattern pattern = Pattern.compile(regex);
     assertThat(pattern.matcher(input).find()).isTrue();
     assertThat(pattern.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
+  }
+
+  @Test
+  void matchDenseNumericFindAllDoesNotUseStartAcceleration() {
+    Pattern pattern = Pattern.compile("\\d{3}/\\d{3}/\\d{4}");
+    byte[] text = new byte[32768];
+    Random random = new Random(42);
+    for (int i = 0; i < text.length; i++) {
+      text[i] = (byte) (47 + random.nextInt(11)); // '/', '0'-'9'
+    }
+    Utf8Matcher matcher = pattern.matcher(Utf8Input.trusted(text, 0, text.length));
+    int matches = 0;
+    while (matcher.find()) {
+      matches++;
+    }
+    assertThat(matches).isEqualTo(112);
   }
 
   @Test

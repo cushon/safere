@@ -727,8 +727,7 @@ final class Dfa {
     }
 
     int escapeCount = 0;
-    int[] escapes = new int[4];
-    AsciiBitmap.Builder escapeBitmap = null;
+    int[] escapes = new int[3];
     int[] seeds = new int[insts.length];
 
     for (int ch = 0; ch < 128; ch++) {
@@ -740,18 +739,13 @@ final class Dfa {
         }
       }
       if (seedCount == 0 || !Arrays.equals(expand(seeds, seedCount, 0), insts)) {
-        if (escapeCount < 4) {
+        if (escapeCount < 3) {
           escapes[escapeCount] = ch;
-        } else if (escapeBitmap == null) {
-          escapeBitmap = new AsciiBitmap.Builder();
-          for (int i = 0; i < 4; i++) {
-            escapeBitmap.add(escapes[i]);
-          }
-        }
-        if (escapeBitmap != null) {
-          escapeBitmap.add(ch);
         }
         escapeCount++;
+        if (escapeCount > 3) {
+          return null;
+        }
       }
     }
 
@@ -775,23 +769,12 @@ final class Dfa {
       }
     }
 
-    if (escapeCount >= 1 && escapeCount <= 3) {
-      if (escapeCount == 1) {
-        return new StateAccelerator.SingleAsciiEscape(escapes[0]);
-      } else if (escapeCount == 2) {
-        return new StateAccelerator.AsciiPairEscape(escapes[0], escapes[1]);
-      } else {
-        return new StateAccelerator.AsciiTripleEscape(escapes[0], escapes[1], escapes[2]);
-      }
-    }
-    if (escapeBitmap != null && escapeCount < 128) {
-      AsciiBitmap bitmap = escapeBitmap.build();
-      int[] ranges = bitmap.toRanges();
-      if (ranges.length <= 8) {
-        return new StateAccelerator.CharClassEscape(ranges, bitmap.bitmap0(), bitmap.bitmap1());
-      }
-    }
-    return null;
+    return switch (escapeCount) {
+      case 1 -> new StateAccelerator.SingleAsciiEscape(escapes[0]);
+      case 2 -> new StateAccelerator.AsciiPairEscape(escapes[0], escapes[1]);
+      case 3 -> new StateAccelerator.AsciiTripleEscape(escapes[0], escapes[1], escapes[2]);
+      default -> null;
+    };
   }
 
   /** Returns whether this DFA was constructed with start-position acceleration enabled. */
@@ -1494,23 +1477,23 @@ final class Dfa {
           }
         }
       }
+      if (s.accelerator != null && (!s.isStartState || anchored) && (textLen - pos >= 16)) {
+        int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, textLen);
+        if (nextPos == -1) {
+          pos = textLen;
+          break;
+        }
+        if (nextPos > pos) {
+          pos = nextPos;
+          if (pos >= textLen) {
+            break;
+          }
+        }
+      }
       int limit =
           hasPositionDependentTransitions ? Math.min(textLen, posDepThreshold - 1) : textLen;
       int sId = s.id * numClasses;
       while (pos < limit) {
-        if (s.accelerator != null && (limit - pos >= 16) && (!s.isStartState || anchored)) {
-          int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, limit);
-          if (nextPos == -1) {
-            pos = limit;
-            break;
-          }
-          if (nextPos > pos) {
-            pos = nextPos;
-            if (pos >= limit) {
-              break;
-            }
-          }
-        }
         int ch = text.asciiAt(pos);
         if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
           break;
@@ -1535,7 +1518,6 @@ final class Dfa {
           }
         }
         sId = nsId;
-        s = offsetToState[sId];
         pos++;
       }
       s = offsetToState[sId];
