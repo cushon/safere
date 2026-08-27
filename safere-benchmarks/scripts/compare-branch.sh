@@ -27,12 +27,12 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
 ORIGINAL_BRANCH="$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)"
-COMPARE_PY="$(mktemp /tmp/compare_benchmarks_XXXXXX.py)"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/compare_benchmarks_XXXXXX")"
+COMPARE_PY="$TMP_DIR/compare-benchmarks.py"
 cp "$SCRIPT_DIR/compare-benchmarks.py" "$COMPARE_PY"
-TEMP_FILES=("$COMPARE_PY")
 
 cleanup() {
-  rm -f "${TEMP_FILES[@]}"
+  rm -rf "$TMP_DIR"
   current_head="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || git rev-parse HEAD)"
   if [ "$current_head" != "$ORIGINAL_BRANCH" ]; then
     git checkout -q "$ORIGINAL_BRANCH" || true
@@ -174,11 +174,10 @@ case "$VARIANT" in
     ;;
 esac
 
-BASELINE_TXT="$(mktemp /tmp/baseline_XXXXXX.txt)"
-CURRENT_TXT="$(mktemp /tmp/current_XXXXXX.txt)"
-BASELINE_JSONL="$(mktemp /tmp/baseline_XXXXXX.jsonl)"
-CURRENT_JSONL="$(mktemp /tmp/current_XXXXXX.jsonl)"
-TEMP_FILES+=("$BASELINE_TXT" "$CURRENT_TXT" "$BASELINE_JSONL" "$CURRENT_JSONL")
+BASELINE_TXT="$TMP_DIR/baseline.txt"
+CURRENT_TXT="$TMP_DIR/current.txt"
+BASELINE_JSONL="$TMP_DIR/baseline.jsonl"
+CURRENT_JSONL="$TMP_DIR/current.jsonl"
 
 VECTOR_ARGS=()
 if [ "$FORCE_VECTOR" = true ]; then
@@ -192,22 +191,22 @@ fi
 # 2. Run Baseline
 echo "=== Running Baseline: $BASELINE_REF ==="
 git checkout -q --detach "$BASELINE_COMMIT"
-./run-java-benchmarks.sh "${MODE_ARGS[@]}" --fastbuild CrossEngineBenchmark.run -- \
+./run-java-benchmarks.sh ${MODE_ARGS[@]+"${MODE_ARGS[@]}"} --fastbuild CrossEngineBenchmark.run -- \
   -p crossEngineTrial="$TRIALS" \
-  "${VECTOR_ARGS[@]}" | tee "$BASELINE_TXT"
+  ${VECTOR_ARGS[@]+"${VECTOR_ARGS[@]}"} | tee "$BASELINE_TXT"
 python3 "$COMPARE_PY" --jmh "$BASELINE_TXT" --output-jsonl "$BASELINE_JSONL"
-sed -i -E 's/"engine"[[:space:]]*:[[:space:]]*"[^"]+"/"engine":"baseline"/' "$BASELINE_JSONL"
+sed -E 's/"engine"[[:space:]]*:[[:space:]]*"[^"]+"/"engine":"baseline"/' "$BASELINE_JSONL" > "$TMP_DIR/baseline_norm.jsonl" && mv "$TMP_DIR/baseline_norm.jsonl" "$BASELINE_JSONL"
 
 # 3. Run Current
 echo "=== Running Current: $CURRENT_REF ==="
 mvn -pl safere-benchmarks -am clean -q
 git checkout -q --detach "$CURRENT_COMMIT"
 mvn -pl safere-benchmarks -am clean -q
-./run-java-benchmarks.sh "${MODE_ARGS[@]}" --fastbuild CrossEngineBenchmark.run -- \
+./run-java-benchmarks.sh ${MODE_ARGS[@]+"${MODE_ARGS[@]}"} --fastbuild CrossEngineBenchmark.run -- \
   -p crossEngineTrial="$TRIALS" \
-  "${VECTOR_ARGS[@]}" | tee "$CURRENT_TXT"
+  ${VECTOR_ARGS[@]+"${VECTOR_ARGS[@]}"} | tee "$CURRENT_TXT"
 python3 "$COMPARE_PY" --jmh "$CURRENT_TXT" --output-jsonl "$CURRENT_JSONL"
-sed -i -E 's/"engine"[[:space:]]*:[[:space:]]*"[^"]+"/"engine":"current"/' "$CURRENT_JSONL"
+sed -E 's/"engine"[[:space:]]*:[[:space:]]*"[^"]+"/"engine":"current"/' "$CURRENT_JSONL" > "$TMP_DIR/current_norm.jsonl" && mv "$TMP_DIR/current_norm.jsonl" "$CURRENT_JSONL"
 
 # 4. Render Table
 echo ""
@@ -223,4 +222,4 @@ fi
 python3 "$COMPARE_PY" \
   --json "$BASELINE_JSONL" "$CURRENT_JSONL" \
   --engines baseline,current \
-  "${EXTRA_ARGS[@]}"
+  ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
