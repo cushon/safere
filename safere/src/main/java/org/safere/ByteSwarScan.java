@@ -408,6 +408,16 @@ abstract class ByteSwarScan {
         return -2;
       }
     }
+    return scalarTail(bytes, offset, length, literal, position);
+  }
+
+  /**
+   * Scans the trailing bytes that the word loop could not cover (fewer than {@link Long#BYTES} plus
+   * the literal length). Kept out of {@link #indexOfFiltered} so the hot word loop stays within
+   * C2's inlining budget; merging this loop into it measurably deoptimizes the SWAR loop.
+   */
+  private static int scalarTail(
+      byte[] bytes, int offset, int length, byte[] literal, int position) {
     while (position <= length - literal.length) {
       if (matchesAt(bytes, offset, literal, position)) {
         return position;
