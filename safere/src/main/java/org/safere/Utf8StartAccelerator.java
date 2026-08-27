@@ -41,6 +41,9 @@ sealed interface Utf8StartAccelerator {
         && VectorScanProviders.teddyProviderAvailable()) {
       return new Teddy(descriptor.teddyModel());
     }
+    if (descriptor.wuManberModel() != null && !hasWordBoundary) {
+      return new WuManber(descriptor.wuManberModel());
+    }
     if (descriptor.charClassPrefix() != null
         && !hasWordBoundary
         && descriptor.charClassPrefix().isSelective()) {
@@ -78,6 +81,7 @@ sealed interface Utf8StartAccelerator {
       case CharClass cc -> cc.findCandidate(scanner, pos);
       case Teddy t -> t.findCandidate(scanner, pos);
       case MultiLiteral ml -> ml.findCandidate(scanner, pos);
+      case WuManber wm -> wm.findCandidate(scanner, pos);
       case LeadingExpansion le -> le.findCandidate(scanner, pos);
     };
   }
@@ -368,6 +372,17 @@ sealed interface Utf8StartAccelerator {
         }
       }
       return -1;
+    }
+  }
+
+  record WuManber(WuManberModel model) implements Utf8StartAccelerator {
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.WU_MANBER;
+    }
+
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      return model.findCandidate(scanner, fromIndex);
     }
   }
 }

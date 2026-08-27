@@ -36,6 +36,9 @@ sealed interface StringStartAccelerator {
         && descriptor.charClassPrefix().isSelective()) {
       return CharClass.create(descriptor.charClassPrefix());
     }
+    if (descriptor.wuManberModel() != null && !hasWordBoundary) {
+      return new WuManber(descriptor.wuManberModel());
+    }
     if (descriptor.lineAnchor() != null && !hasWordBoundary) {
       return new LineAnchor(descriptor.lineAnchor());
     }
@@ -69,6 +72,7 @@ sealed interface StringStartAccelerator {
       case CaseInsensitiveLiteral cil -> cil.findCandidate(text, fromIndex, unixLines);
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
+      case WuManber wm -> wm.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
       case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
     };
@@ -395,6 +399,17 @@ sealed interface StringStartAccelerator {
         searchPos = innerMatch + 1;
       }
       return -1;
+    }
+  }
+
+  record WuManber(WuManberModel model) implements StringStartAccelerator {
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.WU_MANBER;
+    }
+
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
+      return model.findCandidate(text, fromIndex);
     }
   }
 }

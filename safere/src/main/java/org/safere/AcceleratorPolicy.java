@@ -43,6 +43,10 @@ record AcceleratorPolicy(
   /** Policy for line anchor ('^', '$') boundary acceleration. */
   static final AcceleratorPolicy LINE_ANCHOR = new AcceleratorPolicy(16, 3, false, null);
 
+  /** Policy for Wu-Manber multi-pattern sublinear search. */
+  static final AcceleratorPolicy WU_MANBER =
+      new AcceleratorPolicy(32, 4, true, MatchStrategy.LITERAL);
+
   /** Default fallback policy for generic or composite accelerators. */
   static final AcceleratorPolicy DEFAULT = new AcceleratorPolicy(32, 3, false, null);
 }

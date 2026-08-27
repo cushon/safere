@@ -485,12 +485,20 @@ public final class Pattern implements Serializable {
     if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
       teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
     }
+    WuManberModel wuManberModel = null;
+    if (altLiterals != null
+        && altLiterals.length >= 4
+        && altLiterals.length <= 512
+        && (altLiterals.length > 32 || teddyModel == null)) {
+      wuManberModel = WuManberModel.compile(altLiterals);
+    }
     StartAcceleration startAcceleration =
         (prefix == null
                 && ccPrefix == null
                 && fixedOffsetLiteral == null
                 && multiLiteral == null
-                && teddyModel == null)
+                && teddyModel == null
+                && wuManberModel == null)
             ? extractStartAcceleration(metadataAst)
             : null;
     Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
@@ -507,7 +515,8 @@ public final class Pattern implements Serializable {
         (allowLeadingExpansion
                 && prefix == null
                 && fixedOffsetLiteral == null
-                && teddyModel == null)
+                && teddyModel == null
+                && wuManberModel == null)
             ? extractLeadingExpansion(metadataAst)
             : null;
     if (leadingExpansion != null) {
@@ -522,6 +531,7 @@ public final class Pattern implements Serializable {
         && anchoredPrefix == null
         && anchoredCharClassPrefix == null
         && teddyModel == null
+        && wuManberModel == null
         && leadingExpansion == null) {
       return StartDescriptor.NONE;
     }
@@ -535,6 +545,7 @@ public final class Pattern implements Serializable {
         anchoredCharClassPrefix,
         multiLiteral,
         teddyModel,
+        wuManberModel,
         leadingExpansion);
   }
 

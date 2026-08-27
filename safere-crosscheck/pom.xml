@@ -158,6 +158,7 @@
                         <exclude name="WalkerTest.java"/>
                         <exclude name="WorkCounterTest.java"/>
                         <exclude name="WorkLimitTest.java"/>
+                        <exclude name="WuManberTest.java"/>
                       </fileset>
                       <filterchain>
                         <replaceregex

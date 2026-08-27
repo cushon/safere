@@ -22,6 +22,7 @@ record StartDescriptor(
     CharClassScanInfo anchoredCharClassPrefix,
     MultiLiteralInfo multiLiteral,
     TeddyModel teddyModel,
+    WuManberModel wuManberModel,
     LeadingExpansion leadingExpansion,
     ClassHashChain classHashChain) {
 
@@ -32,7 +33,7 @@ record StartDescriptor(
       StartDescriptor innerDescriptor) {}
 
   static final StartDescriptor NONE =
-      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null);
+      new StartDescriptor(null, false, null, null, null, null, null, null, null, null, null, null);
 
   StartDescriptor(
       String prefix,
@@ -44,6 +45,7 @@ record StartDescriptor(
       CharClassScanInfo anchoredCharClassPrefix,
       MultiLiteralInfo multiLiteral,
       TeddyModel teddyModel,
+      WuManberModel wuManberModel,
       LeadingExpansion leadingExpansion) {
     this(
         prefix,
@@ -55,6 +57,7 @@ record StartDescriptor(
         anchoredCharClassPrefix,
         multiLiteral,
         teddyModel,
+        wuManberModel,
         leadingExpansion,
         compileClassHashChain(prefix, prefixFoldCase));
   }
@@ -70,6 +73,7 @@ record StartDescriptor(
         || lineAnchor != null
         || multiLiteral != null
         || teddyModel != null
+        || wuManberModel != null
         || leadingExpansion != null;
   }
 }

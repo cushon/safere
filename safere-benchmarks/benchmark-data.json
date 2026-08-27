@@ -171,6 +171,36 @@
       "shared": true
     },
     {
+      "id": "crossEngine.DictionaryBenchmark.httpHeadersFind.input",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "The quick brown fox jumps over the lazy dog. ",
+        "suffix": "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DictionaryBenchmark.mimeTypesFind.input",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ",
+        "suffix": "Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DictionaryBenchmark.sqlKeywordsFind.input",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ",
+        "suffix": "SEMANTICSIMILARITYTABLE",
+        "length": 32768
+      },
+      "shared": true
+    },
+    {
       "id": "crossEngine.RegexBenchmark.captureGroups.input",
       "recipe": {
         "kind": "literal",
@@ -2731,6 +2761,60 @@
         "crossEngine.RegexBenchmark.alternationFind.input"
       ],
       "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "DictionaryBenchmark.httpHeadersFind",
+      "operation": "find",
+      "patterns": [
+        "Accept|Accept-Charset|Accept-Encoding|Accept-Language|Authorization|Cache-Control|Connection|Content-Disposition|Content-Encoding|Content-Language|Content-Length|Content-Location|Content-Range|Content-Type|Cookie|Date|ETag|Expect|Expires|Forwarded|From|Host|If-Match|If-Modified-Since|If-None-Match|If-Range|If-Unmodified-Since|Origin|Pragma|Proxy-Authorization|Range|Referer|User-Agent"
+      ],
+      "inputs": [
+        "crossEngine.DictionaryBenchmark.httpHeadersFind.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "DictionaryBenchmark.mimeTypesFind",
+      "operation": "find",
+      "patterns": [
+        "application/atom+xml|application/epub+zip|application/gzip|application/json|application/ld+json|application/msword|application/octet-stream|application/ogg|application/pdf|application/rtf|application/vnd.ms-excel|application/vnd.ms-powerpoint|application/vnd.oasis.opendocument.text|application/vnd.openxmlformats-officedocument.presentationml.presentation|application/vnd.openxmlformats-officedocument.spreadsheetml.sheet|application/vnd.openxmlformats-officedocument.wordprocessingml.document|application/x-7z-compressed|application/x-bzip2|application/x-csh|application/x-freearc|application/x-sh|application/x-tar|application/xhtml+xml|application/xml|application/zip|application/zstd|audio/aac|audio/midi|audio/mp4|audio/mpeg|audio/ogg|audio/opus|audio/wav|audio/webm|font/otf|font/ttf|font/woff|font/woff2|image/avif|image/bmp|image/gif|image/jpeg|image/png|image/svg+xml|image/tiff|image/vnd.microsoft.icon|image/webp|message/rfc822|model/gltf+json|model/gltf-binary|multipart/byteranges|multipart/encrypted|multipart/form-data|multipart/mixed|multipart/related|multipart/signed|text/calendar|text/css|text/csv|text/html|text/javascript|text/markdown|text/plain|text/xml|video/mp4|video/mpeg|video/ogg|video/quicktime|video/webm"
+      ],
+      "inputs": [
+        "crossEngine.DictionaryBenchmark.mimeTypesFind.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "DictionaryBenchmark.sqlKeywordsFind",
+      "operation": "find",
+      "patterns": [
+        "ADD|ALL|ALTER|AND|ANY|AS|ASC|AUTHORIZATION|BACKUP|BEGIN|BETWEEN|BREAK|BROWSE|BULK|BY|CASCADE|CASE|CHECK|CHECKPOINT|CLOSE|CLUSTERED|COALESCE|COLLATE|COLUMN|COMMIT|COMPUTE|CONSTRAINT|CONTAINS|CONTAINSTABLE|CONTINUE|CONVERT|CREATE|CROSS|CURRENT|CURRENT_DATE|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_USER|CURSOR|DATABASE|DBCC|DEALLOCATE|DECLARE|DEFAULT|DELETE|DENY|DESC|DISK|DISTINCT|DISTRIBUTED|DOUBLE|DROP|DUMP|ELSE|END|ERRLVL|ESCAPE|EXCEPT|EXEC|EXECUTE|EXISTS|EXIT|EXTERNAL|FETCH|FILE|FILLFACTOR|FOR|FOREIGN|FREETEXT|FREETEXTTABLE|FROM|FULL|FUNCTION|GOTO|GRANT|GROUP|HAVING|HOLDLOCK|IDENTITY|IDENTITYCOL|IDENTITY_INSERT|IF|IN|INDEX|INNER|INSERT|INTERSECT|INTO|IS|JOIN|KEY|KILL|LEFT|LIKE|LINENO|LOAD|MERGE|NATIONAL|NOCHECK|NONCLUSTERED|NOT|NULL|NULLIF|OF|OFF|OFFSETS|ON|OPEN|OPENDATASOURCE|OPENQUERY|OPENROWSET|OPENXML|OPTION|OR|ORDER|OUTER|OVER|PERCENT|PIVOT|PLAN|PRECISION|PRIMARY|PRINT|PROC|PROCEDURE|PUBLIC|RAISERROR|READ|READTEXT|RECONFIGURE|REFERENCES|REPLICATION|RESTORE|RESTRICT|RETURN|REVERT|REVOKE|RIGHT|ROLLBACK|ROWCOUNT|ROWGUIDCOL|RULE|SAVE|SCHEMA|SECURITYAUDIT|SELECT|SEMANTICKEYPHRASETABLE|SEMANTICSIMILARITYDETAILSTABLE|SEMANTICSIMILARITYTABLE|SESSION_USER|SET|SETUSER|SHUTDOWN|SOME|STATISTICS|SYSTEM_USER|TABLE|TABLESAMPLE|TEXTSIZE|THEN|TO|TOP|TRAN|TRANSACTION|TRIGGER|TRUNCATE|TRY_CONVERT|TSEQUAL|UNION|UNIQUE|UNPIVOT|UPDATE|UPDATETEXT|USE|USER|VALUES|VARYING|VIEW|WAITFOR|WHEN|WHERE|WHILE|WITH|WITHIN GROUP|WRITETEXT"
+      ],
+      "inputs": [
+        "crossEngine.DictionaryBenchmark.sqlKeywordsFind.input"
+      ],
+      "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
