@@ -3808,49 +3808,11 @@ public final class Pattern implements Serializable {
   }
 
   private static int[] literalFailure(int[] literal) {
-    int[] failure = new int[literal.length];
-    int matched = 0;
-    for (int index = 1; index < literal.length; index++) {
-      while (matched > 0 && literal[index] != literal[matched]) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record();
-        }
-        matched = failure[matched - 1];
-      }
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      if (literal[index] == literal[matched]) {
-        matched++;
-      }
-      failure[index] = matched;
-    }
-    return failure;
+    return Kmp.literalFailure(literal);
   }
 
   private static boolean containsCodePointSequence(int[] value, int[] candidate, int[] failure) {
-    if (candidate.length == 0) {
-      return true;
-    }
-    int matched = 0;
-    for (int codePoint : value) {
-      while (matched > 0 && codePoint != candidate[matched]) {
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record();
-        }
-        matched = failure[matched - 1];
-      }
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      if (codePoint == candidate[matched]) {
-        matched++;
-        if (matched == candidate.length) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return Kmp.containsCodePointSequence(value, candidate, failure);
   }
 
   private static CharClass literalCharClass(int cp, int flags) {
