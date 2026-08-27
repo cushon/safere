@@ -25,35 +25,11 @@ final class TwoWay {
   private TwoWay() {}
 
   // =============================================================================================
-  // 1. Exact UTF-8 byte[] search
+  // Factorization Helpers (Maximal Suffix & Period Computation)
+  // Packed into primitive long: [63..32] = ell, [31..1] = period, [0] = isPeriodic (1 or 0)
   // =============================================================================================
 
-  static int indexOf(byte[] bytes, int offset, int length, byte[] literal, int start) {
-    int literalLen = literal.length;
-    if (literalLen == 0) {
-      return Math.min(Math.max(0, start), length);
-    }
-    if (literalLen == 1) {
-      byte target = literal[0];
-      int startIdx = Math.max(0, start);
-      for (int i = startIdx; i < length; i++) {
-        if (bytes[offset + i] == target) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record(i - startIdx + 1);
-          }
-          return i;
-        }
-      }
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record(length - startIdx);
-      }
-      return -1;
-    }
-    int s = Math.max(0, start);
-    if (s >= length || literalLen > length - s) {
-      return -1;
-    }
-
+  static long factorize(byte[] literal, int literalLen) {
     int ms1 = -1;
     int j = 0;
     int k = 1;
@@ -109,92 +85,16 @@ final class TwoWay {
 
     boolean isPeriodic = true;
     for (int i = 0; i < ell; i++) {
-      if (!(literal[i] == literal[i + period])) {
+      if (literal[i] != literal[i + period]) {
         isPeriodic = false;
         break;
       }
     }
 
-    int memory = 0;
-    if (isPeriodic) {
-      while (s <= length - literalLen) {
-        int i = Math.max(ell, memory);
-        int startI = i;
-        while (i < literalLen && literal[i] == bytes[offset + s + i]) {
-          i++;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          memory = 0;
-          continue;
-        }
-        int jj = ell - 1;
-        int startJj = jj;
-        while (jj >= memory && literal[jj] == bytes[offset + s + jj]) {
-          jj--;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
-        }
-        if (jj < memory) {
-          return s;
-        }
-        s += period;
-        memory = literalLen - period;
-      }
-    } else {
-      int periodJump = Math.max(ell, literalLen - ell) + 1;
-      while (s <= length - literalLen) {
-        int i = ell;
-        int startI = i;
-        while (i < literalLen && literal[i] == bytes[offset + s + i]) {
-          i++;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          continue;
-        }
-        int jj = ell - 1;
-        int startJj = jj;
-        while (jj >= 0 && literal[jj] == bytes[offset + s + jj]) {
-          jj--;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
-        }
-        if (jj < 0) {
-          return s;
-        }
-        s += periodJump;
-      }
-    }
-    return -1;
+    return ((long) ell << 32) | ((long) period << 1) | (isPeriodic ? 1L : 0L);
   }
 
-  // =============================================================================================
-  // 2. ASCII Case-Insensitive String search
-  // =============================================================================================
-
-  static int indexOfIgnoreCase(String text, String prefix, int start) {
-    int literalLen = prefix.length();
-    if (literalLen == 0) {
-      return Math.min(Math.max(0, start), text.length());
-    }
-    if (literalLen == 1) {
-      return Ascii.indexOfIgnoreCase(text, prefix.charAt(0), start);
-    }
-    int s = Math.max(0, start);
-    int textLen = text.length();
-    if (s >= textLen || literalLen > textLen - s) {
-      return -1;
-    }
-
+  static long factorizeIgnoreCase(String prefix, int literalLen) {
     int ms1 = -1;
     int j = 0;
     int k = 1;
@@ -250,70 +150,211 @@ final class TwoWay {
 
     boolean isPeriodic = true;
     for (int i = 0; i < ell; i++) {
-      if (!(toLowerCase(prefix.charAt(i)) == toLowerCase(prefix.charAt(i + period)))) {
+      if (toLowerCase(prefix.charAt(i)) != toLowerCase(prefix.charAt(i + period))) {
         isPeriodic = false;
         break;
       }
     }
 
+    return ((long) ell << 32) | ((long) period << 1) | (isPeriodic ? 1L : 0L);
+  }
+
+  // =============================================================================================
+  // 1. Exact UTF-8 byte[] search
+  // =============================================================================================
+
+  static int indexOf(byte[] bytes, int offset, int length, byte[] literal, int start) {
+    int literalLen = literal.length;
+    if (literalLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    if (literalLen == 1) {
+      byte target = literal[0];
+      int startIdx = Math.max(0, start);
+      for (int i = startIdx; i < length; i++) {
+        if (bytes[offset + i] == target) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(i - startIdx + 1);
+          }
+          return i;
+        }
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(length - startIdx);
+      }
+      return -1;
+    }
+    int s = Math.max(0, start);
+    if (s >= length || literalLen > length - s) {
+      return -1;
+    }
+    long factor = factorize(literal, literalLen);
+    int ell = (int) (factor >>> 32);
+    int period = (int) ((factor & 0xFFFFFFFFL) >>> 1);
+    return (factor & 1L) != 0
+        ? searchPeriodic(bytes, offset, length, literal, literalLen, ell, period, s)
+        : searchAperiodic(bytes, offset, length, literal, literalLen, ell, s);
+  }
+
+  private static int searchPeriodic(
+      byte[] bytes,
+      int offset,
+      int length,
+      byte[] literal,
+      int literalLen,
+      int ell,
+      int period,
+      int s) {
     int memory = 0;
-    if (isPeriodic) {
-      while (s <= textLen - literalLen) {
-        int i = Math.max(ell, memory);
-        int startI = i;
-        while (i < literalLen && toLowerCase(prefix.charAt(i)) == toLowerCase(text.charAt(s + i))) {
-          i++;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          memory = 0;
-          continue;
-        }
-        int jj = ell - 1;
-        int startJj = jj;
-        while (jj >= memory && toLowerCase(prefix.charAt(jj)) == toLowerCase(text.charAt(s + jj))) {
-          jj--;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
-        }
-        if (jj < memory) {
-          return s;
-        }
-        s += period;
-        memory = literalLen - period;
+    while (s <= length - literalLen) {
+      int i = Math.max(ell, memory);
+      int startI = i;
+      while (i < literalLen && literal[i] == bytes[offset + s + i]) {
+        i++;
       }
-    } else {
-      int periodJump = Math.max(ell, literalLen - ell) + 1;
-      while (s <= textLen - literalLen) {
-        int i = ell;
-        int startI = i;
-        while (i < literalLen && toLowerCase(prefix.charAt(i)) == toLowerCase(text.charAt(s + i))) {
-          i++;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          continue;
-        }
-        int jj = ell - 1;
-        int startJj = jj;
-        while (jj >= 0 && toLowerCase(prefix.charAt(jj)) == toLowerCase(text.charAt(s + jj))) {
-          jj--;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
-        }
-        if (jj < 0) {
-          return s;
-        }
-        s += periodJump;
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
       }
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        memory = 0;
+        continue;
+      }
+      int jj = ell - 1;
+      int startJj = jj;
+      while (jj >= memory && literal[jj] == bytes[offset + s + jj]) {
+        jj--;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
+      }
+      if (jj < memory) {
+        return s;
+      }
+      s += period;
+      memory = literalLen - period;
+    }
+    return -1;
+  }
+
+  private static int searchAperiodic(
+      byte[] bytes, int offset, int length, byte[] literal, int literalLen, int ell, int s) {
+    int periodJump = Math.max(ell, literalLen - ell) + 1;
+    while (s <= length - literalLen) {
+      int i = ell;
+      int startI = i;
+      while (i < literalLen && literal[i] == bytes[offset + s + i]) {
+        i++;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
+      }
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        continue;
+      }
+      int jj = ell - 1;
+      int startJj = jj;
+      while (jj >= 0 && literal[jj] == bytes[offset + s + jj]) {
+        jj--;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
+      }
+      if (jj < 0) {
+        return s;
+      }
+      s += periodJump;
+    }
+    return -1;
+  }
+
+  // =============================================================================================
+  // 2. ASCII Case-Insensitive String search
+  // =============================================================================================
+
+  static int indexOfIgnoreCase(String text, String prefix, int start) {
+    int literalLen = prefix.length();
+    if (literalLen == 0) {
+      return Math.min(Math.max(0, start), text.length());
+    }
+    if (literalLen == 1) {
+      return Ascii.indexOfIgnoreCase(text, prefix.charAt(0), start);
+    }
+    int s = Math.max(0, start);
+    int textLen = text.length();
+    if (s >= textLen || literalLen > textLen - s) {
+      return -1;
+    }
+    long factor = factorizeIgnoreCase(prefix, literalLen);
+    int ell = (int) (factor >>> 32);
+    int period = (int) ((factor & 0xFFFFFFFFL) >>> 1);
+    return (factor & 1L) != 0
+        ? searchPeriodic(text, prefix, literalLen, ell, period, s)
+        : searchAperiodic(text, prefix, literalLen, ell, s);
+  }
+
+  private static int searchPeriodic(
+      String text, String prefix, int literalLen, int ell, int period, int s) {
+    int memory = 0;
+    while (s <= text.length() - literalLen) {
+      int i = Math.max(ell, memory);
+      int startI = i;
+      while (i < literalLen && toLowerCase(prefix.charAt(i)) == toLowerCase(text.charAt(s + i))) {
+        i++;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
+      }
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        memory = 0;
+        continue;
+      }
+      int jj = ell - 1;
+      int startJj = jj;
+      while (jj >= memory && toLowerCase(prefix.charAt(jj)) == toLowerCase(text.charAt(s + jj))) {
+        jj--;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
+      }
+      if (jj < memory) {
+        return s;
+      }
+      s += period;
+      memory = literalLen - period;
+    }
+    return -1;
+  }
+
+  private static int searchAperiodic(String text, String prefix, int literalLen, int ell, int s) {
+    int periodJump = Math.max(ell, literalLen - ell) + 1;
+    while (s <= text.length() - literalLen) {
+      int i = ell;
+      int startI = i;
+      while (i < literalLen && toLowerCase(prefix.charAt(i)) == toLowerCase(text.charAt(s + i))) {
+        i++;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
+      }
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        continue;
+      }
+      int jj = ell - 1;
+      int startJj = jj;
+      while (jj >= 0 && toLowerCase(prefix.charAt(jj)) == toLowerCase(text.charAt(s + jj))) {
+        jj--;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
+      }
+      if (jj < 0) {
+        return s;
+      }
+      s += periodJump;
     }
     return -1;
   }
@@ -345,130 +386,87 @@ final class TwoWay {
     if (s >= length || literalLen > length - s) {
       return -1;
     }
+    long factor = factorizeIgnoreCase(prefix, literalLen);
+    int ell = (int) (factor >>> 32);
+    int period = (int) ((factor & 0xFFFFFFFFL) >>> 1);
+    return (factor & 1L) != 0
+        ? searchPeriodic(bytes, offset, length, prefix, literalLen, ell, period, s)
+        : searchAperiodic(bytes, offset, length, prefix, literalLen, ell, s);
+  }
 
-    int ms1 = -1;
-    int j = 0;
-    int k = 1;
-    int p1 = 1;
-    while (j + k < literalLen) {
-      char a = toLowerCase(prefix.charAt(ms1 + k));
-      char b = toLowerCase(prefix.charAt(j + k));
-      if (b < a) {
-        j += k;
-        k = 1;
-        p1 = j - ms1;
-      } else if (b == a) {
-        if (k == p1) {
-          j += p1;
-          k = 1;
-        } else {
-          k++;
-        }
-      } else {
-        ms1 = j++;
-        k = 1;
-        p1 = 1;
-      }
-    }
-
-    int ms2 = -1;
-    j = 0;
-    k = 1;
-    int p2 = 1;
-    while (j + k < literalLen) {
-      char a = toLowerCase(prefix.charAt(ms2 + k));
-      char b = toLowerCase(prefix.charAt(j + k));
-      if (b > a) {
-        j += k;
-        k = 1;
-        p2 = j - ms2;
-      } else if (b == a) {
-        if (k == p2) {
-          j += p2;
-          k = 1;
-        } else {
-          k++;
-        }
-      } else {
-        ms2 = j++;
-        k = 1;
-        p2 = 1;
-      }
-    }
-
-    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
-    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
-
-    boolean isPeriodic = true;
-    for (int i = 0; i < ell; i++) {
-      if (!(toLowerCase(prefix.charAt(i)) == toLowerCase(prefix.charAt(i + period)))) {
-        isPeriodic = false;
-        break;
-      }
-    }
-
+  private static int searchPeriodic(
+      byte[] bytes,
+      int offset,
+      int length,
+      String prefix,
+      int literalLen,
+      int ell,
+      int period,
+      int s) {
     int memory = 0;
-    if (isPeriodic) {
-      while (s <= length - literalLen) {
-        int i = Math.max(ell, memory);
-        int startI = i;
-        while (i < literalLen
-            && toLowerCase(prefix.charAt(i)) == toLowerCase(bytes[offset + s + i] & 0xFF)) {
-          i++;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          memory = 0;
-          continue;
-        }
-        int jj = ell - 1;
-        int startJj = jj;
-        while (jj >= memory
-            && toLowerCase(prefix.charAt(jj)) == toLowerCase(bytes[offset + s + jj] & 0xFF)) {
-          jj--;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
-        }
-        if (jj < memory) {
-          return s;
-        }
-        s += period;
-        memory = literalLen - period;
+    while (s <= length - literalLen) {
+      int i = Math.max(ell, memory);
+      int startI = i;
+      while (i < literalLen
+          && toLowerCase(prefix.charAt(i)) == toLowerCase(bytes[offset + s + i] & 0xFF)) {
+        i++;
       }
-    } else {
-      int periodJump = Math.max(ell, literalLen - ell) + 1;
-      while (s <= length - literalLen) {
-        int i = ell;
-        int startI = i;
-        while (i < literalLen
-            && toLowerCase(prefix.charAt(i)) == toLowerCase(bytes[offset + s + i] & 0xFF)) {
-          i++;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          continue;
-        }
-        int jj = ell - 1;
-        int startJj = jj;
-        while (jj >= 0
-            && toLowerCase(prefix.charAt(jj)) == toLowerCase(bytes[offset + s + jj] & 0xFF)) {
-          jj--;
-        }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
-        }
-        if (jj < 0) {
-          return s;
-        }
-        s += periodJump;
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
       }
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        memory = 0;
+        continue;
+      }
+      int jj = ell - 1;
+      int startJj = jj;
+      while (jj >= memory
+          && toLowerCase(prefix.charAt(jj)) == toLowerCase(bytes[offset + s + jj] & 0xFF)) {
+        jj--;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(startJj - jj + (jj >= memory ? 1 : 0));
+      }
+      if (jj < memory) {
+        return s;
+      }
+      s += period;
+      memory = literalLen - period;
+    }
+    return -1;
+  }
+
+  private static int searchAperiodic(
+      byte[] bytes, int offset, int length, String prefix, int literalLen, int ell, int s) {
+    int periodJump = Math.max(ell, literalLen - ell) + 1;
+    while (s <= length - literalLen) {
+      int i = ell;
+      int startI = i;
+      while (i < literalLen
+          && toLowerCase(prefix.charAt(i)) == toLowerCase(bytes[offset + s + i] & 0xFF)) {
+        i++;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
+      }
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        continue;
+      }
+      int jj = ell - 1;
+      int startJj = jj;
+      while (jj >= 0
+          && toLowerCase(prefix.charAt(jj)) == toLowerCase(bytes[offset + s + jj] & 0xFF)) {
+        jj--;
+      }
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(startJj - jj + (jj >= 0 ? 1 : 0));
+      }
+      if (jj < 0) {
+        return s;
+      }
+      s += periodJump;
     }
     return -1;
   }
@@ -495,110 +493,67 @@ final class TwoWay {
     if (s >= length || literalLen > length - s) {
       return -1;
     }
+    long factor = factorizeIgnoreCase(pattern, literalLen);
+    int ell = (int) (factor >>> 32);
+    int period = (int) ((factor & 0xFFFFFFFFL) >>> 1);
+    return (factor & 1L) != 0
+        ? searchPeriodic(input, offset, length, pattern, literalLen, ell, period, s)
+        : searchAperiodic(input, offset, length, pattern, literalLen, ell, s);
+  }
 
-    int ms1 = -1;
-    int j = 0;
-    int k = 1;
-    int p1 = 1;
-    while (j + k < literalLen) {
-      char a = toLowerCase(pattern.charAt(ms1 + k));
-      char b = toLowerCase(pattern.charAt(j + k));
-      if (b < a) {
-        j += k;
-        k = 1;
-        p1 = j - ms1;
-      } else if (b == a) {
-        if (k == p1) {
-          j += p1;
-          k = 1;
-        } else {
-          k++;
-        }
-      } else {
-        ms1 = j++;
-        k = 1;
-        p1 = 1;
-      }
-    }
-
-    int ms2 = -1;
-    j = 0;
-    k = 1;
-    int p2 = 1;
-    while (j + k < literalLen) {
-      char a = toLowerCase(pattern.charAt(ms2 + k));
-      char b = toLowerCase(pattern.charAt(j + k));
-      if (b > a) {
-        j += k;
-        k = 1;
-        p2 = j - ms2;
-      } else if (b == a) {
-        if (k == p2) {
-          j += p2;
-          k = 1;
-        } else {
-          k++;
-        }
-      } else {
-        ms2 = j++;
-        k = 1;
-        p2 = 1;
-      }
-    }
-
-    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
-    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
-
-    boolean isPeriodic = true;
-    for (int i = 0; i < ell; i++) {
-      if (!(toLowerCase(pattern.charAt(i)) == toLowerCase(pattern.charAt(i + period)))) {
-        isPeriodic = false;
-        break;
-      }
-    }
-
+  private static int searchPeriodic(
+      char[] input,
+      int offset,
+      int length,
+      String pattern,
+      int literalLen,
+      int ell,
+      int period,
+      int s) {
     int memory = 0;
-    if (isPeriodic) {
-      while (s <= length - literalLen) {
-        int i = Math.max(ell, memory);
-        while (i < literalLen && equalsIgnoreCase(pattern.charAt(i), input[offset + s + i])) {
-          i++;
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          memory = 0;
-          continue;
-        }
-        int jj = ell - 1;
-        while (jj >= memory && equalsIgnoreCase(pattern.charAt(jj), input[offset + s + jj])) {
-          jj--;
-        }
-        if (jj < memory) {
-          return s;
-        }
-        s += period;
-        memory = literalLen - period;
+    while (s <= length - literalLen) {
+      int i = Math.max(ell, memory);
+      while (i < literalLen && equalsIgnoreCase(pattern.charAt(i), input[offset + s + i])) {
+        i++;
       }
-    } else {
-      int periodJump = Math.max(ell, literalLen - ell) + 1;
-      while (s <= length - literalLen) {
-        int i = ell;
-        while (i < literalLen && equalsIgnoreCase(pattern.charAt(i), input[offset + s + i])) {
-          i++;
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          continue;
-        }
-        int jj = ell - 1;
-        while (jj >= 0 && equalsIgnoreCase(pattern.charAt(jj), input[offset + s + jj])) {
-          jj--;
-        }
-        if (jj < 0) {
-          return s;
-        }
-        s += periodJump;
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        memory = 0;
+        continue;
       }
+      int jj = ell - 1;
+      while (jj >= memory && equalsIgnoreCase(pattern.charAt(jj), input[offset + s + jj])) {
+        jj--;
+      }
+      if (jj < memory) {
+        return s;
+      }
+      s += period;
+      memory = literalLen - period;
+    }
+    return -1;
+  }
+
+  private static int searchAperiodic(
+      char[] input, int offset, int length, String pattern, int literalLen, int ell, int s) {
+    int periodJump = Math.max(ell, literalLen - ell) + 1;
+    while (s <= length - literalLen) {
+      int i = ell;
+      while (i < literalLen && equalsIgnoreCase(pattern.charAt(i), input[offset + s + i])) {
+        i++;
+      }
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        continue;
+      }
+      int jj = ell - 1;
+      while (jj >= 0 && equalsIgnoreCase(pattern.charAt(jj), input[offset + s + jj])) {
+        jj--;
+      }
+      if (jj < 0) {
+        return s;
+      }
+      s += periodJump;
     }
     return -1;
   }
@@ -626,114 +581,71 @@ final class TwoWay {
     if (s >= length || literalLen > length - s) {
       return -1;
     }
+    long factor = factorizeIgnoreCase(pattern, literalLen);
+    int ell = (int) (factor >>> 32);
+    int period = (int) ((factor & 0xFFFFFFFFL) >>> 1);
+    return (factor & 1L) != 0
+        ? searchPeriodicUtf16(input, offset, length, pattern, literalLen, ell, period, s)
+        : searchAperiodicUtf16(input, offset, length, pattern, literalLen, ell, s);
+  }
 
-    int ms1 = -1;
-    int j = 0;
-    int k = 1;
-    int p1 = 1;
-    while (j + k < literalLen) {
-      char a = toLowerCase(pattern.charAt(ms1 + k));
-      char b = toLowerCase(pattern.charAt(j + k));
-      if (b < a) {
-        j += k;
-        k = 1;
-        p1 = j - ms1;
-      } else if (b == a) {
-        if (k == p1) {
-          j += p1;
-          k = 1;
-        } else {
-          k++;
-        }
-      } else {
-        ms1 = j++;
-        k = 1;
-        p1 = 1;
-      }
-    }
-
-    int ms2 = -1;
-    j = 0;
-    k = 1;
-    int p2 = 1;
-    while (j + k < literalLen) {
-      char a = toLowerCase(pattern.charAt(ms2 + k));
-      char b = toLowerCase(pattern.charAt(j + k));
-      if (b > a) {
-        j += k;
-        k = 1;
-        p2 = j - ms2;
-      } else if (b == a) {
-        if (k == p2) {
-          j += p2;
-          k = 1;
-        } else {
-          k++;
-        }
-      } else {
-        ms2 = j++;
-        k = 1;
-        p2 = 1;
-      }
-    }
-
-    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
-    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
-
-    boolean isPeriodic = true;
-    for (int i = 0; i < ell; i++) {
-      if (!(toLowerCase(pattern.charAt(i)) == toLowerCase(pattern.charAt(i + period)))) {
-        isPeriodic = false;
-        break;
-      }
-    }
-
+  private static int searchPeriodicUtf16(
+      byte[] input,
+      int offset,
+      int length,
+      String pattern,
+      int literalLen,
+      int ell,
+      int period,
+      int s) {
     int memory = 0;
-    if (isPeriodic) {
-      while (s <= length - literalLen) {
-        int i = Math.max(ell, memory);
-        while (i < literalLen
-            && equalsIgnoreCase(pattern.charAt(i), Utf16.getChar(input, offset, s + i))) {
-          i++;
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          memory = 0;
-          continue;
-        }
-        int jj = ell - 1;
-        while (jj >= memory
-            && equalsIgnoreCase(pattern.charAt(jj), Utf16.getChar(input, offset, s + jj))) {
-          jj--;
-        }
-        if (jj < memory) {
-          return s;
-        }
-        s += period;
-        memory = literalLen - period;
+    while (s <= length - literalLen) {
+      int i = Math.max(ell, memory);
+      while (i < literalLen
+          && equalsIgnoreCase(pattern.charAt(i), Utf16.getChar(input, offset, s + i))) {
+        i++;
       }
-    } else {
-      int periodJump = Math.max(ell, literalLen - ell) + 1;
-      while (s <= length - literalLen) {
-        int i = ell;
-        while (i < literalLen
-            && equalsIgnoreCase(pattern.charAt(i), Utf16.getChar(input, offset, s + i))) {
-          i++;
-        }
-        if (i < literalLen) {
-          s += (i - ell + 1);
-          continue;
-        }
-        int jj = ell - 1;
-        while (jj >= 0
-            && equalsIgnoreCase(pattern.charAt(jj), Utf16.getChar(input, offset, s + jj))) {
-          jj--;
-        }
-        if (jj < 0) {
-          return s;
-        }
-        s += periodJump;
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        memory = 0;
+        continue;
       }
+      int jj = ell - 1;
+      while (jj >= memory
+          && equalsIgnoreCase(pattern.charAt(jj), Utf16.getChar(input, offset, s + jj))) {
+        jj--;
+      }
+      if (jj < memory) {
+        return s;
+      }
+      s += period;
+      memory = literalLen - period;
+    }
+    return -1;
+  }
+
+  private static int searchAperiodicUtf16(
+      byte[] input, int offset, int length, String pattern, int literalLen, int ell, int s) {
+    int periodJump = Math.max(ell, literalLen - ell) + 1;
+    while (s <= length - literalLen) {
+      int i = ell;
+      while (i < literalLen
+          && equalsIgnoreCase(pattern.charAt(i), Utf16.getChar(input, offset, s + i))) {
+        i++;
+      }
+      if (i < literalLen) {
+        s += (i - ell + 1);
+        continue;
+      }
+      int jj = ell - 1;
+      while (jj >= 0
+          && equalsIgnoreCase(pattern.charAt(jj), Utf16.getChar(input, offset, s + jj))) {
+        jj--;
+      }
+      if (jj < 0) {
+        return s;
+      }
+      s += periodJump;
     }
     return -1;
   }

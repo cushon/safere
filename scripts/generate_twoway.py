@@ -9,7 +9,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 
 @dataclass
@@ -17,14 +17,16 @@ class Variant:
   section_num: int
   description: str
   method_name: str
+  periodic_method_name: str
+  aperiodic_method_name: str
   text_params: str
+  text_args: str
   needle_param: str
+  needle_arg: str
   needle_len_expr: str
   text_len_expr: str
+  factorizer_call: str
   single_char_body: str
-  needle_char_type: str
-  needle_char_get: Callable[[str], str]
-  period_equals: Callable[[str, str], str]
   search_equals: Callable[[str, str], str]
   has_work_counter: bool
 
@@ -34,10 +36,15 @@ VARIANTS = [
         section_num=1,
         description="Exact UTF-8 byte[] search",
         method_name="indexOf",
+        periodic_method_name="searchPeriodic",
+        aperiodic_method_name="searchAperiodic",
         text_params="byte[] bytes, int offset, int length",
+        text_args="bytes, offset, length",
         needle_param="byte[] literal",
+        needle_arg="literal",
         needle_len_expr="literal.length",
         text_len_expr="length",
+        factorizer_call="factorize(literal, literalLen)",
         single_char_body="""    if (literalLen == 1) {
       byte target = literal[0];
       int startIdx = Math.max(0, start);
@@ -54,9 +61,6 @@ VARIANTS = [
       }
       return -1;
     }""",
-        needle_char_type="int",
-        needle_char_get=lambda expr: f"literal[{expr}] & 0xFF",
-        period_equals=lambda a, b: f"literal[{a}] == literal[{b}]",
         search_equals=lambda n, t: f"literal[{n}] == bytes[offset + {t}]",
         has_work_counter=True,
     ),
@@ -64,19 +68,18 @@ VARIANTS = [
         section_num=2,
         description="ASCII Case-Insensitive String search",
         method_name="indexOfIgnoreCase",
+        periodic_method_name="searchPeriodic",
+        aperiodic_method_name="searchAperiodic",
         text_params="String text",
+        text_args="text",
         needle_param="String prefix",
+        needle_arg="prefix",
         needle_len_expr="prefix.length()",
         text_len_expr="text.length()",
+        factorizer_call="factorizeIgnoreCase(prefix, literalLen)",
         single_char_body="""    if (literalLen == 1) {
       return Ascii.indexOfIgnoreCase(text, prefix.charAt(0), start);
     }""",
-        needle_char_type="char",
-        needle_char_get=lambda expr: f"toLowerCase(prefix.charAt({expr}))",
-        period_equals=lambda a, b: (
-            f"toLowerCase(prefix.charAt({a})) =="
-            f" toLowerCase(prefix.charAt({b}))"
-        ),
         search_equals=lambda n, t: (
             f"toLowerCase(prefix.charAt({n})) == toLowerCase(text.charAt({t}))"
         ),
@@ -86,10 +89,15 @@ VARIANTS = [
         section_num=3,
         description="ASCII Case-Insensitive byte[] search with String prefix",
         method_name="indexOfIgnoreCase",
+        periodic_method_name="searchPeriodic",
+        aperiodic_method_name="searchAperiodic",
         text_params="byte[] bytes, int offset, int length",
+        text_args="bytes, offset, length",
         needle_param="String prefix",
+        needle_arg="prefix",
         needle_len_expr="prefix.length()",
         text_len_expr="length",
+        factorizer_call="factorizeIgnoreCase(prefix, literalLen)",
         single_char_body="""    if (literalLen == 1) {
       byte low = (byte) toLowerCase(prefix.charAt(0));
       byte high = (byte) Ascii.toUpperCase(prefix.charAt(0));
@@ -104,12 +112,6 @@ VARIANTS = [
       }
       return -1;
     }""",
-        needle_char_type="char",
-        needle_char_get=lambda expr: f"toLowerCase(prefix.charAt({expr}))",
-        period_equals=lambda a, b: (
-            f"toLowerCase(prefix.charAt({a})) =="
-            f" toLowerCase(prefix.charAt({b}))"
-        ),
         search_equals=lambda n, t: (
             f"toLowerCase(prefix.charAt({n})) =="
             f" toLowerCase(bytes[offset + {t}] & 0xFF)"
@@ -120,10 +122,15 @@ VARIANTS = [
         section_num=4,
         description="ASCII Case-Insensitive char[] search with String pattern",
         method_name="indexOfIgnoreCase",
+        periodic_method_name="searchPeriodic",
+        aperiodic_method_name="searchAperiodic",
         text_params="char[] input, int offset, int length",
+        text_args="input, offset, length",
         needle_param="String pattern",
+        needle_arg="pattern",
         needle_len_expr="pattern.length()",
         text_len_expr="length",
+        factorizer_call="factorizeIgnoreCase(pattern, literalLen)",
         single_char_body="""    if (literalLen == 1) {
       char target = pattern.charAt(0);
       for (int i = Math.max(0, start); i < length; i++) {
@@ -133,12 +140,6 @@ VARIANTS = [
       }
       return -1;
     }""",
-        needle_char_type="char",
-        needle_char_get=lambda expr: f"toLowerCase(pattern.charAt({expr}))",
-        period_equals=lambda a, b: (
-            f"toLowerCase(pattern.charAt({a})) =="
-            f" toLowerCase(pattern.charAt({b}))"
-        ),
         search_equals=lambda n, t: (
             f"equalsIgnoreCase(pattern.charAt({n}), input[offset + {t}])"
         ),
@@ -150,10 +151,15 @@ VARIANTS = [
             "ASCII Case-Insensitive byte[] UTF-16 LE search with String pattern"
         ),
         method_name="indexOfIgnoreCaseUtf16",
+        periodic_method_name="searchPeriodicUtf16",
+        aperiodic_method_name="searchAperiodicUtf16",
         text_params="byte[] input, int offset, int length",
+        text_args="input, offset, length",
         needle_param="String pattern",
+        needle_arg="pattern",
         needle_len_expr="pattern.length()",
         text_len_expr="length",
+        factorizer_call="factorizeIgnoreCase(pattern, literalLen)",
         single_char_body="""    if (literalLen == 1) {
       char target = pattern.charAt(0);
       for (int i = Math.max(0, start); i < length; i++) {
@@ -163,12 +169,6 @@ VARIANTS = [
       }
       return -1;
     }""",
-        needle_char_type="char",
-        needle_char_get=lambda expr: f"toLowerCase(pattern.charAt({expr}))",
-        period_equals=lambda a, b: (
-            f"toLowerCase(pattern.charAt({a})) =="
-            f" toLowerCase(pattern.charAt({b}))"
-        ),
         search_equals=lambda n, t: (
             f"equalsIgnoreCase(pattern.charAt({n}), Utf16.getChar(input, offset,"
             f" {t}))"
@@ -178,7 +178,144 @@ VARIANTS = [
 ]
 
 
-def generate_method(v: Variant) -> str:
+def generate_factorizers() -> str:
+  return """  // =============================================================================================
+  // Factorization Helpers (Maximal Suffix & Period Computation)
+  // Packed into primitive long: [63..32] = ell, [31..1] = period, [0] = isPeriodic (1 or 0)
+  // =============================================================================================
+
+  static long factorize(byte[] literal, int literalLen) {
+    int ms1 = -1;
+    int j = 0;
+    int k = 1;
+    int p1 = 1;
+    while (j + k < literalLen) {
+      int a = literal[ms1 + k] & 0xFF;
+      int b = literal[j + k] & 0xFF;
+      if (b < a) {
+        j += k;
+        k = 1;
+        p1 = j - ms1;
+      } else if (b == a) {
+        if (k == p1) {
+          j += p1;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms1 = j++;
+        k = 1;
+        p1 = 1;
+      }
+    }
+
+    int ms2 = -1;
+    j = 0;
+    k = 1;
+    int p2 = 1;
+    while (j + k < literalLen) {
+      int a = literal[ms2 + k] & 0xFF;
+      int b = literal[j + k] & 0xFF;
+      if (b > a) {
+        j += k;
+        k = 1;
+        p2 = j - ms2;
+      } else if (b == a) {
+        if (k == p2) {
+          j += p2;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms2 = j++;
+        k = 1;
+        p2 = 1;
+      }
+    }
+
+    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
+    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
+
+    boolean isPeriodic = true;
+    for (int i = 0; i < ell; i++) {
+      if (literal[i] != literal[i + period]) {
+        isPeriodic = false;
+        break;
+      }
+    }
+
+    return ((long) ell << 32) | ((long) period << 1) | (isPeriodic ? 1L : 0L);
+  }
+
+  static long factorizeIgnoreCase(String prefix, int literalLen) {
+    int ms1 = -1;
+    int j = 0;
+    int k = 1;
+    int p1 = 1;
+    while (j + k < literalLen) {
+      char a = toLowerCase(prefix.charAt(ms1 + k));
+      char b = toLowerCase(prefix.charAt(j + k));
+      if (b < a) {
+        j += k;
+        k = 1;
+        p1 = j - ms1;
+      } else if (b == a) {
+        if (k == p1) {
+          j += p1;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms1 = j++;
+        k = 1;
+        p1 = 1;
+      }
+    }
+
+    int ms2 = -1;
+    j = 0;
+    k = 1;
+    int p2 = 1;
+    while (j + k < literalLen) {
+      char a = toLowerCase(prefix.charAt(ms2 + k));
+      char b = toLowerCase(prefix.charAt(j + k));
+      if (b > a) {
+        j += k;
+        k = 1;
+        p2 = j - ms2;
+      } else if (b == a) {
+        if (k == p2) {
+          j += p2;
+          k = 1;
+        } else {
+          k++;
+        }
+      } else {
+        ms2 = j++;
+        k = 1;
+        p2 = 1;
+      }
+    }
+
+    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
+    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
+
+    boolean isPeriodic = true;
+    for (int i = 0; i < ell; i++) {
+      if (toLowerCase(prefix.charAt(i)) != toLowerCase(prefix.charAt(i + period))) {
+        isPeriodic = false;
+        break;
+      }
+    }
+
+    return ((long) ell << 32) | ((long) period << 1) | (isPeriodic ? 1L : 0L);
+  }"""
+
+
+def generate_variant_methods(v: Variant) -> str:
   wc_fwd = (
       """        if (WorkCounterConfig.ENABLED) {
           WorkCounter.record(i - startI + (i < literalLen ? 1 : 0));
@@ -209,14 +346,14 @@ def generate_method(v: Variant) -> str:
   start_i_init = "        int startI = i;\n" if v.has_work_counter else ""
   start_jj_init = "        int startJj = jj;\n" if v.has_work_counter else ""
 
+  text_len_ref = "textLen" if v.text_len_expr != "length" else "length"
   text_len_var_def = (
       f"    int textLen = {v.text_len_expr};\n"
       if v.text_len_expr != "length"
       else ""
   )
-  text_len_ref = "textLen" if v.text_len_expr != "length" else "length"
 
-  return f"""  // =============================================================================================
+  entry_point = f"""  // =============================================================================================
   // {v.section_num}. {v.description}
   // =============================================================================================
 
@@ -230,113 +367,69 @@ def generate_method(v: Variant) -> str:
 {text_len_var_def}    if (s >= {text_len_ref} || literalLen > {text_len_ref} - s) {{
       return -1;
     }}
+    long factor = {v.factorizer_call};
+    int ell = (int) (factor >>> 32);
+    int period = (int) ((factor & 0xFFFFFFFFL) >>> 1);
+    return (factor & 1L) != 0
+        ? {v.periodic_method_name}({v.text_args}, {v.needle_arg}, literalLen, ell, period, s)
+        : {v.aperiodic_method_name}({v.text_args}, {v.needle_arg}, literalLen, ell, s);
+  }}"""
 
-    int ms1 = -1;
-    int j = 0;
-    int k = 1;
-    int p1 = 1;
-    while (j + k < literalLen) {{
-      {v.needle_char_type} a = {v.needle_char_get('ms1 + k')};
-      {v.needle_char_type} b = {v.needle_char_get('j + k')};
-      if (b < a) {{
-        j += k;
-        k = 1;
-        p1 = j - ms1;
-      }} else if (b == a) {{
-        if (k == p1) {{
-          j += p1;
-          k = 1;
-        }} else {{
-          k++;
-        }}
-      }} else {{
-        ms1 = j++;
-        k = 1;
-        p1 = 1;
-      }}
-    }}
+  text_len_in_search = (
+      "length" if v.text_len_expr == "length" else "text.length()"
+  )
 
-    int ms2 = -1;
-    j = 0;
-    k = 1;
-    int p2 = 1;
-    while (j + k < literalLen) {{
-      {v.needle_char_type} a = {v.needle_char_get('ms2 + k')};
-      {v.needle_char_type} b = {v.needle_char_get('j + k')};
-      if (b > a) {{
-        j += k;
-        k = 1;
-        p2 = j - ms2;
-      }} else if (b == a) {{
-        if (k == p2) {{
-          j += p2;
-          k = 1;
-        }} else {{
-          k++;
-        }}
-      }} else {{
-        ms2 = j++;
-        k = 1;
-        p2 = 1;
-      }}
-    }}
-
-    int ell = ms1 + 1 >= ms2 + 1 ? ms1 + 1 : ms2 + 1;
-    int period = ms1 + 1 >= ms2 + 1 ? p1 : p2;
-
-    boolean isPeriodic = true;
-    for (int i = 0; i < ell; i++) {{
-      if (!({v.period_equals('i', 'i + period')})) {{
-        isPeriodic = false;
-        break;
-      }}
-    }}
-
+  periodic_search = f"""  private static int {v.periodic_method_name}(
+      {v.text_params}, {v.needle_param}, int literalLen, int ell, int period, int s) {{
     int memory = 0;
-    if (isPeriodic) {{
-      while (s <= {text_len_ref} - literalLen) {{
-        int i = Math.max(ell, memory);
-{start_i_init}        while (i < literalLen && {v.search_equals('i', 's + i')}) {{
-          i++;
-        }}
-{wc_fwd}        if (i < literalLen) {{
-          s += (i - ell + 1);
-          memory = 0;
-          continue;
-        }}
-        int jj = ell - 1;
-{start_jj_init}        while (jj >= memory && {v.search_equals('jj', 's + jj')}) {{
-          jj--;
-        }}
-{wc_bwd_periodic}        if (jj < memory) {{
-          return s;
-        }}
-        s += period;
-        memory = literalLen - period;
+    while (s <= {text_len_in_search} - literalLen) {{
+      int i = Math.max(ell, memory);
+{start_i_init}      while (i < literalLen && {v.search_equals('i', 's + i')}) {{
+        i++;
       }}
-    }} else {{
-      int periodJump = Math.max(ell, literalLen - ell) + 1;
-      while (s <= {text_len_ref} - literalLen) {{
-        int i = ell;
-{start_i_init}        while (i < literalLen && {v.search_equals('i', 's + i')}) {{
-          i++;
-        }}
-{wc_fwd}        if (i < literalLen) {{
-          s += (i - ell + 1);
-          continue;
-        }}
-        int jj = ell - 1;
-{start_jj_init}        while (jj >= 0 && {v.search_equals('jj', 's + jj')}) {{
-          jj--;
-        }}
-{wc_bwd_aperiodic}        if (jj < 0) {{
-          return s;
-        }}
-        s += periodJump;
+{wc_fwd}      if (i < literalLen) {{
+        s += (i - ell + 1);
+        memory = 0;
+        continue;
       }}
+      int jj = ell - 1;
+{start_jj_init}      while (jj >= memory && {v.search_equals('jj', 's + jj')}) {{
+        jj--;
+      }}
+{wc_bwd_periodic}      if (jj < memory) {{
+        return s;
+      }}
+      s += period;
+      memory = literalLen - period;
     }}
     return -1;
   }}"""
+
+  aperiodic_search = f"""  private static int {v.aperiodic_method_name}(
+      {v.text_params}, {v.needle_param}, int literalLen, int ell, int s) {{
+    int periodJump = Math.max(ell, literalLen - ell) + 1;
+    while (s <= {text_len_in_search} - literalLen) {{
+      int i = ell;
+{start_i_init}      while (i < literalLen && {v.search_equals('i', 's + i')}) {{
+        i++;
+      }}
+{wc_fwd}      if (i < literalLen) {{
+        s += (i - ell + 1);
+        continue;
+      }}
+      int jj = ell - 1;
+{start_jj_init}      while (jj >= 0 && {v.search_equals('jj', 's + jj')}) {{
+        jj--;
+      }}
+{wc_bwd_aperiodic}      if (jj < 0) {{
+        return s;
+      }}
+      s += periodJump;
+    }}
+    return -1;
+  }}"""
+
+  return f"{entry_point}\n\n{periodic_search}\n\n{aperiodic_search}"
 
 
 def generate_all() -> str:
@@ -367,9 +460,10 @@ final class TwoWay {
   private TwoWay() {}
 """
 
-  methods = "\n\n".join(generate_method(v) for v in VARIANTS)
+  factorizers = generate_factorizers()
+  variants = "\n\n".join(generate_variant_methods(v) for v in VARIANTS)
   footer = "\n}\n"
-  return header + "\n" + methods + footer
+  return f"{header}\n{factorizers}\n\n{variants}{footer}"
 
 
 def main():
