@@ -27,9 +27,10 @@ final class WuManberModel implements Serializable {
   private static final int HASH_MASK = HASH_TABLE_SIZE - 1;
   private static final int MAX_PATTERNS = 512;
   private static final int MIN_PATTERNS = 4;
-  private static final int MIN_PATTERN_LENGTH = 2;
+  private static final int MIN_PATTERN_LENGTH = 4;
 
-  private final byte[] shiftTable;
+  private final byte[] shift1Table;
+  private final byte[] shift2Table;
   private final int[] hashHead;
   private final int[] nextPattern;
   private final short[] prefixSignatures;
@@ -37,13 +38,15 @@ final class WuManberModel implements Serializable {
   private final int minLength;
 
   private WuManberModel(
-      byte[] shiftTable,
+      byte[] shift1Table,
+      byte[] shift2Table,
       int[] hashHead,
       int[] nextPattern,
       short[] prefixSignatures,
       String[] literals,
       int minLength) {
-    this.shiftTable = shiftTable;
+    this.shift1Table = shift1Table;
+    this.shift2Table = shift2Table;
     this.hashHead = hashHead;
     this.nextPattern = nextPattern;
     this.prefixSignatures = prefixSignatures;
@@ -71,11 +74,13 @@ final class WuManberModel implements Serializable {
       return null;
     }
 
-    int defaultShift = minLen - 1;
-    byte[] shiftTable = new byte[HASH_TABLE_SIZE];
-    if (defaultShift > 0) {
-      Arrays.fill(shiftTable, (byte) Math.min(127, defaultShift));
-    }
+    int defaultShift1 = minLen - 1;
+    byte[] shift1Table = new byte[HASH_TABLE_SIZE];
+    Arrays.fill(shift1Table, (byte) Math.min(127, defaultShift1));
+
+    int defaultShift2 = minLen - 3;
+    byte[] shift2Table = new byte[HASH_TABLE_SIZE];
+    Arrays.fill(shift2Table, (byte) Math.min(127, defaultShift2));
 
     int k = patterns.length;
     int[] hashHead = new int[HASH_TABLE_SIZE];
@@ -87,15 +92,27 @@ final class WuManberModel implements Serializable {
       String p = patterns[i];
       prefixSignatures[i] = (short) (((p.charAt(0) & 0xFF) << 8) | (p.charAt(1) & 0xFF));
 
-      // Populate shift table for all 2-grams ending within prefix of length minLen
+      // Populate shift1 table for all 2-grams ending within prefix of length minLen
       for (int j = 2; j <= minLen; j++) {
         int c1 = p.charAt(j - 2) & 0xFF;
         int c2 = p.charAt(j - 1) & 0xFF;
         int hash = ((c1 << 8) | c2) & HASH_MASK;
         int shift = minLen - j;
-        int curShift = shiftTable[hash] & 0xFF;
+        int curShift = shift1Table[hash] & 0xFF;
         if (shift < curShift) {
-          shiftTable[hash] = (byte) shift;
+          shift1Table[hash] = (byte) shift;
+        }
+      }
+
+      // Populate shift2 table for all 2-grams ending within prefix of length (minLen - 2)
+      for (int j = 2; j <= minLen - 2; j++) {
+        int c1 = p.charAt(j - 2) & 0xFF;
+        int c2 = p.charAt(j - 1) & 0xFF;
+        int hash = ((c1 << 8) | c2) & HASH_MASK;
+        int shift = (minLen - 2) - j;
+        int curShift = shift2Table[hash] & 0xFF;
+        if (shift < curShift) {
+          shift2Table[hash] = (byte) shift;
         }
       }
     }
@@ -113,7 +130,13 @@ final class WuManberModel implements Serializable {
     }
 
     return new WuManberModel(
-        shiftTable, hashHead, nextPattern, prefixSignatures, Arrays.copyOf(patterns, k), minLen);
+        shift1Table,
+        shift2Table,
+        hashHead,
+        nextPattern,
+        prefixSignatures,
+        Arrays.copyOf(patterns, k),
+        minLen);
   }
 
   int minLength() {
@@ -137,39 +160,53 @@ final class WuManberModel implements Serializable {
         index += minLength - 1;
         continue;
       }
-      int hash = ((c1 << 8) | c2) & HASH_MASK;
-      int shift = shiftTable[hash] & 0xFF;
-      if (shift > 0) {
-        index += shift;
-      } else {
-        int startPos = index - minLength + 1;
-        short targetPrefix =
-            (short) (((text.charAt(startPos) & 0xFF) << 8) | (text.charAt(startPos + 1) & 0xFF));
-        int patIdx = hashHead[hash];
-        int bestPatIdx = -1;
-        while (patIdx >= 0) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record();
+      int hash1 = ((c1 << 8) | c2) & HASH_MASK;
+      int shift1 = shift1Table[hash1] & 0xFF;
+      if (shift1 > 0) {
+        index += shift1;
+        continue;
+      }
+
+      if (index - 2 >= fromIndex) {
+        int c3 = text.charAt(index - 3);
+        int c4 = text.charAt(index - 2);
+        if (c3 <= 127 && c4 <= 127) {
+          int hash2 = ((c3 << 8) | c4) & HASH_MASK;
+          int shift2 = shift2Table[hash2] & 0xFF;
+          if (shift2 > 0) {
+            index += shift2;
+            continue;
           }
-          work++;
-          if (prefixSignatures[patIdx] == targetPrefix) {
-            String lit = literals[patIdx];
-            if (text.startsWith(lit, startPos)) {
-              if (bestPatIdx < 0 || patIdx < bestPatIdx) {
-                bestPatIdx = patIdx;
-              }
+        }
+      }
+
+      int startPos = index - minLength + 1;
+      short targetPrefix =
+          (short) (((text.charAt(startPos) & 0xFF) << 8) | (text.charAt(startPos + 1) & 0xFF));
+      int patIdx = hashHead[hash1];
+      int bestPatIdx = -1;
+      while (patIdx >= 0) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        work++;
+        if (prefixSignatures[patIdx] == targetPrefix) {
+          String lit = literals[patIdx];
+          if (text.startsWith(lit, startPos)) {
+            if (bestPatIdx < 0 || patIdx < bestPatIdx) {
+              bestPatIdx = patIdx;
             }
           }
-          patIdx = nextPattern[patIdx];
         }
-        if (bestPatIdx >= 0) {
-          return startPos;
-        }
-        if (work > workLimit) {
-          return fromIndex;
-        }
-        index++;
+        patIdx = nextPattern[patIdx];
       }
+      if (bestPatIdx >= 0) {
+        return startPos;
+      }
+      if (work > workLimit) {
+        return fromIndex;
+      }
+      index++;
     }
     return -1;
   }
@@ -189,40 +226,54 @@ final class WuManberModel implements Serializable {
         index += minLength - 1;
         continue;
       }
-      int hash = ((c1 << 8) | c2) & HASH_MASK;
-      int shift = shiftTable[hash] & 0xFF;
-      if (shift > 0) {
-        index += shift;
-      } else {
-        int startPos = index - minLength + 1;
-        short targetPrefix =
-            (short)
-                (((bytes[offset + startPos] & 0xFF) << 8) | (bytes[offset + startPos + 1] & 0xFF));
-        int patIdx = hashHead[hash];
-        int bestPatIdx = -1;
-        while (patIdx >= 0) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record();
+      int hash1 = ((c1 << 8) | c2) & HASH_MASK;
+      int shift1 = shift1Table[hash1] & 0xFF;
+      if (shift1 > 0) {
+        index += shift1;
+        continue;
+      }
+
+      if (index - 2 >= fromIndex) {
+        int c3 = bytes[offset + index - 3] & 0xFF;
+        int c4 = bytes[offset + index - 2] & 0xFF;
+        if (c3 <= 127 && c4 <= 127) {
+          int hash2 = ((c3 << 8) | c4) & HASH_MASK;
+          int shift2 = shift2Table[hash2] & 0xFF;
+          if (shift2 > 0) {
+            index += shift2;
+            continue;
           }
-          work++;
-          if (prefixSignatures[patIdx] == targetPrefix) {
-            String lit = literals[patIdx];
-            if (Ascii.regionMatches(bytes, offset + startPos, lit, lit.length())) {
-              if (bestPatIdx < 0 || patIdx < bestPatIdx) {
-                bestPatIdx = patIdx;
-              }
+        }
+      }
+
+      int startPos = index - minLength + 1;
+      short targetPrefix =
+          (short)
+              (((bytes[offset + startPos] & 0xFF) << 8) | (bytes[offset + startPos + 1] & 0xFF));
+      int patIdx = hashHead[hash1];
+      int bestPatIdx = -1;
+      while (patIdx >= 0) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        work++;
+        if (prefixSignatures[patIdx] == targetPrefix) {
+          String lit = literals[patIdx];
+          if (Ascii.regionMatches(bytes, offset + startPos, lit, lit.length())) {
+            if (bestPatIdx < 0 || patIdx < bestPatIdx) {
+              bestPatIdx = patIdx;
             }
           }
-          patIdx = nextPattern[patIdx];
         }
-        if (bestPatIdx >= 0) {
-          return startPos;
-        }
-        if (work > workLimit) {
-          return fromIndex;
-        }
-        index++;
+        patIdx = nextPattern[patIdx];
       }
+      if (bestPatIdx >= 0) {
+        return startPos;
+      }
+      if (work > workLimit) {
+        return fromIndex;
+      }
+      index++;
     }
     return -1;
   }

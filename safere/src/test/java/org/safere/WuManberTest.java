@@ -59,20 +59,27 @@ class WuManberTest {
   @Test
   @DisplayName("WuManber preserves leftmost-first matching for overlapping alternatives")
   void preservesLeftmostFirstAlternationOrder() {
-    String[] dict = {"application", "apple", "applet", "app"};
-    // Minimum length is 3 ("app")
+    String[] dict = {"application", "apple", "applet", "appl"};
+    // Minimum length is 4 ("appl")
     WuManberModel model = WuManberModel.compile(dict);
     assertThat(model).isNotNull();
-    assertThat(model.minLength()).isEqualTo(3);
+    assertThat(model.minLength()).isEqualTo(4);
 
     String text = "eating an apple a day";
-    // "apple" starts at index 10. "application", "apple", "applet", "app"
-    // "apple" comes before "app" in the dictionary
+    // "apple" starts at index 10. "application", "apple", "applet", "appl"
+    // "apple" comes before "appl" in the dictionary
     int matchPos = model.findCandidate(text, 0);
     assertThat(matchPos).isEqualTo(10);
 
     Utf8InputScanner scanner = new Utf8InputScanner(text.getBytes(UTF_8));
     assertThat(model.findCandidate(scanner, 0)).isEqualTo(10);
+  }
+
+  @Test
+  @DisplayName("WuManber rejects keywords shorter than 4 characters to favor CharClass")
+  void rejectsKeywordsShorterThanFour() {
+    String[] dict = {"SELECT", "FROM", "WHERE", "AS", "BY"};
+    assertThat(WuManberModel.compile(dict)).isNull();
   }
 
   @Test
