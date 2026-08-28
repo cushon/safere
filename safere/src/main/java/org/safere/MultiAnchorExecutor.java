@@ -61,6 +61,10 @@ final class MultiAnchorExecutor {
     Objects.requireNonNull(descriptor, "descriptor");
     Objects.requireNonNull(scanner, "scanner");
 
+    if (!descriptor.isExecutableChain()) {
+      return Result.FALLBACK;
+    }
+
     MultiAnchorDescriptor.Segment[] segments = descriptor.segments();
     int numSegments = segments.length;
     if (numSegments < 1) {
@@ -81,9 +85,6 @@ final class MultiAnchorExecutor {
         return Result.MISMATCH;
       }
     }
-
-    long workLimit = WorkLimit.forRemaining(textLen - searchFrom);
-    long verificationWork = 0;
 
     int candidatePos = Math.max(0, searchFrom);
     MultiAnchorDescriptor.Segment firstSeg = segments[0];
@@ -136,27 +137,8 @@ final class MultiAnchorExecutor {
         MultiAnchorDescriptor.Gap gap = seg.gap();
         MultiAnchorDescriptor.Anchor anchor = seg.anchor();
 
-        int minHop = currentPos + gap.minLength();
-        if (minHop > textLen) {
-          return Result.MISMATCH;
-        }
-
-        int maxScan = gap.scanClassEnd(scanner, currentPos, textLen);
-        int maxHop = Math.min(textLen, maxScan + anchor.maxLength());
-
-        int p = anchor.findNextWithin(scanner, minHop, maxHop);
+        int p = gap.matchExecutorFixedForward(scanner, currentPos, textLen);
         if (p < 0) {
-          chainMatched = false;
-          break;
-        }
-
-        int sliceLen = p - currentPos;
-        verificationWork += sliceLen;
-        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
-          return Result.FALLBACK;
-        }
-
-        if (!gap.matchesSlice(scanner, currentPos, p)) {
           chainMatched = false;
           break;
         }
@@ -176,7 +158,7 @@ final class MultiAnchorExecutor {
       }
 
       // Phase 3: Trailing gap resolution
-      int matchEnd = trailingGap.matchForward(scanner, currentPos, textLen);
+      int matchEnd = trailingGap.matchExecutorFixedForward(scanner, currentPos, textLen);
       if (matchEnd < 0) {
         candidatePos = p0 + 1;
         continue;
@@ -200,6 +182,10 @@ final class MultiAnchorExecutor {
     Objects.requireNonNull(descriptor, "descriptor");
     Objects.requireNonNull(text, "text");
 
+    if (!descriptor.isExecutableChain()) {
+      return Result.FALLBACK;
+    }
+
     MultiAnchorDescriptor.Segment[] segments = descriptor.segments();
     int numSegments = segments.length;
     if (numSegments < 1) {
@@ -220,9 +206,6 @@ final class MultiAnchorExecutor {
         return Result.MISMATCH;
       }
     }
-
-    long workLimit = WorkLimit.forRemaining(textLen - searchFrom);
-    long verificationWork = 0;
 
     int candidatePos = Math.max(0, searchFrom);
     MultiAnchorDescriptor.Segment firstSeg = segments[0];
@@ -275,27 +258,8 @@ final class MultiAnchorExecutor {
         MultiAnchorDescriptor.Gap gap = seg.gap();
         MultiAnchorDescriptor.Anchor anchor = seg.anchor();
 
-        int minHop = currentPos + gap.minLength();
-        if (minHop > textLen) {
-          return Result.MISMATCH;
-        }
-
-        int maxScan = gap.scanClassEnd(text, currentPos, textLen);
-        int maxHop = Math.min(textLen, maxScan + anchor.maxLength());
-
-        int p = anchor.findNextWithin(text, minHop, maxHop);
+        int p = gap.matchExecutorFixedForward(text, currentPos, textLen);
         if (p < 0) {
-          chainMatched = false;
-          break;
-        }
-
-        int sliceLen = p - currentPos;
-        verificationWork += sliceLen;
-        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
-          return Result.FALLBACK;
-        }
-
-        if (!gap.matchesSlice(text, currentPos, p)) {
           chainMatched = false;
           break;
         }
@@ -315,7 +279,7 @@ final class MultiAnchorExecutor {
       }
 
       // Phase 3: Trailing gap resolution
-      int matchEnd = trailingGap.matchForward(text, currentPos, textLen);
+      int matchEnd = trailingGap.matchExecutorFixedForward(text, currentPos, textLen);
       if (matchEnd < 0) {
         candidatePos = p0 + 1;
         continue;

@@ -9,6 +9,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.safere.MultiAnchorDescriptor.GapKind;
 import org.safere.MultiAnchorDescriptor.RejectPlan;
 import org.safere.MultiAnchorDescriptor.StartPlan;
@@ -78,7 +80,7 @@ class MultiAnchorGapEngineTest {
     String regex = ".*foo.*bar.*baz.*";
     Pattern pattern = Pattern.compile(regex);
 
-    assertThat(pattern.multiAnchor().isExecutableChain()).isTrue();
+    assertThat(pattern.multiAnchor().isExecutableChain()).isFalse();
 
     String text = "prefix foo intermediate bar trailing baz suffix";
     Matcher matcher = pattern.matcher(text);
@@ -225,5 +227,68 @@ class MultiAnchorGapEngineTest {
     assertThat(safereMatcher.group(1)).isEqualTo("CRITICAL");
     assertThat(safereMatcher.group(2)).isEqualTo("500");
     assertThat(safereMatcher.group(3)).isEqualTo("crash");
+  }
+
+  @Test
+  void endAnchoredChainDoesNotAcceptAnEarlierAnchor() {
+    assertFirstMatchEqualsJdk("AAA.*BB$", "AAABBxBB");
+  }
+
+  @Test
+  void greedyInternalGapChoosesTheLastCompatibleAnchor() {
+    assertFirstMatchEqualsJdk("AAA.*BB", "AAABBxBB");
+  }
+
+  @Test
+  void lazyInternalGapRetriesAnAnchorThatCanCompleteTheChain() {
+    assertFirstMatchEqualsJdk("AAA.*?BB.CC", "AAAxBBxxBBzCC");
+  }
+
+  @Test
+  void quantifiedInternalGapCountsUnicodeCodePoints() {
+    assertFirstMatchEqualsJdk("AAA.BB", "AAA😀BB");
+
+    Pattern pattern = Pattern.compile("AAA.BB");
+    Utf8Matcher matcher = pattern.matcher(Utf8Input.validated("AAA😀BB".getBytes(UTF_8)));
+    assertThat(matcher.find()).isTrue();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"\r", "", " ", " "})
+  void defaultDotRejectsEveryJdkLineTerminator(String lineTerminator) {
+    assertFirstMatchEqualsJdk("AAA.*BB", "AAA" + lineTerminator + "BB");
+  }
+
+  @Test
+  void variableInternalGapsAreOutsideTheAuthoritativeSubset() {
+    assertThat(Pattern.compile("A.*B.*C").multiAnchor().isExecutableChain()).isFalse();
+    assertThat(Pattern.compile("A[0-9]{3}B").multiAnchor().isExecutableChain()).isFalse();
+  }
+
+  @Test
+  void fixedCharacterClassGapRemainsExecutable() {
+    Pattern pattern = Pattern.compile("AAA[0-9]{2}BB");
+    assertThat(pattern.multiAnchor().isExecutableChain()).isTrue();
+
+    Matcher matcher = pattern.matcher("noise AAA12BB trailing");
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.group()).isEqualTo("AAA12BB");
+
+    Utf8Matcher utf8Matcher =
+        pattern.matcher(Utf8Input.validated("noise AAA12BB trailing".getBytes(UTF_8)));
+    assertThat(utf8Matcher.find()).isTrue();
+  }
+
+  private static void assertFirstMatchEqualsJdk(String regex, String text) {
+    Matcher safere = Pattern.compile(regex).matcher(text);
+    java.util.regex.Matcher jdk = java.util.regex.Pattern.compile(regex).matcher(text);
+
+    boolean expected = jdk.find();
+    assertThat(safere.find()).isEqualTo(expected);
+    if (expected) {
+      assertThat(safere.start()).isEqualTo(jdk.start());
+      assertThat(safere.end()).isEqualTo(jdk.end());
+      assertThat(safere.group()).isEqualTo(jdk.group());
+    }
   }
 }

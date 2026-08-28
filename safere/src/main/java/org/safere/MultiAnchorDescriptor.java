@@ -299,17 +299,21 @@ record MultiAnchorDescriptor(
 
   boolean isExecutableChain() {
     int n = chain.segments().length;
-    if (n < 2) {
+    if (n < 2 || chain.isEndAnchored() || !chain.segments()[0].gap().equals(Gap.EMPTY)) {
       return false;
     }
-    for (Segment segment : chain.segments()) {
+    for (int i = 0; i < n; i++) {
+      Segment segment = chain.segments()[i];
       if (!(segment.anchor() instanceof Anchor.Single)
           && !(segment.anchor() instanceof Anchor.Alternation)
           && !(segment.anchor() instanceof Anchor.CharClass)) {
         return false;
       }
+      if (i > 0 && !segment.gap().isExecutorFixedGap()) {
+        return false;
+      }
     }
-    return true;
+    return chain.trailingGap().isExecutorFixedGap();
   }
 
   enum GapKind {
@@ -365,6 +369,53 @@ record MultiAnchorDescriptor(
 
     boolean isFixed() {
       return minLength == maxLength;
+    }
+
+    private boolean isExecutorFixedGap() {
+      return equals(EMPTY) || (kind == GapKind.BOUNDED_CLASS_REPEAT && isFixed());
+    }
+
+    int matchExecutorFixedForward(String text, int fromPos, int maxPos) {
+      if (equals(EMPTY)) {
+        return fromPos;
+      }
+      if (!isExecutorFixedGap()) {
+        return -1;
+      }
+      int cur = fromPos;
+      for (int count = 0; count < minLength; count++) {
+        if (cur >= maxPos) {
+          return -1;
+        }
+        int cp = text.codePointAt(cur);
+        if (scanInfo != null && !scanInfo.contains(cp)) {
+          return -1;
+        }
+        cur += Character.charCount(cp);
+      }
+      return cur <= maxPos ? cur : -1;
+    }
+
+    int matchExecutorFixedForward(Utf8InputScanner scanner, int fromPos, int maxPos) {
+      if (equals(EMPTY)) {
+        return fromPos;
+      }
+      if (!isExecutorFixedGap()) {
+        return -1;
+      }
+      int cur = fromPos;
+      for (int count = 0; count < minLength; count++) {
+        if (cur >= maxPos) {
+          return -1;
+        }
+        long decoded = scanner.decodeForward(cur);
+        int cp = InputScanner.codePoint(decoded);
+        if (scanInfo != null && !scanInfo.contains(cp)) {
+          return -1;
+        }
+        cur = InputScanner.position(decoded);
+      }
+      return cur <= maxPos ? cur : -1;
     }
 
     Gap(GapKind kind, int minLength, int maxLength, AsciiBitmap charClass, boolean isGreedy) {
