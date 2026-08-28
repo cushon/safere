@@ -487,9 +487,9 @@ public final class Pattern implements Serializable {
     }
     WuManberModel wuManberModel = null;
     if (altLiterals != null
-        && altLiterals.length >= 4
+        && altLiterals.length > 32
         && altLiterals.length <= 512
-        && (altLiterals.length > 32 || teddyModel == null)) {
+        && teddyModel == null) {
       wuManberModel = WuManberModel.compile(altLiterals);
     }
     StartAcceleration startAcceleration =

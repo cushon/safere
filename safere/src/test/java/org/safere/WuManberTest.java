@@ -83,6 +83,14 @@ class WuManberTest {
   }
 
   @Test
+  @DisplayName("Pattern reserves Wu-Manber tables for dictionaries larger than Teddy capacity")
+  void patternReservesWuManberForDictionariesLargerThanTeddyCapacity() {
+    Pattern pattern = Pattern.compile("alpha|bravo|charlie|delta");
+
+    assertThat(pattern.startDescriptor().wuManberModel()).isNull();
+  }
+
+  @Test
   @DisplayName("Pattern with 40-keyword alternation uses WuManber start accelerator")
   void patternWithAlternationUsesWuManber() {
     StringBuilder regex = new StringBuilder();
