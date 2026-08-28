@@ -217,6 +217,17 @@ class WuManberTest {
   }
 
   @Test
+  @DisplayName("Candidate cursor does not overflow for an out-of-range starting index")
+  void candidateCursorDoesNotOverflowForOutOfRangeStart() {
+    WuManberModel model = WuManberModel.compile(new String[] {"abcd", "efgh", "ijkl", "mnop"});
+    String text = "abcd";
+
+    assertThat(model.findCandidate(text, Integer.MAX_VALUE)).isEqualTo(-1);
+    assertThat(model.findCandidate(new Utf8InputScanner(text.getBytes(UTF_8)), Integer.MAX_VALUE))
+        .isEqualTo(-1);
+  }
+
+  @Test
   @DisplayName("Collision-budget fallback participates in adaptive accelerator defeat")
   void collisionBudgetFallbackParticipatesInAdaptiveAcceleratorDefeat() {
     assertThat(AcceleratorPolicy.WU_MANBER.isExactMatchCandidate()).isFalse();

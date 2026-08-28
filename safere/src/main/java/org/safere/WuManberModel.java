@@ -147,13 +147,18 @@ final class WuManberModel implements Serializable {
 
   int findCandidate(String text, int fromIndex) {
     int length = text.length();
-    int index = fromIndex + minLength - 1;
+    int start = Math.max(0, fromIndex);
+    if (start > length - minLength) {
+      return -1;
+    }
+    long index = (long) start + minLength - 1;
     long work = 0;
-    long workLimit = WorkLimit.forRemaining(length - fromIndex);
+    long workLimit = WorkLimit.forRemaining(length - start);
 
     while (index < length) {
-      int c1 = text.charAt(index - 1);
-      int c2 = text.charAt(index);
+      int cursor = (int) index;
+      int c1 = text.charAt(cursor - 1);
+      int c2 = text.charAt(cursor);
       if (c1 > 127 || c2 > 127) {
         index += minLength - 1;
         continue;
@@ -165,9 +170,9 @@ final class WuManberModel implements Serializable {
         continue;
       }
 
-      if (index - 2 >= fromIndex) {
-        int c3 = text.charAt(index - 3);
-        int c4 = text.charAt(index - 2);
+      if (index - 2 >= start) {
+        int c3 = text.charAt(cursor - 3);
+        int c4 = text.charAt(cursor - 2);
         if (c3 <= 127 && c4 <= 127) {
           int hash2 = ((c3 << 8) | c4) & HASH_MASK;
           int shift2 = shift2Table[hash2] & 0xFF;
@@ -178,7 +183,7 @@ final class WuManberModel implements Serializable {
         }
       }
 
-      int startPos = index - minLength + 1;
+      int startPos = cursor - minLength + 1;
       short targetPrefix =
           (short) (((text.charAt(startPos) & 0xFF) << 8) | (text.charAt(startPos + 1) & 0xFF));
       int patIdx = hashHead[hash1];
@@ -202,7 +207,7 @@ final class WuManberModel implements Serializable {
         return startPos;
       }
       if (work > workLimit) {
-        return fromIndex;
+        return start;
       }
       index++;
     }
@@ -211,15 +216,20 @@ final class WuManberModel implements Serializable {
 
   int findCandidate(Utf8InputScanner scanner, int fromIndex) {
     int length = scanner.length();
-    int index = fromIndex + minLength - 1;
+    int start = Math.max(0, fromIndex);
+    if (start > length - minLength) {
+      return -1;
+    }
+    long index = (long) start + minLength - 1;
     long work = 0;
-    long workLimit = WorkLimit.forRemaining(length - fromIndex);
+    long workLimit = WorkLimit.forRemaining(length - start);
     byte[] bytes = scanner.bytes();
     int offset = scanner.offset();
 
     while (index < length) {
-      int c1 = bytes[offset + index - 1] & 0xFF;
-      int c2 = bytes[offset + index] & 0xFF;
+      int cursor = (int) index;
+      int c1 = bytes[offset + cursor - 1] & 0xFF;
+      int c2 = bytes[offset + cursor] & 0xFF;
       if (c1 > 127 || c2 > 127) {
         index += minLength - 1;
         continue;
@@ -231,9 +241,9 @@ final class WuManberModel implements Serializable {
         continue;
       }
 
-      if (index - 2 >= fromIndex) {
-        int c3 = bytes[offset + index - 3] & 0xFF;
-        int c4 = bytes[offset + index - 2] & 0xFF;
+      if (index - 2 >= start) {
+        int c3 = bytes[offset + cursor - 3] & 0xFF;
+        int c4 = bytes[offset + cursor - 2] & 0xFF;
         if (c3 <= 127 && c4 <= 127) {
           int hash2 = ((c3 << 8) | c4) & HASH_MASK;
           int shift2 = shift2Table[hash2] & 0xFF;
@@ -244,7 +254,7 @@ final class WuManberModel implements Serializable {
         }
       }
 
-      int startPos = index - minLength + 1;
+      int startPos = cursor - minLength + 1;
       short targetPrefix =
           (short)
               (((bytes[offset + startPos] & 0xFF) << 8) | (bytes[offset + startPos + 1] & 0xFF));
@@ -270,7 +280,7 @@ final class WuManberModel implements Serializable {
         return startPos;
       }
       if (work > workLimit) {
-        return fromIndex;
+        return start;
       }
       index++;
     }
