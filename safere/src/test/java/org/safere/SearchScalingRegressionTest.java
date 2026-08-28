@@ -31,6 +31,24 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void outOfRangeSingleCharacterSearchDoesNotRecordNegativeWork() {
+    long stringWork =
+        WorkCounter.countForTesting(
+            () -> assertThat(Ascii.indexOfIgnoreCase("abc", 'x', 10)).isEqualTo(-1));
+    byte[] input = "abc".getBytes(UTF_8);
+    long utf8Work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(
+                        Utf8InputScanner.indexOfLinear(
+                            input, 0, input.length, new byte[] {(byte) 'x'}, 10))
+                    .isEqualTo(-1));
+
+    assertThat(stringWork).isZero();
+    assertThat(utf8Work).isZero();
+  }
+
+  @Test
   void shiftDfaTransitionsAreCountedForStringInput() {
     Pattern pattern = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
     String input = "a".repeat(10_000);

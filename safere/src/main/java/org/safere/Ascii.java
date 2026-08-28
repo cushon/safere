@@ -165,7 +165,7 @@ final class Ascii {
       }
     }
     if (WorkCounterConfig.ENABLED) {
-      WorkCounter.record(len - start);
+      WorkCounter.record(Math.max(0, len - start));
     }
     return -1;
   }

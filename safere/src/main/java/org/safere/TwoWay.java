@@ -180,7 +180,7 @@ final class TwoWay {
         }
       }
       if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record(length - startIdx);
+        WorkCounter.record(Math.max(0, length - startIdx));
       }
       return -1;
     }
