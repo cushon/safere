@@ -18,8 +18,6 @@ import java.util.Arrays;
  * sublinear average search performance across large keyword sets without the memory overhead of
  * Aho-Corasick or DFA state explosion.
  */
-// The arrays are immutable, privately owned scanner metadata; array identity is never observed.
-@SuppressWarnings("ArrayRecordComponent")
 final class WuManberModel implements Serializable {
   private static final long serialVersionUID = 1L;
 
@@ -259,7 +257,8 @@ final class WuManberModel implements Serializable {
         work++;
         if (prefixSignatures[patIdx] == targetPrefix) {
           String lit = literals[patIdx];
-          if (Ascii.regionMatches(bytes, offset + startPos, lit, lit.length())) {
+          if (lit.length() <= length - startPos
+              && Ascii.regionMatches(bytes, offset + startPos, lit, lit.length())) {
             if (bestPatIdx < 0 || patIdx < bestPatIdx) {
               bestPatIdx = patIdx;
             }

@@ -409,6 +409,30 @@ class SearchScalingRegressionTest {
         .isLessThanOrEqualTo(smallerWork * 6);
   }
 
+  @Test
+  void wuManberCollisionBudgetFallsBackOnlyOnce() {
+    StringBuilder regex = new StringBuilder();
+    for (int i = 0; i < 64; i++) {
+      if (i > 0) {
+        regex.append('|');
+      }
+      regex.append((char) ('A' + i / 26)).append((char) ('A' + i % 26)).append("aa");
+    }
+    Pattern pattern = Pattern.compile(regex.toString());
+    assertThat(pattern.startDescriptor().wuManberModel()).isNotNull();
+
+    long smallerWork =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher("xxaa".repeat(125)).find()).isFalse());
+    long largerWork =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher("xxaa".repeat(500)).find()).isFalse());
+
+    assertThat(largerWork)
+        .as("Wu-Manber collision fallback must remain linear")
+        .isLessThanOrEqualTo(smallerWork * 6);
+  }
+
   private static void assertConstantRejectionWork(IntPredicate find, String description) {
     long work2000 = WorkCounter.countForTesting(() -> assertThat(find.test(2_000)).isFalse());
     long work10000 = WorkCounter.countForTesting(() -> assertThat(find.test(10_000)).isFalse());

@@ -196,4 +196,38 @@ class WuManberTest {
     assertThat(model.findCandidate("ab", 0)).isEqualTo(-1);
     assertThat(model.findCandidate(new Utf8InputScanner("ab".getBytes(UTF_8)), 0)).isEqualTo(-1);
   }
+
+  @Test
+  @DisplayName("Mixed-length candidates at the input end stay within UTF-8 bounds")
+  void mixedLengthCandidatesAtInputEndStayWithinUtf8Bounds() {
+    WuManberModel model = WuManberModel.compile(new String[] {"abcd", "abcdEFGH", "zzzz", "yyyy"});
+    String text = "xxabcd";
+
+    assertThat(model.findCandidate(text, 0)).isEqualTo(2);
+    assertThat(model.findCandidate(new Utf8InputScanner(text.getBytes(UTF_8)), 0)).isEqualTo(2);
+  }
+
+  @Test
+  @DisplayName("Collision-budget fallback participates in adaptive accelerator defeat")
+  void collisionBudgetFallbackParticipatesInAdaptiveAcceleratorDefeat() {
+    assertThat(AcceleratorPolicy.WU_MANBER.isExactMatchCandidate()).isFalse();
+  }
+
+  @Test
+  @DisplayName("ASCII matches immediately after non-ASCII text are not skipped")
+  void asciiMatchesImmediatelyAfterNonAsciiTextAreNotSkipped() {
+    WuManberModel model = WuManberModel.compile(new String[] {"abcd", "wxyz", "lmno", "pqrs"});
+
+    for (String prefix : List.of("\u00e9", "a\u00e9", "ab\u00e9", "abc\u00e9", "\ud83d\ude00")) {
+      String text = prefix + "abcd";
+      assertThat(model.findCandidate(text, 0))
+          .as("String prefix %s", prefix)
+          .isEqualTo(prefix.length());
+
+      byte[] utf8 = text.getBytes(UTF_8);
+      assertThat(model.findCandidate(new Utf8InputScanner(utf8), 0))
+          .as("UTF-8 prefix %s", prefix)
+          .isEqualTo(prefix.getBytes(UTF_8).length);
+    }
+  }
 }
