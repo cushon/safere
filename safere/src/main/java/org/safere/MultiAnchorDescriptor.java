@@ -309,6 +309,10 @@ record MultiAnchorDescriptor(
           && !(segment.anchor() instanceof Anchor.CharClass)) {
         return false;
       }
+      if (segment.anchor() instanceof Anchor.Alternation alternation
+          && alternation.minLength() != alternation.maxLength()) {
+        return false;
+      }
       if (i > 0 && !segment.gap().isExecutorFixedGap()) {
         return false;
       }
@@ -372,7 +376,8 @@ record MultiAnchorDescriptor(
     }
 
     private boolean isExecutorFixedGap() {
-      return equals(EMPTY) || (kind == GapKind.BOUNDED_CLASS_REPEAT && isFixed());
+      return equals(EMPTY)
+          || (kind == GapKind.BOUNDED_CLASS_REPEAT && isFixed() && scanInfo != null);
     }
 
     int matchExecutorFixedForward(String text, int fromPos, int maxPos) {

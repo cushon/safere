@@ -266,17 +266,31 @@ class MultiAnchorGapEngineTest {
   }
 
   @Test
-  void fixedCharacterClassGapRemainsExecutable() {
-    Pattern pattern = Pattern.compile("AAA[0-9]{2}BB");
+  void fixedAnchorChainRemainsExecutable() {
+    Pattern pattern = Pattern.compile("AAA[0-9]BB");
     assertThat(pattern.multiAnchor().isExecutableChain()).isTrue();
 
-    Matcher matcher = pattern.matcher("noise AAA12BB trailing");
+    Matcher matcher = pattern.matcher("noise AAA1BB trailing");
     assertThat(matcher.find()).isTrue();
-    assertThat(matcher.group()).isEqualTo("AAA12BB");
+    assertThat(matcher.group()).isEqualTo("AAA1BB");
 
     Utf8Matcher utf8Matcher =
-        pattern.matcher(Utf8Input.validated("noise AAA12BB trailing".getBytes(UTF_8)));
+        pattern.matcher(Utf8Input.validated("noise AAA1BB trailing".getBytes(UTF_8)));
     assertThat(utf8Matcher.find()).isTrue();
+  }
+
+  @Test
+  void fixedCompoundGapWithoutCharacterMetadataFallsBack() {
+    Pattern pattern = Pattern.compile("AAA(?:[0-9]x){2}BB");
+    assertThat(pattern.multiAnchor().isExecutableChain()).isFalse();
+    assertFirstMatchEqualsJdk("AAA(?:[0-9]x){2}BB", "AAAaxaxBB");
+  }
+
+  @Test
+  void variableLengthAlternationAnchorFallsBack() {
+    Pattern pattern = Pattern.compile("(foo|foobar)[0-9]ZZ");
+    assertThat(pattern.multiAnchor().isExecutableChain()).isFalse();
+    assertFirstMatchEqualsJdk("(foo|foobar)[0-9]ZZ", "foobar1ZZ");
   }
 
   private static void assertFirstMatchEqualsJdk(String regex, String text) {
