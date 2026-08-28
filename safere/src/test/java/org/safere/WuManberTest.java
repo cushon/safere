@@ -95,6 +95,7 @@ class WuManberTest {
 
     Pattern p = Pattern.compile(regex.toString());
     assertThat(p.startDescriptor().wuManberModel()).isNotNull();
+    assertThat(p.stringStartAccelerator()).isInstanceOf(StringStartAccelerator.WuManber.class);
 
     String haystack = "prefix padding before token33 and some trailing text";
     Matcher m = p.matcher(haystack);
