@@ -1688,6 +1688,7 @@ public final class Matcher implements MatchResult {
           return applyDeferredMatchResult(res.start(), res.end(), prog.numCaptures(), true, false);
         }
         if (res.isDefiniteMismatch()) {
+          diagnosticParticipation(MatchStrategy.MULTI_ANCHOR, StrategyRole.CANDIDATE_VERIFICATION);
           diagnosticBoundary(MatchStrategy.MULTI_ANCHOR);
           return applyFailedMatchResult();
         }
@@ -1703,6 +1704,7 @@ public final class Matcher implements MatchResult {
           return applyDeferredMatchResult(res.start(), res.end(), prog.numCaptures(), true, false);
         }
         if (res.isDefiniteMismatch()) {
+          diagnosticParticipation(MatchStrategy.MULTI_ANCHOR, StrategyRole.CANDIDATE_VERIFICATION);
           diagnosticBoundary(MatchStrategy.MULTI_ANCHOR);
           return applyFailedMatchResult();
         }
