@@ -1671,8 +1671,7 @@ public final class Matcher implements MatchResult {
       }
     }
 
-    // Multi-Anchor Gap Engine: for unanchored multi-segment chains (A₁ G₁ A₂ ... Aₖ),
-    // sequentially locate anchors via SIMD hops and verify intervening gap invariants.
+    // Multi-anchor execution for deterministic unanchored chains with fixed, validated gaps.
     if (options.multiAnchorGapEngine()
         && !prog.anchorStart()
         && parentPattern.multiAnchor().isExecutableChain()) {

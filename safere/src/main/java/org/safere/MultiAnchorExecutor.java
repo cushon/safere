@@ -8,12 +8,12 @@ package org.safere;
 import java.util.Objects;
 
 /**
- * Unified execution engine for multi-anchor chains (A₁ G₁ A₂ ... Aₖ).
+ * Execution engine for deterministic multi-anchor chains (A₁ G₁ A₂ ... Aₖ).
  *
- * <p>Executes regular expressions by locating candidate SIMD anchor positions in sequence,
- * validating intervening gap invariants on micro-slices, and resolving leading and trailing gap
- * boundaries. Merges whole-document negative rejection and gap evaluation into a single
- * zero-allocation pass with {@link WorkLimit} watchdog fallback to the linear Forward Lazy DFA.
+ * <p>Locates the first anchor and validates subsequent single-literal or character-class anchors
+ * across empty or fixed character-class gaps. The descriptor eligibility check excludes shapes that
+ * require gap backtracking, alternation retries, or end-anchor interpretation; those shapes remain
+ * with the general linear engines.
  */
 final class MultiAnchorExecutor {
 
@@ -22,7 +22,7 @@ final class MultiAnchorExecutor {
     MATCHED,
     /** No match is possible in the document (instant negative rejection). */
     MISMATCH,
-    /** WorkLimit exhausted or complex gap backtracking required; fallback to DFA. */
+    /** The descriptor is outside this executor's deterministic subset; fall back. */
     FALLBACK
   }
 

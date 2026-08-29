@@ -293,6 +293,12 @@ class MultiAnchorGapEngineTest {
     assertFirstMatchEqualsJdk("(foo|foobar)[0-9]ZZ", "foobar1ZZ");
   }
 
+  @Test
+  void equalWidthAlternationAnchorFallsBackToAvoidSuffixRescans() {
+    Pattern pattern = Pattern.compile("(AAA|ZZZ)[0-9]BB");
+    assertThat(pattern.multiAnchor().isExecutableChain()).isFalse();
+  }
+
   private static void assertFirstMatchEqualsJdk(String regex, String text) {
     Matcher safere = Pattern.compile(regex).matcher(text);
     java.util.regex.Matcher jdk = java.util.regex.Pattern.compile(regex).matcher(text);

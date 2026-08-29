@@ -305,12 +305,7 @@ record MultiAnchorDescriptor(
     for (int i = 0; i < n; i++) {
       Segment segment = chain.segments()[i];
       if (!(segment.anchor() instanceof Anchor.Single)
-          && !(segment.anchor() instanceof Anchor.Alternation)
           && !(segment.anchor() instanceof Anchor.CharClass)) {
-        return false;
-      }
-      if (segment.anchor() instanceof Anchor.Alternation alternation
-          && alternation.minLength() != alternation.maxLength()) {
         return false;
       }
       if (i > 0 && !segment.gap().isExecutorFixedGap()) {
@@ -769,56 +764,6 @@ record MultiAnchorDescriptor(
         }
       };
     }
-
-    int scanClassEnd(String text, int fromPos, int maxPos) {
-      if (kind == GapKind.BOUNDED_CLASS_REPEAT) {
-        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
-        int cur = fromPos;
-        while (cur < limit) {
-          int cp = text.codePointAt(cur);
-          if (scanInfo != null && !scanInfo.contains(cp)) {
-            break;
-          }
-          cur += Character.charCount(cp);
-        }
-        return cur;
-      }
-      if (kind == GapKind.SINGLE_LINE_ANY_STAR) {
-        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
-        int nl = text.indexOf('\n', fromPos);
-        return (nl >= fromPos && nl < limit) ? nl : limit;
-      }
-      if (maxLength != Integer.MAX_VALUE) {
-        return Math.min(maxPos, fromPos + maxLength);
-      }
-      return maxPos;
-    }
-
-    int scanClassEnd(Utf8InputScanner scanner, int fromPos, int maxPos) {
-      if (kind == GapKind.BOUNDED_CLASS_REPEAT) {
-        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
-        int cur = fromPos;
-        while (cur < limit) {
-          long decoded = scanner.decodeForward(cur);
-          int cp = InputScanner.codePoint(decoded);
-          int nextPos = InputScanner.position(decoded);
-          if (scanInfo != null && !scanInfo.contains(cp)) {
-            break;
-          }
-          cur = nextPos;
-        }
-        return cur;
-      }
-      if (kind == GapKind.SINGLE_LINE_ANY_STAR) {
-        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
-        int nl = scanner.indexOfAscii('\n', fromPos, limit);
-        return (nl >= fromPos && nl < limit) ? nl : limit;
-      }
-      if (maxLength != Integer.MAX_VALUE) {
-        return Math.min(maxPos, fromPos + maxLength);
-      }
-      return maxPos;
-    }
   }
 
   sealed interface Anchor permits Anchor.Single, Anchor.Alternation, Anchor.CharClass {
@@ -861,22 +806,6 @@ record MultiAnchorDescriptor(
     int findNext(String text, int fromIndex);
 
     int findNext(Utf8InputScanner scanner, int fromIndex);
-
-    default int findNextWithin(String text, int fromIndex, int toIndex) {
-      if (fromIndex > toIndex) {
-        return -1;
-      }
-      int idx = findNext(text, fromIndex);
-      return idx >= 0 && idx <= toIndex ? idx : -1;
-    }
-
-    default int findNextWithin(Utf8InputScanner scanner, int fromIndex, int toIndex) {
-      if (fromIndex > toIndex) {
-        return -1;
-      }
-      int idx = findNext(scanner, fromIndex);
-      return idx >= 0 && idx <= toIndex ? idx : -1;
-    }
 
     boolean startsWith(String text, int pos);
 
@@ -960,54 +889,12 @@ record MultiAnchorDescriptor(
       }
 
       @Override
-      public int findNextWithin(String text, int fromIndex, int toIndex) {
-        if (fromIndex > toIndex || fromIndex + literal.length() > text.length()) {
-          return -1;
-        }
-        int maxStart = Math.min(toIndex, text.length() - literal.length());
-        if (fromIndex > maxStart) {
-          return -1;
-        }
-        if (maxStart - fromIndex <= 64) {
-          for (int i = fromIndex; i <= maxStart; i++) {
-            if (startsWith(text, i)) {
-              return i;
-            }
-          }
-          return -1;
-        }
-        int idx = findNext(text, fromIndex);
-        return idx >= 0 && idx <= maxStart ? idx : -1;
-      }
-
-      @Override
       public int findNext(Utf8InputScanner scanner, int fromIndex) {
         if (foldCase) {
           return scanner.indexOfIgnoreCase(
               literal, failure, anchorOffset, anchorLowByte, anchorHighByte, fromIndex);
         }
         return scanner.indexOf(literalUtf8, failure, shifts, fromIndex);
-      }
-
-      @Override
-      public int findNextWithin(Utf8InputScanner scanner, int fromIndex, int toIndex) {
-        if (fromIndex > toIndex || fromIndex + literalUtf8.length > scanner.length()) {
-          return -1;
-        }
-        int maxStart = Math.min(toIndex, scanner.length() - literalUtf8.length);
-        if (fromIndex > maxStart) {
-          return -1;
-        }
-        if (maxStart - fromIndex <= 64) {
-          for (int i = fromIndex; i <= maxStart; i++) {
-            if (startsWith(scanner, i)) {
-              return i;
-            }
-          }
-          return -1;
-        }
-        int idx = findNext(scanner, fromIndex);
-        return idx >= 0 && idx <= maxStart ? idx : -1;
       }
 
       @Override
@@ -1200,48 +1087,6 @@ record MultiAnchorDescriptor(
       }
 
       @Override
-      public int findNextWithin(String text, int fromIndex, int toIndex) {
-        if (fromIndex > toIndex || fromIndex + minLength > text.length()) {
-          return -1;
-        }
-        int maxStart = Math.min(toIndex, text.length() - minLength);
-        if (fromIndex > maxStart) {
-          return -1;
-        }
-        if (maxStart - fromIndex <= 64) {
-          for (int i = fromIndex; i <= maxStart; i++) {
-            if (startsWith(text, i)) {
-              return i;
-            }
-          }
-          return -1;
-        }
-        int idx = findNext(text, fromIndex);
-        return idx >= 0 && idx <= maxStart ? idx : -1;
-      }
-
-      @Override
-      public int findNextWithin(Utf8InputScanner scanner, int fromIndex, int toIndex) {
-        if (fromIndex > toIndex || fromIndex + minLength > scanner.length()) {
-          return -1;
-        }
-        int maxStart = Math.min(toIndex, scanner.length() - minLength);
-        if (fromIndex > maxStart) {
-          return -1;
-        }
-        if (maxStart - fromIndex <= 64) {
-          for (int i = fromIndex; i <= maxStart; i++) {
-            if (startsWith(scanner, i)) {
-              return i;
-            }
-          }
-          return -1;
-        }
-        int idx = findNext(scanner, fromIndex);
-        return idx >= 0 && idx <= maxStart ? idx : -1;
-      }
-
-      @Override
       public boolean startsWith(String text, int pos) {
         if (pos < 0 || pos + minLength > text.length()) {
           return false;
@@ -1421,45 +1266,6 @@ record MultiAnchorDescriptor(
         }
         int len = scanner.length();
         for (int i = Math.max(0, fromIndex); i < len; i++) {
-          int c = scanner.asciiAt(i);
-          if (c >= 0 && bitmap != null && bitmap.containsAscii(c)) {
-            return i;
-          }
-        }
-        return -1;
-      }
-
-      @Override
-      public int findNextWithin(String text, int fromIndex, int toIndex) {
-        if (fromIndex > toIndex || fromIndex >= text.length()) {
-          return -1;
-        }
-        int limit = Math.min(toIndex + 1, text.length());
-        for (int i = Math.max(0, fromIndex); i < limit; ) {
-          int cp = text.codePointAt(i);
-          if (scanInfo != null) {
-            if (scanInfo.contains(cp)) {
-              return i;
-            }
-          } else if (cp < 128 && bitmap != null && bitmap.containsAscii(cp)) {
-            return i;
-          }
-          i += Character.charCount(cp);
-        }
-        return -1;
-      }
-
-      @Override
-      public int findNextWithin(Utf8InputScanner scanner, int fromIndex, int toIndex) {
-        if (fromIndex > toIndex || fromIndex >= scanner.length()) {
-          return -1;
-        }
-        int limit = Math.min(toIndex + 1, scanner.length());
-        if (scanInfo != null) {
-          return scanner.indexOfCodePointClass(
-              scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1(), fromIndex, limit);
-        }
-        for (int i = Math.max(0, fromIndex); i < limit; i++) {
           int c = scanner.asciiAt(i);
           if (c >= 0 && bitmap != null && bitmap.containsAscii(c)) {
             return i;
