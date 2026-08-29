@@ -315,6 +315,29 @@ record MultiAnchorDescriptor(
     return chain.trailingGap().isExecutorFixedGap();
   }
 
+  boolean isExecutableUtf8Chain() {
+    if (!isExecutableChain()) {
+      return false;
+    }
+    for (Segment segment : chain.segments()) {
+      if (segment.anchor() instanceof Anchor.Single single
+          && single.foldCase()
+          && !isAscii(single.literal())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static boolean isAscii(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      if (value.charAt(i) > 0x7f) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   enum GapKind {
     /** Zero-width gap (adjacent anchors or no leading/trailing gap). */
     EMPTY,

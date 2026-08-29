@@ -299,6 +299,16 @@ class MultiAnchorGapEngineTest {
     assertThat(pattern.multiAnchor().isExecutableChain()).isFalse();
   }
 
+  @Test
+  void foldedSupplementaryLiteralFallsBackForUtf8() {
+    Pattern pattern = Pattern.compile("😀A[0-9]BB", Pattern.CASE_INSENSITIVE);
+    assertThat(pattern.multiAnchor().isExecutableChain()).isTrue();
+    assertThat(pattern.multiAnchor().isExecutableUtf8Chain()).isFalse();
+
+    Utf8Matcher matcher = pattern.matcher(Utf8Input.validated("😀A1BB".getBytes(UTF_8)));
+    assertThat(matcher.find()).isTrue();
+  }
+
   private static void assertFirstMatchEqualsJdk(String regex, String text) {
     Matcher safere = Pattern.compile(regex).matcher(text);
     java.util.regex.Matcher jdk = java.util.regex.Pattern.compile(regex).matcher(text);

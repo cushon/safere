@@ -61,7 +61,7 @@ final class MultiAnchorExecutor {
     Objects.requireNonNull(descriptor, "descriptor");
     Objects.requireNonNull(scanner, "scanner");
 
-    if (!descriptor.isExecutableChain()) {
+    if (!descriptor.isExecutableUtf8Chain()) {
       return Result.FALLBACK;
     }
 
