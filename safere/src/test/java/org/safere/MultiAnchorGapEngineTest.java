@@ -287,6 +287,18 @@ class MultiAnchorGapEngineTest {
   }
 
   @Test
+  void multipleTrailingConstraintsFallBackWhenTheyCannotShareOneGap() {
+    for (String regex : new String[] {"AAA[0-9]BB[0-9]\\b", "AAA[0-9]BB[0-9][A-Za-z0-9_]"}) {
+      Pattern pattern = Pattern.compile(regex);
+
+      assertThat(pattern.multiAnchor().isExecutableChain()).as(regex).isFalse();
+    }
+
+    assertFirstMatchEqualsJdk("AAA[0-9]BB[0-9]\\b", "AAA1BB2x");
+    assertFirstMatchEqualsJdk("AAA[0-9]BB[0-9][A-Za-z0-9_]", "x AAA1BB2!");
+  }
+
+  @Test
   void variableLengthAlternationAnchorFallsBack() {
     Pattern pattern = Pattern.compile("(foo|foobar)[0-9]ZZ");
     assertThat(pattern.multiAnchor().isExecutableChain()).isFalse();

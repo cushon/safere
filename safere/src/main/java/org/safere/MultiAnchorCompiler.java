@@ -1026,16 +1026,8 @@ final class MultiAnchorCompiler {
                 idx++;
                 break;
               }
-              MultiAnchorDescriptor.Gap remGap = classifyGap(rem, flags);
-              if (remGap == null) {
-                validTrailing = false;
-                break;
-              }
-              if (remGap.kind() == MultiAnchorDescriptor.GapKind.ANY_STAR
-                  || remGap.kind() == MultiAnchorDescriptor.GapKind.SINGLE_LINE_ANY_STAR) {
-                trailing = remGap;
-              }
-              idx++;
+              validTrailing = false;
+              break;
             }
             if (validTrailing) {
               gaps.add(trailing);
