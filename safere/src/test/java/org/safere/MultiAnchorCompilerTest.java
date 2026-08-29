@@ -113,13 +113,13 @@ class MultiAnchorCompilerTest {
 
     MultiAnchorDescriptor expectedText =
         MultiAnchorDescriptorBuilder.create()
-            .segment(Gap.EMPTY, "foo")
+            .segment(Gap.TEXT_START, "foo")
             .segment(GapKind.SINGLE_LINE_ANY_STAR, "bar")
             .trailingGap(Gap.EMPTY)
             .checkOrder(1, 0)
             .isStartAnchored(true)
             .isEndAnchored(true)
-            .startPlan(StartPlan.None.INSTANCE)
+            .startPlan(new StartPlan.Literal("foo", false, null))
             .rejectPlan(
                 new RejectPlan.EndAnchoredSuffix(new Pattern.SuffixInfo("bar", true, false, false)))
             .anchoredPrefix("foo")

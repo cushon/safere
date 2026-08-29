@@ -1671,6 +1671,44 @@ public final class Matcher implements MatchResult {
       }
     }
 
+    // Multi-Anchor Gap Engine: for unanchored multi-segment chains (A₁ G₁ A₂ ... Aₖ),
+    // sequentially locate anchors via SIMD hops and verify intervening gap invariants.
+    if (options.multiAnchorGapEngine()
+        && !prog.anchorStart()
+        && parentPattern.multiAnchor().isExecutableChain()) {
+      if (scanner instanceof Utf8InputScanner utf8Scanner) {
+        MultiAnchorExecutor.Result res =
+            MultiAnchorExecutor.find(parentPattern.multiAnchor(), utf8Scanner, searchFrom);
+        if (res.isMatched()) {
+          diagnosticParticipation(MatchStrategy.MULTI_ANCHOR, StrategyRole.CANDIDATE_VERIFICATION);
+          diagnosticBoundary(MatchStrategy.MULTI_ANCHOR);
+          if (prog.numCaptures() <= 1) {
+            return applyGroupZeroMatchResult(res.start(), res.end());
+          }
+          return applyDeferredMatchResult(res.start(), res.end(), prog.numCaptures(), true, false);
+        }
+        if (res.isDefiniteMismatch()) {
+          diagnosticBoundary(MatchStrategy.MULTI_ANCHOR);
+          return applyFailedMatchResult();
+        }
+      } else if (text != null) {
+        MultiAnchorExecutor.Result res =
+            MultiAnchorExecutor.find(parentPattern.multiAnchor(), text, searchFrom);
+        if (res.isMatched()) {
+          diagnosticParticipation(MatchStrategy.MULTI_ANCHOR, StrategyRole.CANDIDATE_VERIFICATION);
+          diagnosticBoundary(MatchStrategy.MULTI_ANCHOR);
+          if (prog.numCaptures() <= 1) {
+            return applyGroupZeroMatchResult(res.start(), res.end());
+          }
+          return applyDeferredMatchResult(res.start(), res.end(), prog.numCaptures(), true, false);
+        }
+        if (res.isDefiniteMismatch()) {
+          diagnosticBoundary(MatchStrategy.MULTI_ANCHOR);
+          return applyFailedMatchResult();
+        }
+      }
+    }
+
     // Prefix acceleration: if the pattern has a start accelerator (literal, fixed-offset,
     // character-class, or line-anchor), skip ahead to candidate match positions.
     int effectiveStart = searchFrom;
