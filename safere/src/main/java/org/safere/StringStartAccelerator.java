@@ -18,42 +18,48 @@ sealed interface StringStartAccelerator {
    * Creates a {@link StringStartAccelerator} for the given pattern descriptor, or {@code null} if
    * no acceleration strategy applies.
    */
-  static StringStartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
-    if (descriptor == null || !descriptor.hasStartAcceleration()) {
+  static StringStartAccelerator create(MultiAnchorDescriptor descriptor, boolean hasWordBoundary) {
+    if (descriptor == null) {
       return null;
     }
-    if (descriptor.prefix() != null) {
-      if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(descriptor.prefix(), descriptor.classHashChain());
+    return create(descriptor.startPlan(), hasWordBoundary);
+  }
+
+  static StringStartAccelerator create(
+      MultiAnchorDescriptor.StartPlan plan, boolean hasWordBoundary) {
+    if (plan == null || plan instanceof MultiAnchorDescriptor.StartPlan.None) {
+      return null;
+    }
+    return switch (plan) {
+      case MultiAnchorDescriptor.StartPlan.None unusedNone -> null;
+      case MultiAnchorDescriptor.StartPlan.Literal lit ->
+          lit.foldCase()
+              ? CaseInsensitiveLiteral.create(lit.prefix(), lit.classHashChain())
+              : Literal.create(lit.prefix());
+      case MultiAnchorDescriptor.StartPlan.CharClass cc ->
+          hasWordBoundary || !cc.scanInfo().isSelective() ? null : CharClass.create(cc.scanInfo());
+      case MultiAnchorDescriptor.StartPlan.FixedOffset fo ->
+          new FixedOffset(fo.fol(), fo.leadingClass());
+      case MultiAnchorDescriptor.StartPlan.MultiLiteral ml -> {
+        if (hasWordBoundary) {
+          yield null;
+        }
+        if (ml.wuManberModel() != null) {
+          yield new WuManber(ml.wuManberModel());
+        }
+        yield ml.fallbackClass() == null || !ml.fallbackClass().isSelective()
+            ? null
+            : CharClass.create(ml.fallbackClass());
       }
-      return Literal.create(descriptor.prefix());
-    }
-    if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
-    }
-    if (descriptor.wuManberModel() != null && !hasWordBoundary) {
-      return new WuManber(descriptor.wuManberModel());
-    }
-    if (descriptor.charClassPrefix() != null
-        && !hasWordBoundary
-        && descriptor.charClassPrefix().isSelective()) {
-      return CharClass.create(descriptor.charClassPrefix());
-    }
-    if (descriptor.lineAnchor() != null && !hasWordBoundary) {
-      return new LineAnchor(descriptor.lineAnchor());
-    }
-    if (descriptor.leadingExpansion() != null) {
-      StringStartAccelerator inner =
-          create(descriptor.leadingExpansion().innerDescriptor(), hasWordBoundary);
-      if (inner != null) {
-        return new LeadingExpansion(
-            descriptor.leadingExpansion().leadingClass(),
-            descriptor.leadingExpansion().minRepetition(),
-            descriptor.leadingExpansion().maxRepetition(),
-            inner);
+      case MultiAnchorDescriptor.StartPlan.LeadingExpansion le -> {
+        StringStartAccelerator inner = create(le.innerPlan(), hasWordBoundary);
+        yield inner != null
+            ? new LeadingExpansion(le.leadingClass(), le.minRepetition(), le.maxRepetition(), inner)
+            : null;
       }
-    }
-    return null;
+      case MultiAnchorDescriptor.StartPlan.LineAnchor la ->
+          hasWordBoundary ? null : new LineAnchor(la.acceleration());
+    };
   }
 
   /**

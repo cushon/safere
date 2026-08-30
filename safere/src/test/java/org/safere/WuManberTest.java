@@ -87,7 +87,10 @@ class WuManberTest {
   void patternReservesWuManberForDictionariesLargerThanTeddyCapacity() {
     Pattern pattern = Pattern.compile("alpha|bravo|charlie|delta");
 
-    assertThat(pattern.startDescriptor().wuManberModel()).isNull();
+    assertThat(pattern.startPlan())
+        .isInstanceOfSatisfying(
+            MultiAnchorDescriptor.StartPlan.MultiLiteral.class,
+            plan -> assertThat(plan.wuManberModel()).isNull());
   }
 
   @Test
@@ -102,7 +105,10 @@ class WuManberTest {
     }
 
     Pattern p = Pattern.compile(regex.toString());
-    assertThat(p.startDescriptor().wuManberModel()).isNotNull();
+    assertThat(p.startPlan())
+        .isInstanceOfSatisfying(
+            MultiAnchorDescriptor.StartPlan.MultiLiteral.class,
+            plan -> assertThat(plan.wuManberModel()).isNotNull());
     assertThat(p.stringStartAccelerator()).isInstanceOf(StringStartAccelerator.WuManber.class);
 
     String haystack = "prefix padding before token33 and some trailing text";
