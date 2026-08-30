@@ -741,7 +741,6 @@ record MultiAnchorDescriptor(
         String literal,
         boolean foldCase,
         byte[] literalUtf8,
-        int[] failure,
         int[] shifts,
         int anchorOffset,
         char anchorLowChar,
@@ -758,12 +757,9 @@ record MultiAnchorDescriptor(
         Objects.requireNonNull(literal);
         byte[] utf8 = literal.getBytes(StandardCharsets.UTF_8);
         if (!foldCase) {
-          int[] failure = Pattern.literalFailure(utf8);
           int[] shifts = Pattern.literalShifts(utf8);
-          return new Single(
-              literal, false, utf8, failure, shifts, 0, '\0', '\0', (byte) 0, (byte) 0);
+          return new Single(literal, false, utf8, shifts, 0, '\0', '\0', (byte) 0, (byte) 0);
         }
-        int[] failure = Ascii.ignoreCaseFailure(literal);
         int anchorOffset = RarityOracle.rarestAsciiOffset(literal, literal.length());
         char anchor = literal.charAt(anchorOffset);
         char anchorLow = Ascii.toLowerCase(anchor);
@@ -772,7 +768,6 @@ record MultiAnchorDescriptor(
             literal,
             true,
             utf8,
-            failure,
             null,
             anchorOffset,
             anchorLow,
@@ -809,9 +804,9 @@ record MultiAnchorDescriptor(
       public int findNext(Utf8InputScanner scanner, int fromIndex) {
         if (foldCase) {
           return scanner.indexOfIgnoreCase(
-              literal, failure, anchorOffset, anchorLowByte, anchorHighByte, fromIndex);
+              literal, anchorOffset, anchorLowByte, anchorHighByte, fromIndex);
         }
-        return scanner.indexOf(literalUtf8, failure, shifts, fromIndex);
+        return scanner.indexOf(literalUtf8, shifts, fromIndex);
       }
 
       @Override
