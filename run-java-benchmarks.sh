@@ -303,7 +303,9 @@ fi
 run_benchmark() {
   local bench="$1"
   local opts="$JMH_OPTS"
+  local benchmark_param_args=("${CROSS_ENGINE_PARAM_ARGS[@]}")
   case "$bench" in
+    *InternalBenchmark*) benchmark_param_args=() ;;
     *CrossEngineNoForkBenchmark*) opts="$NO_FORK_JMH_OPTS" ;;
     *CrossEngineColdStartBenchmark*)
       local trials="$CROSS_ENGINE_COLD_START_TRIALS"
@@ -352,7 +354,7 @@ run_benchmark() {
       -jar "$BENCHMARK_JAR" \
       -jvmArgs "$JVM_ARGS" \
       $opts \
-      "${CROSS_ENGINE_PARAM_ARGS[@]}" \
+      "${benchmark_param_args[@]}" \
       "${JMH_EXTRA_ARGS[@]}" \
       "$bench"
   else
@@ -362,7 +364,7 @@ run_benchmark() {
       -jar "$BENCHMARK_JAR" \
       -jvmArgs "$JVM_ARGS" \
       $opts \
-      "${CROSS_ENGINE_PARAM_ARGS[@]}" \
+      "${benchmark_param_args[@]}" \
       "$bench"
   fi
 }

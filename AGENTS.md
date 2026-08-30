@@ -378,11 +378,17 @@ generic runners and trials:
   collection as completed.
 - **Do not commit optimizations that do not improve benchmark results.**
   Every optimization must be validated with before/after benchmarks.
-- **`benchmark-data.json` is the only checked-in workload source.** Benchmark
-  scripts materialize it into a resolved manifest and exact UTF-8 input files
-  before execution. Java, C++, Go, Rust, and other harnesses read only those
-  generated artifacts. Edit the JSON file to change workloads; never hardcode
-  values or generation logic in a harness.
+- **`benchmark-data.json` is the only checked-in workload source for benchmark
+  harnesses.** Benchmark scripts materialize it into a resolved manifest and
+  exact UTF-8 input files before execution. Java, C++, Go, Rust, and other
+  harnesses read only those generated artifacts. Edit the JSON file to change
+  workloads; never hardcode values or generation logic in a harness. The sole
+  exception is a deterministic SafeRE-internal algorithm comparison in the
+  `org.safere` package whose class name ends in `InternalBenchmark`; these
+  benchmarks may define their inputs in Java so they can exercise package-private
+  implementation code directly. They must still use `run-java-benchmarks.sh`
+  and must not declare their own fork, warmup, or measurement settings or a
+  standalone runner.
 - **Zero implicit benchmark syntax conversion.** Regex patterns and
   replacement templates remain Java-canonical workload data. When an engine
   needs different syntax, declare the engine's exact alternate beside the
