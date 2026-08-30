@@ -1453,14 +1453,14 @@ final class MultiAnchorCompiler {
         continue;
       }
       if (!sawTextAnchor) {
+        if (node.op == RegexpOp.BEGIN_TEXT) {
+          sawTextAnchor = true;
+          continue;
+        }
         if (isLeadingZeroWidth(node)) {
           continue;
         }
-        if (node.op != RegexpOp.BEGIN_TEXT) {
-          return null;
-        }
-        sawTextAnchor = true;
-        continue;
+        return null;
       }
       if (!isLeadingZeroWidth(node)) {
         return node;

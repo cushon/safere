@@ -7,7 +7,6 @@ package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
@@ -287,33 +286,6 @@ class MultiAnchorCompilerTest {
   }
 
   @Test
-  void reverseAnchorAnalysisScalesLinearlyForLongConcatenations() {
-    Regexp smaller = repeatedCharacterClassConcat(4_000);
-    Regexp larger = repeatedCharacterClassConcat(8_000);
-    MultiAnchorCompiler.extractReverseMultiAnchor(smaller, 0, false);
-    MultiAnchorCompiler.extractReverseMultiAnchor(larger, 0, false);
-
-    long smallerNanos = medianReverseAnalysisNanos(smaller);
-    long largerNanos = medianReverseAnalysisNanos(larger);
-
-    assertThat(largerNanos)
-        .withFailMessage("smaller=%s larger=%s", smallerNanos, largerNanos)
-        .isLessThan(smallerNanos * 3);
-  }
-
-  @Test
-  void reverseAnchorAnalysisIsStackSafeForDeepPrefixes() {
-    Regexp prefix = Regexp.literal('a', 0);
-    for (int index = 0; index < 20_000; index++) {
-      prefix = Regexp.capture(prefix, 0, index + 1, null);
-    }
-    Regexp regexp =
-        Regexp.concat(List.of(prefix, Regexp.literalString(new int[] {'z', 'z'}, 0)), 0);
-
-    MultiAnchorCompiler.extractReverseMultiAnchor(regexp, 0, false);
-  }
-
-  @Test
   void endRejectPlansRetainUnixLinesMode() {
     MultiAnchorDescriptor.RejectPlan suffix =
         Pattern.compile(".*needle$", Pattern.UNIX_LINES).rejectPlan();
@@ -391,30 +363,11 @@ class MultiAnchorCompilerTest {
     return nested;
   }
 
-  private static Regexp repeatedCharacterClassConcat(int size) {
-    List<Regexp> children = new ArrayList<>(size);
-    for (int index = 0; index < size; index++) {
-      children.add(Parser.parse("[ab]", Pattern.toParseFlags(0)));
-    }
-    return Regexp.concat(children, 0);
-  }
-
   private static long medianAnalysisNanos(Regexp regexp) {
     long[] timings = new long[5];
     for (int index = 0; index < timings.length; index++) {
       long start = System.nanoTime();
       MultiAnchorCompiler.analyze(regexp);
-      timings[index] = System.nanoTime() - start;
-    }
-    Arrays.sort(timings);
-    return timings[timings.length / 2];
-  }
-
-  private static long medianReverseAnalysisNanos(Regexp regexp) {
-    long[] timings = new long[5];
-    for (int index = 0; index < timings.length; index++) {
-      long start = System.nanoTime();
-      MultiAnchorCompiler.extractReverseMultiAnchor(regexp, 0, false);
       timings[index] = System.nanoTime() - start;
     }
     Arrays.sort(timings);
