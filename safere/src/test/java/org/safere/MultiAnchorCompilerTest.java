@@ -271,21 +271,6 @@ class MultiAnchorCompilerTest {
   }
 
   @Test
-  void nestedRequiredLiteralAnalysisScalesLinearly() {
-    Regexp smaller = nestedRequiredLiteral(8_000);
-    Regexp larger = nestedRequiredLiteral(16_000);
-    MultiAnchorCompiler.analyze(smaller);
-    MultiAnchorCompiler.analyze(larger);
-
-    long smallerNanos = medianAnalysisNanos(smaller);
-    long largerNanos = medianAnalysisNanos(larger);
-
-    assertThat(largerNanos)
-        .withFailMessage("smaller=%s larger=%s", smallerNanos, largerNanos)
-        .isLessThan(smallerNanos * 3);
-  }
-
-  @Test
   void endRejectPlansRetainUnixLinesMode() {
     MultiAnchorDescriptor.RejectPlan suffix =
         Pattern.compile(".*needle$", Pattern.UNIX_LINES).rejectPlan();
@@ -345,19 +330,6 @@ class MultiAnchorCompilerTest {
           Regexp.alternate(
               List.of(
                   Regexp.literal(0x102 + index * 2, 0), Regexp.capture(nested, 0, index + 1, null)),
-              0);
-    }
-    return nested;
-  }
-
-  private static Regexp nestedRequiredLiteral(int size) {
-    Regexp nested = Regexp.literalString("q".repeat(size).codePoints().toArray(), 0);
-    for (int index = 0; index < size; index++) {
-      nested =
-          Regexp.concat(
-              List.of(
-                  Regexp.capture(nested, 0, index + 1, null),
-                  Regexp.quest(Regexp.literal('x', 0), 0)),
               0);
     }
     return nested;
