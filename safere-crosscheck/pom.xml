@@ -104,6 +104,7 @@
                         <exclude name="AnchoredDfaCachingTest.java"/>
                         <exclude name="AsciiBitmapTest.java"/>
                         <exclude name="AsciiTest.java"/>
+                        <exclude name="AstAnalysisTest.java"/>
                         <exclude name="BitStateTest.java"/>
                         <exclude name="CharClassTest.java"/>
                         <exclude name="CompilerTest.java"/>
@@ -121,7 +122,7 @@
                         <exclude name="MatcherDeferredCaptureStateTest.java"/>
                         <exclude name="MatcherTransitionInventoryTest.java"/>
                         <exclude name="MatchDescriptorTest.java"/>
-                        <exclude name="MultiLiteralTest.java"/>
+                        <exclude name="MultiAnchorCompilerTest.java"/>
                         <exclude name="MultiLiteralTest.java"/>
                         <exclude name="NfaTest.java"/>
                         <exclude name="OnePassTest.java"/>
