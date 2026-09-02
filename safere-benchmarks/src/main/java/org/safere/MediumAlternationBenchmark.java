@@ -6,6 +6,7 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -21,8 +22,13 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
 /**
- * Benchmark for medium-sized keyword alternations (16 <= K <= 128), representative of HTTP headers,
- * SQL keywords, and MIME types. Targets Multi-Group Teddy SIMD acceleration.
+ * Benchmark across alternation acceleration tiers:
+ *
+ * <ul>
+ *   <li>Tier 1: Direct SIMD Equality (K <= 4)
+ *   <li>Tier 2: Single-Group Teddy SIMD (5 <= K <= 32)
+ *   <li>Tier 3: Vector-Accelerated Aho-Corasick (K > 32)
+ * </ul>
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -35,13 +41,30 @@ public class MediumAlternationBenchmark {
   @Param({"64", "1024", "65536"})
   public int haystackLength;
 
-  @Param({"HTTP_HEADERS_36", "SQL_KEYWORDS_72", "MIME_TYPES_110"})
+  @Param({
+    "DIRECT_SIMD_4",
+    "TEDDY_8",
+    "TEDDY_16",
+    "TEDDY_32",
+    "AC_HTTP_HEADERS_36",
+    "AC_SQL_KEYWORDS_72",
+    "AC_MIME_TYPES_110"
+  })
   public String workload;
+
+  @Param({"ABSENT", "MATCH_LATE"})
+  public String matchMode;
 
   private Pattern saferePattern;
   private java.util.regex.Pattern jdkPattern;
   private String stringInput;
   private Utf8Input utf8Input;
+
+  private static final String[] HTTP_METHODS_4 = {"GET", "POST", "PUT", "DELETE"};
+
+  private static final String[] KEYWORDS_8 = {
+    "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH", "CONNECT"
+  };
 
   private static final String[] HTTP_HEADERS = {
     "Accept",
@@ -189,9 +212,13 @@ public class MediumAlternationBenchmark {
   public void setup() {
     String[] keywords =
         switch (workload) {
-          case "HTTP_HEADERS_36" -> HTTP_HEADERS;
-          case "SQL_KEYWORDS_72" -> SQL_KEYWORDS;
-          case "MIME_TYPES_110" -> MIME_TYPES;
+          case "DIRECT_SIMD_4" -> HTTP_METHODS_4;
+          case "TEDDY_8" -> KEYWORDS_8;
+          case "TEDDY_16" -> Arrays.copyOfRange(HTTP_HEADERS, 0, 16);
+          case "TEDDY_32" -> Arrays.copyOfRange(HTTP_HEADERS, 0, 32);
+          case "AC_HTTP_HEADERS_36", "HTTP_HEADERS_36" -> Arrays.copyOfRange(HTTP_HEADERS, 0, 36);
+          case "AC_SQL_KEYWORDS_72", "SQL_KEYWORDS_72" -> SQL_KEYWORDS;
+          case "AC_MIME_TYPES_110", "MIME_TYPES_110" -> MIME_TYPES;
           default -> throw new IllegalArgumentException("Unknown workload: " + workload);
         };
 
@@ -212,6 +239,16 @@ public class MediumAlternationBenchmark {
     for (int i = 0; i < haystackLength; i++) {
       chars[i] = (byte) ('a' + rng.nextInt(26));
     }
+
+    if (matchMode.equals("MATCH_LATE")) {
+      String target = keywords[keywords.length / 2];
+      byte[] targetBytes = target.getBytes(StandardCharsets.UTF_8);
+      int insertPos =
+          Math.max(0, haystackLength - targetBytes.length - (haystackLength > 64 ? 8 : 0));
+      int copyLen = Math.min(targetBytes.length, haystackLength - insertPos);
+      System.arraycopy(targetBytes, 0, chars, insertPos, copyLen);
+    }
+
     stringInput = new String(chars, StandardCharsets.UTF_8);
     utf8Input = Utf8Input.trusted(chars);
   }

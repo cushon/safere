@@ -44,7 +44,8 @@ sealed interface Utf8StartAccelerator {
         if (hasWordBoundary) {
           yield null;
         }
-        if (ml.literals().length <= 4 && VectorScanProviders.multiLiteralProviderAvailable()) {
+        int k = ml.literals().length;
+        if (k <= 4 && VectorScanProviders.multiLiteralProviderAvailable()) {
           MultiLiteralInfo info = MultiLiteralInfo.create(ml.literals());
           if (info != null) {
             TeddyModel teddy =
@@ -54,13 +55,14 @@ sealed interface Utf8StartAccelerator {
             yield new MultiLiteral(info, teddy);
           }
         }
-        if (VectorScanProviders.teddyProviderAvailable()) {
+        if (VectorScanProviders.teddyProviderAvailable() && k <= 32) {
           TeddyModel model = TeddyModel.compileForSelectedProvider(ml.literals());
           if (model != null) {
             yield new Teddy(model);
           }
         }
-        if (ml.literals().length > 4) {
+        int uniqueStartChars = countUniqueFirstBytes(ml.literals());
+        if (k >= 128 || uniqueStartChars <= 8) {
           AhoCorasickSearcher ac = AhoCorasickSearcher.create(ml.literals(), false);
           if (ac != null) {
             yield new AhoCorasick(ac);
@@ -416,5 +418,25 @@ sealed interface Utf8StartAccelerator {
       }
       return -1;
     }
+  }
+
+  private static int countUniqueFirstBytes(String[] literals) {
+    long lo = 0;
+    long hi = 0;
+    int nonAsciiCount = 0;
+    for (String lit : literals) {
+      if (lit.isEmpty()) {
+        continue;
+      }
+      char c = lit.charAt(0);
+      if (c < 64) {
+        lo |= (1L << c);
+      } else if (c < 128) {
+        hi |= (1L << (c - 64));
+      } else {
+        nonAsciiCount++;
+      }
+    }
+    return Long.bitCount(lo) + Long.bitCount(hi) + nonAsciiCount;
   }
 }
