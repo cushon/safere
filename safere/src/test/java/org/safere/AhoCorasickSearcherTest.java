@@ -18,42 +18,41 @@ class AhoCorasickSearcherTest {
   @Test
   void testAhoCorasickSearcher_basicMatch() {
     AhoCorasickSearcher searcher = new AhoCorasickSearcher(List.of("AL", "AK", "AZ"), false);
-    assertThat(searcher.findNext("This is AL matching text", 0)).isEqualTo(8);
-    assertThat(searcher.findNext("This is AK matching text", 0)).isEqualTo(8);
-    assertThat(searcher.findNext("This has no state codes", 0)).isEqualTo(-1);
+    byte[] bytes1 = "This is AL matching text".getBytes(StandardCharsets.UTF_8);
+    byte[] bytes2 = "This is AK matching text".getBytes(StandardCharsets.UTF_8);
+    byte[] bytesNo = "This has no state codes".getBytes(StandardCharsets.UTF_8);
 
-    byte[] bytes = "This is AL matching text".getBytes(StandardCharsets.UTF_8);
-    assertThat(searcher.findNext(bytes, 0, bytes.length, 0)).isEqualTo(8);
+    assertThat(searcher.findNext(bytes1, 0, bytes1.length, 0)).isEqualTo(8);
+    assertThat(searcher.findNext(bytes2, 0, bytes2.length, 0)).isEqualTo(8);
+    assertThat(searcher.findNext(bytesNo, 0, bytesNo.length, 0)).isEqualTo(-1);
   }
 
   @Test
   void testAhoCorasickSearcher_caseInsensitiveMatch() {
     AhoCorasickSearcher searcher = new AhoCorasickSearcher(List.of("AL", "AK", "AZ"), true);
-    assertThat(searcher.findNext("This is al matching text", 0)).isEqualTo(8);
-    assertThat(searcher.findNext("This is Ak matching text", 0)).isEqualTo(8);
-    assertThat(searcher.findNext("This is AZ matching text", 0)).isEqualTo(8);
+    byte[] bytes1 = "This is al matching text".getBytes(StandardCharsets.UTF_8);
+    byte[] bytes2 = "This is Ak matching text".getBytes(StandardCharsets.UTF_8);
+    byte[] bytes3 = "This is AZ matching text".getBytes(StandardCharsets.UTF_8);
 
-    byte[] bytes = "This is al matching text".getBytes(StandardCharsets.UTF_8);
-    assertThat(searcher.findNext(bytes, 0, bytes.length, 0)).isEqualTo(8);
+    assertThat(searcher.findNext(bytes1, 0, bytes1.length, 0)).isEqualTo(8);
+    assertThat(searcher.findNext(bytes2, 0, bytes2.length, 0)).isEqualTo(8);
+    assertThat(searcher.findNext(bytes3, 0, bytes3.length, 0)).isEqualTo(8);
   }
 
   @Test
   void testAhoCorasickSearcher_multipleMatches() {
     AhoCorasickSearcher searcher =
         new AhoCorasickSearcher(List.of("he", "she", "his", "hers"), false);
-    assertThat(searcher.findNext("ushers", 0)).isEqualTo(1); // Matches "she" starting at index 1
-    assertThat(searcher.findNext("ushers", 2)).isEqualTo(2); // Matches "he" starting at index 2
-
     byte[] bytes = "ushers".getBytes(StandardCharsets.UTF_8);
-    assertThat(searcher.findNext(bytes, 0, bytes.length, 0)).isEqualTo(1);
-    assertThat(searcher.findNext(bytes, 0, bytes.length, 2)).isEqualTo(2);
+    assertThat(searcher.findNext(bytes, 0, bytes.length, 0))
+        .isEqualTo(1); // Matches "she" starting at index 1
+    assertThat(searcher.findNext(bytes, 0, bytes.length, 2))
+        .isEqualTo(2); // Matches "he" starting at index 2
   }
 
   @Test
   void testAhoCorasickSearcher_returnsEarliestStartForOverlappingMatches() {
     AhoCorasickSearcher searcher = new AhoCorasickSearcher(List.of("abcd", "bc"), false);
-    assertThat(searcher.findNext("abcdz", 0)).isEqualTo(0);
-
     byte[] bytes = "abcdz".getBytes(StandardCharsets.UTF_8);
     assertThat(searcher.findNext(bytes, 0, bytes.length, 0)).isEqualTo(0);
   }
@@ -61,7 +60,9 @@ class AhoCorasickSearcherTest {
   @Test
   void testAhoCorasickSearcher_unicodeMatch() {
     AhoCorasickSearcher searcher = new AhoCorasickSearcher(List.of("乳", "卵", "奶"), false);
-    assertThat(searcher.findNext("这包含乳製品", 0)).isEqualTo(3);
+    byte[] bytes = "这包含乳製品".getBytes(StandardCharsets.UTF_8);
+    assertThat(searcher.findNext(bytes, 0, bytes.length, 0))
+        .isEqualTo(9); // "乳" is at UTF-8 byte offset 9
   }
 
   @Test
@@ -76,11 +77,9 @@ class AhoCorasickSearcherTest {
     byte[] bytes = haystack.getBytes(StandardCharsets.UTF_8);
 
     int expectedIndex = haystack.indexOf("pattern_0342");
-    assertThat(searcher.findNext(haystack, 0)).isEqualTo(expectedIndex);
     assertThat(searcher.findNext(bytes, 0, bytes.length, 0)).isEqualTo(expectedIndex);
 
     // After match
-    assertThat(searcher.findNext(haystack, expectedIndex + 1)).isEqualTo(-1);
     assertThat(searcher.findNext(bytes, 0, bytes.length, expectedIndex + 1)).isEqualTo(-1);
   }
 

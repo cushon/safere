@@ -918,9 +918,6 @@ record MultiAnchorDescriptor(
 
       @Override
       public int findNext(String text, int fromIndex) {
-        if (ahoCorasick != null) {
-          return ahoCorasick.findNext(text, fromIndex);
-        }
         if (literals.length == 2) {
           String lit0 = literals[0];
           String lit1 = literals[1];

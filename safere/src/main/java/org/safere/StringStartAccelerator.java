@@ -40,27 +40,10 @@ sealed interface StringStartAccelerator {
           hasWordBoundary || !cc.scanInfo().isSelective() ? null : CharClass.create(cc.scanInfo());
       case MultiAnchorDescriptor.StartPlan.FixedOffset fo ->
           new FixedOffset(fo.fol(), fo.leadingClass());
-      case MultiAnchorDescriptor.StartPlan.MultiLiteral ml -> {
-        if (hasWordBoundary) {
-          yield null;
-        }
-        if (ml.literals().length > 128) {
-          AhoCorasickSearcher ac = AhoCorasickSearcher.create(ml.literals(), false);
-          if (ac != null) {
-            yield new AhoCorasick(ac);
-          }
-        }
-        if (ml.fallbackClass() != null && ml.fallbackClass().isSelective()) {
-          yield CharClass.create(ml.fallbackClass());
-        }
-        if (ml.literals().length > 4) {
-          AhoCorasickSearcher ac = AhoCorasickSearcher.create(ml.literals(), false);
-          if (ac != null) {
-            yield new AhoCorasick(ac);
-          }
-        }
-        yield null;
-      }
+      case MultiAnchorDescriptor.StartPlan.MultiLiteral ml ->
+          hasWordBoundary || ml.fallbackClass() == null || !ml.fallbackClass().isSelective()
+              ? null
+              : CharClass.create(ml.fallbackClass());
       case MultiAnchorDescriptor.StartPlan.LeadingExpansion le -> {
         StringStartAccelerator inner = create(le.innerPlan(), hasWordBoundary);
         yield inner != null
@@ -88,7 +71,6 @@ sealed interface StringStartAccelerator {
       case CaseInsensitiveLiteral cil -> cil.findCandidate(text, fromIndex, unixLines);
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
-      case AhoCorasick ac -> ac.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
       case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
     };
@@ -368,17 +350,6 @@ sealed interface StringStartAccelerator {
           || prev == '\u2028'
           || prev == '\u2029'
           || (prev == '\r' && text.charAt(pos) != '\n');
-    }
-  }
-
-  record AhoCorasick(AhoCorasickSearcher searcher) implements StringStartAccelerator {
-    @Override
-    public AcceleratorPolicy policy() {
-      return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
-    }
-
-    int findCandidate(String text, int fromIndex, boolean unixLines) {
-      return searcher.findNext(text, fromIndex);
     }
   }
 
