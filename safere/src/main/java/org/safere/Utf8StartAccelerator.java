@@ -60,7 +60,7 @@ sealed interface Utf8StartAccelerator {
             yield new Teddy(model);
           }
         }
-        if (ml.literals().length > 128) {
+        if (ml.literals().length > 4) {
           AhoCorasickSearcher ac = AhoCorasickSearcher.create(ml.literals(), false);
           if (ac != null) {
             yield new AhoCorasick(ac);
@@ -68,12 +68,6 @@ sealed interface Utf8StartAccelerator {
         }
         if (ml.fallbackClass() != null && ml.fallbackClass().isSelective()) {
           yield new CharClass(ml.fallbackClass());
-        }
-        if (ml.literals().length > 4) {
-          AhoCorasickSearcher ac = AhoCorasickSearcher.create(ml.literals(), false);
-          if (ac != null) {
-            yield new AhoCorasick(ac);
-          }
         }
         yield null;
       }

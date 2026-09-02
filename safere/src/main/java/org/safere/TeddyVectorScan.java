@@ -111,6 +111,7 @@ final class TeddyVectorScan {
       ByteVector[] matchVectors = new ByteVector[numGroups];
 
       for (; pos <= limit; pos += vectorLen) {
+        // Stage 1: 2-byte primary SIMD filter across all groups
         ByteVector input0 = ByteVector.fromArray(SPECIES, bytes, offset + pos);
         ByteVector lo0 = input0.and((byte) 0x0F);
         ByteVector hi0 = input0.lanewise(LSHR, 4).and((byte) 0x0F);
@@ -124,53 +125,59 @@ final class TeddyVectorScan {
           hi1 = input1.lanewise(LSHR, 4).and((byte) 0x0F);
         }
 
-        boolean has3 = is3Byte && pos + 2 <= limit;
-        ByteVector lo2 = null;
-        ByteVector hi2 = null;
-        if (has3) {
-          ByteVector input2 = ByteVector.fromArray(SPECIES, bytes, offset + pos + 2);
-          lo2 = input2.and((byte) 0x0F);
-          hi2 = input2.lanewise(LSHR, 4).and((byte) 0x0F);
-        }
-
         ByteVector combined = null;
         for (int g = 0; g < numGroups; g++) {
           ByteVector mg = lo0.selectFrom(lutLo0[g]).and(hi0.selectFrom(lutHi0[g]));
           if (has2) {
             mg = mg.and(lo1.selectFrom(lutLo1[g]).and(hi1.selectFrom(lutHi1[g])));
           }
-          if (has3) {
-            mg = mg.and(lo2.selectFrom(lutLo2[g]).and(hi2.selectFrom(lutHi2[g])));
-          }
           matchVectors[g] = mg;
-          combined = (combined == null) ? mg : combined.or(mg);
+          combined = (g == 0) ? mg : combined.or(mg);
         }
 
         VectorMask<Byte> matchMask = combined.compare(NE, (byte) 0);
         if (matchMask.anyTrue()) {
-          long activeLanes = matchMask.toLong();
-          while (activeLanes != 0) {
-            int bit = Long.numberOfTrailingZeros(activeLanes);
-            int candidatePos = pos + bit;
+          // Stage 2: 3-byte confirmation filter across groups (only on candidate blocks)
+          if (is3Byte && pos + 2 <= limit) {
+            ByteVector input2 = ByteVector.fromArray(SPECIES, bytes, offset + pos + 2);
+            ByteVector lo2 = input2.and((byte) 0x0F);
+            ByteVector hi2 = input2.lanewise(LSHR, 4).and((byte) 0x0F);
+
+            combined = null;
             for (int g = 0; g < numGroups; g++) {
-              byte bucketMask = matchVectors[g].lane(bit);
-              if (bucketMask != 0) {
-                TeddyModel.Group group = groups[g];
-                String[] literals = group.literals();
-                int[] buckets = group.literalBuckets();
-                for (int litIdx = 0; litIdx < literals.length; litIdx++) {
-                  int b = buckets[litIdx];
-                  if ((bucketMask & (1 << b)) != 0) {
-                    String lit = literals[litIdx];
-                    if (candidatePos + lit.length() <= length
-                        && Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
-                      return candidatePos;
+              matchVectors[g] =
+                  matchVectors[g].and(lo2.selectFrom(lutLo2[g]).and(hi2.selectFrom(lutHi2[g])));
+              combined = (g == 0) ? matchVectors[g] : combined.or(matchVectors[g]);
+            }
+            matchMask = combined.compare(NE, (byte) 0);
+          }
+
+          if (matchMask.anyTrue()) {
+            // Stage 3: Candidate extraction and verification
+            long activeLanes = matchMask.toLong();
+            while (activeLanes != 0) {
+              int bit = Long.numberOfTrailingZeros(activeLanes);
+              int candidatePos = pos + bit;
+              for (int g = 0; g < numGroups; g++) {
+                byte bucketMask = matchVectors[g].lane(bit);
+                if (bucketMask != 0) {
+                  TeddyModel.Group group = groups[g];
+                  String[] literals = group.literals();
+                  int[] buckets = group.literalBuckets();
+                  for (int litIdx = 0; litIdx < literals.length; litIdx++) {
+                    int b = buckets[litIdx];
+                    if ((bucketMask & (1 << b)) != 0) {
+                      String lit = literals[litIdx];
+                      if (candidatePos + lit.length() <= length
+                          && Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
+                        return candidatePos;
+                      }
                     }
                   }
                 }
               }
+              activeLanes &= activeLanes - 1;
             }
-            activeLanes &= activeLanes - 1;
           }
         }
       }

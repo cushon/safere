@@ -7,6 +7,8 @@ package org.safere;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Immutable precomputed lookup tables and metadata for Teddy SIMD vector-shuffle multi-literal
@@ -187,6 +189,24 @@ final class TeddyModel implements Serializable {
 
     boolean is2Byte = minLen >= 2;
     boolean is3Byte = minLen >= 3;
+
+    // Multi-group Teddy (K > 32) requires high 2-byte prefix diversity to avoid bucket collisions
+    // in Stage 1 2-byte SIMD nibble tables. Clustered prefixes (e.g. HTTP headers with "Ac*",
+    // "Co*",
+    // "If*" or MIME types) degrade under collisions and are routed to deterministic Aho-Corasick
+    // instead.
+    if (literals.length > MAX_LITERALS_PER_GROUP) {
+      Set<String> prefixes = new HashSet<>(literals.length);
+      int prefixLen = Math.min(minLen, 2);
+      for (String lit : literals) {
+        prefixes.add(lit.substring(0, prefixLen));
+      }
+      double diversity = (double) prefixes.size() / literals.length;
+      if (diversity < 0.60) {
+        return null;
+      }
+    }
+
     int tableSize = Math.max(64, Math.max(NIBBLE_TABLE_SIZE, vectorLength));
 
     int numGroups = (literals.length + MAX_LITERALS_PER_GROUP - 1) / MAX_LITERALS_PER_GROUP;
