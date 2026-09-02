@@ -858,7 +858,8 @@ record MultiAnchorDescriptor(
         int minLength,
         int maxLength,
         MultiLiteralInfo multiLiteral,
-        TeddyModel teddyModel)
+        TeddyModel teddyModel,
+        AhoCorasickSearcher ahoCorasick)
         implements Anchor {
 
       static Alternation create(String[] literals, boolean foldCase) {
@@ -878,13 +879,14 @@ record MultiAnchorDescriptor(
 
         MultiLiteralInfo multiLit = !foldCase ? MultiLiteralInfo.create(literals) : null;
         TeddyModel teddy = !foldCase ? TeddyModel.compileForSelectedProvider(literals) : null;
+        AhoCorasickSearcher ac = AhoCorasickSearcher.create(literals, foldCase);
 
-        return new Alternation(literals.clone(), utf8, foldCase, min, max, multiLit, teddy);
+        return new Alternation(literals.clone(), utf8, foldCase, min, max, multiLit, teddy, ac);
       }
 
       @Override
       public int selectivityScore() {
-        if (teddyModel != null || multiLiteral != null) {
+        if (teddyModel != null || multiLiteral != null || ahoCorasick != null) {
           return 80;
         }
         int minScore = Integer.MAX_VALUE;
@@ -916,6 +918,9 @@ record MultiAnchorDescriptor(
 
       @Override
       public int findNext(String text, int fromIndex) {
+        if (ahoCorasick != null) {
+          return ahoCorasick.findNext(text, fromIndex);
+        }
         if (literals.length == 2) {
           String lit0 = literals[0];
           String lit1 = literals[1];
@@ -990,6 +995,10 @@ record MultiAnchorDescriptor(
               }
             }
           }
+        }
+        if (ahoCorasick != null) {
+          return ahoCorasick.findNext(
+              scanner.bytes(), scanner.offset(), scanner.length(), fromIndex);
         }
 
         int len = scanner.length();

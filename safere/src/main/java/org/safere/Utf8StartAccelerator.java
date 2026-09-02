@@ -44,7 +44,7 @@ sealed interface Utf8StartAccelerator {
         if (hasWordBoundary) {
           yield null;
         }
-        if (VectorScanProviders.multiLiteralProviderAvailable()) {
+        if (ml.literals().length <= 4 && VectorScanProviders.multiLiteralProviderAvailable()) {
           MultiLiteralInfo info = MultiLiteralInfo.create(ml.literals());
           if (info != null) {
             TeddyModel teddy =
@@ -60,8 +60,20 @@ sealed interface Utf8StartAccelerator {
             yield new Teddy(model);
           }
         }
+        if (ml.literals().length > 128) {
+          AhoCorasickSearcher ac = AhoCorasickSearcher.create(ml.literals(), false);
+          if (ac != null) {
+            yield new AhoCorasick(ac);
+          }
+        }
         if (ml.fallbackClass() != null && ml.fallbackClass().isSelective()) {
           yield new CharClass(ml.fallbackClass());
+        }
+        if (ml.literals().length > 4) {
+          AhoCorasickSearcher ac = AhoCorasickSearcher.create(ml.literals(), false);
+          if (ac != null) {
+            yield new AhoCorasick(ac);
+          }
         }
         yield null;
       }
@@ -93,6 +105,7 @@ sealed interface Utf8StartAccelerator {
       case CharClass cc -> cc.findCandidate(scanner, pos);
       case Teddy t -> t.findCandidate(scanner, pos);
       case MultiLiteral ml -> ml.findCandidate(scanner, pos);
+      case AhoCorasick ac -> ac.findCandidate(scanner, pos);
       case LeadingExpansion le -> le.findCandidate(scanner, pos);
     };
   }
@@ -280,6 +293,17 @@ sealed interface Utf8StartAccelerator {
         }
       }
       return -1;
+    }
+  }
+
+  record AhoCorasick(AhoCorasickSearcher searcher) implements Utf8StartAccelerator {
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.VECTOR_MULTI_LITERAL;
+    }
+
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      return searcher.findNext(scanner.bytes(), scanner.offset(), scanner.length(), fromIndex);
     }
   }
 
