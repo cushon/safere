@@ -82,7 +82,25 @@ class TeddyModelTest {
   }
 
   @Test
-  void floatingRarestAnchorsAccelerateSharedPrefixes() {
+  void teddyPreservesLeftmostFirstPrefixOrder() {
+    if (!VectorScanProviders.teddyProviderAvailable()) {
+      return;
+    }
+    String[] lits = {"b", "ba", "abc", "abcd"};
+    TeddyModel model = TeddyModel.compile(lits, 64);
+    assertThat(model).isNotNull();
+
+    // In "ba", alternative "b" matches at 0 and "ba" matches at 0.
+    // Leftmost match starting at 0 must be found.
+    String text = "padding_noise ".repeat(100) + "ba" + " trailing_padding".repeat(100);
+    byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+    int expected = text.indexOf("ba");
+    int found = TeddyVectorScan.indexOfTeddyUtf8(bytes, 0, bytes.length, model, 0);
+    assertThat(found).isEqualTo(expected);
+  }
+
+  @Test
+  void sharedPrefixHeadersMatchCorrectly() {
     if (!VectorScanProviders.teddyProviderAvailable()) {
       return;
     }
@@ -100,7 +118,6 @@ class TeddyModelTest {
     };
     TeddyModel model = TeddyModel.compile(headers, 64);
     assertThat(model).isNotNull();
-    assertThat(model.maxAnchorOffset()).isGreaterThan(0);
 
     for (String header : headers) {
       String text =
@@ -110,5 +127,34 @@ class TeddyModelTest {
       int found = TeddyVectorScan.indexOfTeddyUtf8(bytes, 0, bytes.length, model, 0);
       assertThat(found).isEqualTo(expected);
     }
+  }
+
+  @Test
+  void adversarialCandidateNoiseExhaustsWorkLimitAndAborts() {
+    if (!VectorScanProviders.teddyProviderAvailable()) {
+      return;
+    }
+    // Patterns that share a 2-byte prefix: "aa0", "aa1", ... "aa7"
+    String[] lits = new String[8];
+    for (int i = 0; i < 8; i++) {
+      lits[i] = "aa" + i;
+    }
+    TeddyModel model = TeddyModel.compile(lits, 64);
+    assertThat(model).isNotNull();
+
+    // 10,000 repetitions of false prefix "aax"
+    String noise = "aax".repeat(10_000);
+    byte[] noiseBytes = noise.getBytes(StandardCharsets.UTF_8);
+
+    // Vector scan should hit WorkLimit exhaustion and return UNSUPPORTED
+    int res = TeddyVectorScan.indexOfTeddyUtf8(noiseBytes, 0, noiseBytes.length, model, 0);
+    assertThat(res).isEqualTo(VectorScanProvider.UNSUPPORTED);
+
+    // Full Matcher should still correctly report false or locate a late match via DFA fallback
+    String withLateMatch = noise + "aa5";
+    Matcher m = Pattern.compile("aa0|aa1|aa2|aa3|aa4|aa5|aa6|aa7").matcher(withLateMatch);
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(noise.length());
+    assertThat(m.group()).isEqualTo("aa5");
   }
 }

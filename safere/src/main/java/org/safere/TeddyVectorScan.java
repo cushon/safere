@@ -24,6 +24,9 @@ final class TeddyVectorScan {
     boolean is2Byte = model.is2Byte();
     boolean is3Byte = model.is3Byte();
 
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
+
     ByteVector lutLo0 = ByteVector.fromArray(SPECIES, model.lutLo(), 0);
     ByteVector lutHi0 = ByteVector.fromArray(SPECIES, model.lutHi(), 0);
     ByteVector lutLo1 = is2Byte ? ByteVector.fromArray(SPECIES, model.lutLo1(), 0) : null;
@@ -32,7 +35,6 @@ final class TeddyVectorScan {
     ByteVector lutHi2 = is3Byte ? ByteVector.fromArray(SPECIES, model.lutHi2(), 0) : null;
     String[] literals = model.literals();
     int[] buckets = model.literalBuckets();
-    int[] anchorOffsets = model.anchorOffsets();
 
     for (; pos <= limit; pos += vectorLen) {
       // Stage 1: 2-byte primary SIMD filter (discards ~85% of non-matching blocks)
@@ -66,18 +68,23 @@ final class TeddyVectorScan {
           long activeLanes = matchMask.toLong();
           while (activeLanes != 0) {
             int bit = Long.numberOfTrailingZeros(activeLanes);
-            int anchorHitPos = pos + bit;
+            int candidatePos = pos + bit;
             byte bucketMask = match0.lane(bit);
 
             for (int litIdx = 0; litIdx < literals.length; litIdx++) {
               int b = buckets[litIdx];
               if ((bucketMask & (1 << b)) != 0) {
-                int candidatePos = anchorHitPos - anchorOffsets[litIdx];
-                if (candidatePos >= start) {
-                  String lit = literals[litIdx];
-                  if (candidatePos + lit.length() <= length
-                      && Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
+                String lit = literals[litIdx];
+                if (candidatePos + lit.length() <= length) {
+                  if (WorkCounterConfig.ENABLED) {
+                    WorkCounter.record(lit.length());
+                  }
+                  if (Ascii.regionMatches(bytes, offset + candidatePos, lit, lit.length())) {
                     return candidatePos;
+                  }
+                  verificationWork += lit.length();
+                  if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+                    return VectorScanProvider.UNSUPPORTED;
                   }
                 }
               }
@@ -89,14 +96,20 @@ final class TeddyVectorScan {
     }
 
     int scalarLimit = length - minLen;
-    int scalarStart = Math.max(start, pos - model.maxAnchorOffset());
-    String[] allLiterals = model.literals();
-    for (int p = scalarStart; p <= scalarLimit; p++) {
-      for (String lit : allLiterals) {
-        if (p + lit.length() <= length
-            && Ascii.regionMatches(bytes, offset + p, lit, lit.length())) {
-          return p;
+    for (; pos <= scalarLimit; pos++) {
+      for (String lit : literals) {
+        if (pos + lit.length() <= length) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(lit.length());
+          }
+          if (Ascii.regionMatches(bytes, offset + pos, lit, lit.length())) {
+            return pos;
+          }
         }
+      }
+      verificationWork += minLen;
+      if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+        return VectorScanProvider.UNSUPPORTED;
       }
     }
     return -1;

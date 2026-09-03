@@ -276,19 +276,7 @@ sealed interface Utf8StartAccelerator {
       if (idx != VectorScanProvider.UNSUPPORTED) {
         return idx;
       }
-      int len = scanner.length();
-      int minLen = model.minLength();
-      byte[] bytes = scanner.bytes();
-      int offset = scanner.offset();
-      for (int i = fromIndex; i <= len - minLen; i++) {
-        for (String lit : model.literals()) {
-          if (i + lit.length() <= len
-              && Ascii.regionMatches(bytes, offset + i, lit, lit.length())) {
-            return i;
-          }
-        }
-      }
-      return -1;
+      return fromIndex;
     }
   }
 

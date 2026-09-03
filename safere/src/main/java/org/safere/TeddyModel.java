@@ -17,7 +17,7 @@ import java.util.Arrays;
  * instructions ({@code rearrange} + {@code and}) on {@code ByteVector}.
  */
 final class TeddyModel implements Serializable {
-  private static final long serialVersionUID = 3L;
+  private static final long serialVersionUID = 4L;
 
   private static final int MAX_BUCKETS = 8;
   private static final int MAX_LITERALS = 32;
@@ -31,11 +31,9 @@ final class TeddyModel implements Serializable {
   private final byte[] lutHi2;
   private final String[] literals;
   private final int[] literalBuckets;
-  private final int[] anchorOffsets;
   private final int minLength;
   private final boolean is2Byte;
   private final boolean is3Byte;
-  private final int maxAnchorOffset;
 
   private TeddyModel(
       byte[] lutLo,
@@ -46,11 +44,9 @@ final class TeddyModel implements Serializable {
       byte[] lutHi2,
       String[] literals,
       int[] literalBuckets,
-      int[] anchorOffsets,
       int minLength,
       boolean is2Byte,
-      boolean is3Byte,
-      int maxAnchorOffset) {
+      boolean is3Byte) {
     this.lutLo = lutLo;
     this.lutHi = lutHi;
     this.lutLo1 = lutLo1;
@@ -59,11 +55,9 @@ final class TeddyModel implements Serializable {
     this.lutHi2 = lutHi2;
     this.literals = literals;
     this.literalBuckets = literalBuckets;
-    this.anchorOffsets = anchorOffsets;
     this.minLength = minLength;
     this.is2Byte = is2Byte;
     this.is3Byte = is3Byte;
-    this.maxAnchorOffset = maxAnchorOffset;
   }
 
   byte[] lutLo() {
@@ -98,16 +92,8 @@ final class TeddyModel implements Serializable {
     return literalBuckets;
   }
 
-  int[] anchorOffsets() {
-    return anchorOffsets;
-  }
-
   int minLength() {
     return minLength;
-  }
-
-  int maxAnchorOffset() {
-    return maxAnchorOffset;
   }
 
   boolean is2Byte() {
@@ -150,30 +136,6 @@ final class TeddyModel implements Serializable {
     boolean is2Byte = minLen >= 2;
     boolean is3Byte = minLen >= 3;
 
-    // Pick rarest 2-byte anchor offset for each literal
-    int[] anchorOffsets = new int[literals.length];
-    int maxAnchorOffset = 0;
-    for (int i = 0; i < literals.length; i++) {
-      String lit = literals[i];
-      if (lit.length() <= 2) {
-        anchorOffsets[i] = 0;
-      } else {
-        int bestOffset = 0;
-        int bestScore = -1;
-        int maxSearch = Math.min(lit.length() - 2, 8);
-        for (int k = 0; k <= maxSearch; k++) {
-          int score =
-              RarityOracle.byteRarity(lit.charAt(k)) + RarityOracle.byteRarity(lit.charAt(k + 1));
-          if (score > bestScore) {
-            bestScore = score;
-            bestOffset = k;
-          }
-        }
-        anchorOffsets[i] = bestOffset;
-        maxAnchorOffset = Math.max(maxAnchorOffset, bestOffset);
-      }
-    }
-
     int tableSize = Math.max(64, Math.max(NIBBLE_TABLE_SIZE, vectorLength));
     int numBuckets = Math.min(literals.length, MAX_BUCKETS);
     int[] literalBuckets = new int[literals.length];
@@ -184,9 +146,8 @@ final class TeddyModel implements Serializable {
       int bucket = i % numBuckets;
       literalBuckets[i] = bucket;
       byte mask = (byte) (1 << bucket);
-      int off = anchorOffsets[i];
 
-      char c0 = literals[i].charAt(off);
+      char c0 = literals[i].charAt(0);
       int lo0 = c0 & 0x0F;
       int hi0 = (c0 >> 4) & 0x0F;
       baseLutLo0[lo0] |= mask;
@@ -199,9 +160,8 @@ final class TeddyModel implements Serializable {
       for (int i = 0; i < literals.length; i++) {
         int bucket = literalBuckets[i];
         byte mask = (byte) (1 << bucket);
-        int off = anchorOffsets[i];
 
-        char c1 = literals[i].charAt(off + 1);
+        char c1 = literals[i].charAt(1);
         int lo1 = c1 & 0x0F;
         int hi1 = (c1 >> 4) & 0x0F;
         baseLutLo1[lo1] |= mask;
@@ -215,20 +175,12 @@ final class TeddyModel implements Serializable {
       for (int i = 0; i < literals.length; i++) {
         int bucket = literalBuckets[i];
         byte mask = (byte) (1 << bucket);
-        int off = anchorOffsets[i];
 
-        if (off + 2 < literals[i].length()) {
-          char c2 = literals[i].charAt(off + 2);
-          int lo2 = c2 & 0x0F;
-          int hi2 = (c2 >> 4) & 0x0F;
-          baseLutLo2[lo2] |= mask;
-          baseLutHi2[hi2] |= mask;
-        } else {
-          for (int k = 0; k < NIBBLE_TABLE_SIZE; k++) {
-            baseLutLo2[k] |= mask;
-            baseLutHi2[k] |= mask;
-          }
-        }
+        char c2 = literals[i].charAt(2);
+        int lo2 = c2 & 0x0F;
+        int hi2 = (c2 >> 4) & 0x0F;
+        baseLutLo2[lo2] |= mask;
+        baseLutHi2[hi2] |= mask;
       }
     }
 
@@ -248,11 +200,9 @@ final class TeddyModel implements Serializable {
         repeatedHi2,
         Arrays.copyOf(literals, literals.length),
         literalBuckets,
-        anchorOffsets,
         minLen,
         is2Byte,
-        is3Byte,
-        maxAnchorOffset);
+        is3Byte);
   }
 
   private static byte[] repeatTable(byte[] base16, int totalSize) {

@@ -22,12 +22,13 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
 /**
- * Benchmark across alternation acceleration tiers:
+ * Consolidated benchmark across alternation acceleration tiers:
  *
  * <ul>
  *   <li>Tier 1: Direct SIMD Equality (K <= 4)
  *   <li>Tier 2: Single-Group Teddy SIMD (5 <= K <= 32)
- *   <li>Tier 3: Vector-Accelerated Aho-Corasick (K > 32)
+ *   <li>Dense Fallback: Lazy DFA (K > 32, dense roots bypassing AC)
+ *   <li>Tier 3: Vector-Accelerated Aho-Corasick (K > 32, sparse roots)
  * </ul>
  */
 @BenchmarkMode(Mode.AverageTime)
@@ -38,18 +39,10 @@ import org.openjdk.jmh.annotations.Warmup;
 @State(Scope.Thread)
 public class MediumAlternationBenchmark {
 
-  @Param({"64", "1024", "65536"})
+  @Param({"1024", "65536"})
   public int haystackLength;
 
-  @Param({
-    "DIRECT_SIMD_4",
-    "TEDDY_8",
-    "TEDDY_16",
-    "TEDDY_32",
-    "AC_HTTP_HEADERS_36",
-    "AC_SQL_KEYWORDS_72",
-    "AC_MIME_TYPES_110"
-  })
+  @Param({"TIER1_DIRECT_4", "TIER2_TEDDY_16", "DENSE_FALLBACK_36", "TIER3_AC_ROUTES_256"})
   public String workload;
 
   @Param({"ABSENT", "MATCH_LATE"})
@@ -61,10 +54,6 @@ public class MediumAlternationBenchmark {
   private Utf8Input utf8Input;
 
   private static final String[] HTTP_METHODS_4 = {"GET", "POST", "PUT", "DELETE"};
-
-  private static final String[] KEYWORDS_8 = {
-    "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH", "CONNECT"
-  };
 
   private static final String[] HTTP_HEADERS = {
     "Accept",
@@ -117,108 +106,32 @@ public class MediumAlternationBenchmark {
     "WWW-Authenticate"
   };
 
-  private static final String[] SQL_KEYWORDS = {
-    "SELECT", "FROM", "WHERE", "GROUP", "HAVING", "ORDER", "LIMIT", "OFFSET",
-    "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "CREATE", "ALTER",
-    "DROP", "TABLE", "INDEX", "VIEW", "TRIGGER", "PROCEDURE", "FUNCTION", "DATABASE",
-    "SCHEMA", "GRANT", "REVOKE", "COMMIT", "ROLLBACK", "SAVEPOINT", "TRANSACTION", "JOIN",
-    "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "CROSS", "NATURAL", "UNION",
-    "INTERSECT", "EXCEPT", "EXISTS", "BETWEEN", "LIKE", "ILIKE", "SIMILAR", "DISTINCT",
-    "CASCADE", "RESTRICT", "PRIMARY", "FOREIGN", "KEY", "REFERENCES", "CHECK", "UNIQUE",
-    "DEFAULT", "NULL", "NOT", "AND", "OR", "XOR", "CASE", "WHEN",
-    "THEN", "ELSE", "END", "AS", "CAST", "COLLATE", "OVER", "PARTITION"
-  };
-
-  private static final String[] MIME_TYPES = {
-    "application/atom+xml",
-    "application/epub+zip",
-    "application/gzip",
-    "application/json",
-    "application/ld+json",
-    "application/msword",
-    "application/octet-stream",
-    "application/ogg",
-    "application/pdf",
-    "application/rtf",
-    "application/vnd.amazon.ebook",
-    "application/vnd.apple.installer+xml",
-    "application/vnd.mozilla.xul+xml",
-    "application/vnd.ms-excel",
-    "application/vnd.ms-fontobject",
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.rar",
-    "application/vnd.visio",
-    "application/x-7z-compressed",
-    "application/x-abiword",
-    "application/x-bzip",
-    "application/x-bzip2",
-    "application/x-csh",
-    "application/x-freearc",
-    "application/x-sh",
-    "application/x-tar",
-    "application/xhtml+xml",
-    "application/xml",
-    "application/zip",
-    "audio/3gpp",
-    "audio/3gpp2",
-    "audio/aac",
-    "audio/midi",
-    "audio/mp3",
-    "audio/mp4",
-    "audio/mpeg",
-    "audio/ogg",
-    "audio/opus",
-    "audio/wav",
-    "audio/webm",
-    "font/otf",
-    "font/ttf",
-    "font/woff",
-    "font/woff2",
-    "image/avif",
-    "image/bmp",
-    "image/gif",
-    "image/jpeg",
-    "image/png",
-    "image/svg+xml",
-    "image/tiff",
-    "image/vnd.microsoft.icon",
-    "image/webp",
-    "model/gltf-binary",
-    "model/gltf+json",
-    "model/stl",
-    "text/calendar",
-    "text/css",
-    "text/csv",
-    "text/html",
-    "text/javascript",
-    "text/markdown",
-    "text/plain",
-    "text/xml",
-    "video/3gpp",
-    "video/3gpp2",
-    "video/mp2t",
-    "video/mp4",
-    "video/mpeg",
-    "video/ogg",
-    "video/quicktime",
-    "video/webm",
-    "video/x-msvideo"
-  };
+  private static String[] generateUrlRoutes256() {
+    String[] prefixes = {
+      "/api/v1/users/", "/api/v1/accounts/", "/api/v2/orders/", "/api/v2/billing/",
+      "/api/v3/reports/", "/api/v3/analytics/", "/auth/oauth2/", "/static/assets/"
+    };
+    String[] suffixes = {
+      "/profile", "/settings", "/list", "/create", "/delete", "/update", "/status", "/export"
+    };
+    String[] routes = new String[256];
+    for (int i = 0; i < 256; i++) {
+      String p = prefixes[i % prefixes.length];
+      String s = suffixes[(i / prefixes.length) % suffixes.length];
+      routes[i] = p + "item" + i + s;
+    }
+    return routes;
+  }
 
   @Setup
   public void setup() {
     String[] keywords =
         switch (workload) {
-          case "DIRECT_SIMD_4" -> HTTP_METHODS_4;
-          case "TEDDY_8" -> KEYWORDS_8;
-          case "TEDDY_16" -> Arrays.copyOfRange(HTTP_HEADERS, 0, 16);
-          case "TEDDY_32" -> Arrays.copyOfRange(HTTP_HEADERS, 0, 32);
-          case "AC_HTTP_HEADERS_36", "HTTP_HEADERS_36" -> Arrays.copyOfRange(HTTP_HEADERS, 0, 36);
-          case "AC_SQL_KEYWORDS_72", "SQL_KEYWORDS_72" -> SQL_KEYWORDS;
-          case "AC_MIME_TYPES_110", "MIME_TYPES_110" -> MIME_TYPES;
+          case "TIER1_DIRECT_4", "DIRECT_SIMD_4" -> HTTP_METHODS_4;
+          case "TIER2_TEDDY_16", "TEDDY_16" -> Arrays.copyOfRange(HTTP_HEADERS, 0, 16);
+          case "DENSE_FALLBACK_36", "AC_HTTP_HEADERS_36", "HTTP_HEADERS_36" ->
+              Arrays.copyOfRange(HTTP_HEADERS, 0, 36);
+          case "TIER3_AC_ROUTES_256", "URL_ROUTES_256" -> generateUrlRoutes256();
           default -> throw new IllegalArgumentException("Unknown workload: " + workload);
         };
 
