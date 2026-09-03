@@ -134,16 +134,16 @@ class TeddyModelTest {
     if (!VectorScanProviders.teddyProviderAvailable()) {
       return;
     }
-    // Patterns that share a 2-byte prefix: "aa0", "aa1", ... "aa7"
+    // Patterns that share a 3-byte prefix: "aaa0", "aaa1", ... "aaa7"
     String[] lits = new String[8];
     for (int i = 0; i < 8; i++) {
-      lits[i] = "aa" + i;
+      lits[i] = "aaa" + i;
     }
     TeddyModel model = TeddyModel.compile(lits, 64);
     assertThat(model).isNotNull();
 
-    // 10,000 repetitions of false prefix "aax"
-    String noise = "aax".repeat(10_000);
+    // 10,000 repetitions of false prefix "aaax"
+    String noise = "aaax".repeat(10_000);
     byte[] noiseBytes = noise.getBytes(StandardCharsets.UTF_8);
 
     // Vector scan should hit WorkLimit exhaustion and return UNSUPPORTED
@@ -151,10 +151,10 @@ class TeddyModelTest {
     assertThat(res).isEqualTo(VectorScanProvider.UNSUPPORTED);
 
     // Full Matcher should still correctly report false or locate a late match via DFA fallback
-    String withLateMatch = noise + "aa5";
-    Matcher m = Pattern.compile("aa0|aa1|aa2|aa3|aa4|aa5|aa6|aa7").matcher(withLateMatch);
+    String withLateMatch = noise + "aaa5";
+    Matcher m = Pattern.compile("aaa0|aaa1|aaa2|aaa3|aaa4|aaa5|aaa6|aaa7").matcher(withLateMatch);
     assertThat(m.find()).isTrue();
     assertThat(m.start()).isEqualTo(noise.length());
-    assertThat(m.group()).isEqualTo("aa5");
+    assertThat(m.group()).isEqualTo("aaa5");
   }
 }
