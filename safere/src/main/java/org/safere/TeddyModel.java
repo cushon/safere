@@ -9,18 +9,17 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * Immutable precomputed lookup tables and metadata for single-group Teddy SIMD vector-shuffle
- * multi-literal acceleration (2 <= K <= 32).
+ * Immutable precomputed lookup tables and metadata for Teddy SIMD vector-shuffle multi-literal
+ * acceleration.
  *
- * <p>Teddy compresses up to 32 literal search patterns into parallel 16-byte nibble lookup tables
- * across an 8-bucket group, enabling simultaneous multi-keyword matching in SIMD vector shuffle
- * instructions ({@code rearrange} + {@code and}) on {@code ByteVector}.
+ * <p>Teddy compresses up to 32 literal search patterns into parallel 16-byte nibble lookup tables,
+ * enabling simultaneous multi-keyword matching in 3 SIMD instructions (2 {@code rearrange} + 1
+ * {@code and}) on {@code ByteVector}.
  */
 final class TeddyModel implements Serializable {
-  private static final long serialVersionUID = 4L;
+  private static final long serialVersionUID = 1L;
 
   private static final int MAX_BUCKETS = 8;
-  private static final int MAX_LITERALS = 32;
   private static final int NIBBLE_TABLE_SIZE = 16;
 
   private final byte[] lutLo;
@@ -110,14 +109,14 @@ final class TeddyModel implements Serializable {
   }
 
   /**
-   * Compiles up to 32 ASCII literal keywords into a single-group {@link TeddyModel}.
+   * Compiles up to 32 ASCII literal keywords into a {@link TeddyModel}.
    *
-   * @param literals the array of literal keywords (2 <= K <= 32)
+   * @param literals the array of literal keywords
    * @param vectorLength the preferred vector lane width (16, 32, or 64 bytes)
    * @return the compiled model, or {@code null} if inputs are ineligible for Teddy
    */
   static TeddyModel compile(String[] literals, int vectorLength) {
-    if (literals == null || literals.length < 2 || literals.length > MAX_LITERALS) {
+    if (literals == null || literals.length < 2 || literals.length > 32) {
       return null;
     }
     int minLen = Integer.MAX_VALUE;
@@ -133,10 +132,6 @@ final class TeddyModel implements Serializable {
       minLen = Math.min(minLen, lit.length());
     }
 
-    boolean is2Byte = minLen >= 2;
-    boolean is3Byte = minLen >= 3;
-
-    int tableSize = Math.max(64, Math.max(NIBBLE_TABLE_SIZE, vectorLength));
     int numBuckets = Math.min(literals.length, MAX_BUCKETS);
     int[] literalBuckets = new int[literals.length];
     byte[] baseLutLo0 = new byte[NIBBLE_TABLE_SIZE];
@@ -154,8 +149,10 @@ final class TeddyModel implements Serializable {
       baseLutHi0[hi0] |= mask;
     }
 
+    boolean is2Byte = minLen >= 2;
     byte[] baseLutLo1 = is2Byte ? new byte[NIBBLE_TABLE_SIZE] : null;
     byte[] baseLutHi1 = is2Byte ? new byte[NIBBLE_TABLE_SIZE] : null;
+
     if (is2Byte) {
       for (int i = 0; i < literals.length; i++) {
         int bucket = literalBuckets[i];
@@ -169,8 +166,10 @@ final class TeddyModel implements Serializable {
       }
     }
 
+    boolean is3Byte = minLen >= 3;
     byte[] baseLutLo2 = is3Byte ? new byte[NIBBLE_TABLE_SIZE] : null;
     byte[] baseLutHi2 = is3Byte ? new byte[NIBBLE_TABLE_SIZE] : null;
+
     if (is3Byte) {
       for (int i = 0; i < literals.length; i++) {
         int bucket = literalBuckets[i];
@@ -184,6 +183,7 @@ final class TeddyModel implements Serializable {
       }
     }
 
+    int tableSize = Math.max(64, Math.max(NIBBLE_TABLE_SIZE, vectorLength));
     byte[] repeatedLo0 = repeatTable(baseLutLo0, tableSize);
     byte[] repeatedHi0 = repeatTable(baseLutHi0, tableSize);
     byte[] repeatedLo1 = is2Byte ? repeatTable(baseLutLo1, tableSize) : null;
