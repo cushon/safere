@@ -219,6 +219,8 @@ class CommentsTest {
     }
 
     @Test
+    @DisabledForCrosscheck(
+        "JDK-8391732: comments-mode whitespace after ampersands breaks unread() in java.util.regex")
     @DisplayName("character class with ampersands, whitespace, and nested class (issue #796)")
     void characterClassAmpersandsWhitespaceAndNestedClass() {
       // In OpenJDK (JDK-8391732), comments-mode whitespace after ampersands breaks unread(),
@@ -242,6 +244,8 @@ class CommentsTest {
     }
 
     @Test
+    @DisabledForCrosscheck(
+        "JDK-8391732: comments-mode whitespace after ampersands breaks unread() in java.util.regex")
     @DisplayName("comments and whitespace around ampersands and nested classes compile and match")
     void commentsAndWhitespaceAroundAmpersandsAndNestedClasses() {
       Pattern withComment = Pattern.compile("(?x)[a&&& # comment\n [b])]");
