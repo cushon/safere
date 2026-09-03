@@ -175,6 +175,12 @@ final class MultiAnchorExecutor {
 
           int searchUpperBound = curAnchorStart - minHop;
           int searchLowerBound = Math.max(minReverseWatermark, curAnchorStart - maxHop);
+          if (gap.guardBytes() != null) {
+            int lastGuard = gap.findLastGuardByte(scanner, searchLowerBound, curAnchorStart - 1);
+            if (lastGuard >= 0) {
+              searchLowerBound = Math.max(searchLowerBound, lastGuard + 1);
+            }
+          }
 
           if (searchUpperBound < searchLowerBound) {
             upstreamMatched = false;
@@ -288,7 +294,9 @@ final class MultiAnchorExecutor {
             chainMatched = false;
             break;
           }
-          downstreamWatermarks[i] = p;
+          if (!gap.isGreedy()) {
+            downstreamWatermarks[i] = p;
+          }
 
           if (!gap.matchesSlice(scanner, currentPos, p)) {
             chainMatched = false;
@@ -449,6 +457,12 @@ final class MultiAnchorExecutor {
 
           int searchUpperBound = curAnchorStart - minHop;
           int searchLowerBound = Math.max(minReverseWatermark, curAnchorStart - maxHop);
+          if (gap.guardBytes() != null) {
+            int lastGuard = gap.findLastGuardByte(text, searchLowerBound, curAnchorStart - 1);
+            if (lastGuard >= 0) {
+              searchLowerBound = Math.max(searchLowerBound, lastGuard + 1);
+            }
+          }
 
           if (searchUpperBound < searchLowerBound) {
             upstreamMatched = false;
@@ -562,7 +576,9 @@ final class MultiAnchorExecutor {
             chainMatched = false;
             break;
           }
-          downstreamWatermarks[i] = p;
+          if (!gap.isGreedy()) {
+            downstreamWatermarks[i] = p;
+          }
 
           if (!gap.matchesSlice(text, currentPos, p)) {
             chainMatched = false;

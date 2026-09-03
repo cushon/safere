@@ -1981,15 +1981,15 @@ final class MultiAnchorCompiler {
   }
 
   private static boolean isDotCharClass(CharClass cc) {
-    if (cc == null) {
+    if (cc == null || cc.contains('\n')) {
       return false;
     }
-    return !cc.contains('\n')
-        && cc.contains('a')
-        && cc.contains(' ')
-        && cc.contains('0')
-        && cc.numRanges() <= 6
-        && cc.numRunes() > 1000;
+    for (int i = 0; i < 128; i++) {
+      if (i != '\n' && i != '\r' && !cc.contains(i)) {
+        return false;
+      }
+    }
+    return cc.numRanges() <= 6 && cc.numRunes() > 1000;
   }
 
   static MultiAnchorDescriptor.Gap classifyGap(Regexp re, int flags) {
@@ -2026,16 +2026,35 @@ final class MultiAnchorCompiler {
             (flags & Pattern.DOTALL) != 0
                 || (re.flags & (ParseFlags.DOT_NL | ParseFlags.MATCH_NL)) != 0
                 || (sub.flags & (ParseFlags.DOT_NL | ParseFlags.MATCH_NL)) != 0;
-        return dotAll
-            ? (greedy
-                ? MultiAnchorDescriptor.Gap.ANY_STAR_GREEDY
-                : MultiAnchorDescriptor.Gap.ANY_STAR_LAZY)
-            : (greedy
-                ? MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_GREEDY
-                : MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_LAZY);
+        if (dotAll) {
+          return greedy
+              ? MultiAnchorDescriptor.Gap.ANY_STAR_GREEDY
+              : MultiAnchorDescriptor.Gap.ANY_STAR_LAZY;
+        }
+        boolean unixLines =
+            (flags & Pattern.UNIX_LINES) != 0
+                || (re.flags & ParseFlags.UNIX_LINES) != 0
+                || (sub.flags & ParseFlags.UNIX_LINES) != 0;
+        if (unixLines) {
+          return greedy
+              ? MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_UNIX_GREEDY
+              : MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_UNIX_LAZY;
+        }
+        return greedy
+            ? MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_GREEDY
+            : MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_LAZY;
       }
       if (sub != null && sub.op == RegexpOp.CHAR_CLASS) {
         if (isDotCharClass(sub.charClass)) {
+          boolean unixLines =
+              (flags & Pattern.UNIX_LINES) != 0
+                  || (re.flags & ParseFlags.UNIX_LINES) != 0
+                  || (sub.flags & ParseFlags.UNIX_LINES) != 0;
+          if (unixLines) {
+            return greedy
+                ? MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_UNIX_GREEDY
+                : MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_UNIX_LAZY;
+          }
           return greedy
               ? MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_GREEDY
               : MultiAnchorDescriptor.Gap.SINGLE_LINE_ANY_STAR_LAZY;
