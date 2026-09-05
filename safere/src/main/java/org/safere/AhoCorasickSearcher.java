@@ -24,6 +24,8 @@ import java.util.Queue;
  */
 final class AhoCorasickSearcher implements Serializable {
   private static final long serialVersionUID = 1L;
+  private static final int MAX_DENSE_TRANSITION_BYTES = 32 * 1024 * 1024;
+  private static final int MAX_TRIE_STATES = MAX_DENSE_TRANSITION_BYTES / (128 * Integer.BYTES);
 
   private static final class BuilderNode {
     final Map<Integer, BuilderNode> children = new HashMap<>();
@@ -46,14 +48,32 @@ final class AhoCorasickSearcher implements Serializable {
     if (patterns == null || patterns.length < 2 || !VectorScanProviders.teddyProviderAvailable()) {
       return null;
     }
-    return new AhoCorasickSearcher(Arrays.asList(patterns), caseInsensitive);
+    List<String> patternList = Arrays.asList(patterns);
+    return fitsDenseTransitionBudget(patternList)
+        ? new AhoCorasickSearcher(patternList, caseInsensitive)
+        : null;
   }
 
   static AhoCorasickSearcher create(List<String> patterns, boolean caseInsensitive) {
     if (patterns == null || patterns.size() < 2 || !VectorScanProviders.teddyProviderAvailable()) {
       return null;
     }
-    return new AhoCorasickSearcher(patterns, caseInsensitive);
+    return fitsDenseTransitionBudget(patterns)
+        ? new AhoCorasickSearcher(patterns, caseInsensitive)
+        : null;
+  }
+
+  private static boolean fitsDenseTransitionBudget(List<String> patterns) {
+    // The sum of encoded lengths is an upper bound on the non-root trie states. Reject before
+    // constructing the trie so the flattened table has a fixed memory ceiling.
+    long maxStates = 1;
+    for (String pattern : patterns) {
+      maxStates += pattern.getBytes(StandardCharsets.UTF_8).length;
+      if (maxStates > MAX_TRIE_STATES) {
+        return false;
+      }
+    }
+    return true;
   }
 
   AhoCorasickSearcher(List<String> patterns, boolean caseInsensitive) {
@@ -180,7 +200,7 @@ final class AhoCorasickSearcher implements Serializable {
     }
 
     AsciiBitmap rootBitmap = rootBitmapBuilder.build();
-    this.rootRanges = rootBitmap.isEmpty() ? null : rootBitmap.toRanges();
+    this.rootRanges = !allAscii || rootBitmap.isEmpty() ? null : rootBitmap.toRanges();
   }
 
   /**

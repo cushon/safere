@@ -103,6 +103,24 @@ class AhoCorasickSearcherTest {
   }
 
   @Test
+  void vectorRootPrefilterPreservesNonAsciiRootTransitions() {
+    AhoCorasickSearcher searcher = new AhoCorasickSearcher(List.of("aa", "乳"), false);
+    byte[] bytes = ("x".repeat(1_100) + "乳").getBytes(StandardCharsets.UTF_8);
+
+    assertThat(searcher.findNext(bytes, 0, bytes.length, 0)).isEqualTo(1_100);
+  }
+
+  @Test
+  void factoryRejectsDictionariesAboveDenseTransitionBudget() {
+    List<String> longPatterns = new ArrayList<>();
+    for (int i = 0; i < 128; i++) {
+      longPatterns.add("p%03d".formatted(i) + "x".repeat(512));
+    }
+
+    assertThat(AhoCorasickSearcher.create(longPatterns, false)).isNull();
+  }
+
+  @Test
   void transitionTableSupportsMoreThanUnsignedShortStates() {
     String longLiteral = "a".repeat(65_536) + "b";
     AhoCorasickSearcher searcher =
