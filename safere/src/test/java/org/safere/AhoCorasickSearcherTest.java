@@ -92,4 +92,23 @@ class AhoCorasickSearcherTest {
     assertThat(matcher.start()).isEqualTo(5000);
     assertThat(matcher.end()).isEqualTo(5005);
   }
+
+  @Test
+  void vectorRootPrefilterFallsBackForFragmentedClasses() {
+    AhoCorasickSearcher searcher =
+        new AhoCorasickSearcher(List.of("aa", "cc", "ee", "gg", "ii"), false);
+    byte[] bytes = ("x".repeat(1_100) + "ii").getBytes(StandardCharsets.UTF_8);
+
+    assertThat(searcher.findNext(bytes, 0, bytes.length, 0)).isEqualTo(1_100);
+  }
+
+  @Test
+  void transitionTableSupportsMoreThanUnsignedShortStates() {
+    String longLiteral = "a".repeat(65_536) + "b";
+    AhoCorasickSearcher searcher =
+        new AhoCorasickSearcher(List.of(longLiteral, "unrelated"), false);
+    byte[] bytes = longLiteral.getBytes(StandardCharsets.UTF_8);
+
+    assertThat(searcher.findNext(bytes, 0, bytes.length, 0)).isZero();
+  }
 }

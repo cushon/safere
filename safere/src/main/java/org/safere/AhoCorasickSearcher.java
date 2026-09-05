@@ -32,7 +32,7 @@ final class AhoCorasickSearcher implements Serializable {
   }
 
   // Pre-computed DFA transition table: [numStates * 128]
-  private final char[] transitions;
+  private final int[] transitions;
   private final int[] failureLinks;
   private final int[] matchIndices;
   private final int[] patternLengths;
@@ -136,7 +136,7 @@ final class AhoCorasickSearcher implements Serializable {
     }
 
     int numNodes = nodeList.size();
-    this.transitions = new char[numNodes * 128];
+    this.transitions = new int[numNodes * 128];
     this.failureLinks = new int[numNodes];
     this.matchIndices = new int[numNodes];
     this.nonAsciiTransitions = allAscii ? null : new HashMap<>();
@@ -153,7 +153,7 @@ final class AhoCorasickSearcher implements Serializable {
         BuilderNode child = node.children.get(c);
         if (child != null) {
           int nextState = nodeIndices.get(child);
-          transitions[baseOffset | c] = (char) nextState;
+          transitions[baseOffset | c] = nextState;
           if (state == 0 && nextState != 0) {
             rootBitmapBuilder.add((char) c);
             if (caseInsensitive) {
@@ -192,21 +192,24 @@ final class AhoCorasickSearcher implements Serializable {
     int state = 0;
     int pos = Math.max(0, start);
     int bestStart = -1;
+    boolean rootPrefilterSupported = true;
 
     if (isAsciiOnly && !caseInsensitive) {
       while (pos < length) {
         // SIMD vector root prefilter when in root state
-        if (state == 0 && rootRanges != null && (length - pos) >= 64) {
+        if (state == 0 && rootPrefilterSupported && rootRanges != null && (length - pos) >= 64) {
           VectorScanProvider provider = VectorScanProviders.providerForLength(length);
           if (provider != null) {
             int rootMatch = provider.indexOfAsciiClass(bytes, offset, length, rootRanges, pos);
-            if (rootMatch < 0) {
+            if (rootMatch == VectorScanProvider.UNSUPPORTED) {
+              rootPrefilterSupported = false;
+            } else if (rootMatch < 0) {
               return bestStart;
-            }
-            if (bestStart >= 0 && rootMatch >= bestStart + maxPatternLength - 1) {
+            } else if (bestStart >= 0 && rootMatch >= bestStart + maxPatternLength - 1) {
               return bestStart;
+            } else {
+              pos = rootMatch;
             }
-            pos = rootMatch;
           }
         }
 
@@ -227,17 +230,19 @@ final class AhoCorasickSearcher implements Serializable {
       }
     } else {
       while (pos < length) {
-        if (state == 0 && rootRanges != null && (length - pos) >= 64) {
+        if (state == 0 && rootPrefilterSupported && rootRanges != null && (length - pos) >= 64) {
           VectorScanProvider provider = VectorScanProviders.providerForLength(length);
           if (provider != null) {
             int rootMatch = provider.indexOfAsciiClass(bytes, offset, length, rootRanges, pos);
-            if (rootMatch < 0) {
+            if (rootMatch == VectorScanProvider.UNSUPPORTED) {
+              rootPrefilterSupported = false;
+            } else if (rootMatch < 0) {
               return bestStart;
-            }
-            if (bestStart >= 0 && rootMatch >= bestStart + maxPatternLength - 1) {
+            } else if (bestStart >= 0 && rootMatch >= bestStart + maxPatternLength - 1) {
               return bestStart;
+            } else {
+              pos = rootMatch;
             }
-            pos = rootMatch;
           }
         }
 
