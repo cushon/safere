@@ -120,6 +120,29 @@ behavior is correct because it follows the documented predicate rather than an
 extra implementation detail that makes `\b` disagree with the default `\w`
 definition.
 
+## Character Class Intersection and Ampersand Literals
+
+SafeRE models character classes using principled boolean algebra. The intersection
+operator `&&` is strictly an infix binary operator that requires non-empty left
+and right operands. A single ampersand `&` is always treated strictly as a
+literal character, not as a partial operator token.
+
+Consequently, SafeRE rejects malformed character class intersection syntax with
+`PatternSyntaxException`, including:
+- Leading `&&` without a left operand (e.g. `[&&a]`, `[^&&a]`)
+- Trailing `&&` without a right operand (e.g. `[a&&]`, `[a-z&&]`)
+- Repeated operator runs of three or more ampersands (e.g. `[a&&&b]`, `[a&&&&b]`)
+- Empty operands created by empty quotes or empty nested classes (e.g. `[a&&\Q\E&&b]`)
+- Ambiguous unescaped hyphens directly following intersection operators (e.g. `[a&&-b]`)
+
+Observed JDK behavior accepts repeated ampersands, leading and trailing
+ampersands, and exhibits idiosyncratic parser leakiness where solitary `&`
+characters inside right-hand operands can leak out of nested character classes into
+outer unions (for example, JDK treats `[b&&[a]&]` as matching `&` because the `&`
+leaks out of the right-hand operand into an outer union). SafeRE follows the clean,
+documented grammar of boolean class intersection rather than reproducing JDK
+parser bugs and implementation accidents.
+
 ## Unicode Case-Insensitive Range Closure
 
 Issue reference: #452.

@@ -315,22 +315,48 @@ class ParserTest {
     }
 
     @ParameterizedTest
-    @CsvSource({
-      "'[&&-a]', '-', true",
-      "'[&&-a]', 'a', true",
-      "'[&&-a]', 'b', false",
-      "'[^&&-a]', '-', false",
-      "'[^&&-a]', 'a', false",
-      "'[^&&-a]', 'b', true",
-      "'[&&  -a]', '-', true",
-      "'[&&  -a]', 'a', true",
-      "'[&&  -a]', 'b', false"
-    })
-    void leadingIntersectionMarkerPreservesFirstItemBehaviorWithoutPerlX(
-        String pattern, String input, boolean expected) {
-      int flags = (pattern.indexOf(' ') >= 0 ? ParseFlags.COMMENTS : 0) | ParseFlags.MATCH_NL;
+    @ValueSource(
+        strings = {
+          "[&&-a]",
+          "[^&&-a]",
+          "[&&  -a]",
+          "[&&a]",
+          "[^&&a]",
+          "[a&&]",
+          "[^a&&]",
+          "[a&&&b]",
+          "[a&&&&b]",
+          "[a&&\\Q\\E&&b]",
+          "[a&&\\Q\\E]",
+          "[\\Q\\E&&a]",
+          "[a&&-b]",
+          "(?x)[a&& -b]"
+        })
+    void malformedCharacterClassIntersectionsAreRejected(String pattern) {
+      int flags = (pattern.contains(" ") ? ParseFlags.COMMENTS : 0) | ParseFlags.MATCH_NL;
 
-      assertThat(fullMatch(pattern, input, flags)).isEqualTo(expected);
+      assertThatThrownBy(() -> fullMatch(pattern, "a", flags))
+          .isInstanceOf(PatternSyntaxException.class);
+    }
+
+    @Test
+    void literalAmpersandAndPrincipledIntersection() {
+      // Single ampersand is a literal character
+      assertThat(fullMatch("[&]", "&", ParseFlags.MATCH_NL)).isTrue();
+      assertThat(fullMatch("[&]", "a", ParseFlags.MATCH_NL)).isFalse();
+      assertThat(fullMatch("[a&b]", "&", ParseFlags.MATCH_NL)).isTrue();
+      assertThat(fullMatch("[a&b]", "a", ParseFlags.MATCH_NL)).isTrue();
+      assertThat(fullMatch("[a&b]", "b", ParseFlags.MATCH_NL)).isTrue();
+      assertThat(fullMatch("[&-a]", "&", ParseFlags.MATCH_NL)).isTrue();
+      assertThat(fullMatch("[&-a]", "'", ParseFlags.MATCH_NL)).isTrue();
+
+      // Infix intersection
+      assertThat(fullMatch("[a-z&&[def]]", "d", ParseFlags.MATCH_NL)).isTrue();
+      assertThat(fullMatch("[a-z&&[def]]", "a", ParseFlags.MATCH_NL)).isFalse();
+      assertThat(fullMatch("[a-z&&[^bc]]", "a", ParseFlags.MATCH_NL)).isTrue();
+      assertThat(fullMatch("[a-z&&[^bc]]", "b", ParseFlags.MATCH_NL)).isFalse();
+      assertThat(fullMatch("[a-z&&d-f&&e]", "e", ParseFlags.MATCH_NL)).isTrue();
+      assertThat(fullMatch("[a-z&&d-f&&e]", "d", ParseFlags.MATCH_NL)).isFalse();
     }
 
     @Test

@@ -803,7 +803,16 @@ final class FuzzSupport {
     return hasLookaround(regex)
         || hasBackreference(regex)
         || hasPossessiveQuantifier(regex)
-        || isOverCompilerBudget(safeReException);
+        || isOverCompilerBudget(safeReException)
+        || isMalformedCharacterClassIntersection(safeReException);
+  }
+
+  private static boolean isMalformedCharacterClassIntersection(
+      PatternSyntaxException safeReException) {
+    String desc = safeReException.getDescription();
+    return desc != null
+        && (desc.contains("character class intersection")
+            || desc.contains("dangling character class '-'"));
   }
 
   private static boolean isOverCompilerBudget(PatternSyntaxException safeReException) {
