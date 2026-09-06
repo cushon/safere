@@ -1357,6 +1357,41 @@
       "shared": true
     },
     {
+      "id": "realWorldRegex.caseInsensitiveKeywordNoise.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "kind knowledge block check token mark keep track make lock ",
+        "suffix": "KEYWORD_TO_FIND",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.caseInsensitiveKeywordNoise.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "kind knowledge block check token mark keep track make lock",
+        "delimiterAlphabet": " ",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "realWorldRegex.boundedNameMatch.match.{size}",
       "axes": {
         "size": [
@@ -3533,6 +3568,44 @@
       ],
       "inputs": [
         "realWorldRegex.caseInsensitiveKeyword.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "requirements": []
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.caseInsensitiveKeywordNoise.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        {
+          "java": "(?i)keyword_to_find",
+          "alternates": {
+            "dotnet": {
+              "unsupported": true,
+              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
+            }
+          }
+        }
+      ],
+      "inputs": [
+        "realWorldRegex.caseInsensitiveKeywordNoise.{matchLabel}.{size}"
       ],
       "resultConsumption": "boolean",
       "measurement": {
