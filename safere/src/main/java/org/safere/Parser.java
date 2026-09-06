@@ -1141,8 +1141,7 @@ final class Parser {
       // Check for intersection operator '&&'
       if (c == '&' && pos + 1 < pattern.length() && pattern.charAt(pos + 1) == '&') {
         if (pos + 2 < pattern.length() && pattern.charAt(pos + 2) == '&') {
-          throw new PatternSyntaxException(
-              "invalid character class intersection", pattern, pos);
+          throw new PatternSyntaxException("invalid character class intersection", pattern, pos);
         }
         if (!frame.hasItems || frame.afterIntersection) {
           throw new PatternSyntaxException(
@@ -1171,8 +1170,7 @@ final class Parser {
                 "empty right side of character class intersection", pattern, pos);
           }
           if (next == '-') {
-            throw new PatternSyntaxException(
-                "dangling character class '-'", pattern, pos);
+            throw new PatternSyntaxException("dangling character class '-'", pattern, pos);
           }
         }
         continue;
