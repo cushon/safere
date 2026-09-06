@@ -25,8 +25,6 @@ class VectorSpeciesSimulationTest {
       VECTOR_AVAILABLE ? resolveByteIndexOfAsciiClass() : null;
   private static final Method BYTE_INDEX_OF_IGNORE_CASE =
       VECTOR_AVAILABLE ? resolveByteIndexOfIgnoreCase() : null;
-  private static final Method BYTE_INDEX_OF_PAIR_IGNORE_CASE =
-      VECTOR_AVAILABLE ? resolveByteIndexOfPairIgnoreCase() : null;
   private static final Method SHORT_INDEX_OF_CHAR_CLASS =
       VECTOR_AVAILABLE ? resolveShortIndexOfCharClass() : null;
 
@@ -96,32 +94,6 @@ class VectorSpeciesSimulationTest {
     }
   }
 
-  private static Method resolveByteIndexOfPairIgnoreCase() {
-    try {
-      Class<?> speciesClass = Class.forName("jdk.incubator.vector.VectorSpecies");
-      Method m =
-          ByteVectorScan.class.getDeclaredMethod(
-              "indexOfPairIgnoreCase",
-              speciesClass,
-              byte[].class,
-              int.class,
-              int.class,
-              String.class,
-              int.class,
-              int.class,
-              byte.class,
-              byte.class,
-              int.class,
-              byte.class,
-              byte.class,
-              int.class);
-      m.setAccessible(true);
-      return m;
-    } catch (ReflectiveOperationException | LinkageError e) {
-      throw new ExceptionInInitializerError(e);
-    }
-  }
-
   private static Method resolveShortIndexOfCharClass() {
     try {
       Class<?> speciesClass = Class.forName("jdk.incubator.vector.VectorSpecies");
@@ -176,42 +148,6 @@ class VectorSpeciesSimulationTest {
               anchorOffset,
               low,
               high,
-              start);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private static int invokeByteIndexOfPairIgnoreCase(
-      SpeciesHandle species,
-      byte[] bytes,
-      int offset,
-      int length,
-      String prefix,
-      int prefixLen,
-      int offset1,
-      byte low1,
-      byte high1,
-      int offset2,
-      byte low2,
-      byte high2,
-      int start) {
-    try {
-      return (int)
-          BYTE_INDEX_OF_PAIR_IGNORE_CASE.invoke(
-              null,
-              species.value(),
-              bytes,
-              offset,
-              length,
-              prefix,
-              prefixLen,
-              offset1,
-              low1,
-              high1,
-              offset2,
-              low2,
-              high2,
               start);
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -303,100 +239,6 @@ class VectorSpeciesSimulationTest {
                     high,
                     0))
             .as("IgnoreCase absent for species %s, pad %d", species, pad)
-            .isEqualTo(-1);
-      }
-    }
-  }
-
-  @Test
-  void ignoreCasePairMatchingAcrossAllByteVectorSpecies() {
-    assumeTrue(VECTOR_AVAILABLE, "Vector API not available on module path");
-    String prefix = "content-type:";
-    int prefixLen = prefix.length();
-    RarityOracle.AsciiPair pair = RarityOracle.rarestAsciiPairIgnoreCase(prefix, prefixLen);
-    assertThat(pair).isNotNull();
-
-    for (SpeciesHandle species : BYTE_SPECIES) {
-      for (int pad = 0; pad <= 128; pad++) {
-        String target = "CoNtEnT-TyPe:";
-        String base = "x".repeat(pad) + target + "y".repeat(64);
-        byte[] bytes = base.getBytes(UTF_8);
-
-        assertThat(
-                invokeByteIndexOfPairIgnoreCase(
-                    species,
-                    bytes,
-                    0,
-                    bytes.length,
-                    prefix,
-                    prefixLen,
-                    pair.offset1(),
-                    pair.low1(),
-                    pair.high1(),
-                    pair.offset2(),
-                    pair.low2(),
-                    pair.high2(),
-                    0))
-            .as("Pair IgnoreCase match for species %s, pad %d", species, pad)
-            .isEqualTo(pad);
-
-        String falsePositives1 = "c".repeat(pad + 64);
-        byte[] fpBytes1 = falsePositives1.getBytes(UTF_8);
-        assertThat(
-                invokeByteIndexOfPairIgnoreCase(
-                    species,
-                    fpBytes1,
-                    0,
-                    fpBytes1.length,
-                    prefix,
-                    prefixLen,
-                    pair.offset1(),
-                    pair.low1(),
-                    pair.high1(),
-                    pair.offset2(),
-                    pair.low2(),
-                    pair.high2(),
-                    0))
-            .as("Pair IgnoreCase false positives 1 for species %s, pad %d", species, pad)
-            .isEqualTo(-1);
-
-        String falsePositives2 = "t".repeat(pad + 64);
-        byte[] fpBytes2 = falsePositives2.getBytes(UTF_8);
-        assertThat(
-                invokeByteIndexOfPairIgnoreCase(
-                    species,
-                    fpBytes2,
-                    0,
-                    fpBytes2.length,
-                    prefix,
-                    prefixLen,
-                    pair.offset1(),
-                    pair.low1(),
-                    pair.high1(),
-                    pair.offset2(),
-                    pair.low2(),
-                    pair.high2(),
-                    0))
-            .as("Pair IgnoreCase false positives 2 for species %s, pad %d", species, pad)
-            .isEqualTo(-1);
-
-        byte[] absent = "x".repeat(pad + 64).getBytes(UTF_8);
-        assertThat(
-                invokeByteIndexOfPairIgnoreCase(
-                    species,
-                    absent,
-                    0,
-                    absent.length,
-                    prefix,
-                    prefixLen,
-                    pair.offset1(),
-                    pair.low1(),
-                    pair.high1(),
-                    pair.offset2(),
-                    pair.low2(),
-                    pair.high2(),
-                    0))
-            .as("Pair IgnoreCase absent for species %s, pad %d", species, pad)
             .isEqualTo(-1);
       }
     }

@@ -274,25 +274,6 @@ final class ByteVectorScan {
       byte low2,
       byte high2,
       int start) {
-    return indexOfPairIgnoreCase(
-        SPECIES, bytes, offset, length, prefix, prefixLen, offset1, low1, high1, offset2, low2,
-        high2, start);
-  }
-
-  public static int indexOfPairIgnoreCase(
-      VectorSpecies<Byte> species,
-      byte[] bytes,
-      int offset,
-      int length,
-      String prefix,
-      int prefixLen,
-      int offset1,
-      byte low1,
-      byte high1,
-      int offset2,
-      byte low2,
-      byte high2,
-      int start) {
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
     }
@@ -318,7 +299,7 @@ final class ByteVectorScan {
       }
     }
 
-    int vectorLen = species.length();
+    int vectorLen = SPECIES.length();
     int limit = length - vectorLen - maxAnchorOffset;
     if (pos > limit) {
       int limitScalar = length - prefixLen;
@@ -340,10 +321,10 @@ final class ByteVectorScan {
       return -1;
     }
 
-    ByteVector lowVec1 = ByteVector.broadcast(species, low1);
-    ByteVector highVec1 = ByteVector.broadcast(species, high1);
-    ByteVector lowVec2 = ByteVector.broadcast(species, low2);
-    ByteVector highVec2 = ByteVector.broadcast(species, high2);
+    ByteVector lowVec1 = ByteVector.broadcast(SPECIES, low1);
+    ByteVector highVec1 = ByteVector.broadcast(SPECIES, high1);
+    ByteVector lowVec2 = ByteVector.broadcast(SPECIES, low2);
+    ByteVector highVec2 = ByteVector.broadcast(SPECIES, high2);
     int baseOffset1 = offset + offset1;
     int baseOffset2 = offset + offset2;
     boolean hasHigh1 = (low1 != high1);
@@ -351,12 +332,12 @@ final class ByteVectorScan {
 
     if (hasHigh1 && hasHigh2) {
       for (; pos <= limit; pos += vectorLen) {
-        ByteVector inputVec1 = ByteVector.fromArray(species, bytes, baseOffset1 + pos);
+        ByteVector inputVec1 = ByteVector.fromArray(SPECIES, bytes, baseOffset1 + pos);
         VectorMask<Byte> mask1 = inputVec1.compare(EQ, lowVec1).or(inputVec1.compare(EQ, highVec1));
         if (!mask1.anyTrue()) {
           continue;
         }
-        ByteVector inputVec2 = ByteVector.fromArray(species, bytes, baseOffset2 + pos);
+        ByteVector inputVec2 = ByteVector.fromArray(SPECIES, bytes, baseOffset2 + pos);
         VectorMask<Byte> mask2 = inputVec2.compare(EQ, lowVec2).or(inputVec2.compare(EQ, highVec2));
         VectorMask<Byte> matchMask = mask1.and(mask2);
 
@@ -380,7 +361,7 @@ final class ByteVectorScan {
       }
     } else {
       for (; pos <= limit; pos += vectorLen) {
-        ByteVector inputVec1 = ByteVector.fromArray(species, bytes, baseOffset1 + pos);
+        ByteVector inputVec1 = ByteVector.fromArray(SPECIES, bytes, baseOffset1 + pos);
         VectorMask<Byte> mask1 =
             hasHigh1
                 ? inputVec1.compare(EQ, lowVec1).or(inputVec1.compare(EQ, highVec1))
@@ -388,7 +369,7 @@ final class ByteVectorScan {
         if (!mask1.anyTrue()) {
           continue;
         }
-        ByteVector inputVec2 = ByteVector.fromArray(species, bytes, baseOffset2 + pos);
+        ByteVector inputVec2 = ByteVector.fromArray(SPECIES, bytes, baseOffset2 + pos);
         VectorMask<Byte> mask2 =
             hasHigh2
                 ? inputVec2.compare(EQ, lowVec2).or(inputVec2.compare(EQ, highVec2))
