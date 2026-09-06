@@ -471,6 +471,24 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void caseInsensitivePairDenseFalseCandidatesScaleLinearlyForUtf8Input() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find");
+    byte[] input2000 = "kind knowledge token lock keep track ".repeat(50).getBytes(UTF_8);
+    byte[] input10000 = "kind knowledge token lock keep track ".repeat(250).getBytes(UTF_8);
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input2000)).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input10000)).find()).isFalse());
+
+    assertThat(work10000)
+        .as("UTF-8 case-insensitive false candidate search must remain linearly bounded")
+        .isLessThanOrEqualTo(work2000 * 6);
+  }
+
+  @Test
   void caseInsensitiveLiteralFindWorkIsLinear() {
     Pattern pattern = Pattern.compile("(?i)keyword_to_find");
 
