@@ -140,10 +140,13 @@ Consequently, SafeRE rejects malformed character class intersection syntax with
 Observed JDK behavior accepts repeated ampersands, leading and trailing
 ampersands, and exhibits idiosyncratic parser leakiness where solitary `&`
 characters inside right-hand operands can leak out of nested character classes into
-outer unions (for example, JDK treats `[b&&[a]&]` as matching `&` because the `&`
-leaks out of the right-hand operand into an outer union). SafeRE follows the clean,
-documented grammar of boolean class intersection rather than reproducing JDK
-parser bugs and implementation accidents.
+outer unions. Furthermore, this leakiness in the JDK is asymmetrical across the 8-bit
+boundary: characters <= 0xFF leak from `BitClass` into the outer match set (causing
+`[b&&[a]&]` to match `b`), whereas characters >= 0x100 bypass the bitmap and do not
+leak (so `[\u0100&&[a]&]` fails to match `\u0100`). This upstream inconsistency is
+tracked as [JDK-8320001](https://bugs.openjdk.org/browse/JDK-8320001). SafeRE treats
+all Unicode code points uniformly according to boolean set algebra rather than
+reproducing JDK parser bugs and implementation accidents.
 
 ## Unicode Case-Insensitive Range Closure
 
