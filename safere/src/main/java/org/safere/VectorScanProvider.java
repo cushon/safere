@@ -5,7 +5,6 @@
 
 package org.safere;
 
-/** Internal provider for experimental Vector API scan operations. */
 interface VectorScanProvider {
   int UNSUPPORTED = -2;
 
@@ -13,11 +12,18 @@ interface VectorScanProvider {
 
   int minimumTeddyInputLength();
 
+  int minimumMultiLiteralInputLength();
+
   int minimumPairInputLength();
 
   int minimumTripleInputLength();
 
   int maximumTripleInputLength();
+
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  default int indexOfByte(byte[] bytes, int offset, int length, byte target, int start) {
+    return UNSUPPORTED;
+  }
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start);
@@ -35,4 +41,17 @@ interface VectorScanProvider {
 
   /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
   int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start);
+
+  /** Returns a match position, {@code -1} when absent, or {@link #UNSUPPORTED}. */
+  int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int[] anchorRanges,
+      int minLength,
+      TeddyModel teddyModel,
+      int start);
 }

@@ -702,6 +702,8 @@
       "id": "searchScaling.random.{size}",
       "axes": {
         "size": [
+          64,
+          256,
           1024,
           10240,
           102400,
@@ -2487,6 +2489,199 @@
         "text": "application:12345 (and trailing data that is not matched)"
       },
       "shared": true
+    },
+    {
+      "id": "realWorldRegex.markdownCitationScrub.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "According to source documentation [1.2.3.4, 5.6.7.8], the query completed in 42ms. For details, see [System Overview](https://example.com/sys) and metrics [9.10.11.12].",
+        "delimiterAlphabet": "\n\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.markdownCitationScrub.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "For more information, see the [User Guide](https://example.com/guide) and [API Reference](https://example.com/api). This section describes standard operational behavior without recitation data.",
+        "delimiterAlphabet": "\n\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.llmCitationScrub.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "## 1. Overview\n\nThe SafeRE execution engine processes regular expressions in linear O(N) time with guaranteed bounds [1.2.3.4, 5.6.7.8]. As documented in version 2.4 release notes, queries execute in approximately 15ms. For further details on configuration parameters and error handling, refer to the [SafeRE Documentation](https://github.com/safere/docs/v2) and review the [Architecture Guide](https://github.com/safere/arch/v2). All operations maintain backward compatibility.\n\n",
+        "delimiterAlphabet": "\n\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.llmCitationScrub.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "## 1. Overview\n\nThe SafeRE execution engine processes regular expressions in linear O(N) time with guaranteed bounds. As documented in version 2.4 release notes, queries execute in approximately 15ms. For further details on configuration parameters and error handling, refer to the [SafeRE Documentation](https://github.com/safere/docs/v2) and review the [Architecture Guide](https://github.com/safere/arch/v2). All operations maintain backward compatibility.\n\n",
+        "delimiterAlphabet": "\n\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaInteriorLoopBenchmark.quotedString.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "start \"",
+        "unit": "x",
+        "suffix": "\" end",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaLoopMatchesBenchmark.ambiguousLoop.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "1",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaInteriorLoopBenchmark.cComment.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "/*",
+        "unit": "a",
+        "suffix": "*/",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaLoopMatchesBenchmark.wildcardQuote.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "\"",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.booleanToken.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "false"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.identifier.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "variable_name_",
+        "unit": "x",
+        "suffix": "",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.digitsRange.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "1234"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.stringLiteral.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "\"",
+        "length": "{size}"
+      },
+      "shared": true
     }
   ],
   "workloads": [
@@ -4075,6 +4270,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.64",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.64"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.alternationScaled.64",
       "operation": "find",
       "patterns": [
@@ -4093,6 +4306,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.256",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.256"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.alternationScaled.256",
       "operation": "find",
       "patterns": [
@@ -4100,6 +4331,24 @@
       ],
       "inputs": [
         "searchScaling.prose.256"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.1024",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4291,6 +4540,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.10240",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.alternationScaled.10240",
       "operation": "find",
       "patterns": [
@@ -4465,6 +4732,24 @@
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.102400",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
         ]
@@ -4651,6 +4936,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.1048576",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.alternationScaled.1048576",
       "operation": "find",
       "patterns": [
@@ -4732,6 +5035,42 @@
         "searchScaling.success.1048576"
       ],
       "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.64",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.64"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.multiLiteral3Fail.256",
+      "operation": "find",
+      "patterns": [
+        "APPLE|BANANA|CHERRY"
+      ],
+      "inputs": [
+        "searchScaling.random.256"
+      ],
+      "resultConsumption": "boolean",
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "nanoseconds",
@@ -5846,11 +6185,6 @@
       "inputs": [
         "replace.anchoredReplace.input"
       ],
-      "inputRepresentations": [
-        "javaString",
-        "javaStringWithTimedUtf8Conversion"
-      ],
-      "inputRepresentationReason": "The Matcher replacement fast path operates on Java strings; preexisting UTF-8 replacement uses a separate API.",
       "resultConsumption": "string",
       "measurement": {
         "mode": "averageTime",
@@ -9357,6 +9691,29 @@
       }
     },
     {
+      "id": "Utf8MatchingBenchmark.literalScan.longWordPrefix",
+      "operation": "find",
+      "patterns": [
+        "coolfunctionname.*"
+      ],
+      "inputs": [
+        "utf8Matching.literalScan.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Exercises the long-literal prefix through the start accelerator rather than the pure-literal fast path, matching how SQL engines rewrite LIKE-style patterns.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "Utf8MatchingBenchmark.hardFailure.1024",
       "operation": "find",
       "patterns": [
@@ -11266,6 +11623,31 @@
       }
     },
     {
+      "id": "UnicodeCaseFoldingBenchmark.linearChainCapture",
+      "operation": "matchesGroupLengthSum",
+      "patterns": [
+        "^(?iu)([a-z]+)://([^:/]+):([0-9]+)$"
+      ],
+      "inputs": [
+        "onePassScaling.withCaptures.4096"
+      ],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "groups": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
       "id": "ValidationBenchmark.ambiguousLoopMatches.match",
       "operation": "matches",
       "patterns": [
@@ -11376,6 +11758,316 @@
       },
       "lifecycle": {
         "matcher": "newPerInvocation"
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.markdownCitationScrub.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\s*[\\[\\uff3b]\\s*(?:(?:[0-9]+\\.?){3,4}(?:\\s*[,\\u3001]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]\\uff3d]"
+      ],
+      "inputs": [
+        "realWorldRegex.markdownCitationScrub.{matchLabel}.{size}"
+      ],
+      "trialExclusions": [
+        {
+          "engineIds": [
+            "jdk-string"
+          ],
+          "when": {
+            "size": [
+              10000,
+              100000
+            ]
+          },
+          "reason": "JDK backtracking matcher throws StackOverflowError on nested quantifiers"
+        }
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.llmCitationScrub.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\s*[\\[\\uff3b]\\s*(?:(?:[0-9]+\\.?){3,4}(?:\\s*[,\\u3001]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]\\uff3d]"
+      ],
+      "inputs": [
+        "realWorldRegex.llmCitationScrub.{matchLabel}.{size}"
+      ],
+      "trialExclusions": [
+        {
+          "engineIds": [
+            "jdk-string"
+          ],
+          "when": {
+            "size": [
+              10000,
+              100000
+            ]
+          },
+          "reason": "JDK backtracking matcher throws StackOverflowError on nested quantifiers"
+        }
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "DfaInteriorLoopBenchmark.quotedString.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "\"[^\"]*\""
+      ],
+      "inputs": [
+        "crossEngine.DfaInteriorLoopBenchmark.quotedString.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaLoopMatchesBenchmark.ambiguousLoop.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "(?s)^[a-zA-Z0-9_]*[0-9][a-zA-Z0-9_]*$"
+      ],
+      "inputs": [
+        "crossEngine.DfaLoopMatchesBenchmark.ambiguousLoop.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaInteriorLoopBenchmark.cComment.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "(?s)/\\*.*?\\*/"
+      ],
+      "inputs": [
+        "crossEngine.DfaInteriorLoopBenchmark.cComment.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaLoopMatchesBenchmark.wildcardQuote.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "(?s)^.*\"$"
+      ],
+      "inputs": [
+        "crossEngine.DfaLoopMatchesBenchmark.wildcardQuote.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.booleanToken",
+      "operation": "matches",
+      "patterns": [
+        "(?:true|false) ?"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.booleanToken.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.identifier.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "[a-zA-Z_][a-zA-Z0-9_]*"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.identifier.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.digitsRange",
+      "operation": "matches",
+      "patterns": [
+        "[0-9]{1,4}"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.digitsRange.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.stringLiteral.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "[\\x00-\\x21\\x23-\\x7F]*\""
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.stringLiteral.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
       }
     }
   ]

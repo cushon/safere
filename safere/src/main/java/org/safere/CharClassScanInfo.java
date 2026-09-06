@@ -23,6 +23,11 @@ sealed interface CharClassScanInfo {
 
   int[] ranges();
 
+  default boolean isSelective() {
+    int count = Long.bitCount(bitmap0()) + Long.bitCount(bitmap1());
+    return count <= 3;
+  }
+
   /** Matches 1, 2, or 3 exact ASCII characters via single-instruction SIMD equality. */
   // Arrays are immutable, privately owned scanner metadata; array identity is never observed.
   @SuppressWarnings("ArrayRecordComponent")

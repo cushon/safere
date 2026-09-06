@@ -55,6 +55,11 @@ record EnginePathContract(
               EnumSet.of(ResultAuthority.CANDIDATE_START),
               EnumSet.of(SemanticGuard.CONSERVATIVE_START_SET)),
           new EnginePathContract(
+              EnginePath.SHIFT_DFA,
+              EnginePathRole.GUARDED_OPTIMIZATION,
+              EnumSet.of(ResultAuthority.NO_MATCH, ResultAuthority.GROUP_ZERO),
+              EnumSet.of(SemanticGuard.WHOLE_PATTERN_SHAPE, SemanticGuard.BOUNDED_STATE)),
+          new EnginePathContract(
               EnginePath.ONE_PASS,
               EnginePathRole.GUARDED_OPTIMIZATION,
               EnumSet.of(

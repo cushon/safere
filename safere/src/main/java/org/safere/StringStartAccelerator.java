@@ -18,26 +18,41 @@ sealed interface StringStartAccelerator {
    * Creates a {@link StringStartAccelerator} for the given pattern descriptor, or {@code null} if
    * no acceleration strategy applies.
    */
-  static StringStartAccelerator create(StartDescriptor descriptor, boolean hasWordBoundary) {
-    if (descriptor == null || !descriptor.hasStartAcceleration()) {
+  static StringStartAccelerator create(MultiAnchorDescriptor descriptor, boolean hasWordBoundary) {
+    if (descriptor == null) {
       return null;
     }
-    if (descriptor.prefix() != null) {
-      if (descriptor.prefixFoldCase()) {
-        return CaseInsensitiveLiteral.create(descriptor.prefix());
+    return create(descriptor.startPlan(), hasWordBoundary);
+  }
+
+  static StringStartAccelerator create(
+      MultiAnchorDescriptor.StartPlan plan, boolean hasWordBoundary) {
+    if (plan == null || plan instanceof MultiAnchorDescriptor.StartPlan.None) {
+      return null;
+    }
+    return switch (plan) {
+      case MultiAnchorDescriptor.StartPlan.None unusedNone -> null;
+      case MultiAnchorDescriptor.StartPlan.Literal lit ->
+          lit.foldCase()
+              ? CaseInsensitiveLiteral.create(lit.prefix(), lit.classHashChain())
+              : Literal.create(lit.prefix());
+      case MultiAnchorDescriptor.StartPlan.CharClass cc ->
+          hasWordBoundary || !cc.scanInfo().isSelective() ? null : CharClass.create(cc.scanInfo());
+      case MultiAnchorDescriptor.StartPlan.FixedOffset fo ->
+          new FixedOffset(fo.fol(), fo.leadingClass());
+      case MultiAnchorDescriptor.StartPlan.MultiLiteral ml ->
+          hasWordBoundary || ml.fallbackClass() == null || !ml.fallbackClass().isSelective()
+              ? null
+              : CharClass.create(ml.fallbackClass());
+      case MultiAnchorDescriptor.StartPlan.LeadingExpansion le -> {
+        StringStartAccelerator inner = create(le.innerPlan(), hasWordBoundary);
+        yield inner != null
+            ? new LeadingExpansion(le.leadingClass(), le.minRepetition(), le.maxRepetition(), inner)
+            : null;
       }
-      return Literal.create(descriptor.prefix());
-    }
-    if (descriptor.fixedOffsetLiteral() != null) {
-      return new FixedOffset(descriptor.fixedOffsetLiteral(), descriptor.charClassPrefix());
-    }
-    if (descriptor.charClassPrefix() != null && !hasWordBoundary) {
-      return CharClass.create(descriptor.charClassPrefix());
-    }
-    if (descriptor.lineAnchor() != null && !hasWordBoundary) {
-      return new LineAnchor(descriptor.lineAnchor());
-    }
-    return null;
+      case MultiAnchorDescriptor.StartPlan.LineAnchor la ->
+          hasWordBoundary ? null : new LineAnchor(la.acceleration());
+    };
   }
 
   /**
@@ -57,6 +72,7 @@ sealed interface StringStartAccelerator {
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
       case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
+      case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
     };
   }
 
@@ -77,29 +93,34 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
+      int idx = text.indexOf(prefix, fromIndex);
       if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record(Math.max(0, text.length() - fromIndex));
+        int scanned = idx >= 0 ? idx - fromIndex + prefix.length() : text.length() - fromIndex;
+        WorkCounter.record(Math.max(0, scanned));
       }
-      return text.indexOf(prefix, fromIndex);
+      return idx;
     }
   }
 
-  // The failure table is immutable pattern metadata; array identity and value semantics are unused.
-  @SuppressWarnings("ArrayRecordComponent")
   record CaseInsensitiveLiteral(
-      String prefix, int[] failure, int anchorOffset, char anchorLow, char anchorHigh)
+      String prefix,
+      int anchorOffset,
+      char anchorLow,
+      char anchorHigh,
+      ClassHashChain classHashChain)
       implements StringStartAccelerator {
 
-    static CaseInsensitiveLiteral create(String prefix) {
+    static CaseInsensitiveLiteral create(String prefix, ClassHashChain classHashChain) {
       if (prefix == null || prefix.isEmpty()) {
-        return new CaseInsensitiveLiteral(prefix, null, 0, '\0', '\0');
+        return new CaseInsensitiveLiteral(prefix, 0, '\0', '\0', null);
       }
-      int[] failure = Ascii.ignoreCaseFailure(prefix);
       int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length(), true);
       char anchor = prefix.charAt(anchorOffset);
       char anchorLow = Ascii.toLowerCase(anchor);
       char anchorHigh = Ascii.toUpperCase(anchor);
-      return new CaseInsensitiveLiteral(prefix, failure, anchorOffset, anchorLow, anchorHigh);
+      ClassHashChain chain =
+          classHashChain != null ? classHashChain : ClassHashChain.compileCaseInsensitive(prefix);
+      return new CaseInsensitiveLiteral(prefix, anchorOffset, anchorLow, anchorHigh, chain);
     }
 
     @Override
@@ -109,7 +130,7 @@ sealed interface StringStartAccelerator {
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
       return Matcher.indexOfIgnoreCase(
-          text, prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
+          text, prefix, anchorOffset, anchorLow, anchorHigh, classHashChain, fromIndex);
     }
   }
 
@@ -329,6 +350,53 @@ sealed interface StringStartAccelerator {
           || prev == '\u2028'
           || prev == '\u2029'
           || (prev == '\r' && text.charAt(pos) != '\n');
+    }
+  }
+
+  record LeadingExpansion(
+      CharClassScanInfo leadingClass,
+      int minRepetition,
+      int maxRepetition,
+      StringStartAccelerator inner)
+      implements StringStartAccelerator {
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return new AcceleratorPolicy(16, 4, false, inner.policy().strategy());
+    }
+
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
+      int searchPos = Math.max(0, fromIndex);
+      int textLen = text.length();
+      while (searchPos < textLen) {
+        int innerMatch =
+            StringStartAccelerator.findNextCandidate(inner, text, searchPos, unixLines);
+        if (innerMatch < 0) {
+          return -1;
+        }
+        int start = innerMatch;
+        int count = 0;
+        while (start > fromIndex) {
+          int cp = text.codePointBefore(start);
+          int cpStart = start - Character.charCount(cp);
+          if (cpStart < fromIndex) {
+            break;
+          }
+          if (!leadingClass.contains(cp)) {
+            break;
+          }
+          if (count + 1 > maxRepetition) {
+            break;
+          }
+          count++;
+          start = cpStart;
+        }
+        if (count >= minRepetition) {
+          return start;
+        }
+        searchPos = innerMatch + 1;
+      }
+      return -1;
     }
   }
 }

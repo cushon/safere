@@ -14,20 +14,14 @@ import java.lang.invoke.MethodType;
 import java.lang.invoke.MutableCallSite;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.Spliterator;
-import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.regex.PatternSyntaxException;
@@ -60,7 +54,6 @@ public final class Pattern implements Serializable {
       MethodType.methodType(SafeReMatchDiagnostics.class);
   private static final MutableCallSite DIAGNOSTICS_SITE = new MutableCallSite(DIAGNOSTICS_TYPE);
   private static final MethodHandle DIAGNOSTICS_INVOKER = DIAGNOSTICS_SITE.dynamicInvoker();
-  private static final int MAX_DISJOINT_REQUIRED_LITERALS = 4;
 
   static {
     setDiagnosticsTarget(SafeReMatchDiagnostics.NONE);
@@ -120,8 +113,7 @@ public final class Pattern implements Serializable {
   private final transient Prog flatProg;
   private final transient Prog flatDfaProg;
   private final transient Regexp ast;
-
-  private final transient Map<String, Integer> namedGroups;
+  private final transient AstAnalysis astAnalysis;
   private final transient String prefix;
   private final transient boolean prefixFoldCase;
   private final transient MatchDescriptor matchDescriptor;
@@ -131,15 +123,10 @@ public final class Pattern implements Serializable {
   private final transient byte[] prefixUtf8;
   private final transient String anchoredPrefix;
   private final transient byte[] anchoredPrefixUtf8;
-  private final transient boolean hasLazy;
-  private final transient boolean hasAlternation;
-  private final transient boolean hasNullableAlternation;
-  private final transient boolean canMatchEmpty;
   private final transient boolean startsWithGraphemeClusterBoundary;
   private final transient boolean hasInternalGraphemeClusterBoundary;
   private final transient CharClassScanInfo charClassPrefix;
   private final transient CharClassScanInfo anchoredCharClassPrefix;
-  private final transient FixedOffsetLiteral fixedOffsetLiteral;
   private final transient Utf8StartAccelerator utf8StartAccelerator;
   private final transient StringStartAccelerator stringStartAccelerator;
   private final transient EnginePathOptions enginePathOptions;
@@ -148,9 +135,7 @@ public final class Pattern implements Serializable {
   private final long patternId;
   private transient volatile PatternAnalysis patternAnalysis;
   private transient volatile PatternDescriptor patternDescriptor;
-
-  /** Whole-input rejection AST metadata for Tier 0 acceleration. */
-  private final transient RejectDescriptor rejectDescriptor;
+  private final transient MultiAnchorDescriptor multiAnchor;
 
   /**
    * Whole-input rejection filter for Tier 0 acceleration. Non-null when matching can quickly reject
@@ -232,34 +217,16 @@ public final class Pattern implements Serializable {
     static final OnePassAnalysis DISABLED = new OnePassAnalysis(null, false, false, false);
   }
 
-  /** Precomputed metadata for a small disjoint set of required literal substrings. */
-  // The array is owned by the immutable compiled Pattern and is never exposed publicly.
-  @SuppressWarnings("ArrayRecordComponent")
-  record DisjointRequiredLiterals(String[] literals) {
-
-    static DisjointRequiredLiterals create(String[] literals) {
-      if (literals == null || literals.length == 0) {
-        return null;
-      }
-      return new DisjointRequiredLiterals(literals);
-    }
-  }
-
   private Pattern(
       String pattern,
       int flags,
       Prog prog,
       Regexp ast,
-      Map<String, Integer> namedGroups,
-      StartDescriptor startDescriptor,
+      AstAnalysis astAnalysis,
       MatchDescriptor matchDescriptor,
-      boolean hasLazy,
-      boolean hasAlternation,
-      boolean hasNullableAlternation,
-      boolean canMatchEmpty,
       boolean startsWithGraphemeClusterBoundary,
       boolean hasInternalGraphemeClusterBoundary,
-      RejectDescriptor rejectDescriptor,
+      MultiAnchorDescriptor multiAnchor,
       EnginePathOptions enginePathOptions) {
     this.patternId = nextPatternId();
     this.pattern = pattern;
@@ -287,40 +254,35 @@ public final class Pattern implements Serializable {
     }
 
     this.ast = ast;
-    this.namedGroups = namedGroups;
-    this.prefix = startDescriptor.prefix();
-    this.prefixFoldCase = startDescriptor.prefixFoldCase();
+    this.astAnalysis = astAnalysis;
+    this.multiAnchor = multiAnchor != null ? multiAnchor : MultiAnchorDescriptor.NONE;
+    this.prefix = this.multiAnchor.prefix();
+    this.prefixFoldCase = this.multiAnchor.prefixFoldCase();
     this.prefixUtf8 =
-        startDescriptor.prefix() == null || startDescriptor.prefix().isEmpty()
+        this.prefix == null || this.prefix.isEmpty()
             ? null
-            : startDescriptor.prefix().getBytes(StandardCharsets.UTF_8);
-    this.anchoredPrefix = startDescriptor.anchoredPrefix();
+            : this.prefix.getBytes(StandardCharsets.UTF_8);
+    this.anchoredPrefix = this.multiAnchor.anchoredPrefix();
     this.anchoredPrefixUtf8 =
-        anchoredPrefix == null || anchoredPrefix.isEmpty()
+        this.anchoredPrefix == null || this.anchoredPrefix.isEmpty()
             ? null
-            : anchoredPrefix.getBytes(StandardCharsets.UTF_8);
+            : this.anchoredPrefix.getBytes(StandardCharsets.UTF_8);
     this.matchDescriptor = matchDescriptor != null ? matchDescriptor : MatchDescriptor.NONE;
     String literalMatch = this.matchDescriptor.literalMatch();
     this.literalMatchUtf8 =
         literalMatch == null ? null : literalMatch.getBytes(StandardCharsets.UTF_8);
     this.literalMatchFailure = literalMatchUtf8 == null ? null : literalFailure(literalMatchUtf8);
     this.literalMatchShifts = literalMatchUtf8 == null ? null : literalShifts(literalMatchUtf8);
-    this.hasLazy = hasLazy;
-    this.hasAlternation = hasAlternation;
-    this.hasNullableAlternation = hasNullableAlternation;
-    this.canMatchEmpty = canMatchEmpty;
     this.startsWithGraphemeClusterBoundary = startsWithGraphemeClusterBoundary;
     this.hasInternalGraphemeClusterBoundary = hasInternalGraphemeClusterBoundary;
-    this.charClassPrefix = startDescriptor.charClassPrefix();
-    this.anchoredCharClassPrefix = startDescriptor.anchoredCharClassPrefix();
-    this.fixedOffsetLiteral = startDescriptor.fixedOffsetLiteral();
+    this.charClassPrefix = this.multiAnchor.charClassPrefix();
+    this.anchoredCharClassPrefix = this.multiAnchor.anchoredCharClassPrefix();
     this.utf8StartAccelerator =
-        Utf8StartAccelerator.create(startDescriptor, prog.hasWordBoundary());
+        Utf8StartAccelerator.create(this.multiAnchor, prog.hasWordBoundary());
     this.stringStartAccelerator =
-        StringStartAccelerator.create(startDescriptor, prog.hasWordBoundary());
+        StringStartAccelerator.create(this.multiAnchor, prog.hasWordBoundary());
     this.enginePathOptions = enginePathOptions;
-    this.rejectDescriptor = rejectDescriptor != null ? rejectDescriptor : RejectDescriptor.NONE;
-    this.rejectPrefilter = RejectPrefilter.create(this.rejectDescriptor);
+    this.rejectPrefilter = RejectPrefilter.create(this.multiAnchor);
     this.defaultPreparedMatchRunner = createPreparedRunner(false);
     this.regionPreparedMatchRunner = createPreparedRunner(true);
 
@@ -340,7 +302,7 @@ public final class Pattern implements Serializable {
   }
 
   private static MatchDescriptor extractMatchDescriptor(
-      Regexp metadataAst, Regexp sourceAst, int flags) {
+      Regexp metadataAst, Regexp sourceAst, int flags, Prog prog) {
     LiteralResult literalMatchResult = extractLiteralMatch(metadataAst);
     String literalMatch = literalMatchResult.literal();
     boolean literalFoldCase = literalMatchResult.foldCase();
@@ -348,11 +310,13 @@ public final class Pattern implements Serializable {
     KeywordAlternation keywordAlternation = extractKeywordAlternation(metadataAst, flags);
     CharClassMatchInfo ccMatch = extractCharClassMatch(metadataAst);
     int minMatchLength = extractMinMatchLength(sourceAst);
+    ShiftDfa shiftDfa = ShiftDfa.compile(prog);
     if (literalMatch == null
         && singleCharClass == null
         && keywordAlternation == null
         && ccMatch == null
-        && minMatchLength <= 0) {
+        && minMatchLength <= 0
+        && shiftDfa == null) {
       return MatchDescriptor.NONE;
     }
     return new MatchDescriptor(
@@ -361,7 +325,8 @@ public final class Pattern implements Serializable {
         singleCharClass,
         keywordAlternation,
         ccMatch,
-        minMatchLength);
+        minMatchLength,
+        shiftDfa);
   }
 
   private static long nextPatternId() {
@@ -446,81 +411,23 @@ public final class Pattern implements Serializable {
     if (metadataAst == null) {
       throw new PatternSyntaxException("pattern too large to simplify", regex, -1);
     }
-    Map<String, Integer> named = extractNamedGroups(re);
-    StartDescriptor startDescriptor = extractStartDescriptor(metadataAst);
-    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, re, flags);
-    boolean hasLazy = hasLazyQuantifiers(re);
-    boolean hasAlt = hasAlternation(re);
-    boolean canMatchEmpty = canMatchEmpty(re);
-    boolean hasNullableAlt = hasAlt && hasNullableAlternation(re);
+    AstAnalysis astAnalysis = AstAnalysis.analyze(re);
+    MultiAnchorDescriptor multiAnchor = MultiAnchorCompiler.compile(metadataAst, effectiveFlags);
+    MatchDescriptor matchDescriptor = extractMatchDescriptor(metadataAst, re, flags, compiled);
     boolean startsWithGcb = startsWithGraphemeClusterBoundary(metadataAst);
     boolean hasInternalGcb = hasInternalExplicitGraphemeBoundary(re);
-    RejectDescriptor rejectDescriptor =
-        extractRejectDescriptor(
-            metadataAst, effectiveFlags, startDescriptor, compiled.anchorStart());
     // OnePass analysis and DFA setup are deferred to first use (lazy initialization).
     return new Pattern(
         regex,
         effectiveFlags,
         compiled,
         re,
-        named,
-        startDescriptor,
+        astAnalysis,
         matchDescriptor,
-        hasLazy,
-        hasAlt,
-        hasNullableAlt,
-        canMatchEmpty,
         startsWithGcb,
         hasInternalGcb,
-        rejectDescriptor,
+        multiAnchor,
         enginePathOptions);
-  }
-
-  private static StartDescriptor extractStartDescriptor(Regexp metadataAst) {
-    PrefixResult prefixResult = extractPrefix(metadataAst);
-    String prefix = prefixResult.prefix();
-    boolean prefixFoldCase = prefixResult.foldCase();
-    FixedOffsetLiteral fixedOffsetLiteral =
-        prefix == null ? extractFixedOffsetLiteral(metadataAst) : null;
-    CharClassScanInfo ccPrefix = (prefix == null) ? extractCharClassPrefix(metadataAst) : null;
-    String[] altLiterals = prefix == null ? extractLiteralAlternation(metadataAst) : null;
-    TeddyModel teddyModel = null;
-    if (altLiterals != null && altLiterals.length >= 2 && altLiterals.length <= 32) {
-      teddyModel = TeddyModel.compileForSelectedProvider(altLiterals);
-    }
-    StartAcceleration startAcceleration =
-        (prefix == null && ccPrefix == null && fixedOffsetLiteral == null && teddyModel == null)
-            ? extractStartAcceleration(metadataAst)
-            : null;
-    Regexp anchoredCandidate = firstPrefixCandidateAfterTextAnchor(metadataAst);
-    PrefixResult anchoredPrefixResult = extractPrefixFromCandidate(anchoredCandidate);
-    String anchoredPrefix =
-        anchoredPrefixResult.prefix() != null && !anchoredPrefixResult.foldCase()
-            ? anchoredPrefixResult.prefix()
-            : null;
-    CharClassScanInfo anchoredCharClassPrefix =
-        anchoredPrefix == null && anchoredCandidate != null
-            ? extractCharClassPrefix(anchoredCandidate)
-            : null;
-    if (prefix == null
-        && fixedOffsetLiteral == null
-        && ccPrefix == null
-        && startAcceleration == null
-        && anchoredPrefix == null
-        && anchoredCharClassPrefix == null
-        && teddyModel == null) {
-      return StartDescriptor.NONE;
-    }
-    return new StartDescriptor(
-        prefix,
-        prefixFoldCase,
-        fixedOffsetLiteral,
-        ccPrefix,
-        startAcceleration,
-        anchoredPrefix,
-        anchoredCharClassPrefix,
-        teddyModel);
   }
 
   /**
@@ -636,7 +543,7 @@ public final class Pattern implements Serializable {
       if (prog.anchorStart()) {
         return scanner.startsWith(literalMatchUtf8, 0);
       }
-      return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
+      return scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts, 0) >= 0;
     }
     if (enginePathOptions.keywordAlternationFastPath()
         && matchDescriptor.keywordAlternation() != null) {
@@ -661,6 +568,7 @@ public final class Pattern implements Serializable {
       return false;
     }
     int searchStart = 0;
+    boolean startPositionPreselected = false;
     if (enginePathOptions.startAcceleration()
         && utf8StartAccelerator != null
         && !prog.anchorStart()) {
@@ -668,9 +576,12 @@ public final class Pattern implements Serializable {
       if (searchStart < 0) {
         return false;
       }
+      startPositionPreselected = true;
     }
     if (!prog.anchorEnd() && !prog.hasGraphemeSemantics() && prog.numLoopRegs() == 0) {
-      Dfa.SearchResult result = forwardFirstMatchDfa().doSearch(scanner, searchStart, false, false);
+      Dfa.SearchResult result =
+          forwardFirstMatchDfa()
+              .doSearch(scanner, searchStart, false, false, startPositionPreselected);
       if (result != null) {
         return result.matched();
       }
@@ -695,7 +606,7 @@ public final class Pattern implements Serializable {
       boolean matched =
           prog.anchorStart()
               ? scanner.startsWith(literalMatchUtf8, 0)
-              : scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts) >= 0;
+              : scanner.indexOf(literalMatchUtf8, literalMatchFailure, literalMatchShifts, 0) >= 0;
       diagnostics.boundary(MatchStrategy.LITERAL);
       return matched;
     }
@@ -731,6 +642,7 @@ public final class Pattern implements Serializable {
       return false;
     }
     int searchStart = 0;
+    boolean startPositionPreselected = false;
     if (enginePathOptions.startAcceleration()
         && utf8StartAccelerator != null
         && !prog.anchorStart()) {
@@ -745,11 +657,14 @@ public final class Pattern implements Serializable {
         }
         return false;
       }
+      startPositionPreselected = true;
     }
     if (!prog.anchorEnd() && !prog.hasGraphemeSemantics() && prog.numLoopRegs() == 0) {
       diagnostics.participate(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
       diagnostics.incrementForwardDfaSearchCount();
-      Dfa.SearchResult result = forwardFirstMatchDfa().doSearch(scanner, searchStart, false, false);
+      Dfa.SearchResult result =
+          forwardFirstMatchDfa()
+              .doSearch(scanner, searchStart, false, false, startPositionPreselected);
       if (result != null) {
         diagnostics.boundary(MatchStrategy.DFA);
         return result.matched();
@@ -1026,7 +941,8 @@ public final class Pattern implements Serializable {
           prog.anchorStart(),
           matchDescriptor.literalFoldCase()
               ? createLiteralFallbackRunner(regionActive)
-              : Matcher.FallbackPreparedRunner.INSTANCE);
+              : Matcher.FallbackPreparedRunner.INSTANCE,
+          matchDescriptor.classHashChain());
     }
 
     CharClassScanInfo singleCharClass = matchDescriptor.singleCharClass();
@@ -1045,6 +961,10 @@ public final class Pattern implements Serializable {
     if (enginePathOptions.keywordAlternationFastPath() && keywordAlternation != null) {
       return new Matcher.KeywordAlternationPreparedRunner(
           keywordAlternation, prog.numCaptures(), prog.anchorStart());
+    }
+
+    if (enginePathOptions.shiftDfa() && matchDescriptor.shiftDfa() != null && numGroups() == 0) {
+      return new Matcher.ShiftDfaPreparedRunner(matchDescriptor.shiftDfa());
     }
 
     if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
@@ -1073,7 +993,11 @@ public final class Pattern implements Serializable {
           keywordAlternation, prog.numCaptures(), prog.anchorStart());
     }
 
-    if (enginePathOptions.onePass()) {
+    if (enginePathOptions.shiftDfa() && matchDescriptor.shiftDfa() != null && numGroups() == 0) {
+      return new Matcher.ShiftDfaPreparedRunner(matchDescriptor.shiftDfa());
+    }
+
+    if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
       return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
 
@@ -1188,7 +1112,7 @@ public final class Pattern implements Serializable {
       // Lazy quantifiers are excluded because OnePass returns leftmost-longest capture group
       // boundaries, which differs from leftmost-first semantics for lazy groups. When hasLazy is
       // true, neither canPrimary nor canSubmatch can use OnePass, so we can skip building OnePass.
-      if (hasLazy || prog.numCaptures() > OnePass.MAX_CAPTURE_GROUPS) {
+      if (astAnalysis.hasLazy() || prog.numCaptures() > OnePass.MAX_CAPTURE_GROUPS) {
         analysis = OnePassAnalysis.DISABLED;
       } else {
         OnePass op = OnePass.build(prog);
@@ -1199,7 +1123,7 @@ public final class Pattern implements Serializable {
         boolean canPrimary =
             op != null
                 && op.search("", false, 0) == null
-                && !hasNullableAlternation
+                && !astAnalysis.hasNullableAlt()
                 && !prog.hasGraphemeSemantics();
         // canFind is canPrimary restricted to anchored patterns (legacy flag).
         boolean canFind = canPrimary && prog.anchorStart();
@@ -1268,38 +1192,6 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns {@code true} if the pattern contains alternation ({@code |}). Used by the Matcher to
-   * skip OnePass primary for find() — OnePass always uses longest-match semantics, which can pick
-   * the wrong alternative when a zero-width branch competes with a consuming branch.
-   */
-  boolean hasAlternation() {
-    return hasAlternation;
-  }
-
-  /**
-   * Returns {@code true} if the pattern contains an alternation where at least one branch can match
-   * zero characters. This is the specific case where OnePass's longest-match semantics produce
-   * incorrect results: a zero-width branch (assertion, nullable repetition) loses to a consuming
-   * branch under longest-match, but should win under first-match (leftmost-first).
-   *
-   * <p>When this returns {@code false}, alternations are safe for OnePass because all branches must
-   * consume at least one character, making longest-match and first-match equivalent.
-   */
-  boolean hasNullableAlternation() {
-    return hasNullableAlternation;
-  }
-
-  /** Returns {@code true} if this pattern can match zero characters. */
-  boolean canMatchEmpty() {
-    return canMatchEmpty;
-  }
-
-  /** Returns whether this pattern contains any lazy quantifiers. */
-  boolean hasLazyQuantifiers() {
-    return hasLazy;
-  }
-
-  /**
    * Returns true if this pattern can participate in reverse DFA matching (e.g. unanchored find or
    * end-anchored reverse-first rejection).
    */
@@ -1308,7 +1200,7 @@ public final class Pattern implements Serializable {
   }
 
   private boolean shouldEagerlyBuildOnePass() {
-    return !hasLazy && !matchDescriptor.hasFindFastPath();
+    return !astAnalysis.hasLazy() && !matchDescriptor.hasFindFastPath();
   }
 
   /**
@@ -1345,11 +1237,6 @@ public final class Pattern implements Serializable {
     return anchoredCharClassPrefix;
   }
 
-  /** Returns a mandatory ASCII literal at a fixed offset from the match start, or {@code null}. */
-  FixedOffsetLiteral fixedOffsetLiteral() {
-    return fixedOffsetLiteral;
-  }
-
   /** Returns the compiled UTF-8 start-position accelerator strategy, or {@code null}. */
   Utf8StartAccelerator utf8StartAccelerator() {
     return utf8StartAccelerator;
@@ -1369,9 +1256,14 @@ public final class Pattern implements Serializable {
     return matchDescriptor.keywordAlternation();
   }
 
-  /** Returns AST metadata for whole-input rejection, or {@link RejectDescriptor#NONE}. */
-  RejectDescriptor rejectDescriptor() {
-    return rejectDescriptor;
+  /** Returns AST metadata for whole-input rejection. */
+  MultiAnchorDescriptor.RejectPlan rejectPlan() {
+    return multiAnchor.rejectPlan();
+  }
+
+  /** Returns AST metadata for start-position acceleration. */
+  MultiAnchorDescriptor.StartPlan startPlan() {
+    return multiAnchor.startPlan();
   }
 
   /** Returns whole-input rejection prefilter, or {@code null}. */
@@ -1379,14 +1271,8 @@ public final class Pattern implements Serializable {
     return rejectPrefilter;
   }
 
-  DisjointRequiredLiterals disjointRequiredLiterals() {
-    return rejectDescriptor.disjointRequiredLiterals();
-  }
-
-  String[] requiredDisjointLiterals() {
-    return rejectDescriptor.disjointRequiredLiterals() != null
-        ? rejectDescriptor.disjointRequiredLiterals().literals()
-        : null;
+  MultiAnchorDescriptor multiAnchor() {
+    return multiAnchor;
   }
 
   /**
@@ -1515,7 +1401,11 @@ public final class Pattern implements Serializable {
    * @since 20
    */
   public Map<String, Integer> namedGroups() {
-    return namedGroups;
+    return astAnalysis.namedGroups();
+  }
+
+  AstAnalysis astAnalysis() {
+    return astAnalysis;
   }
 
   /**
@@ -1565,17 +1455,17 @@ public final class Pattern implements Serializable {
     if (prog.numCaptures() > 1) {
       features.add(PatternFeature.CAPTURES);
     }
-    if (hasAlternation) {
+    if (astAnalysis.hasAlt()) {
       features.add(PatternFeature.ALTERNATION);
     }
-    if (hasLazy) {
+    if (astAnalysis.hasLazy()) {
       features.add(PatternFeature.LAZY_QUANTIFIER);
       limitations.add(PatternLimitation.LAZY_SEMANTICS_LIMIT_ONE_PASS);
     }
-    if (canMatchEmpty) {
+    if (astAnalysis.canMatchEmpty()) {
       features.add(PatternFeature.NULLABLE);
     }
-    if (hasNullableAlternation) {
+    if (astAnalysis.hasNullableAlt()) {
       features.add(PatternFeature.NULLABLE_ALTERNATION);
       limitations.add(PatternLimitation.NULLABLE_ALTERNATION_LIMITS_ONE_PASS);
     }
@@ -1635,7 +1525,7 @@ public final class Pattern implements Serializable {
       limitations.add(PatternLimitation.NULLABLE_LOOP_REQUIRES_EXACT_ENGINE);
     }
     if (features.contains(PatternFeature.CAPTURES)
-        && (hasAlternation || hasLazy || prog.numLoopRegs() > 0)) {
+        && (astAnalysis.hasAlt() || astAnalysis.hasLazy() || prog.numLoopRegs() > 0)) {
       limitations.add(PatternLimitation.CAPTURE_PRIORITY_REQUIRES_EXACT_ENGINE);
     }
 
@@ -1732,7 +1622,7 @@ public final class Pattern implements Serializable {
    * <p>The baseline is {@link ParseFlags#LIKE_PERL}, which includes {@code ONE_LINE} (single-line
    * mode where {@code ^} and {@code $} match only at the start/end of the entire input).
    */
-  private static int toParseFlags(int flags) {
+  static int toParseFlags(int flags) {
     // Start with LIKE_PERL as the baseline.
     int pf = ParseFlags.LIKE_PERL;
 
@@ -1766,153 +1656,8 @@ public final class Pattern implements Serializable {
   }
 
   // ---------------------------------------------------------------------------
-  // Named group extraction
+  // Grapheme cluster boundary analysis
   // ---------------------------------------------------------------------------
-
-  /** Walks the AST to extract named capture groups and their 1-based indices. */
-  private static Map<String, Integer> extractNamedGroups(Regexp re) {
-    Map<String, Integer> map = new HashMap<>();
-    Deque<Regexp> stack = new ArrayDeque<>();
-    stack.push(re);
-    while (!stack.isEmpty()) {
-      Regexp node = stack.pop();
-      if (node.op == RegexpOp.CAPTURE && node.name != null) {
-        map.put(node.name, node.cap);
-      }
-      if (node.subs != null) {
-        for (Regexp sub : node.subs) {
-          stack.push(sub);
-        }
-      }
-    }
-    return Collections.unmodifiableMap(map);
-  }
-
-  /**
-   * Returns {@code true} if the AST contains any lazy (non-greedy) quantifiers ({@code +?}, {@code
-   * *?}, {@code ??}, or {@code {n,m}?}). OnePass does not respect lazy vs greedy semantics for
-   * overall match boundaries, so patterns with lazy quantifiers must use the DFA pipeline in {@code
-   * find()}.
-   */
-  private static boolean hasLazyQuantifiers(Regexp re) {
-    Deque<Regexp> stack = new ArrayDeque<>();
-    stack.push(re);
-    while (!stack.isEmpty()) {
-      Regexp node = stack.pop();
-      if (node.nonGreedy()) {
-        return true;
-      }
-      if (node.subs != null) {
-        for (Regexp sub : node.subs) {
-          stack.push(sub);
-        }
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Returns {@code true} if the AST contains any explicit alternation ({@link RegexpOp#ALTERNATE}).
-   * Patterns with alternation may have branches of different match lengths, causing the DFA's
-   * leftmost-longest match to disagree with RE2's leftmost-first alternation priority. When this
-   * flag is set, the submatch engine must resolve the correct group(0) boundaries.
-   */
-  private static boolean hasAlternation(Regexp re) {
-    Deque<Regexp> stack = new ArrayDeque<>();
-    stack.push(re);
-    while (!stack.isEmpty()) {
-      Regexp node = stack.pop();
-      if (node.op == RegexpOp.ALTERNATE) {
-        return true;
-      }
-      if (node.subs != null) {
-        for (Regexp sub : node.subs) {
-          stack.push(sub);
-        }
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Returns {@code true} if the AST contains an alternation where at least one branch can match
-   * zero characters (is "nullable"). This detects the case where OnePass's longest-match semantics
-   * differ from first-match: a zero-width branch (assertion, empty match, nullable repetition)
-   * competing with a consuming branch. For alternations where all branches must consume at least
-   * one character (e.g., {@code GET|POST}), OnePass gives correct results.
-   */
-  private static boolean hasNullableAlternation(Regexp re) {
-    Deque<Regexp> stack = new ArrayDeque<>();
-    stack.push(re);
-    while (!stack.isEmpty()) {
-      Regexp node = stack.pop();
-      if (node.op == RegexpOp.ALTERNATE && node.subs != null) {
-        for (Regexp branch : node.subs) {
-          if (canMatchEmpty(branch)) {
-            return true;
-          }
-        }
-      }
-      if (node.subs != null) {
-        for (Regexp sub : node.subs) {
-          stack.push(sub);
-        }
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Returns {@code true} if the given regexp can match the empty string. Used to detect nullable
-   * alternation branches where OnePass's longest-match semantics may differ from first-match.
-   */
-  static boolean canMatchEmpty(Regexp re) {
-    return new CanMatchEmptyWalker().walk(re, false);
-  }
-
-  private static final class CanMatchEmptyWalker extends Walker<Boolean> {
-
-    @Override
-    protected Boolean shortVisit(Regexp re, Boolean parentArg) {
-      return false;
-    }
-
-    @Override
-    protected Boolean postVisit(
-        Regexp re, Boolean parentArg, Boolean preArg, List<Boolean> childArgs) {
-      return switch (re.op) {
-        case EMPTY_MATCH,
-            BEGIN_LINE,
-            END_LINE,
-            BEGIN_TEXT,
-            END_TEXT,
-            WORD_BOUNDARY,
-            NO_WORD_BOUNDARY,
-            GRAPHEME_CLUSTER_BOUNDARY ->
-            true;
-        case STAR, QUEST -> true;
-        case REPEAT -> re.min == 0 || (!childArgs.isEmpty() && childArgs.getFirst());
-        case PLUS, NON_CAPTURE, CAPTURE -> !childArgs.isEmpty() && childArgs.getFirst();
-        case CONCAT -> {
-          for (boolean childCanMatchEmpty : childArgs) {
-            if (!childCanMatchEmpty) {
-              yield false;
-            }
-          }
-          yield true;
-        }
-        case ALTERNATE -> {
-          for (boolean childCanMatchEmpty : childArgs) {
-            if (childCanMatchEmpty) {
-              yield true;
-            }
-          }
-          yield childArgs.isEmpty();
-        }
-        default -> false;
-      };
-    }
-  }
 
   private static boolean startsWithGraphemeClusterBoundary(Regexp re) {
     Regexp first = firstMeaningfulNode(re);
@@ -2087,9 +1832,6 @@ public final class Pattern implements Serializable {
       return childArgs.isEmpty() ? GraphemeBoundaryContext.noMatch() : childArgs.getFirst();
     }
   }
-
-  /** Result of prefix extraction: a literal string prefix and whether it is case-folded. */
-  private record PrefixResult(String prefix, boolean foldCase) {}
 
   /**
    * Conservative start-position accelerator.
@@ -2270,542 +2012,6 @@ public final class Pattern implements Serializable {
     static int matchEnd(long match) {
       return (int) match;
     }
-  }
-
-  /** Finds the longest case-sensitive ASCII literal after a bounded-width match prefix. */
-  private static FixedOffsetLiteral extractFixedOffsetLiteral(Regexp re) {
-    Regexp node = unwrapCaptures(re);
-    if (node == null || node.op != RegexpOp.CONCAT || node.subs == null) {
-      return null;
-    }
-    FixedOffsetLiteral best = null;
-    int bestScore = 0;
-    AsciiWidthRange prefixWidth = AsciiWidthRange.ZERO;
-
-    for (int index = 0; index < node.subs.size(); ) {
-      String literalPart = extractExactAsciiLiteral(node.subs.get(index));
-      if (literalPart != null) {
-        StringBuilder literal = new StringBuilder(literalPart);
-        int next = index + 1;
-        while (next < node.subs.size()) {
-          String nextPart = extractExactAsciiLiteral(node.subs.get(next));
-          if (nextPart == null) {
-            break;
-          }
-          literal.append(nextPart);
-          next++;
-        }
-        if (index > 0 && (prefixWidth.minWidth > 0 || prefixWidth.maxWidth > 0)) {
-          int minimumLiteralLength = prefixWidth.discreteWidths != null ? 1 : 2;
-          if (literal.length() >= minimumLiteralLength) {
-            int candidateScore = RarityOracle.literalSelectivityScore(literal);
-            if (best == null || candidateScore > bestScore) {
-              best =
-                  new FixedOffsetLiteral(
-                      literal.toString(),
-                      prefixWidth.minWidth,
-                      prefixWidth.maxWidth,
-                      prefixWidth.discreteWidths);
-              bestScore = candidateScore;
-            }
-          }
-        }
-        prefixWidth = concatenateWidths(prefixWidth, AsciiWidthRange.exact(literal.length()));
-        if (!prefixWidth.isValid()) {
-          break;
-        }
-        index = next;
-        continue;
-      }
-
-      prefixWidth = concatenateWidths(prefixWidth, computeAsciiWidthRange(node.subs.get(index)));
-      if (!prefixWidth.isValid()) {
-        break;
-      }
-      index++;
-    }
-    return best;
-  }
-
-  private static String extractExactAsciiLiteral(Regexp re) {
-    if (re == null) {
-      return null;
-    }
-    StringBuilder literal = new StringBuilder();
-    Deque<Regexp> pending = new ArrayDeque<>();
-    pending.push(re);
-    while (!pending.isEmpty()) {
-      Regexp node = unwrapCaptures(pending.pop());
-      if (node == null || (node.flags & ParseFlags.FOLD_CASE) != 0) {
-        return null;
-      }
-      if (node.op == RegexpOp.LITERAL && node.rune >= 0 && node.rune < 128) {
-        literal.append((char) node.rune);
-        continue;
-      }
-      if (node.op == RegexpOp.LITERAL_STRING && node.runes != null && node.runes.length > 0) {
-        for (int rune : node.runes) {
-          if (rune < 0 || rune >= 128) {
-            return null;
-          }
-          literal.append((char) rune);
-        }
-        continue;
-      }
-      if (node.op == RegexpOp.CONCAT && node.subs != null) {
-        for (int index = node.subs.size() - 1; index >= 0; index--) {
-          pending.push(node.subs.get(index));
-        }
-        continue;
-      }
-      return null;
-    }
-    return literal.isEmpty() ? null : literal.toString();
-  }
-
-  private static AsciiWidthRange computeAsciiWidthRange(Regexp re) {
-    return new AsciiWidthRangeWalker().walk(re, AsciiWidthRange.INVALID);
-  }
-
-  private static final class AsciiWidthRangeWalker extends Walker<AsciiWidthRange> {
-    @Override
-    protected AsciiWidthRange postVisit(
-        Regexp node,
-        AsciiWidthRange parentArg,
-        AsciiWidthRange preArg,
-        List<AsciiWidthRange> childArgs) {
-      return switch (node.op) {
-        case CAPTURE, NON_CAPTURE ->
-            childArgs.isEmpty() ? AsciiWidthRange.INVALID : childArgs.getFirst();
-        case EMPTY_MATCH,
-            BEGIN_LINE,
-            END_LINE,
-            BEGIN_TEXT,
-            END_TEXT,
-            WORD_BOUNDARY,
-            NO_WORD_BOUNDARY ->
-            AsciiWidthRange.ZERO;
-        case LITERAL ->
-            node.rune >= 0 && node.rune < 128 && (node.flags & ParseFlags.FOLD_CASE) == 0
-                ? AsciiWidthRange.ONE
-                : AsciiWidthRange.INVALID;
-        case LITERAL_STRING -> literalStringWidth(node);
-        case CHAR_CLASS -> characterClassWidth(node);
-        case REPEAT -> repeatWidth(node, childArgs);
-        case QUEST -> optionalWidth(childArgs);
-        case ALTERNATE -> alternateWidth(childArgs);
-        case CONCAT -> concatenateWidths(childArgs);
-        default -> AsciiWidthRange.INVALID;
-      };
-    }
-
-    @Override
-    protected AsciiWidthRange shortVisit(Regexp re, AsciiWidthRange parentArg) {
-      return AsciiWidthRange.INVALID;
-    }
-
-    private static AsciiWidthRange literalStringWidth(Regexp node) {
-      if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.runes == null) {
-        return AsciiWidthRange.INVALID;
-      }
-      for (int rune : node.runes) {
-        if (rune < 0 || rune >= 128) {
-          return AsciiWidthRange.INVALID;
-        }
-      }
-      return AsciiWidthRange.exact(node.runes.length);
-    }
-
-    private static AsciiWidthRange characterClassWidth(Regexp node) {
-      if (node.charClass == null || node.charClass.isEmpty()) {
-        return AsciiWidthRange.INVALID;
-      }
-      return node.charClass.hi(node.charClass.numRanges() - 1) < 128
-          ? AsciiWidthRange.ONE
-          : AsciiWidthRange.NON_DISCRETE_ONE;
-    }
-
-    private static AsciiWidthRange repeatWidth(Regexp node, List<AsciiWidthRange> childArgs) {
-      if (node.min < 0 || node.max < 0 || childArgs.isEmpty()) {
-        return AsciiWidthRange.INVALID;
-      }
-      AsciiWidthRange child = childArgs.getFirst();
-      if (!child.isValid()) {
-        return AsciiWidthRange.INVALID;
-      }
-      int minWidth = multiplyWidth(child.minWidth, node.min);
-      int maxWidth = multiplyWidth(child.maxWidth, node.max);
-      if (minWidth < 0 || maxWidth < 0) {
-        return AsciiWidthRange.INVALID;
-      }
-      if (child.discreteWidths != null && child.isExact() && node.max - node.min <= 8) {
-        int[] discrete = new int[node.max - node.min + 1];
-        for (int index = 0; index < discrete.length; index++) {
-          int width = multiplyWidth(child.minWidth, node.min + index);
-          if (width < 0) {
-            return AsciiWidthRange.INVALID;
-          }
-          discrete[index] = width;
-        }
-        return new AsciiWidthRange(minWidth, maxWidth, discrete);
-      }
-      return new AsciiWidthRange(minWidth, maxWidth, null);
-    }
-
-    private static AsciiWidthRange optionalWidth(List<AsciiWidthRange> childArgs) {
-      if (childArgs.isEmpty() || !childArgs.getFirst().isValid()) {
-        return AsciiWidthRange.INVALID;
-      }
-      AsciiWidthRange child = childArgs.getFirst();
-      if (child.discreteWidths == null) {
-        return new AsciiWidthRange(0, child.maxWidth, null);
-      }
-      TreeSet<Integer> discrete = new TreeSet<>();
-      discrete.add(0);
-      for (int width : child.discreteWidths) {
-        discrete.add(width);
-      }
-      return new AsciiWidthRange(
-          0,
-          child.maxWidth,
-          discrete.size() <= 16 ? discrete.stream().mapToInt(Integer::intValue).toArray() : null);
-    }
-
-    private static AsciiWidthRange alternateWidth(List<AsciiWidthRange> childArgs) {
-      if (childArgs.isEmpty()) {
-        return AsciiWidthRange.INVALID;
-      }
-      int minWidth = Integer.MAX_VALUE;
-      int maxWidth = Integer.MIN_VALUE;
-      TreeSet<Integer> discrete = new TreeSet<>();
-      boolean allDiscrete = true;
-      for (AsciiWidthRange child : childArgs) {
-        if (!child.isValid()) {
-          return AsciiWidthRange.INVALID;
-        }
-        minWidth = Math.min(minWidth, child.minWidth);
-        maxWidth = Math.max(maxWidth, child.maxWidth);
-        if (allDiscrete && child.discreteWidths != null) {
-          for (int width : child.discreteWidths) {
-            discrete.add(width);
-          }
-        } else {
-          allDiscrete = false;
-        }
-      }
-      return new AsciiWidthRange(
-          minWidth,
-          maxWidth,
-          allDiscrete && discrete.size() <= 8
-              ? discrete.stream().mapToInt(Integer::intValue).toArray()
-              : null);
-    }
-  }
-
-  private static AsciiWidthRange concatenateWidths(List<AsciiWidthRange> widths) {
-    AsciiWidthRange result = AsciiWidthRange.ZERO;
-    for (AsciiWidthRange width : widths) {
-      result = concatenateWidths(result, width);
-      if (!result.isValid()) {
-        return result;
-      }
-    }
-    return result;
-  }
-
-  private static AsciiWidthRange concatenateWidths(AsciiWidthRange left, AsciiWidthRange right) {
-    if (!left.isValid() || !right.isValid()) {
-      return AsciiWidthRange.INVALID;
-    }
-    int minWidth = addWidth(left.minWidth, right.minWidth);
-    int maxWidth = addWidth(left.maxWidth, right.maxWidth);
-    if (minWidth < 0 || maxWidth < 0) {
-      return AsciiWidthRange.INVALID;
-    }
-    int[] discrete = null;
-    if (left.discreteWidths != null
-        && right.discreteWidths != null
-        && left.discreteWidths.length * right.discreteWidths.length <= 16) {
-      TreeSet<Integer> combined = new TreeSet<>();
-      for (int leftWidth : left.discreteWidths) {
-        for (int rightWidth : right.discreteWidths) {
-          int width = addWidth(leftWidth, rightWidth);
-          if (width < 0) {
-            return AsciiWidthRange.INVALID;
-          }
-          combined.add(width);
-        }
-      }
-      discrete = combined.stream().mapToInt(Integer::intValue).toArray();
-    }
-    return new AsciiWidthRange(minWidth, maxWidth, discrete);
-  }
-
-  private static int addWidth(int left, int right) {
-    return left > Integer.MAX_VALUE - right ? -1 : left + right;
-  }
-
-  private static int multiplyWidth(int width, int count) {
-    return width != 0 && count > Integer.MAX_VALUE / width ? -1 : width * count;
-  }
-
-  private static final class AsciiWidthRange {
-    static final AsciiWidthRange INVALID = new AsciiWidthRange(-1, -1, null);
-    static final AsciiWidthRange ZERO = new AsciiWidthRange(0, 0, new int[] {0});
-    static final AsciiWidthRange ONE = new AsciiWidthRange(1, 1, new int[] {1});
-    static final AsciiWidthRange NON_DISCRETE_ONE = new AsciiWidthRange(1, 1, null);
-
-    final int minWidth;
-    final int maxWidth;
-    final int[] discreteWidths;
-
-    AsciiWidthRange(int minWidth, int maxWidth, int[] discreteWidths) {
-      this.minWidth = minWidth;
-      this.maxWidth = maxWidth;
-      this.discreteWidths = discreteWidths;
-    }
-
-    static AsciiWidthRange exact(int width) {
-      return new AsciiWidthRange(width, width, new int[] {width});
-    }
-
-    boolean isValid() {
-      return minWidth >= 0;
-    }
-
-    boolean isExact() {
-      return minWidth >= 0 && minWidth == maxWidth;
-    }
-  }
-
-  /**
-   * Extracts a literal prefix from the simplified AST for prefix acceleration. Returns a {@link
-   * PrefixResult} containing the literal string that every match must start with (or {@code null}
-   * if no fixed prefix exists) and whether the prefix is case-folded.
-   *
-   * <p>This looks for patterns that begin with literal characters (possibly inside a CONCAT or
-   * CAPTURE). The prefix is used by {@link Matcher#doFind()} to skip ahead using {@link
-   * String#indexOf} before running the full engine.
-   */
-  private static PrefixResult extractPrefix(Regexp re) {
-    return extractPrefixFromCandidate(firstPrefixCandidate(re));
-  }
-
-  private static PrefixResult extractPrefixFromCandidate(Regexp node) {
-    if (node == null) {
-      return new PrefixResult(null, false);
-    }
-
-    // Check for literal or literal string.
-    boolean foldCase = (node.flags & ParseFlags.FOLD_CASE) != 0;
-    StringBuilder sb = new StringBuilder();
-    if (node.op == RegexpOp.LITERAL) {
-      sb.appendCodePoint(node.rune);
-    } else if (node.op == RegexpOp.LITERAL_STRING && node.runes != null) {
-      for (int r : node.runes) {
-        sb.appendCodePoint(r);
-      }
-    } else {
-      return new PrefixResult(null, false);
-    }
-
-    if (sb.isEmpty()) {
-      return new PrefixResult(null, false);
-    }
-
-    String prefix = foldCase ? sb.toString().toLowerCase(Locale.ROOT) : sb.toString();
-    return new PrefixResult(prefix, foldCase);
-  }
-
-  private static Regexp firstPrefixCandidate(Regexp re) {
-    Deque<Regexp> stack = new ArrayDeque<>();
-    stack.push(re);
-    while (!stack.isEmpty()) {
-      Regexp node = unwrapCaptures(stack.pop());
-      if (node == null || isLeadingZeroWidth(node)) {
-        continue;
-      }
-      if (node.op == RegexpOp.CONCAT) {
-        for (int i = node.subs.size() - 1; i >= 0; i--) {
-          stack.push(node.subs.get(i));
-        }
-      } else {
-        return node;
-      }
-    }
-    return null;
-  }
-
-  private static Regexp firstPrefixCandidateAfterTextAnchor(Regexp re) {
-    Deque<Regexp> stack = new ArrayDeque<>();
-    stack.push(re);
-    boolean sawTextAnchor = false;
-    while (!stack.isEmpty()) {
-      Regexp node = unwrapCaptures(stack.pop());
-      if (node == null) {
-        continue;
-      }
-      if (node.op == RegexpOp.CONCAT) {
-        for (int i = node.subs.size() - 1; i >= 0; i--) {
-          stack.push(node.subs.get(i));
-        }
-        continue;
-      }
-      if (!sawTextAnchor) {
-        if (isLeadingZeroWidth(node)) {
-          continue;
-        }
-        if (node.op != RegexpOp.BEGIN_TEXT) {
-          return null;
-        }
-        sawTextAnchor = true;
-        continue;
-      }
-      if (!isLeadingZeroWidth(node)) {
-        return node;
-      }
-    }
-    return null;
-  }
-
-  private static boolean isLeadingZeroWidth(Regexp re) {
-    return switch (re.op) {
-      case EMPTY_MATCH, WORD_BOUNDARY, NO_WORD_BOUNDARY -> true;
-      default -> false;
-    };
-  }
-
-  /**
-   * Extracts a character-class prefix bitmap for ASCII acceleration. Walks the AST (through CAPTURE
-   * and CONCAT wrappers) to find a required character class at the start of the pattern. If found
-   * and the class contains only ASCII code points, returns a {@code boolean[128]} bitmap where
-   * Extracts a character-class prefix from the AST, supporting both ASCII and Unicode character
-   * classes.
-   *
-   * @return a {@link CharClassScanInfo}, or {@code null} if no suitable prefix exists
-   */
-  private static CharClassScanInfo extractCharClassPrefix(Regexp re) {
-    CharClassBuilder builder = new CharClassBuilder();
-    Deque<Regexp> work = new ArrayDeque<>();
-    work.add(re);
-
-    while (!work.isEmpty()) {
-      Regexp node = work.removeLast();
-
-      for (; ; ) {
-        node = unwrapCaptures(node);
-        if (node == null) {
-          return null;
-        }
-        if (node.op == RegexpOp.CONCAT && node.nsub() > 0) {
-          node = node.subs.getFirst();
-          continue;
-        }
-        if (node.op == RegexpOp.PLUS || (node.op == RegexpOp.REPEAT && node.min >= 1)) {
-          node = node.sub();
-          continue;
-        }
-        break;
-      }
-
-      switch (node.op) {
-        case LITERAL -> {
-          builder.addCharClass(literalCharClass(node.rune, node.flags));
-        }
-        case LITERAL_STRING -> {
-          if (node.runes == null || node.runes.length == 0) {
-            return null;
-          }
-          builder.addCharClass(literalCharClass(node.runes[0], node.flags));
-        }
-        case CHAR_CLASS -> {
-          if (node.charClass == null || node.charClass.isEmpty()) {
-            return null;
-          }
-          builder.addCharClass(node.charClass);
-        }
-        case ALTERNATE -> {
-          if (node.nsub() == 0) {
-            return null;
-          }
-          for (Regexp sub : node.subs) {
-            work.add(sub);
-          }
-        }
-        default -> {
-          return null;
-        }
-      }
-    }
-
-    CharClass cc = builder.build();
-    if (cc.isEmpty()) {
-      return null;
-    }
-    // Selectivity check: If the character class matches more than 50% of the Unicode space,
-    // scanning for it will cause high false-positive rates. Skip prefix acceleration.
-    if (cc.numRunes() > 0x80000) {
-      return null;
-    }
-    return CharClassScanInfo.fromCharClass(cc);
-  }
-
-  private static boolean addAsciiCharClass(CharClass cc, AsciiBitmap.Builder bitmap) {
-    if (cc == null || cc.isEmpty()) {
-      return false;
-    }
-    for (int i = 0; i < cc.numRanges(); i++) {
-      if (cc.hi(i) >= 128) {
-        return false;
-      }
-    }
-    for (int i = 0; i < cc.numRanges(); i++) {
-      bitmap.addRange(cc.lo(i), cc.hi(i));
-    }
-    return true;
-  }
-
-  private static String[] extractLiteralAlternation(Regexp re) {
-    if (re == null) {
-      return null;
-    }
-    re = unwrapCaptures(re);
-    if (re == null || re.op != RegexpOp.ALTERNATE || re.nsub() < 2) {
-      return null;
-    }
-    String[] literals = new String[re.nsub()];
-    for (int i = 0; i < re.nsub(); i++) {
-      String lit = extractExactAsciiLiteral(re.subs.get(i));
-      if (lit == null || lit.isEmpty()) {
-        return null;
-      }
-      literals[i] = lit;
-    }
-    return literals;
-  }
-
-  private static StartAcceleration extractStartAcceleration(Regexp re) {
-    Regexp node = unwrapCaptures(re);
-    if (node == null) {
-      return null;
-    }
-
-    if (node.op == RegexpOp.CONCAT && node.nsub() > 0) {
-      Regexp first = unwrapCaptures(node.subs.get(0));
-      if (first != null && first.op == RegexpOp.BEGIN_LINE) {
-        AsciiBitmap requiredStart = null;
-        if (node.nsub() > 1) {
-          requiredStart = requiredFirstAscii(node.subs.get(1));
-        }
-        return new StartAcceleration(true, false, requiredStart);
-      }
-      return null;
-    }
-
-    if (node.op == RegexpOp.BEGIN_LINE) {
-      return new StartAcceleration(true, false, null);
-    }
-    return null;
   }
 
   private static KeywordAlternation extractKeywordAlternation(Regexp re, int patternFlags) {
@@ -3007,49 +2213,6 @@ public final class Pattern implements Serializable {
     return node;
   }
 
-  private static AsciiBitmap requiredFirstAscii(Regexp re) {
-    Regexp node = firstMeaningfulNode(re);
-    if (node == null) {
-      return null;
-    }
-    if (node.op == RegexpOp.PLUS || (node.op == RegexpOp.REPEAT && node.min >= 1)) {
-      node = firstMeaningfulNode(node.sub());
-    }
-    if (node == null) {
-      return null;
-    }
-
-    if (node.op == RegexpOp.LITERAL) {
-      if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.rune >= 128) {
-        return null;
-      }
-      return AsciiBitmap.of(node.rune);
-    }
-    if (node.op == RegexpOp.LITERAL_STRING && node.runes != null && node.runes.length > 0) {
-      if ((node.flags & ParseFlags.FOLD_CASE) != 0 || node.runes[0] >= 128) {
-        return null;
-      }
-      return AsciiBitmap.of(node.runes[0]);
-    }
-    if (node.op == RegexpOp.CHAR_CLASS && node.charClass != null) {
-      CharClass cc = node.charClass;
-      if (cc.isEmpty()) {
-        return null;
-      }
-      for (int i = 0; i < cc.numRanges(); i++) {
-        if (cc.hi(i) >= 128) {
-          return null;
-        }
-      }
-      AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
-      for (int i = 0; i < cc.numRanges(); i++) {
-        builder.addRange(cc.lo(i), cc.hi(i));
-      }
-      return builder.build();
-    }
-    return null;
-  }
-
   /** Holds precomputed data for the character-class-match fast path. */
   // TODO(#98): Replace int[] with Guava ImmutableIntArray to get proper value semantics.
   @SuppressWarnings("ArrayRecordComponent")
@@ -3170,448 +2333,6 @@ public final class Pattern implements Serializable {
     }
   }
 
-  /** Extracts whole-input rejection metadata from the AST. */
-  private static RejectDescriptor extractRejectDescriptor(
-      Regexp metadataAst, int flags, StartDescriptor startDescriptor, boolean anchorStart) {
-    SuffixInfo endAnchoredSuffix = extractEndAnchoredSuffix(metadataAst, flags);
-    EndAnchoredCharClassInfo endAnchoredCharClass =
-        endAnchoredSuffix == null ? extractEndAnchoredCharClass(metadataAst, flags) : null;
-    String prefix = startDescriptor != null ? startDescriptor.prefix() : null;
-    CharClassScanInfo ccPrefix = startDescriptor != null ? startDescriptor.charClassPrefix() : null;
-    String suffixStr = endAnchoredSuffix != null ? endAnchoredSuffix.suffix() : null;
-    String requiredLiteral =
-        !anchorStart ? extractRequiredLiteral(metadataAst, prefix, suffixStr) : null;
-    CharClassScanInfo requiredMatchClass = null;
-    if (!anchorStart && prefix == null && endAnchoredCharClass == null) {
-      if (ccPrefix == null) {
-        requiredMatchClass = extractRequiredMatchClass(metadataAst, true);
-      } else {
-        CharClassScanInfo candidate = extractRequiredMatchClass(metadataAst, false);
-        if (candidate != null && candidate.ranges() != null) {
-          int candidateRunes = 0;
-          for (int i = 0; i < candidate.ranges().length; i += 2) {
-            candidateRunes += (candidate.ranges()[i + 1] - candidate.ranges()[i] + 1);
-          }
-          int prefixRunes = 0;
-          for (int i = 0; i < ccPrefix.ranges().length; i += 2) {
-            prefixRunes += (ccPrefix.ranges()[i + 1] - ccPrefix.ranges()[i] + 1);
-          }
-          if (candidateRunes < prefixRunes) {
-            requiredMatchClass = candidate;
-          }
-        }
-      }
-    }
-    DisjointRequiredLiterals disjointRequiredLiterals =
-        (!anchorStart && prefix == null && requiredLiteral == null)
-            ? DisjointRequiredLiterals.create(extractDisjointRequiredLiterals(metadataAst))
-            : null;
-    if (requiredLiteral == null
-        && requiredMatchClass == null
-        && disjointRequiredLiterals == null
-        && endAnchoredSuffix == null
-        && endAnchoredCharClass == null) {
-      return null;
-    }
-    return new RejectDescriptor(
-        requiredLiteral,
-        requiredMatchClass,
-        disjointRequiredLiterals,
-        endAnchoredSuffix,
-        endAnchoredCharClass);
-  }
-
-  /**
-   * Extracts a literal suffix from an end-anchored pattern (e.g. {@code .*\\.json$} or {@code
-   * (?i).*\\.json$}).
-   *
-   * <p>Returns {@code null} if the pattern is not end-anchored, if the pattern is compiled with
-   * {@link #MULTILINE} and ends with {@code $}, or if no literal precedes the anchor.
-   */
-  private static SuffixInfo extractEndAnchoredSuffix(Regexp metadataAst, int flags) {
-    Regexp node = unwrapCaptures(metadataAst);
-    if (node == null || node.op != RegexpOp.CONCAT || node.nsub() < 2) {
-      return null;
-    }
-    List<Regexp> subs = node.subs;
-    Regexp last = unwrapCaptures(subs.get(subs.size() - 1));
-    if (last == null || last.op != RegexpOp.END_TEXT) {
-      return null;
-    }
-    if ((flags & MULTILINE) != 0 && (last.flags & ParseFlags.WAS_DOLLAR) != 0) {
-      return null;
-    }
-    boolean wasDollar = (last.flags & ParseFlags.WAS_DOLLAR) != 0;
-    boolean foldCase = false;
-
-    Deque<String> suffixParts = new ArrayDeque<>();
-    int suffixLength = 0;
-    for (int i = subs.size() - 2; i >= 0; i--) {
-      Regexp sub = unwrapCaptures(subs.get(i));
-      if (sub == null) {
-        break;
-      }
-      boolean subFold = (sub.flags & ParseFlags.FOLD_CASE) != 0;
-      if (sub.op == RegexpOp.LITERAL) {
-        if (subFold && sub.rune > 0x7F) {
-          break;
-        }
-        String part = Character.toString(sub.rune);
-        suffixParts.addFirst(part);
-        suffixLength += part.length();
-        foldCase |= subFold;
-      } else if (sub.op == RegexpOp.LITERAL_STRING && sub.runes != null) {
-        if (subFold && !isAllAscii(sub.runes)) {
-          break;
-        }
-        String part = new String(sub.runes, 0, sub.runes.length);
-        suffixParts.addFirst(part);
-        suffixLength += part.length();
-        foldCase |= subFold;
-      } else {
-        break;
-      }
-    }
-    if (suffixParts.isEmpty()) {
-      return null;
-    }
-    StringBuilder suffix = new StringBuilder(suffixLength);
-    suffixParts.forEach(suffix::append);
-    return new SuffixInfo(suffix.toString(), wasDollar, (flags & UNIX_LINES) != 0, foldCase);
-  }
-
-  private static boolean isAllAscii(int[] runes) {
-    for (int r : runes) {
-      if (r > 0x7F) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Extracts an ASCII character class from an end-anchored pattern (e.g. {@code .*[0-9]$}).
-   *
-   * <p>Returns {@code null} if the pattern is not end-anchored, if the pattern is compiled with
-   * {@link #MULTILINE} and ends with {@code $}, or if the preceding node is not an ASCII character
-   * class.
-   */
-  private static EndAnchoredCharClassInfo extractEndAnchoredCharClass(
-      Regexp metadataAst, int flags) {
-    Regexp node = unwrapCaptures(metadataAst);
-    if (node == null || node.op != RegexpOp.CONCAT || node.nsub() < 2) {
-      return null;
-    }
-    List<Regexp> subs = node.subs;
-    Regexp last = unwrapCaptures(subs.get(subs.size() - 1));
-    if (last == null || last.op != RegexpOp.END_TEXT) {
-      return null;
-    }
-    if ((flags & MULTILINE) != 0 && (last.flags & ParseFlags.WAS_DOLLAR) != 0) {
-      return null;
-    }
-    boolean wasDollar = (last.flags & ParseFlags.WAS_DOLLAR) != 0;
-
-    Regexp sub = unwrapCaptures(subs.get(subs.size() - 2));
-    if (sub == null) {
-      return null;
-    }
-    while (sub.op == RegexpOp.PLUS || (sub.op == RegexpOp.REPEAT && sub.min >= 1)) {
-      sub = unwrapCaptures(sub.sub());
-      if (sub == null) {
-        return null;
-      }
-    }
-    AsciiBitmap.Builder builder = new AsciiBitmap.Builder();
-    if (sub.op == RegexpOp.CHAR_CLASS && addAsciiCharClass(sub.charClass, builder)) {
-      boolean unixLines = (flags & UNIX_LINES) != 0;
-      return new EndAnchoredCharClassInfo(builder.build(), wasDollar, unixLines);
-    }
-    return null;
-  }
-
-  /**
-   * Detects a mandatory character class, such as the whitespace in {@code .*\\s+.*}. The resulting
-   * class is only used to reject inputs that contain no matching code point; positive results still
-   * go through the normal engine to preserve full regex semantics.
-   *
-   * <p>Alternation is inspected only when no start-character accelerator was found. For a leading
-   * alternation, its union is already represented more precisely by that accelerator; constructing
-   * the same union again would add compile-time work without improving searches.
-   */
-  private static CharClassScanInfo extractRequiredMatchClass(
-      Regexp re, boolean inspectAlternation) {
-    Regexp node = unwrapRequiredNode(re);
-    if (node == null) {
-      return null;
-    }
-    if (node.op != RegexpOp.CONCAT || node.subs == null) {
-      CharClass required = requiredCharClass(node, inspectAlternation);
-      return required != null ? CharClassScanInfo.fromCharClass(required) : null;
-    }
-    CharClass mostSelective = null;
-    for (Regexp sub : node.subs) {
-      CharClass required = requiredCharClass(sub, inspectAlternation);
-      if (required != null
-          && (mostSelective == null || required.numRunes() < mostSelective.numRunes())) {
-        mostSelective = required;
-      }
-    }
-    return mostSelective != null ? CharClassScanInfo.fromCharClass(mostSelective) : null;
-  }
-
-  private static CharClass requiredCharClass(Regexp re, boolean inspectAlternation) {
-    Regexp node = unwrapRequiredNode(re);
-    if (node == null) {
-      return null;
-    }
-    if (node.op == RegexpOp.LITERAL) {
-      return literalCharClass(node.rune, node.flags);
-    }
-    if (node.op == RegexpOp.LITERAL_STRING && node.runes != null && node.runes.length > 0) {
-      return literalCharClass(node.runes[0], node.flags);
-    }
-    if (node.op == RegexpOp.CHAR_CLASS && node.charClass != null) {
-      return node.charClass.isEmpty() ? null : node.charClass;
-    }
-    if (inspectAlternation
-        && node.op == RegexpOp.ALTERNATE
-        && node.subs != null
-        && !node.subs.isEmpty()) {
-      CharClassBuilder union = new CharClassBuilder();
-      for (Regexp branch : node.subs) {
-        CharClass branchClass = requiredAtomicCharClass(branch);
-        if (branchClass == null) {
-          return null;
-        }
-        union.addCharClass(branchClass);
-      }
-      CharClass result = union.build();
-      return result.isEmpty() ? null : result;
-    }
-    return null;
-  }
-
-  private static CharClass requiredAtomicCharClass(Regexp re) {
-    Regexp node = unwrapRequiredNode(re);
-    if (node == null) {
-      return null;
-    }
-    if (node.op == RegexpOp.LITERAL) {
-      return literalCharClass(node.rune, node.flags);
-    }
-    if (node.op == RegexpOp.LITERAL_STRING && node.runes != null && node.runes.length > 0) {
-      return literalCharClass(node.runes[0], node.flags);
-    }
-    if (node.op == RegexpOp.CHAR_CLASS && node.charClass != null && !node.charClass.isEmpty()) {
-      return node.charClass;
-    }
-    return null;
-  }
-
-  private static Regexp unwrapRequiredNode(Regexp re) {
-    Regexp node = re;
-    while (true) {
-      if (node.op == RegexpOp.CAPTURE
-          || node.op == RegexpOp.NON_CAPTURE
-          || node.op == RegexpOp.PLUS) {
-        node = node.sub();
-        continue;
-      }
-      if (node.op == RegexpOp.REPEAT) {
-        if (node.min == 0) {
-          return null;
-        }
-        node = node.sub();
-        continue;
-      }
-      return node;
-    }
-  }
-
-  /**
-   * Finds the longest case-sensitive literal substring that every match must contain.
-   *
-   * <p>The worklist descends only through operators whose children are mandatory: concatenation,
-   * transparent groups, and repetitions with a positive minimum. It deliberately stops at
-   * alternation and optional repetition, so the result can only reject inputs that cannot match.
-   */
-  private static String extractRequiredLiteral(Regexp re) {
-    return extractRequiredLiteral(re, null, null);
-  }
-
-  private static String extractRequiredLiteral(
-      Regexp re, String excludePrefix, String excludeSuffix) {
-    String best = null;
-    int bestScore = 0;
-    Deque<Regexp> pending = new ArrayDeque<>();
-    pending.addLast(re);
-    while (!pending.isEmpty()) {
-      Regexp node = pending.removeLast();
-      switch (node.op) {
-        case CAPTURE, NON_CAPTURE, PLUS -> pending.addLast(node.sub());
-        case REPEAT -> {
-          if (node.min > 0) {
-            pending.addLast(node.sub());
-          }
-        }
-        case CONCAT -> {
-          if (node.subs != null) {
-            for (Regexp sub : node.subs) {
-              pending.addLast(sub);
-            }
-          }
-        }
-        case LITERAL_STRING -> {
-          if ((node.flags & ParseFlags.FOLD_CASE) == 0
-              && node.runes != null
-              && node.runes.length >= 2) {
-            String candidate = new String(node.runes, 0, node.runes.length);
-            if ((excludePrefix == null || !candidate.equals(excludePrefix))
-                && (excludeSuffix == null || !candidate.equals(excludeSuffix))) {
-              int candidateScore = RarityOracle.literalSelectivityScore(candidate);
-              if (best == null || candidateScore > bestScore) {
-                best = candidate;
-                bestScore = candidateScore;
-              }
-            }
-          }
-        }
-        default -> {}
-      }
-    }
-    return best;
-  }
-
-  /**
-   * Finds a small set of disjoint required literal substrings for alternation patterns where every
-   * branch requires at least one literal substring (e.g., {@code (apple.*|banana.*|orange.*)}).
-   *
-   * <p>Returns {@code null} if any branch has no required literal, or if the number of distinct
-   * literals is outside [2, 4].
-   */
-  private static String[] extractDisjointRequiredLiterals(Regexp re) {
-    Regexp node = re;
-    while (node != null
-        && (node.op == RegexpOp.CAPTURE
-            || node.op == RegexpOp.NON_CAPTURE
-            || node.op == RegexpOp.PLUS)) {
-      node = node.sub();
-    }
-    if (node == null) {
-      return null;
-    }
-    if (node.op == RegexpOp.CONCAT && node.subs != null) {
-      if (!node.subs.isEmpty()) {
-        Regexp first = unwrapCaptures(node.subs.get(0));
-        if (first != null && (first.op == RegexpOp.BEGIN_TEXT || first.op == RegexpOp.BEGIN_LINE)) {
-          return null;
-        }
-      }
-      for (Regexp sub : node.subs) {
-        String[] disjoint = extractDisjointRequiredLiteralsFromAlternate(sub);
-        if (disjoint != null) {
-          return disjoint;
-        }
-      }
-      return null;
-    }
-    return extractDisjointRequiredLiteralsFromAlternate(node);
-  }
-
-  private static String[] extractDisjointRequiredLiteralsFromAlternate(Regexp re) {
-    Regexp node = re;
-    while (node != null
-        && (node.op == RegexpOp.CAPTURE
-            || node.op == RegexpOp.NON_CAPTURE
-            || node.op == RegexpOp.PLUS)) {
-      node = node.sub();
-    }
-    if (node == null
-        || node.op != RegexpOp.ALTERNATE
-        || node.subs == null
-        || node.subs.size() < 2) {
-      return null;
-    }
-    Set<String> literalSet = new LinkedHashSet<>();
-    for (Regexp branch : node.subs) {
-      String req = extractRequiredLiteral(branch);
-      if (req == null || req.length() < 2) {
-        return null;
-      }
-      literalSet.add(req);
-      if (literalSet.size() > MAX_DISJOINT_REQUIRED_LITERALS) {
-        return null;
-      }
-    }
-    // Substring subsumption / set minimization:
-    // If literal A is a substring of literal B, any text containing B already contains A.
-    // Therefore, searching for A is sufficient to cover branch B, and the longer literal B can
-    // be pruned from the required search set.
-    List<String> rawList = new ArrayList<>(literalSet);
-    List<int[]> rawCodePoints = new ArrayList<>(rawList.size());
-    List<int[]> rawFailures = new ArrayList<>(rawList.size());
-    for (String literal : rawList) {
-      int[] codePoints = literal.codePoints().toArray();
-      rawCodePoints.add(codePoints);
-      rawFailures.add(literalFailure(codePoints));
-    }
-    Set<String> pruned = new LinkedHashSet<>();
-    for (int i = 0; i < rawList.size(); i++) {
-      String s1 = rawList.get(i);
-      boolean subsumed = false;
-      for (int j = 0; j < rawList.size(); j++) {
-        if (i != j) {
-          String s2 = rawList.get(j);
-          if (containsCodePointSequence(
-                  rawCodePoints.get(i), rawCodePoints.get(j), rawFailures.get(j))
-              && (s1.length() > s2.length() || (s1.length() == s2.length() && j < i))) {
-            subsumed = true;
-            break;
-          }
-        }
-      }
-      if (!subsumed) {
-        pruned.add(s1);
-      }
-    }
-    if (pruned.size() < 2) {
-      return null;
-    }
-    return pruned.toArray(new String[0]);
-  }
-
-  private static int[] literalFailure(int[] literal) {
-    int[] failure = new int[literal.length];
-    int matched = 0;
-    for (int index = 1; index < literal.length; index++) {
-      while (matched > 0 && literal[index] != literal[matched]) {
-        matched = failure[matched - 1];
-      }
-      if (literal[index] == literal[matched]) {
-        matched++;
-      }
-      failure[index] = matched;
-    }
-    return failure;
-  }
-
-  private static boolean containsCodePointSequence(int[] value, int[] candidate, int[] failure) {
-    int matched = 0;
-    for (int codePoint : value) {
-      while (matched > 0 && codePoint != candidate[matched]) {
-        matched = failure[matched - 1];
-      }
-      if (codePoint == candidate[matched]) {
-        matched++;
-        if (matched == candidate.length) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   private static CharClass literalCharClass(int cp, int flags) {
     CharClassBuilder ccb = new CharClassBuilder();
     if ((flags & ParseFlags.FOLD_CASE) == 0) {
@@ -3701,20 +2422,37 @@ public final class Pattern implements Serializable {
             continue;
           }
           boolean childFoldCase = (c.flags & ParseFlags.FOLD_CASE) != 0;
-          if (!foldCaseInitialized) {
-            foldCase = childFoldCase;
-            foldCaseInitialized = true;
-          } else if (childFoldCase != foldCase) {
-            return LiteralResult.NONE;
-          }
-          if (c.op == RegexpOp.LITERAL) {
-            sb.appendCodePoint(c.rune);
-          } else if (c.op == RegexpOp.LITERAL_STRING && c.runes != null) {
-            for (int r : c.runes) {
-              sb.appendCodePoint(r);
+          switch (c.op) {
+            case LITERAL -> {
+              if (Inst.simpleFold(c.rune) != c.rune) {
+                if (!foldCaseInitialized) {
+                  foldCase = childFoldCase;
+                  foldCaseInitialized = true;
+                } else if (childFoldCase != foldCase) {
+                  return LiteralResult.NONE;
+                }
+              }
+              sb.appendCodePoint(c.rune);
             }
-          } else {
-            return LiteralResult.NONE;
+            case LITERAL_STRING -> {
+              if (c.runes == null) {
+                return LiteralResult.NONE;
+              }
+              for (int r : c.runes) {
+                if (Inst.simpleFold(r) != r) {
+                  if (!foldCaseInitialized) {
+                    foldCase = childFoldCase;
+                    foldCaseInitialized = true;
+                  } else if (childFoldCase != foldCase) {
+                    return LiteralResult.NONE;
+                  }
+                }
+                sb.appendCodePoint(r);
+              }
+            }
+            default -> {
+              return LiteralResult.NONE;
+            }
           }
         }
       }
@@ -3800,6 +2538,6 @@ public final class Pattern implements Serializable {
 
   /** Deserialization: recompile the pattern from the stored string and flags. */
   private Object readResolve() {
-    return compile(pattern, flags);
+    return compile(pattern(), flags());
   }
 }

@@ -9,6 +9,7 @@ package org.safere;
 final class IncubatorVectorScanProvider implements VectorScanProvider {
   private static final int MINIMUM_INPUT_LENGTH = 1024;
   private static final int MINIMUM_TEDDY_INPUT_LENGTH = 1024;
+  private static final int MINIMUM_MULTI_LITERAL_INPUT_LENGTH = 64;
   private static final int MINIMUM_PAIR_INPUT_LENGTH = 64;
   private static final int MINIMUM_TRIPLE_INPUT_LENGTH = 64;
   private static final int MAXIMUM_TRIPLE_INPUT_LENGTH = 10_240;
@@ -24,6 +25,11 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   }
 
   @Override
+  public int minimumMultiLiteralInputLength() {
+    return MINIMUM_MULTI_LITERAL_INPUT_LENGTH;
+  }
+
+  @Override
   public int minimumPairInputLength() {
     return MINIMUM_PAIR_INPUT_LENGTH;
   }
@@ -36,6 +42,11 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   @Override
   public int maximumTripleInputLength() {
     return MAXIMUM_TRIPLE_INPUT_LENGTH;
+  }
+
+  @Override
+  public int indexOfByte(byte[] bytes, int offset, int length, byte target, int start) {
+    return ByteVectorScan.indexOfByte(bytes, offset, length, target, start);
   }
 
   @Override
@@ -57,5 +68,30 @@ final class IncubatorVectorScanProvider implements VectorScanProvider {
   @Override
   public int indexOfTeddy(byte[] bytes, int offset, int length, TeddyModel model, int start) {
     return TeddyVectorScan.indexOfTeddyUtf8(bytes, offset, length, model, start);
+  }
+
+  @Override
+  public int indexOfMultiLiteral(
+      byte[] bytes,
+      int offset,
+      int length,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int[] anchorRanges,
+      int minLength,
+      TeddyModel teddyModel,
+      int start) {
+    return ByteVectorScan.indexOfMultiLiteral(
+        bytes,
+        offset,
+        length,
+        literals,
+        anchorChars,
+        anchorOffsets,
+        anchorRanges,
+        minLength,
+        teddyModel,
+        start);
   }
 }

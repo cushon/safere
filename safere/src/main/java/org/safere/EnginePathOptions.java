@@ -20,6 +20,7 @@ record EnginePathOptions(
     boolean charClassReplacementFastPath,
     boolean keywordAlternationFastPath,
     boolean startAcceleration,
+    boolean shiftDfa,
     boolean onePass,
     boolean dfa,
     boolean reverseDfa,
@@ -52,6 +53,7 @@ record EnginePathOptions(
     accessors.put(
         EnginePath.KEYWORD_ALTERNATION_FAST_PATH, EnginePathOptions::keywordAlternationFastPath);
     accessors.put(EnginePath.START_ACCELERATION, EnginePathOptions::startAcceleration);
+    accessors.put(EnginePath.SHIFT_DFA, EnginePathOptions::shiftDfa);
     accessors.put(EnginePath.ONE_PASS, EnginePathOptions::onePass);
     accessors.put(EnginePath.DFA, EnginePathOptions::dfa);
     accessors.put(EnginePath.REVERSE_DFA, EnginePathOptions::reverseDfa);
@@ -70,6 +72,7 @@ record EnginePathOptions(
     private boolean charClassReplacementFastPath = true;
     private boolean keywordAlternationFastPath = true;
     private boolean startAcceleration = true;
+    private boolean shiftDfa = true;
     private boolean onePass = true;
     private boolean dfa = true;
     private boolean reverseDfa = true;
@@ -98,6 +101,11 @@ record EnginePathOptions(
 
     Builder startAcceleration(boolean enabled) {
       startAcceleration = enabled;
+      return this;
+    }
+
+    Builder shiftDfa(boolean enabled) {
+      shiftDfa = enabled;
       return this;
     }
 
@@ -133,6 +141,7 @@ record EnginePathOptions(
           charClassReplacementFastPath,
           keywordAlternationFastPath,
           startAcceleration,
+          shiftDfa,
           onePass,
           dfa,
           reverseDfa,

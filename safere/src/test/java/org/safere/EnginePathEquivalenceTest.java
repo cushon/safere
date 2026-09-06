@@ -179,6 +179,28 @@ class EnginePathEquivalenceTest {
   }
 
   @Test
+  @DisplayName("start-anchored fixed-offset plans preserve UTF-8 anchoring")
+  void startAnchoredFixedOffsetPlansPreserveUtf8Anchoring() {
+    String lateCandidate = "x".repeat(300) + "1c";
+    for (String regex : List.of("\\A\\dc", "(?m:\\A\\d(?m:c))", "(\\A)[0-9]c")) {
+      Pattern accelerated = Pattern.compile(regex);
+      Pattern control =
+          Pattern.compile(regex, 0, EnginePathOptions.builder().startAcceleration(false).build());
+
+      assertThat(
+              accelerated.find(Utf8Input.validated(lateCandidate.getBytes(StandardCharsets.UTF_8))))
+          .as("accelerated search for %s", regex)
+          .isFalse();
+      assertThat(control.find(Utf8Input.validated(lateCandidate.getBytes(StandardCharsets.UTF_8))))
+          .as("control search for %s", regex)
+          .isFalse();
+      assertThat(accelerated.find(Utf8Input.validated("1c".getBytes(StandardCharsets.UTF_8))))
+          .as("anchored match for %s", regex)
+          .isTrue();
+    }
+  }
+
+  @Test
   @DisplayName("disabled start acceleration is not installed in forward DFAs")
   void disabledStartAccelerationIsNotInstalledInForwardDfas() {
     Pattern pattern =
@@ -382,6 +404,55 @@ class EnginePathEquivalenceTest {
         EnginePathOptions.builder().onePass(false).bitState(false).build();
 
     assertEquivalent(regex, input, forcedDfa);
+  }
+
+  @Test
+  @DisplayName("Shift DFA matches and lookingAt equivalent to canonical engine")
+  void shiftDfaEquivalence() {
+    EnginePathOptions forcedShift =
+        EnginePathOptions.builder()
+            .shiftDfa(true)
+            .dfa(false)
+            .onePass(false)
+            .bitState(false)
+            .build();
+
+    EnginePathOptions disabledShift = EnginePathOptions.builder().shiftDfa(false).build();
+
+    String[] patterns = {
+      "true|false",
+      "null",
+      "[0-9]{1,4}",
+      "[a-zA-Z_][a-zA-Z0-9_]*",
+      "[0-9]{4}-[0-9]{2}",
+      "[\\x00-\\x21\\x23-\\x7F]*\"",
+      "abc|abd|xyz"
+    };
+
+    String[] inputs = {
+      "true",
+      "false",
+      "null",
+      "1234",
+      "99",
+      "_identifier123",
+      "2026-08",
+      "some_text\"",
+      "abc",
+      "xyz",
+      "mismatch",
+      "",
+      "12345",
+      "truee",
+      "2026-8"
+    };
+
+    for (String pattern : patterns) {
+      for (String input : inputs) {
+        assertEquivalent(pattern, input, forcedShift);
+        assertEquivalent(pattern, input, disabledShift);
+      }
+    }
   }
 
   private static MatchTrace operationTrace(Matcher matcher, Operation operation) {

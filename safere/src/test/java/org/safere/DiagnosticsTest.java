@@ -120,13 +120,13 @@ class DiagnosticsTest {
             foldedUtf8LookingAt.matcher(Utf8Input.validated("FOObar".getBytes(UTF_8))).lookingAt())
         .isTrue();
     assertThat(operationsFor(foldedUtf8LookingAt).getLast().boundaryStrategy())
-        .isEqualTo(MatchStrategy.ONE_PASS);
+        .isEqualTo(MatchStrategy.DFA);
 
     Pattern foldedUtf8Matches = Pattern.compile("(?i)foo");
     assertThat(foldedUtf8Matches.matcher(Utf8Input.validated("FOO".getBytes(UTF_8))).matches())
         .isTrue();
     assertThat(operationsFor(foldedUtf8Matches).getLast().boundaryStrategy())
-        .isEqualTo(MatchStrategy.ONE_PASS);
+        .isEqualTo(MatchStrategy.SHIFT_DFA);
 
     Pattern foldedUtf8Find = Pattern.compile("(?i)foo");
     assertThat(foldedUtf8Find.matcher(Utf8Input.validated("xxFOO".getBytes(UTF_8))).find())
@@ -143,6 +143,7 @@ class DiagnosticsTest {
             .literalFastPaths(false)
             .charClassMatchFastPaths(false)
             .keywordAlternationFastPath(false)
+            .shiftDfa(false)
             .onePass(false)
             .dfa(false)
             .build();
@@ -157,6 +158,7 @@ class DiagnosticsTest {
             .literalFastPaths(false)
             .charClassMatchFastPaths(false)
             .keywordAlternationFastPath(false)
+            .shiftDfa(false)
             .onePass(false)
             .dfa(false)
             .bitState(false)
@@ -236,6 +238,7 @@ class DiagnosticsTest {
             .charClassMatchFastPaths(false)
             .charClassReplacementFastPath(false)
             .keywordAlternationFastPath(false)
+            .shiftDfa(false)
             .onePass(false)
             .dfa(false)
             .build();
@@ -577,6 +580,7 @@ class DiagnosticsTest {
             .literalFastPaths(false)
             .charClassMatchFastPaths(false)
             .keywordAlternationFastPath(false)
+            .shiftDfa(false)
             .onePass(false)
             .dfa(false)
             .build();

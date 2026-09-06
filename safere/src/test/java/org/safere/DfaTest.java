@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Random;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -684,11 +685,139 @@ class DfaTest {
   }
 
   @Test
+  void automataDerivedStartStateAcceleratesOptionalWhitespaceBracket() {
+    Pattern pattern = Pattern.compile("[ \\t]*\\[\\[.*?\\]\\]");
+    String text = "x".repeat(1000) + "[[test]]" + "y".repeat(1000);
+    assertThat(pattern.matcher(text).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+  }
+
+  @Test
+  void automataDerivedStartStateAcceleratesAlternations() {
+    Regexp re = Parser.parse("apple|banana|cherry", FLAGS);
+    Prog prog = Compiler.compile(re);
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    InputScanner scanner = new StringInputScanner("x".repeat(100));
+    Dfa.State s = dfa.startState(scanner, 0, false);
+    assertThat(s.accelerator).isNotNull();
+    assertThat(s.accelerator).isInstanceOf(StateAccelerator.AsciiTripleEscape.class);
+
+    Pattern pattern = Pattern.compile("apple|banana|cherry");
+    String text = "x".repeat(500) + "banana" + "y".repeat(500);
+    assertThat(pattern.matcher(text).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+
+    String noMatch = "x".repeat(1000);
+    assertThat(pattern.matcher(noMatch).find()).isFalse();
+    assertThat(pattern.find(Utf8Input.validated(noMatch.getBytes(UTF_8)))).isFalse();
+  }
+
+  @Test
+  void automataDerivedStartStateAcceleratesMultiTokenAlternation() {
+    Pattern pattern = Pattern.compile("(?:image-tokens|video-tokens|pdf-tokens)");
+    String text = "x".repeat(500) + "video-tokens" + "y".repeat(500);
+    assertThat(pattern.matcher(text).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+
+    String noMatch = "x".repeat(1000);
+    assertThat(pattern.matcher(noMatch).find()).isFalse();
+    assertThat(pattern.find(Utf8Input.validated(noMatch.getBytes(UTF_8)))).isFalse();
+  }
+
+  @Test
+  void automataDerivedStartStateAcceleratesDisjointRangeAlternation() {
+    Pattern pattern = Pattern.compile("[0-9]{3}|[a-z]{3}");
+    String text = "---".repeat(100) + "123" + "---".repeat(100);
+    assertThat(pattern.matcher(text).find()).isTrue();
+    assertThat(pattern.find(Utf8Input.validated(text.getBytes(UTF_8)))).isTrue();
+
+    String noMatch = "---".repeat(200);
+    assertThat(pattern.matcher(noMatch).find()).isFalse();
+    assertThat(pattern.find(Utf8Input.validated(noMatch.getBytes(UTF_8)))).isFalse();
+  }
+
+  @Test
   void wordBoundaryLongText() {
     String regex = "(?:\\w(?:\\b))";
     String input = "#".repeat(260) + "a";
     Pattern pattern = Pattern.compile(regex);
     assertThat(pattern.matcher(input).find()).isTrue();
     assertThat(pattern.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
+  }
+
+  @Test
+  void matchDenseNumericFindAllDoesNotUseStartAcceleration() {
+    Pattern pattern = Pattern.compile("\\d{3}/\\d{3}/\\d{4}");
+    byte[] text = new byte[32768];
+    Random random = new Random(42);
+    for (int i = 0; i < text.length; i++) {
+      text[i] = (byte) (47 + random.nextInt(11)); // '/', '0'-'9'
+    }
+    Utf8Matcher matcher = pattern.matcher(Utf8Input.trusted(text, 0, text.length));
+    int matches = 0;
+    while (matcher.find()) {
+      matches++;
+    }
+    assertThat(matches).isEqualTo(112);
+  }
+
+  @Test
+  void automataDerivedAnchoredStartStateAcceleratesSelfLoop() {
+    String regex = "[^\"]*\"";
+    Regexp re = Parser.parse(regex, FLAGS | ParseFlags.DOT_NL | ParseFlags.CLASS_NL);
+    Prog prog = Compiler.compile(re);
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    InputScanner scanner = new StringInputScanner("a".repeat(100) + "\"");
+    Dfa.State s = dfa.startState(scanner, 0, true);
+    assertThat(s.accelerator).isNotNull();
+    assertThat(s.accelerator).isInstanceOf(StateAccelerator.SingleAsciiEscape.class);
+
+    Pattern pattern = Pattern.compile(regex);
+    String matching = "a\n".repeat(2048) + "\"";
+    assertThat(pattern.matcher(matching).matches()).isTrue();
+    assertThat(pattern.matcher(Utf8Input.validated(matching.getBytes(UTF_8))).matches()).isTrue();
+
+    String noMatch = "a\n".repeat(2048);
+    assertThat(pattern.matcher(noMatch).matches()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).matches()).isFalse();
+  }
+
+  @Test
+  void automataDerivedAnchoredStartStateAcceleratesPairEscapes() {
+    String regex = "[^\"]*\"";
+    Regexp re = Parser.parse(regex, FLAGS);
+    Prog prog = Compiler.compile(re);
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    InputScanner scanner = new StringInputScanner("a".repeat(100) + "\"");
+    Dfa.State s = dfa.startState(scanner, 0, true);
+    assertThat(s.accelerator).isNotNull();
+    assertThat(s.accelerator).isInstanceOf(StateAccelerator.AsciiPairEscape.class);
+
+    Pattern pattern = Pattern.compile(regex);
+    String matching = "a".repeat(4096) + "\"";
+    assertThat(pattern.matcher(matching).matches()).isTrue();
+    assertThat(pattern.matcher(Utf8Input.validated(matching.getBytes(UTF_8))).matches()).isTrue();
+
+    String noMatch = "a".repeat(4096);
+    assertThat(pattern.matcher(noMatch).matches()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).matches()).isFalse();
+  }
+
+  @Test
+  void automataDerivedInteriorStateAcceleratesSelfLoop() {
+    String regex = "prefix:\\s*[^;]+;\\s*suffix";
+    Pattern pattern = Pattern.compile(regex);
+
+    String matching = "prefix: " + "a".repeat(4096) + "; suffix";
+    assertThat(pattern.matcher(matching).find()).isTrue();
+    assertThat(pattern.matcher(matching).matches()).isTrue();
+    assertThat(pattern.matcher(Utf8Input.validated(matching.getBytes(UTF_8))).find()).isTrue();
+    assertThat(pattern.matcher(Utf8Input.validated(matching.getBytes(UTF_8))).matches()).isTrue();
+
+    String noMatch = "prefix: " + "a".repeat(4096);
+    assertThat(pattern.matcher(noMatch).find()).isFalse();
+    assertThat(pattern.matcher(noMatch).matches()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).find()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).matches()).isFalse();
   }
 }

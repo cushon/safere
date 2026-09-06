@@ -39,16 +39,34 @@ sealed interface InputScanner permits StringInputScanner, Utf8InputScanner {
   int indexOfAscii(int ascii, int fromIndex, int limit);
 
   /**
+   * Returns the first index in {@code [fromIndex, limit)} containing {@code ascii} or a non-ASCII
+   * code unit, or {@code -1} if neither occurs.
+   */
+  int indexOfAsciiOrNonAscii(int ascii, int fromIndex, int limit);
+
+  /**
    * Returns the first index in {@code [fromIndex, limit)} containing {@code c1} or {@code c2}, or
    * {@code -1} if none exists.
    */
   int indexOfAsciiPair(int c1, int c2, int fromIndex, int limit);
 
   /**
+   * Returns the first index in {@code [fromIndex, limit)} containing {@code c1}, {@code c2}, or a
+   * non-ASCII code unit, or {@code -1} if none occurs.
+   */
+  int indexOfAsciiPairOrNonAscii(int c1, int c2, int fromIndex, int limit);
+
+  /**
    * Returns the first index in {@code [fromIndex, limit)} containing {@code c1}, {@code c2}, or
    * {@code c3}, or {@code -1} if none exists.
    */
   int indexOfAsciiTriple(int c1, int c2, int c3, int fromIndex, int limit);
+
+  /**
+   * Returns the first index in {@code [fromIndex, limit)} containing {@code c1}, {@code c2}, {@code
+   * c3}, or a non-ASCII code unit, or {@code -1} if none occurs.
+   */
+  int indexOfAsciiTripleOrNonAscii(int c1, int c2, int c3, int fromIndex, int limit);
 
   /** Decodes the scalar at {@code pos} and packs it with the following logical position. */
   long decodeForward(int pos);

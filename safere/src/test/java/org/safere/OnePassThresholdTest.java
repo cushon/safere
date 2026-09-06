@@ -37,7 +37,8 @@ class OnePassThresholdTest {
 
   @Test
   void noDeclaredGroups_underThreshold_usesOnePass() {
-    Pattern pattern = Pattern.compile("^[a-z]+:[0-9]+$");
+    EnginePathOptions options = EnginePathOptions.builder().shiftDfa(false).build();
+    Pattern pattern = Pattern.compile("^[a-z]+:[0-9]+$", 0, options);
     String input = "abc:" + "1".repeat(50); // ~55 bytes <= 256
 
     Matcher matcher = pattern.matcher(input);
@@ -49,7 +50,8 @@ class OnePassThresholdTest {
 
   @Test
   void noDeclaredGroups_overThreshold_routesToDfa() {
-    Pattern pattern = Pattern.compile("^[a-z]+:[0-9]+$");
+    EnginePathOptions options = EnginePathOptions.builder().shiftDfa(false).build();
+    Pattern pattern = Pattern.compile("^[a-z]+:[0-9]+$", 0, options);
     String input = "abc:" + "1".repeat(1_000); // 1005 bytes > 256
 
     Matcher matcher = pattern.matcher(input);

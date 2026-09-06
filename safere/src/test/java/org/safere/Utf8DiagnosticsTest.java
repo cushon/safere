@@ -445,6 +445,7 @@ class Utf8DiagnosticsTest {
         .charClassMatchFastPaths(false)
         .keywordAlternationFastPath(false)
         .startAcceleration(false)
+        .shiftDfa(false)
         .onePass(false)
         .dfa(false)
         .bitState(bitState)

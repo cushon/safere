@@ -23,6 +23,9 @@ sealed interface StateAccelerator {
    */
   int findEscape(InputScanner text, int fromIndex, int limit);
 
+  /** Returns the accelerator policy for this state accelerator. */
+  AcceleratorPolicy policy();
+
   /**
    * Fast-forwards to the next escape character in a self-loop state using pattern-matched
    * devirtualization.
@@ -40,8 +43,25 @@ sealed interface StateAccelerator {
       case AsciiPairEscape pair -> text.indexOfAsciiPair(pair.c1(), pair.c2(), fromIndex, limit);
       case AsciiTripleEscape triple ->
           text.indexOfAsciiTriple(triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
-      case CharClassEscape cc ->
-          text.indexOfCodePointClass(cc.ranges(), cc.bitmap0(), cc.bitmap1(), fromIndex, limit);
+    };
+  }
+
+  /**
+   * Fast-forwards to the next ASCII escape or non-ASCII input unit for an ASCII-only automaton.
+   *
+   * <p>Unlike {@link #findNextEscape}, this must stop at non-ASCII input because the caller has not
+   * modeled non-ASCII transitions in its transition table.
+   */
+  static int findNextAsciiOrNonAsciiEscape(
+      StateAccelerator accelerator, InputScanner text, int fromIndex, int limit) {
+    return switch (accelerator) {
+      case SingleAsciiEscape single ->
+          text.indexOfAsciiOrNonAscii(single.escape(), fromIndex, limit);
+      case AsciiPairEscape pair ->
+          text.indexOfAsciiPairOrNonAscii(pair.c1(), pair.c2(), fromIndex, limit);
+      case AsciiTripleEscape triple ->
+          text.indexOfAsciiTripleOrNonAscii(
+              triple.c1(), triple.c2(), triple.c3(), fromIndex, limit);
     };
   }
 
@@ -51,6 +71,11 @@ sealed interface StateAccelerator {
     public int findEscape(InputScanner text, int fromIndex, int limit) {
       return text.indexOfAscii(escape, fromIndex, limit);
     }
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
+    }
   }
 
   /** Accelerator for two escape characters (e.g. quote {@code '"'} and backslash {@code '\\'}). */
@@ -58,6 +83,11 @@ sealed interface StateAccelerator {
     @Override
     public int findEscape(InputScanner text, int fromIndex, int limit) {
       return text.indexOfAsciiPair(c1, c2, fromIndex, limit);
+    }
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.CHAR_CLASS;
     }
   }
 
@@ -67,14 +97,10 @@ sealed interface StateAccelerator {
     public int findEscape(InputScanner text, int fromIndex, int limit) {
       return text.indexOfAsciiTriple(c1, c2, c3, fromIndex, limit);
     }
-  }
 
-  /** Accelerator for a character-class escape (e.g. delimiters or character ranges). */
-  @SuppressWarnings("ArrayRecordComponent")
-  record CharClassEscape(int[] ranges, long bitmap0, long bitmap1) implements StateAccelerator {
     @Override
-    public int findEscape(InputScanner text, int fromIndex, int limit) {
-      return text.indexOfCodePointClass(ranges, bitmap0, bitmap1, fromIndex, limit);
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.CHAR_CLASS;
     }
   }
 }

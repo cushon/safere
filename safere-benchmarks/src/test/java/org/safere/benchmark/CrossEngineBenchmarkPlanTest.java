@@ -8,6 +8,7 @@ package org.safere.benchmark;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -22,6 +23,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.openjdk.jmh.infra.Blackhole;
 
 class CrossEngineBenchmarkPlanTest {
+  // This is a historical floor, not a snapshot. Additions do not raise it.
+  private static final int MINIMUM_CROSS_ENGINE_WORKLOADS = 606;
+  private static final int MINIMUM_RUNNABLE_CROSS_ENGINE_TRIALS = 2_448;
+  private static final int MINIMUM_SPECIALIZED_AVERAGE_TIME_TRIALS = 63;
+  private static final int MINIMUM_SPECIALIZED_RETAINED_MEMORY_TRIALS = 34;
+  private static final int MINIMUM_COLLECTION_RUNNER_TRIALS = 2_487;
 
   @TempDir static Path temporaryDirectory;
 
@@ -48,7 +55,7 @@ class CrossEngineBenchmarkPlanTest {
             "HttpBenchmark.httpFull",
             "SearchScalingBenchmark.searchEasyFail.1024",
             "FanoutBenchmark.fanoutUnicode.1024");
-    assertThat(ids).hasSize(585);
+    assertThat(ids).hasSizeGreaterThanOrEqualTo(MINIMUM_CROSS_ENGINE_WORKLOADS);
   }
 
   @Test
@@ -77,9 +84,14 @@ class CrossEngineBenchmarkPlanTest {
                   .map(CrossEngineBenchmarkPlan.Trial::variant))
           .containsAnyOf(RegexEngineVariant.SAFERE_STRING, RegexEngineVariant.SAFERE_UTF8);
     }
-    assertThat(allTrials).hasSize(2190);
-    assertThat(plan.exclusions()).hasSize(735);
-    assertThat(accounted).hasSize(585 * RegexEngineVariant.values().length);
+    assertThat(allTrials).hasSizeGreaterThanOrEqualTo(MINIMUM_RUNNABLE_CROSS_ENGINE_TRIALS);
+    Set<String> expected = new HashSet<>();
+    for (CrossEngineWorkload workload : plan.workloads()) {
+      for (RegexEngineVariant variant : RegexEngineVariant.values()) {
+        expected.add(workload.id() + "@" + variant.id());
+      }
+    }
+    assertThat(accounted).containsExactlyInAnyOrderElementsOf(expected);
   }
 
   @Test
@@ -117,27 +129,18 @@ class CrossEngineBenchmarkPlanTest {
     CrossEngineBenchmarkPlan first = CrossEngineBenchmarkPlan.load();
     CrossEngineBenchmarkPlan second = CrossEngineBenchmarkPlan.load();
 
-    assertThat(first.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS))
-        .extracting(CrossEngineBenchmarkPlan.Trial::id)
-        .containsExactlyElementsOf(
-            second.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
-                .map(CrossEngineBenchmarkPlan.Trial::id)
-                .toList())
-        .hasSize(1540);
-    assertThat(first.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
-        .extracting(CrossEngineBenchmarkPlan.Trial::id)
-        .containsExactlyElementsOf(
-            second.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS).stream()
-                .map(CrossEngineBenchmarkPlan.Trial::id)
-                .toList())
-        .hasSize(578);
-    assertThat(first.trials(CrossEngineWorkload.TimingGroup.MILLISECONDS))
-        .extracting(CrossEngineBenchmarkPlan.Trial::id)
-        .containsExactlyElementsOf(
-            second.trials(CrossEngineWorkload.TimingGroup.MILLISECONDS).stream()
-                .map(CrossEngineBenchmarkPlan.Trial::id)
-                .toList())
-        .hasSize(72);
+    Set<String> trialIds = new HashSet<>();
+    for (CrossEngineWorkload.TimingGroup timingGroup : CrossEngineWorkload.TimingGroup.values()) {
+      List<CrossEngineBenchmarkPlan.Trial> firstTrials = first.trials(timingGroup);
+      assertThat(firstTrials)
+          .as(timingGroup.name())
+          .isNotEmpty()
+          .allMatch(trial -> trial.workload().timingGroup() == timingGroup)
+          .extracting(CrossEngineBenchmarkPlan.Trial::id)
+          .containsExactlyElementsOf(
+              second.trials(timingGroup).stream().map(CrossEngineBenchmarkPlan.Trial::id).toList());
+      firstTrials.forEach(trial -> assertThat(trialIds.add(trial.id())).as(trial.id()).isTrue());
+    }
   }
 
   @Test
@@ -163,12 +166,36 @@ class CrossEngineBenchmarkPlanTest {
             BenchmarkOperation.LOOKING_AT,
             BenchmarkOperation.MATCHER_RESET_FIND,
             BenchmarkOperation.MATCHER_REGION_FIND,
-            BenchmarkOperation.FIND_GROUP_PRESENT)
+            BenchmarkOperation.FIND_GROUP_PRESENT,
+            BenchmarkOperation.REPLACE_FIRST,
+            BenchmarkOperation.REPLACE_ALL,
+            BenchmarkOperation.REPLACE_ALL_LENGTH_SUM,
+            BenchmarkOperation.MANUAL_REPLACE_ALL)
         .doesNotContain(
             BenchmarkOperation.CAPTURE_GROUPS,
             BenchmarkOperation.FIND_GROUP,
-            BenchmarkOperation.REPLACE_ALL,
             BenchmarkOperation.SPLIT_LENGTH_SUM);
+  }
+
+  @Test
+  void utf8ReplacementTrialsCoverGenericBenchmarkFamilies() {
+    CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
+
+    assertThat(
+            List.of(
+                    plan.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS),
+                    plan.trials(CrossEngineWorkload.TimingGroup.MICROSECONDS))
+                .stream()
+                .flatMap(List::stream)
+                .filter(trial -> trial.variant() == RegexEngineVariant.SAFERE_UTF8)
+                .map(CrossEngineBenchmarkPlan.Trial::id))
+        .contains(
+            "ApplicationBenchmark.secretRedaction@safere-utf8",
+            "RealWorldRegexBenchmark.runBenchmark.markupImageLink.match.1000@safere-utf8",
+            "ReplaceBenchmark.literalReplaceFirst@safere-utf8",
+            "ReplaceBenchmark.pigLatinReplaceAll@safere-utf8",
+            "ReplaceBenchmark.anchoredReplace@safere-utf8",
+            "ReplaceBenchmark.manualReplaceAll@safere-utf8");
   }
 
   @Test
@@ -292,6 +319,51 @@ class CrossEngineBenchmarkPlanTest {
   }
 
   @Test
+  void utf8ReplacementOperationsPrepareAndRunThroughTheGenericAdapter() {
+    CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
+    Blackhole blackhole =
+        new Blackhole(
+            "Today's password is swordfish. I understand instantiating Blackholes directly is"
+                + " dangerous.");
+    for (String id :
+        List.of(
+            "ReplaceBenchmark.literalReplaceFirst@safere-utf8",
+            "ReplaceBenchmark.pigLatinReplaceAll@safere-utf8",
+            "ReplaceBenchmark.manualReplaceAll@safere-utf8",
+            "ApplicationBenchmark.secretRedaction@safere-utf8",
+            "RealWorldRegexBenchmark.runBenchmark.markupImageLink.match.1000@safere-utf8")) {
+      CrossEngineBenchmarkPlan.Trial trial = plan.resolve(id);
+      try (CrossEngineTrialRunner runner =
+          CrossEngineTrialRunner.prepare(id, trial.workload().timingGroup())) {
+        runner.run(blackhole);
+      }
+    }
+  }
+
+  @Test
+  void utf8ReplacementAdapterExpandsLiteralNumberedAndNamedTemplates() {
+    RegexEngineVariant variant = RegexEngineVariant.SAFERE_UTF8;
+    RegexEngineVariant.RegexInput input =
+        new RegexEngineVariant.Utf8RegexInput(
+            org.safere.Utf8Input.trusted("alpha=one&beta=two".getBytes(StandardCharsets.UTF_8)));
+
+    try (RegexEngineVariant.CompiledRegex literal = variant.compile("&");
+        RegexEngineVariant.CompiledRegex numbered = variant.compile("([a-z]+)=([a-z]+)");
+        RegexEngineVariant.CompiledRegex named =
+            variant.compile("(?<key>[a-z]+)=(?<value>[a-z]+)")) {
+      assertThat(literal.replaceFirst(input, variant.prepareReplacement(";")).validationValue())
+          .isEqualTo("alpha=one;beta=two");
+      assertThat(numbered.replaceAll(input, variant.prepareReplacement("$2:$1")).validationValue())
+          .isEqualTo("one:alpha&two:beta");
+      assertThat(
+              named
+                  .replaceAll(input, variant.prepareReplacement("${key}=[${value}]"))
+                  .validationValue())
+          .isEqualTo("alpha=[one]&beta=[two]");
+    }
+  }
+
+  @Test
   void groupParticipationUsesBoundsWithoutMaterializingCaptureText() {
     RegexEngineVariant.MatchCursor cursor =
         new RegexEngineVariant.MatchCursor() {
@@ -402,15 +474,25 @@ class CrossEngineBenchmarkPlanTest {
     SpecializedBenchmarkPlan second = SpecializedBenchmarkPlan.load();
 
     assertThat(first.averageTimeTrials())
+        .hasSizeGreaterThanOrEqualTo(MINIMUM_SPECIALIZED_AVERAGE_TIME_TRIALS)
+        .allMatch(
+            trial ->
+                trial.workload().measurement().mode()
+                    == DeclarativeBenchmarkPlan.MeasurementMode.AVERAGE_TIME)
         .extracting(SpecializedBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
-            second.averageTimeTrials().stream().map(SpecializedBenchmarkPlan.Trial::id).toList())
-        .hasSize(63);
+            second.averageTimeTrials().stream().map(SpecializedBenchmarkPlan.Trial::id).toList());
     assertThat(first.retainedMemoryTrials())
+        .hasSizeGreaterThanOrEqualTo(MINIMUM_SPECIALIZED_RETAINED_MEMORY_TRIALS)
+        .allMatch(
+            trial ->
+                trial.workload().measurement().mode()
+                    == DeclarativeBenchmarkPlan.MeasurementMode.RETAINED_MEMORY)
         .extracting(SpecializedBenchmarkPlan.Trial::id)
         .containsExactlyElementsOf(
-            second.retainedMemoryTrials().stream().map(SpecializedBenchmarkPlan.Trial::id).toList())
-        .hasSize(34);
+            second.retainedMemoryTrials().stream()
+                .map(SpecializedBenchmarkPlan.Trial::id)
+                .toList());
   }
 
   @Test
@@ -425,18 +507,27 @@ class CrossEngineBenchmarkPlanTest {
             "org.safere.benchmark.CrossEngineNoForkBenchmark.run",
             "org.safere.benchmark.CrossEngineColdStartBenchmark.run",
             "org.safere.benchmark.SpecializedBenchmark.run");
-    assertThat(plan.runners())
-        .allMatch(runner -> !runner.trialIds().isEmpty())
-        .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
-        .doesNotHaveDuplicates()
-        .hasSize(2229);
-    assertThat(plan.reportPlan().trials()).hasSize(2229);
+    List<String> runnerTrialIds =
+        plan.runners().stream().flatMap(runner -> runner.trialIds().stream()).toList();
+    assertThat(plan.runners()).allMatch(runner -> !runner.trialIds().isEmpty());
+    assertThat(runnerTrialIds)
+        .hasSizeGreaterThanOrEqualTo(MINIMUM_COLLECTION_RUNNER_TRIALS)
+        .doesNotHaveDuplicates();
+    assertThat(plan.reportPlan().trials())
+        .extracting(BenchmarkCollectionPlan.CollectionTrial::id)
+        .containsExactlyInAnyOrderElementsOf(runnerTrialIds);
     assertThat(plan.reportPlan().exclusions()).isNotEmpty().doesNotHaveDuplicates();
-    assertThat(
-            plan.reportPlan(true).trials().stream()
-                .map(BenchmarkCollectionPlan.CollectionTrial::workloadId)
-                .distinct())
-        .hasSize(5);
+    Set<String> expectedSmokeTrialIds = new HashSet<>();
+    for (BenchmarkCollectionPlan.Runner runner : plan.runners()) {
+      String firstTrial = runner.trialIds().getFirst();
+      String firstWorkload = firstTrial.substring(0, firstTrial.lastIndexOf('@'));
+      runner.trialIds().stream()
+          .filter(trialId -> trialId.startsWith(firstWorkload + "@"))
+          .forEach(expectedSmokeTrialIds::add);
+    }
+    assertThat(plan.reportPlan(true).trials())
+        .extracting(BenchmarkCollectionPlan.CollectionTrial::id)
+        .containsExactlyInAnyOrderElementsOf(expectedSmokeTrialIds);
   }
 
   @Test
