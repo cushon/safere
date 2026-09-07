@@ -23,9 +23,25 @@ sealed interface CharClassScanInfo {
 
   int[] ranges();
 
+  /**
+   * Returns whether this character class is sufficiently selective to drive start acceleration.
+   * Classes with more than 3 characters or single-character classes matching high-frequency
+   * characters (e.g. {@code [ ]}) are not selective and delegate to DFA matching.
+   */
   default boolean isSelective() {
     int count = Long.bitCount(bitmap0()) + Long.bitCount(bitmap1());
-    return count <= 3;
+    if (count > 3) {
+      return false;
+    }
+    if (count == 1) {
+      long b0 = bitmap0();
+      long b1 = bitmap1();
+      int ch = b0 != 0 ? Long.numberOfTrailingZeros(b0) : 64 + Long.numberOfTrailingZeros(b1);
+      if (RarityOracle.byteRarity(ch) <= RarityOracle.POISONOUS_ANCHOR_MAX_RARITY) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Matches 1, 2, or 3 exact ASCII characters via single-instruction SIMD equality. */

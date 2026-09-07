@@ -53,4 +53,17 @@ class RarityOracleTest {
     assertThat(RarityOracle.literalSelectivityScore(" ".repeat(32)))
         .isGreaterThan(RarityOracle.literalSelectivityScore("ee"));
   }
+
+  @Test
+  void poisonousAnchorDetection() {
+    assertThat(RarityOracle.isPoisonousAnchor(" ")).isTrue();
+    assertThat(RarityOracle.isPoisonousAnchor("e")).isTrue();
+    assertThat(RarityOracle.isPoisonousAnchor("E")).isTrue();
+    assertThat(RarityOracle.isPoisonousAnchor("z")).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("q")).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("404")).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("  ")).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor(null)).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("")).isFalse();
+  }
 }

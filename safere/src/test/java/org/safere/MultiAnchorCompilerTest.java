@@ -430,6 +430,53 @@ class MultiAnchorCompilerTest {
         .doesNotThrowAnyException();
   }
 
+  @Test
+  void poisonousSingleCharacterPrefixGatedFromLiteralStartPlan() {
+    // Single space is poisonous; should not be emitted as StartPlan.Literal
+    Pattern spacePattern = Pattern.compile(" [0-9]+");
+    assertThat(spacePattern.startPlan())
+        .isNotInstanceOf(MultiAnchorDescriptor.StartPlan.Literal.class);
+
+    // Single 'e' is high-frequency / poisonous; should not be emitted as StartPlan.Literal
+    Pattern ePattern = Pattern.compile("e[0-9]+");
+    assertThat(ePattern.startPlan()).isNotInstanceOf(MultiAnchorDescriptor.StartPlan.Literal.class);
+
+    // Single-character class matching space is unselective / poisonous
+    Pattern spaceClassPattern = Pattern.compile("[ ]\\d+");
+    assertThat(spaceClassPattern.charClassPrefix().isSelective()).isFalse();
+    assertThat(spaceClassPattern.stringStartAccelerator()).isNull();
+
+    // Multi-character prefix containing space is not poisonous (e.g. "  " or "id: ")
+    Pattern multiSpace = Pattern.compile("  [0-9]+");
+    assertThat(multiSpace.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.Literal.class);
+    assertThat(((MultiAnchorDescriptor.StartPlan.Literal) multiSpace.startPlan()).prefix())
+        .isEqualTo("  ");
+  }
+
+  @Test
+  void competitiveSelectivityPrefersFixedOffsetOverPoisonousOrWeakPrefix() {
+    // Case 1: Poisonous leading space prefix eclipsed by selective fixed-offset literal
+    Pattern p1 = Pattern.compile(" [0-9]{2}404_NOT_FOUND");
+    assertThat(p1.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.FixedOffset.class);
+    MultiAnchorDescriptor.StartPlan.FixedOffset fo1 =
+        (MultiAnchorDescriptor.StartPlan.FixedOffset) p1.startPlan();
+    assertThat(fo1.fol().literal()).isEqualTo("404_NOT_FOUND");
+    assertThat(fo1.fol().minOffset()).isEqualTo(3);
+
+    // Case 2: Short 2-character weak prefix eclipsed by much more selective fixed-offset literal
+    Pattern p2 = Pattern.compile("ab[0-9]{2}ERROR_CRITICAL_PAYLOAD");
+    assertThat(p2.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.FixedOffset.class);
+    MultiAnchorDescriptor.StartPlan.FixedOffset fo2 =
+        (MultiAnchorDescriptor.StartPlan.FixedOffset) p2.startPlan();
+    assertThat(fo2.fol().literal()).isEqualTo("ERROR_CRITICAL_PAYLOAD");
+
+    // Case 3: Long selective prefix retains priority over fixed-offset literal
+    Pattern p3 = Pattern.compile("Content-Type:[0-9]{2}json");
+    assertThat(p3.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.Literal.class);
+    assertThat(((MultiAnchorDescriptor.StartPlan.Literal) p3.startPlan()).prefix())
+        .isEqualTo("Content-Type:");
+  }
+
   private static String deepHomogeneousGap(String atom, int depth) {
     return "foo" + "(?:".repeat(depth) + atom + (")?" + atom).repeat(depth) + "bar";
   }

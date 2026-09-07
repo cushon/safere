@@ -239,18 +239,40 @@ final class MultiAnchorCompiler {
 
     String prefix = start.prefix().prefix();
     boolean prefixFoldCase = start.prefix().foldCase();
-    if (prefix != null) {
+    FixedOffsetLiteral fol = start.fixedOffsetLiteral();
+
+    boolean prefixPoisonous = prefix != null && RarityOracle.isPoisonousAnchor(prefix);
+    boolean folPoisonous = fol != null && RarityOracle.isPoisonousAnchor(fol.literal());
+
+    // When a fixed-offset literal is available and not poisonous:
+    //  (a) If the leading prefix is poisonous (e.g. single space or high-frequency letter),
+    //      suppress it and prioritize the non-poisonous fixed-offset literal.
+    //  (b) If the leading prefix is short/weak (length <= 2) and the fixed-offset literal
+    //      is significantly more selective (score > 2x prefix score), prioritize the
+    //      more distinctive fixed-offset anchor over the weak leading prefix.
+    if (fol != null && !folPoisonous) {
+      if (prefix == null || prefixPoisonous) {
+        return new MultiAnchorDescriptor.StartPlan.FixedOffset(
+            new Pattern.FixedOffsetLiteral(
+                fol.literal(), fol.minOffset(), fol.maxOffset(), fol.discreteOffsets()),
+            start.charClassPrefix());
+      }
+      if (prefix.length() <= 2) {
+        int prefixScore = RarityOracle.literalSelectivityScore(prefix);
+        int folScore = RarityOracle.literalSelectivityScore(fol.literal());
+        if (folScore > prefixScore * 2) {
+          return new MultiAnchorDescriptor.StartPlan.FixedOffset(
+              new Pattern.FixedOffsetLiteral(
+                  fol.literal(), fol.minOffset(), fol.maxOffset(), fol.discreteOffsets()),
+              start.charClassPrefix());
+        }
+      }
+    }
+
+    if (prefix != null && !prefixPoisonous) {
       ClassHashChain classHashChain =
           prefixFoldCase ? ClassHashChain.compileCaseInsensitive(prefix) : null;
       return new MultiAnchorDescriptor.StartPlan.Literal(prefix, prefixFoldCase, classHashChain);
-    }
-
-    if (start.fixedOffsetLiteral() != null) {
-      FixedOffsetLiteral fol = start.fixedOffsetLiteral();
-      return new MultiAnchorDescriptor.StartPlan.FixedOffset(
-          new Pattern.FixedOffsetLiteral(
-              fol.literal(), fol.minOffset(), fol.maxOffset(), fol.discreteOffsets()),
-          start.charClassPrefix());
     }
 
     String[] altLiterals = start.literalAlternation();
