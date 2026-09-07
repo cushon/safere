@@ -248,7 +248,8 @@ final class Dfa {
 
   private int[] transitions;
   private State[] offsetToState;
-  private boolean[] isStartStateOffset;
+  private boolean[] isAcceleratedStateOffset;
+  private boolean hasStateAccelerators;
   private int nextStateId;
 
   private final Utf8StartAccelerator utf8StartAccelerator;
@@ -322,7 +323,7 @@ final class Dfa {
     this.nextStateId = 1;
     this.transitions = new int[1024];
     this.offsetToState = new State[1024];
-    this.isStartStateOffset = new boolean[1024];
+    this.isAcceleratedStateOffset = new boolean[1024];
     addStateToFlatArrays(deadState);
   }
 
@@ -332,10 +333,13 @@ final class Dfa {
       int newLen = Math.max(transitions.length * 2, minTransLen);
       transitions = Arrays.copyOf(transitions, newLen);
       offsetToState = Arrays.copyOf(offsetToState, newLen);
-      isStartStateOffset = Arrays.copyOf(isStartStateOffset, newLen);
+      isAcceleratedStateOffset = Arrays.copyOf(isAcceleratedStateOffset, newLen);
     }
     offsetToState[s.id * numClasses] = s;
-    isStartStateOffset[s.id * numClasses] = s.isStartState;
+    isAcceleratedStateOffset[s.id * numClasses] = s.isStartState || s.accelerator != null;
+    if (s.accelerator != null) {
+      hasStateAccelerators = true;
+    }
   }
 
   private void setTransition(int fromId, int cls, int toId) {
@@ -940,7 +944,7 @@ final class Dfa {
     State s = getOrCreate(insts, flags);
     if (s != null) {
       s.isStartState = true;
-      isStartStateOffset[s.id * numClasses] = true;
+      isAcceleratedStateOffset[s.id * numClasses] = true;
       startStateByContext[cacheKey] = s;
     }
     return s;
@@ -1453,7 +1457,7 @@ final class Dfa {
 
     int[] transitions = this.transitions;
     State[] offsetToState = this.offsetToState;
-    boolean[] isStartStateOffset = this.isStartStateOffset;
+    boolean[] isAcceleratedStateOffset = this.isAcceleratedStateOffset;
     int[] asciiClassMap = this.asciiClassMap;
     int pos = startPos;
     // Fast path: loop through ASCII characters (characters < 128)
@@ -1515,12 +1519,13 @@ final class Dfa {
           }
         }
       }
-      boolean breakOnStartState = canAccelerate && pos >= accelerationResumePos;
-      boolean hitStartState = false;
+      boolean breakOnAcceleratedState =
+          (canAccelerate && pos >= accelerationResumePos) || hasStateAccelerators;
+      boolean hitAcceleratedState = false;
       int limit =
           hasPositionDependentTransitions ? Math.min(textLen, posDepThreshold - 1) : textLen;
       int sId = s.id * numClasses;
-      if (breakOnStartState) {
+      if (breakOnAcceleratedState) {
         while (pos < limit) {
           int ch = text.asciiAt(pos);
           if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
@@ -1547,8 +1552,8 @@ final class Dfa {
           }
           sId = nsId;
           pos++;
-          if (isStartStateOffset[sId]) {
-            hitStartState = true;
+          if (isAcceleratedStateOffset[sId]) {
+            hitAcceleratedState = true;
             break;
           }
         }
@@ -1586,7 +1591,7 @@ final class Dfa {
       if (pos >= textLen) {
         break;
       }
-      if (hitStartState) {
+      if (hitAcceleratedState) {
         continue;
       }
       if (hasPositionDependentTransitions && pos + 1 >= posDepThreshold) {
@@ -1608,7 +1613,7 @@ final class Dfa {
         addTransition(s, cls, ns);
         transitions = this.transitions;
         offsetToState = this.offsetToState;
-        isStartStateOffset = this.isStartStateOffset;
+        isAcceleratedStateOffset = this.isAcceleratedStateOffset;
       }
       s = ns;
       if (s == deadState) {

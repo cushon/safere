@@ -1424,7 +1424,7 @@
       "shared": true
     },
     {
-      "id": "realWorldRegex.adversarialNoise.match.{size}",
+      "id": "realWorldRegex.candidateRecovery.match.{size}",
       "axes": {
         "size": [
           1000,
@@ -1433,15 +1433,16 @@
         ]
       },
       "recipe": {
-        "kind": "suffixToLength",
-        "prefixUnit": "q1234a",
-        "suffix": "q1234z",
+        "kind": "surroundToLength",
+        "prefix": "foox",
+        "unit": "a",
+        "suffix": "fo123",
         "length": "{size}"
       },
       "shared": true
     },
     {
-      "id": "realWorldRegex.adversarialNoise.noMatch.{size}",
+      "id": "realWorldRegex.candidateRecovery.noMatch.{size}",
       "axes": {
         "size": [
           1000,
@@ -1450,8 +1451,10 @@
         ]
       },
       "recipe": {
-        "kind": "repeatToLength",
-        "unit": "q1234a",
+        "kind": "surroundToLength",
+        "prefix": "foox",
+        "unit": "a",
+        "suffix": "x",
         "length": "{size}"
       },
       "shared": true
@@ -4661,13 +4664,13 @@
       }
     },
     {
-      "id": "RealWorldRegexBenchmark.runBenchmark.adversarialNoise.{matchLabel}.{size}",
+      "id": "RealWorldRegexBenchmark.runBenchmark.candidateRecovery.{matchLabel}.{size}",
       "operation": "find",
       "patterns": [
-        "q[0-9]{4}z"
+        "fo[0-9]+"
       ],
       "inputs": [
-        "realWorldRegex.adversarialNoise.{matchLabel}.{size}"
+        "realWorldRegex.candidateRecovery.{matchLabel}.{size}"
       ],
       "resultConsumption": "boolean",
       "measurement": {
