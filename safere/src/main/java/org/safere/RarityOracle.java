@@ -16,6 +16,17 @@ package org.safere;
  * aho-corasick} / {@code memchr} background distribution ({@code BYTE_FREQUENCIES}, licensed under
  * MIT / Unlicense), inverted so higher rank indicates rarer bytes.
  *
+ * <p><b>UTF-8 Lead-Byte Clamping and Character Domain Boundary:</b> In the original UTF-8 byte
+ * distribution, bytes {@code 192..255} ({@code 0xC0..0xFF}) are clamped to maximum frequency
+ * (assigned rarity rank {@code 0}, equivalent to space). This is an essential heuristic for UTF-8
+ * byte streams to prevent candidate verification storms on UTF-8 multibyte continuation lead bytes
+ * (for example, {@code 0xD0} in Cyrillic text or {@code 0xE4} in CJK documents). In Java, {@link
+ * String} and {@link CharSequence} inputs may represent Latin-1 characters (where {@code
+ * 0xC0..0xFF} represent accented Latin-1 letters such as {@code 'é'} or {@code 'ü'}) or UTF-16 code
+ * units (where {@code c >= 256} defaults to rarity rank {@code 255}). To ensure semantic safety
+ * when selecting broadcast anchors for ASCII-only SIMD and SWAR case-folding loops, {@link
+ * #rarestAsciiOffset} strictly restricts anchor selection to the ASCII range ({@code c < 128}).
+ *
  * <p>Two distinct frequency distributions are calibrated:
  *
  * <ul>
@@ -172,22 +183,26 @@ final class RarityOracle {
 
   /**
    * Returns the offset of the rarest ASCII character in the prefix (up to {@code prefixLen}),
-   * optionally applying case-folded frequency ratings.
+   * optionally applying case-folded frequency ratings. Only characters strictly within the ASCII
+   * range ({@code c < 128}) are considered as candidate broadcast anchors. If all characters in the
+   * evaluated prefix are non-ASCII or {@code prefixLen <= 0}, returns 0.
    *
    * @param prefix the character sequence to scan
    * @param prefixLen length of prefix to evaluate
    * @param caseFolded {@code true} for case-insensitive matching
-   * @return 0-based offset of rarest character
+   * @return 0-based offset of rarest ASCII character
    */
   static int rarestAsciiOffset(CharSequence prefix, int prefixLen, boolean caseFolded) {
     int bestOffset = 0;
     int maxRank = -1;
     for (int i = 0; i < prefixLen; i++) {
       char c = prefix.charAt(i);
-      int rank = byteRarity(c, caseFolded);
-      if (rank > maxRank) {
-        maxRank = rank;
-        bestOffset = i;
+      if (c < 128) {
+        int rank = byteRarity(c, caseFolded);
+        if (rank > maxRank) {
+          maxRank = rank;
+          bestOffset = i;
+        }
       }
     }
     return bestOffset;
