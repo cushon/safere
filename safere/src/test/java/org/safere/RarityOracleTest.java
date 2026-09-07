@@ -83,4 +83,64 @@ class RarityOracleTest {
     int exactLowerScore = RarityOracle.literalSelectivityScore("error", false);
     assertThat(exactUpperScore).isGreaterThan(exactLowerScore);
   }
+
+  @Test
+  void rarestAsciiOffsetIgnoresNonAsciiCharacters() {
+    // '\u03B1' (Greek alpha, c >= 256) defaults to byteRarity 255, which would erroneously
+    // preempt ASCII characters if not strictly filtered to c < 128.
+    String mixedGreek = "c\u03B1b";
+    assertThat(RarityOracle.rarestAsciiOffset(mixedGreek, mixedGreek.length(), false))
+        .isEqualTo(2); // 'b' (offset 2, rank 39), not '\u03B1' (offset 1, rank 255)
+
+    String mixedGreekFirst = "b\u03B1c";
+    assertThat(RarityOracle.rarestAsciiOffset(mixedGreekFirst, mixedGreekFirst.length(), false))
+        .isEqualTo(0); // 'b' (offset 0, rank 39), not '\u03B1' (offset 1, rank 255)
+
+    String leadingNonAscii = "\u03B1the_query";
+    assertThat(RarityOracle.rarestAsciiOffset(leadingNonAscii, leadingNonAscii.length(), true))
+        .isEqualTo(leadingNonAscii.indexOf('q')); // 'q' (offset 5), not '\u03B1' (offset 0)
+
+    // Latin-1 characters (c >= 128) such as '\u00E9' (0xE9 = 233) or '\u00A9' (0xA9 = 169)
+    // must not be chosen as ASCII anchors.
+    String mixedLatin1 = "caf\u00E9";
+    assertThat(RarityOracle.rarestAsciiOffset(mixedLatin1, mixedLatin1.length(), false))
+        .isEqualTo(2); // 'f' (offset 2), not '\u00E9' (offset 3)
+
+    String highLatin1 = "the_\u00A9query";
+    assertThat(RarityOracle.rarestAsciiOffset(highLatin1, highLatin1.length(), false))
+        .isEqualTo(highLatin1.indexOf('q'));
+  }
+
+  @Test
+  void rarestAsciiOffsetDefaultsToZeroWhenAllCharactersNonAscii() {
+    String allGreek = "\u03B1\u03B2\u03B3";
+    assertThat(RarityOracle.rarestAsciiOffset(allGreek, allGreek.length(), false)).isEqualTo(0);
+    assertThat(RarityOracle.rarestAsciiOffset(allGreek, allGreek.length(), true)).isEqualTo(0);
+
+    String allLatin1 = "\u00E9\u00E8\u00EA";
+    assertThat(RarityOracle.rarestAsciiOffset(allLatin1, allLatin1.length(), false)).isEqualTo(0);
+    assertThat(RarityOracle.rarestAsciiOffset(allLatin1, allLatin1.length(), true)).isEqualTo(0);
+
+    assertThat(RarityOracle.rarestAsciiOffset("", 0, false)).isEqualTo(0);
+    assertThat(RarityOracle.rarestAsciiOffset("abc", 0, false)).isEqualTo(0);
+  }
+
+  @Test
+  void utf8LeadBytesClampedToZeroRarity() {
+    // Bytes 0xC0..0xFF (192..255) are clamped to 0 (treated as frequent as space) to avoid
+    // verification traps on UTF-8 continuation sequences in byte streams.
+    for (int b = 0xC0; b <= 0xFF; b++) {
+      assertThat(RarityOracle.exactByteRarity(b))
+          .as("exactByteRarity for UTF-8 lead byte 0x%02X", b)
+          .isEqualTo(0);
+      assertThat(RarityOracle.caseFoldedByteRarity(b))
+          .as("caseFoldedByteRarity for UTF-8 lead byte 0x%02X", b)
+          .isEqualTo(0);
+    }
+    // Out-of-byte-range code units (c >= 256 or c < 0) default to 255.
+    assertThat(RarityOracle.exactByteRarity(256)).isEqualTo(255);
+    assertThat(RarityOracle.exactByteRarity(-1)).isEqualTo(255);
+    assertThat(RarityOracle.caseFoldedByteRarity(256)).isEqualTo(255);
+    assertThat(RarityOracle.caseFoldedByteRarity(-1)).isEqualTo(255);
+  }
 }
