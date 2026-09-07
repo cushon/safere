@@ -1424,6 +1424,39 @@
       "shared": true
     },
     {
+      "id": "realWorldRegex.adversarialNoise.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "q1234a",
+        "suffix": "q1234z",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.adversarialNoise.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "q1234a",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "realWorldRegex.wideFactoredApiRoute.match.{size}",
       "axes": {
         "size": [
@@ -4606,6 +4639,35 @@
       ],
       "inputs": [
         "realWorldRegex.isoTimestampLog.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.adversarialNoise.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "q[0-9]{4}z"
+      ],
+      "inputs": [
+        "realWorldRegex.adversarialNoise.{matchLabel}.{size}"
       ],
       "resultConsumption": "boolean",
       "measurement": {
