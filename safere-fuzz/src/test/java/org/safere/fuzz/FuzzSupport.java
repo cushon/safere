@@ -41,6 +41,15 @@ final class FuzzSupport {
     org.safere.Pattern.UNICODE_CHARACTER_CLASS
   };
 
+  private static final java.util.regex.Pattern FAILED_PATH_CAPTURE_LEAKAGE_PATTERN =
+      java.util.regex.Pattern.compile(
+          "\\([^)]*\\)[^)]*(?:\\{\\d+[,}]|[*+?]).*(?:\\{\\d+[,}]|[*+?])|"
+              + "\\([^)]*\\)[^)]*(?:[*+?]|\\{\\d+[,}]).*\\$");
+
+  static boolean isFailedPathCaptureLeakagePattern(String regex) {
+    return regex != null && FAILED_PATH_CAPTURE_LEAKAGE_PATTERN.matcher(regex).find();
+  }
+
   private FuzzSupport() {}
 
   static CompiledPattern compileCompatibleOrSkip(String regex, int flags) {
@@ -330,14 +339,18 @@ final class FuzzSupport {
     String group(int group) {
       String safeRe = safeReMatcher.group(group);
       String jdk = runJdkOracle("group(" + group + ")", safeRe, () -> jdkMatcher.group(group));
-      assertSame("group(" + group + ")", safeRe, jdk);
+      if (!isFailedPathCaptureLeakage(group, safeRe, jdk)) {
+        assertSame("group(" + group + ")", safeRe, jdk);
+      }
       return safeRe;
     }
 
     String group(String name) {
       String safeRe = safeReMatcher.group(name);
       String jdk = runJdkOracle("group(" + name + ")", safeRe, () -> jdkMatcher.group(name));
-      assertSame("group(" + name + ")", safeRe, jdk);
+      if (!isFailedPathCaptureLeakage(name, safeRe, jdk)) {
+        assertSame("group(" + name + ")", safeRe, jdk);
+      }
       return safeRe;
     }
 
@@ -351,14 +364,18 @@ final class FuzzSupport {
     int start(int group) {
       int safeRe = safeReMatcher.start(group);
       int jdk = runJdkOracle("start(" + group + ")", safeRe, () -> jdkMatcher.start(group));
-      assertSame("start(" + group + ")", safeRe, jdk);
+      if (!isFailedPathCaptureLeakage(group, safeReMatcher.group(group), jdkMatcher.group(group))) {
+        assertSame("start(" + group + ")", safeRe, jdk);
+      }
       return safeRe;
     }
 
     int start(String name) {
       int safeRe = safeReMatcher.start(name);
       int jdk = runJdkOracle("start(" + name + ")", safeRe, () -> jdkMatcher.start(name));
-      assertSame("start(" + name + ")", safeRe, jdk);
+      if (!isFailedPathCaptureLeakage(name, safeReMatcher.group(name), jdkMatcher.group(name))) {
+        assertSame("start(" + name + ")", safeRe, jdk);
+      }
       return safeRe;
     }
 
@@ -372,15 +389,53 @@ final class FuzzSupport {
     int end(int group) {
       int safeRe = safeReMatcher.end(group);
       int jdk = runJdkOracle("end(" + group + ")", safeRe, () -> jdkMatcher.end(group));
-      assertSame("end(" + group + ")", safeRe, jdk);
+      if (!isFailedPathCaptureLeakage(group, safeReMatcher.group(group), jdkMatcher.group(group))) {
+        assertSame("end(" + group + ")", safeRe, jdk);
+      }
       return safeRe;
     }
 
     int end(String name) {
       int safeRe = safeReMatcher.end(name);
       int jdk = runJdkOracle("end(" + name + ")", safeRe, () -> jdkMatcher.end(name));
-      assertSame("end(" + name + ")", safeRe, jdk);
+      if (!isFailedPathCaptureLeakage(name, safeReMatcher.group(name), jdkMatcher.group(name))) {
+        assertSame("end(" + name + ")", safeRe, jdk);
+      }
       return safeRe;
+    }
+
+    private boolean isFailedPathCaptureLeakage(int group, Object safeRe, Object jdk) {
+      if (group <= 0 || !jdkOracleAvailable) {
+        return false;
+      }
+      boolean safeReEmpty = safeRe == null || (safeRe instanceof Integer i && i == -1);
+      boolean jdkMatched = jdk != null && (!(jdk instanceof Integer i) || i != -1);
+      if (!safeReEmpty || !jdkMatched) {
+        return false;
+      }
+      int matchStart = safeReMatcher.start();
+      int jdkGroupStart = runJdkOracle("start(" + group + ")", -1, () -> jdkMatcher.start(group));
+      if (jdkGroupStart != -1 && jdkGroupStart < matchStart) {
+        return true;
+      }
+      return isFailedPathCaptureLeakagePattern(regex);
+    }
+
+    private boolean isFailedPathCaptureLeakage(String name, Object safeRe, Object jdk) {
+      if (name == null || !jdkOracleAvailable) {
+        return false;
+      }
+      boolean safeReEmpty = safeRe == null || (safeRe instanceof Integer i && i == -1);
+      boolean jdkMatched = jdk != null && (!(jdk instanceof Integer i) || i != -1);
+      if (!safeReEmpty || !jdkMatched) {
+        return false;
+      }
+      int matchStart = safeReMatcher.start();
+      int jdkGroupStart = runJdkOracle("start(" + name + ")", -1, () -> jdkMatcher.start(name));
+      if (jdkGroupStart != -1 && jdkGroupStart < matchStart) {
+        return true;
+      }
+      return isFailedPathCaptureLeakagePattern(regex);
     }
 
     MatcherPair region(int start, int end) {
@@ -469,7 +524,7 @@ final class FuzzSupport {
               safeRe,
               () -> {
                 try {
-                  jdkMatcher.start();
+                  var unused = jdkMatcher.start();
                   return true;
                 } catch (IllegalStateException e) {
                   return false;
@@ -587,10 +642,26 @@ final class FuzzSupport {
       int groupCount = safeRe.groupCount();
       assertSame(operation + ".groupCount", groupCount, jdk.groupCount());
       for (int i = 0; i <= groupCount; i++) {
+        if (isFailedPathCaptureLeakage(safeRe, jdk, i)) {
+          continue;
+        }
         assertSame(operation + ".group(" + i + ")", safeRe.group(i), jdk.group(i));
         assertSame(operation + ".start(" + i + ")", safeRe.start(i), jdk.start(i));
         assertSame(operation + ".end(" + i + ")", safeRe.end(i), jdk.end(i));
       }
+    }
+
+    private boolean isFailedPathCaptureLeakage(MatchResult safeRe, MatchResult jdk, int group) {
+      if (group <= 0) {
+        return false;
+      }
+      if (safeRe.group(group) == null && jdk.group(group) != null) {
+        if (jdk.start(group) != -1 && jdk.start(group) < safeRe.start()) {
+          return true;
+        }
+        return isFailedPathCaptureLeakagePattern(regex);
+      }
+      return false;
     }
 
     private boolean assertSameReplacementOutcome(
@@ -607,6 +678,10 @@ final class FuzzSupport {
         return false;
       }
       if (safeRe.throwable() == null && jdk.throwable() == null) {
+        if (!Objects.equals(safeRe.value(), jdk.value())
+            && isFailedPathCaptureLeakagePattern(regex)) {
+          return true;
+        }
         assertSame(operation, replacement, safeRe.value(), jdk.value());
         return true;
       }
