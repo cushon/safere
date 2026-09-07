@@ -6,8 +6,8 @@
 package org.safere.fuzz;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
@@ -44,45 +44,18 @@ final class FuzzSupportOracleTimeoutTest {
   }
 
   @Test
-  @DisplayName("malformed intersection exclusion validates the syntax at the error index")
-  void malformedIntersectionExclusionValidatesSyntaxAtErrorIndex() {
-    assertTrue(
-        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
-            "[a&&&b]", 0, "invalid character class intersection", 2));
+  @DisplayName("only parser-marked intentional syntax errors are excluded")
+  void onlyParserMarkedIntentionalSyntaxErrorsAreExcluded() {
+    assertNull(FuzzSupport.compileCompatibleOrSkip("[a&&&b]", 0));
+    assertNull(FuzzSupport.compileCompatibleOrSkip("(?x:[a& & &b])", 0));
+    assertNull(FuzzSupport.compileCompatibleOrSkip("(?ix)[a& & &b]", 0));
+    assertNull(
+        FuzzSupport.compileCompatibleOrSkip(
+            "#\r(?-x)\n[a& & &b]", org.safere.Pattern.COMMENTS | org.safere.Pattern.UNIX_LINES));
+    assertNull(FuzzSupport.compileCompatibleOrSkip("(?x)[](?-x)][a& & &b]", 0));
     assertFalse(
-        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
-            "(?x)[a& &b]", 0, "invalid character class intersection", 6));
-    assertFalse(
-        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
-            "[a-z&&[def]]", 0, "empty left side of character class intersection", 4));
-    assertTrue(
-        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
-            "[a&&]", 0, "empty right side of character class intersection", 4));
-    assertTrue(
-        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
-            "[a&&-b]", 0, "dangling character class '-'", 4));
-  }
-
-  @Test
-  @DisplayName("malformed intersection exclusion observes inline comments flag scope")
-  void malformedIntersectionExclusionObservesInlineCommentsFlagScope() {
-    assertMalformedLogicalAmpersandRun("(?x:[a& & &b])", 0, true);
-    assertMalformedLogicalAmpersandRun("(?ix)[a& & &b]", 0, true);
-    assertMalformedLogicalAmpersandRun("(?i-x:[a& & &b])", 0, false);
-    assertMalformedLogicalAmpersandRun("(?x:(?-x:[a& & &b]))", 0, false);
-    assertMalformedLogicalAmpersandRun("(?x:(?-x:(?x:[a& & &b])))", 0, true);
-    assertMalformedLogicalAmpersandRun("(?-x:[a& & &b])", org.safere.Pattern.COMMENTS, false);
-  }
-
-  private static void assertMalformedLogicalAmpersandRun(
-      String regex, int flags, boolean expected) {
-    boolean actual =
-        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
-            regex, flags, "invalid character class intersection", regex.indexOf('&'));
-    if (expected) {
-      assertTrue(actual, regex);
-    } else {
-      assertFalse(actual, regex);
-    }
+        FuzzSupport.isIntentionalCharacterClassIntersectionForTesting(
+            new java.util.regex.PatternSyntaxException(
+                "invalid character class intersection", "[a-z&&[def]]", 4)));
   }
 }

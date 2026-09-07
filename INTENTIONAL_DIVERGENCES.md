@@ -124,6 +124,11 @@ definition.
 
 Issue reference: #796.
 
+Upstream JDK bug:
+[JDK-8391732: Pattern inconsistency with comments mode][jdk-8391732].
+
+[jdk-8391732]: https://bugs.openjdk.org/browse/JDK-8391732
+
 SafeRE models character classes using principled boolean algebra. The intersection
 operator `&&` is strictly an infix binary operator that requires non-empty left
 and right operands. A single ampersand `&` is always treated strictly as a

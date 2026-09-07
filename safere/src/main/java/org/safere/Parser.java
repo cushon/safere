@@ -1114,7 +1114,7 @@ final class Parser {
           continue;
         }
         if (frame.afterIntersection) {
-          throw new PatternSyntaxException(
+          throw new IntentionalDivergenceSyntaxException(
               "empty right side of character class intersection", pattern, pos);
         }
         pos++; // consume ']'
@@ -1149,10 +1149,11 @@ final class Parser {
       if (intersectionEnd >= 0) {
         int nextToken = skipClassOperatorTriviaAt(intersectionEnd);
         if (nextToken < pattern.length() && pattern.charAt(nextToken) == '&') {
-          throw new PatternSyntaxException("invalid character class intersection", pattern, pos);
+          throw new IntentionalDivergenceSyntaxException(
+              "invalid character class intersection", pattern, pos);
         }
         if (!frame.hasItems || frame.afterIntersection) {
-          throw new PatternSyntaxException(
+          throw new IntentionalDivergenceSyntaxException(
               "empty left side of character class intersection", pattern, pos);
         }
         pos = intersectionEnd;
@@ -1170,15 +1171,16 @@ final class Parser {
         if (pos < pattern.length()) {
           char next = pattern.charAt(pos);
           if (next == ']') {
-            throw new PatternSyntaxException(
+            throw new IntentionalDivergenceSyntaxException(
                 "empty right side of character class intersection", pattern, pos);
           }
           if (next == '&' && pos + 1 < pattern.length() && pattern.charAt(pos + 1) == '&') {
-            throw new PatternSyntaxException(
+            throw new IntentionalDivergenceSyntaxException(
                 "empty right side of character class intersection", pattern, pos);
           }
           if (next == '-') {
-            throw new PatternSyntaxException("dangling character class '-'", pattern, pos);
+            throw new IntentionalDivergenceSyntaxException(
+                "dangling character class '-'", pattern, pos);
           }
         }
         continue;
@@ -1186,7 +1188,8 @@ final class Parser {
 
       // If we are right after an intersection and the next character is unescaped '-', reject
       if (frame.afterIntersection && c == '-') {
-        throw new PatternSyntaxException("dangling character class '-'", pattern, pos);
+        throw new IntentionalDivergenceSyntaxException(
+            "dangling character class '-'", pattern, pos);
       }
 
       // Any other character atom / range / single '&' / quoted literal
@@ -1252,6 +1255,14 @@ final class Parser {
     ClassExpressionFrame(int classStart, boolean negated) {
       this.classStart = classStart;
       this.negated = negated;
+    }
+  }
+
+  private static final class IntentionalDivergenceSyntaxException extends PatternSyntaxException {
+    private static final long serialVersionUID = 1L;
+
+    IntentionalDivergenceSyntaxException(String description, String regex, int index) {
+      super(description, regex, index);
     }
   }
 
@@ -1354,7 +1365,7 @@ final class Parser {
   }
 
   private RangeEndpoint parseCCRangeEndpoint() {
-    skipEmptyQuotedLiterals();
+    skipClassRangeEndpointTrivia();
     if (pos < pattern.length() && pattern.charAt(pos) == '[') {
       throw new PatternSyntaxException("bad class syntax", pattern, pos);
     }
@@ -1368,6 +1379,19 @@ final class Parser {
       return new RangeEndpoint(literals[0], trailing);
     }
     return new RangeEndpoint(parseCCCharacter(), new int[0]);
+  }
+
+  private void skipClassRangeEndpointTrivia() {
+    while (true) {
+      int before = pos;
+      if ((flags & ParseFlags.COMMENTS) != 0) {
+        skipCommentsAndWhitespace();
+      }
+      skipEmptyQuotedLiterals();
+      if (pos == before) {
+        return;
+      }
+    }
   }
 
   private boolean startsQuotedLiteral() {

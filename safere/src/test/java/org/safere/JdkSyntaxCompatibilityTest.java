@@ -1148,6 +1148,19 @@ class JdkSyntaxCompatibilityTest {
     @ParameterizedTest
     @ValueSource(
         strings = {
+          "(?x)[a-\\Q\\E b]",
+          "(?x)[a- \\Q\\E b]",
+          "(?x)[a-\\Q\\E # endpoint\n b]",
+          "(?x)[a-\\Q\\E\\Q\\E b]"
+        })
+    @DisplayName("comments-mode trivia and empty quotes before a range endpoint are ignored")
+    void commentsModeTriviaAndEmptyQuotesBeforeRangeEndpointAreIgnored(String regex) {
+      assertFullMatchesSameForAll(regex, List.of("`", "a", "b", "c", " "));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = {
           "(?x)[a&& &b]",
           "(?x)[a& &&b]",
           "(?x)[a& & &b]",
