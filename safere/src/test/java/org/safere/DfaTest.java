@@ -890,4 +890,28 @@ class DfaTest {
     }
     assertThat(matchCount).isEqualTo(50);
   }
+
+  @Test
+  void dfaReacceleratesStartStateAfterFalseCandidate() {
+    Pattern pattern = Pattern.compile("fo[0-9]+");
+    String text = "foox" + "a".repeat(100000);
+    var utf8Input = Utf8Input.validated(text.getBytes(UTF_8));
+    assertThat(pattern.find(utf8Input)).isFalse();
+
+    Matcher stringMatcher = pattern.matcher(text);
+    assertThat(stringMatcher.find()).isFalse();
+  }
+
+  @Test
+  void dfaReacceleratesToNextMatchAfterFalseCandidate() {
+    Pattern pattern = Pattern.compile("fo[0-9]+");
+    String text = "foox" + "a".repeat(100000) + "fo123";
+    var utf8Input = Utf8Input.validated(text.getBytes(UTF_8));
+    assertThat(pattern.find(utf8Input)).isTrue();
+
+    Matcher stringMatcher = pattern.matcher(text);
+    assertThat(stringMatcher.find()).isTrue();
+    assertThat(stringMatcher.start()).isEqualTo(4 + 100000);
+    assertThat(stringMatcher.end()).isEqualTo(4 + 100000 + 5);
+  }
 }
