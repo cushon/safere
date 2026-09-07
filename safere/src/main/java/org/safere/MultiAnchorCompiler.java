@@ -305,6 +305,12 @@ final class MultiAnchorCompiler {
       plans.add(new MultiAnchorDescriptor.RejectPlan.EndAnchoredCharClass(endAnchoredCharClass));
     }
 
+    String excludeStartLiteral =
+        startPlan instanceof MultiAnchorDescriptor.StartPlan.Literal lit
+            ? lit.prefix()
+            : startPlan instanceof MultiAnchorDescriptor.StartPlan.FixedOffset fo
+                ? fo.fol().literal()
+                : null;
     String prefix =
         startPlan instanceof MultiAnchorDescriptor.StartPlan.Literal lit ? lit.prefix() : null;
     CharClassScanInfo ccPrefix =
@@ -315,7 +321,7 @@ final class MultiAnchorCompiler {
 
     String requiredLiteral =
         !anchorStart && !hasLeadingExpansion
-            ? extractRequiredLiteral(metadataAst, prefix, suffixStr)
+            ? extractRequiredLiteral(metadataAst, excludeStartLiteral, suffixStr)
             : null;
     if (requiredLiteral != null) {
       plans.add(new MultiAnchorDescriptor.RejectPlan.RequiredLiteral(requiredLiteral));
@@ -2760,8 +2766,8 @@ final class MultiAnchorCompiler {
           if (node.subs != null) {
             String exactAscii = extractExactAsciiLiteral(node);
             if (exactAscii != null && exactAscii.length() >= 2) {
-              if ((excludePrefix == null || !exactAscii.equals(excludePrefix))
-                  && (excludeSuffix == null || !exactAscii.equals(excludeSuffix))) {
+              if (!isLiteralSubsumed(exactAscii, excludePrefix)
+                  && !isLiteralSubsumed(exactAscii, excludeSuffix)) {
                 int score = RarityOracle.literalSelectivityScore(exactAscii);
                 if (best == null || score > bestScore) {
                   best = exactAscii;
@@ -2779,8 +2785,8 @@ final class MultiAnchorCompiler {
               && node.runes != null
               && node.runes.length >= 2) {
             String candidate = new String(node.runes, 0, node.runes.length);
-            if ((excludePrefix == null || !candidate.equals(excludePrefix))
-                && (excludeSuffix == null || !candidate.equals(excludeSuffix))) {
+            if (!isLiteralSubsumed(candidate, excludePrefix)
+                && !isLiteralSubsumed(candidate, excludeSuffix)) {
               int candidateScore = RarityOracle.literalSelectivityScore(candidate);
               if (best == null || candidateScore > bestScore) {
                 best = candidate;
@@ -2793,6 +2799,10 @@ final class MultiAnchorCompiler {
       }
     }
     return best;
+  }
+
+  private static boolean isLiteralSubsumed(String candidate, String excluded) {
+    return excluded != null && (candidate.equals(excluded) || excluded.contains(candidate));
   }
 
   private static String[] combineDisjointRequiredLiterals(List<NodeAnalysis> children) {

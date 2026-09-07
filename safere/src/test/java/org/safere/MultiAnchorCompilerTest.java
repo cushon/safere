@@ -430,6 +430,33 @@ class MultiAnchorCompilerTest {
         .doesNotThrowAnyException();
   }
 
+  @Test
+  void fixedOffsetLiteralSubsumedFromRejectPlan() {
+    // Single fixed-offset literal drives startPlan; should not be duplicated in rejectPlan
+    Pattern p1 = Pattern.compile("[0-9]{2}404_NOT_FOUND");
+    assertThat(p1.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.FixedOffset.class);
+    MultiAnchorDescriptor.StartPlan.FixedOffset fo =
+        (MultiAnchorDescriptor.StartPlan.FixedOffset) p1.startPlan();
+    assertThat(fo.fol().literal()).isEqualTo("404_NOT_FOUND");
+
+    // The required literal "404_NOT_FOUND" is subsumed and excluded from rejectPlan
+    Stream<MultiAnchorDescriptor.RejectPlan.RequiredLiteral> reqLits1 =
+        rejectPlans(p1.rejectPlan())
+            .filter(MultiAnchorDescriptor.RejectPlan.RequiredLiteral.class::isInstance)
+            .map(MultiAnchorDescriptor.RejectPlan.RequiredLiteral.class::cast);
+    assertThat(reqLits1).noneMatch(l -> l.literal().equals("404_NOT_FOUND"));
+
+    // Multiple required literals: fixed-offset literal is excluded, but downstream required literal
+    // is preserved
+    Pattern p2 = Pattern.compile("[0-9]{2}404_NOT_FOUND.*EXCEPTION_LOG");
+    assertThat(p2.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.FixedOffset.class);
+    Stream<MultiAnchorDescriptor.RejectPlan.RequiredLiteral> reqLits2 =
+        rejectPlans(p2.rejectPlan())
+            .filter(MultiAnchorDescriptor.RejectPlan.RequiredLiteral.class::isInstance)
+            .map(MultiAnchorDescriptor.RejectPlan.RequiredLiteral.class::cast);
+    assertThat(reqLits2).anyMatch(l -> l.literal().equals("EXCEPTION_LOG"));
+  }
+
   private static String deepHomogeneousGap(String atom, int depth) {
     return "foo" + "(?:".repeat(depth) + atom + (")?" + atom).repeat(depth) + "bar";
   }
