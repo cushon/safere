@@ -820,4 +820,74 @@ class DfaTest {
     assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).find()).isFalse();
     assertThat(pattern.matcher(Utf8Input.validated(noMatch.getBytes(UTF_8))).matches()).isFalse();
   }
+
+  @Test
+  void adaptiveQuarantineOnAdversarialPeriodicNoise() {
+    String regex = "q[0-9]{4}z";
+    Pattern pattern = Pattern.compile(regex);
+
+    // 2,000 repetitions of "q1234a" (12,000 bytes). Distance between 'q' is 6 bytes.
+    // Downstream fails on 'a' instead of 'z'.
+    String adversarialNoise = "q1234a".repeat(2000);
+    assertThat(pattern.matcher(adversarialNoise).find()).isFalse();
+    assertThat(pattern.matcher(Utf8Input.validated(adversarialNoise.getBytes(UTF_8))).find())
+        .isFalse();
+
+    // Adversarial noise followed by an actual valid match at the end
+    String withMatch = adversarialNoise + "q1234z";
+    Matcher stringMatcher = pattern.matcher(withMatch);
+    assertThat(stringMatcher.find()).isTrue();
+    assertThat(stringMatcher.start()).isEqualTo(adversarialNoise.length());
+    assertThat(stringMatcher.end()).isEqualTo(withMatch.length());
+
+    var utf8Matcher = pattern.matcher(Utf8Input.validated(withMatch.getBytes(UTF_8)));
+    assertThat(utf8Matcher.find()).isTrue();
+    assertThat(utf8Matcher.start()).isEqualTo(adversarialNoise.length());
+    assertThat(utf8Matcher.end()).isEqualTo(withMatch.length());
+  }
+
+  @Test
+  void burstyHeaderRecoversAccelerationInCleanBody() {
+    String regex = "q[0-9]{4}z";
+    Pattern pattern = Pattern.compile(regex);
+
+    // 100 repetitions of noise (600 bytes header) followed by 50 KB of clean text, ending in a
+    // match
+    String header = "q1234a".repeat(100);
+    String cleanBody = "the quick brown fox jumps over the lazy dog. ".repeat(1000);
+    String target = "q1234z";
+    String input = header + cleanBody + target;
+
+    Matcher stringMatcher = pattern.matcher(input);
+    assertThat(stringMatcher.find()).isTrue();
+    assertThat(stringMatcher.start()).isEqualTo(header.length() + cleanBody.length());
+    assertThat(stringMatcher.end()).isEqualTo(input.length());
+
+    var utf8Matcher = pattern.matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+    assertThat(utf8Matcher.find()).isTrue();
+    assertThat(utf8Matcher.start()).isEqualTo(header.length() + cleanBody.length());
+    assertThat(utf8Matcher.end()).isEqualTo(input.length());
+  }
+
+  @Test
+  void denseConsecutiveValidMatchesNotThrottled() {
+    String regex = "q[0-9]{4}z";
+    Pattern pattern = Pattern.compile(regex);
+
+    // 50 valid consecutive matches back-to-back
+    String denseMatches = "q1234z".repeat(50);
+    Matcher stringMatcher = pattern.matcher(denseMatches);
+    int matchCount = 0;
+    while (stringMatcher.find()) {
+      matchCount++;
+    }
+    assertThat(matchCount).isEqualTo(50);
+
+    var utf8Matcher = pattern.matcher(Utf8Input.validated(denseMatches.getBytes(UTF_8)));
+    matchCount = 0;
+    while (utf8Matcher.find()) {
+      matchCount++;
+    }
+    assertThat(matchCount).isEqualTo(50);
+  }
 }
