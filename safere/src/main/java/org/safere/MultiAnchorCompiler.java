@@ -311,8 +311,6 @@ final class MultiAnchorCompiler {
             : startPlan instanceof MultiAnchorDescriptor.StartPlan.FixedOffset fo
                 ? fo.fol().literal()
                 : null;
-    String prefix =
-        startPlan instanceof MultiAnchorDescriptor.StartPlan.Literal lit ? lit.prefix() : null;
     CharClassScanInfo ccPrefix =
         startPlan instanceof MultiAnchorDescriptor.StartPlan.CharClass cc ? cc.scanInfo() : null;
     boolean hasLeadingExpansion =
@@ -328,7 +326,7 @@ final class MultiAnchorCompiler {
     }
 
     CharClassScanInfo requiredMatchClass = null;
-    if (!anchorStart && prefix == null && endAnchoredCharClass == null) {
+    if (!anchorStart && excludeStartLiteral == null && endAnchoredCharClass == null) {
       CharClass reqClass = reject.bestRequiredClass();
       if (reqClass != null) {
         if (ccPrefix == null) {
@@ -356,7 +354,7 @@ final class MultiAnchorCompiler {
     }
 
     String[] disjointLiterals =
-        (!anchorStart && prefix == null && requiredLiteral == null)
+        (!anchorStart && excludeStartLiteral == null && requiredLiteral == null)
             ? reject.disjointRequiredLiterals()
             : null;
     if (disjointLiterals != null && disjointLiterals.length > 1) {
