@@ -649,9 +649,7 @@ record MultiAnchorDescriptor(
     }
 
     boolean isExecutorGuardedGap() {
-      return kind == GapKind.BOUNDED_CLASS_REPEAT
-          && guardBytes != null
-          && isPureComplement;
+      return kind == GapKind.BOUNDED_CLASS_REPEAT && guardBytes != null && isPureComplement;
     }
 
     int findFirstGuardByte(String text, int from, int to) {
