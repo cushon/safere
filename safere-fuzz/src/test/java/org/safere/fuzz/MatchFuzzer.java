@@ -8,6 +8,7 @@ package org.safere.fuzz;
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.util.List;
+import java.util.Locale;
 import org.safere.Pattern;
 
 final class MatchFuzzer {
@@ -54,6 +55,10 @@ final class MatchFuzzer {
     assertZeroWidthPossessiveCaptureRetentionJdk();
     assertDfaSandwichLeftmostStartCasesMatchJdk();
     assertMixedAsciiAndExactUnicodeCaseFoldingMatchesJdk(data);
+    assertScopedCaseFoldingMatchesJdk(data);
+    assertMultiAnchorGapBoundsMatchJdk(data);
+    assertLeadingClassAssertionsMatchJdk(data);
+    assertFactoredPrefixCaseFlagsMatchJdk(data);
     assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(data);
 
     String regex;
@@ -106,6 +111,32 @@ final class MatchFuzzer {
     FuzzSupport.MatcherPair matcher = pattern.matcher(boundary);
     matcher.region(1, boundary.length()).lookingAt();
     matcher.reset(nonBoundary).region(1, nonBoundary.length()).lookingAt();
+  }
+
+  private static void assertLeadingClassAssertionsMatchJdk(FuzzedDataProvider data) {
+    String leadingClass = data.pickValue(List.of("[a-z]", "[ ]", "[0-9]", "[^A-Z]"));
+    String assertion = data.consumeBoolean() ? "\\b" : "\\B";
+    String suffix = data.consumeBoolean() ? "AAA" : "AAA[0-9]RAREST_TOKEN";
+    String regex = leadingClass + assertion + suffix;
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
+    if (pattern != null) {
+      pattern.matcher(data.pickValue(List.of("xAAA", " AAA", "11AAA", "xAAA1RAREST_TOKEN"))).find();
+    }
+  }
+
+  private static void assertFactoredPrefixCaseFlagsMatchJdk(FuzzedDataProvider data) {
+    String exactSuffix = data.pickValue(List.of("X", "Y", "Z"));
+    String foldedSuffix = data.pickValue(List.of("M", "N", "P"));
+    String foldedBranch = "(?i:abc)" + foldedSuffix;
+    String exactBranch = "abc" + exactSuffix;
+    String regex =
+        data.consumeBoolean()
+            ? "(?:" + foldedBranch + "|" + exactBranch + ")"
+            : "(?:" + exactBranch + "|" + foldedBranch + ")";
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
+    if (pattern != null) {
+      pattern.matcher(data.consumeBoolean() ? "ABC" + foldedSuffix : "abc" + exactSuffix).find();
+    }
   }
 
   private static void assertTrailingLineTerminatorEndAnchorFindsMatchJdk() {
@@ -217,6 +248,52 @@ final class MatchFuzzer {
     String regex = "(?i:" + ascii + separator + exactCharacters.get(variant) + ")";
     String input =
         Character.toUpperCase(ascii.charAt(0)) + separator + unicodeFoldedCharacters.get(variant);
+
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
+    if (pattern != null) {
+      pattern.matcher(input).find();
+    }
+  }
+
+  private static void assertScopedCaseFoldingMatchesJdk(FuzzedDataProvider data) {
+    String exact = distinctAsciiLiteral(data.consumeInt(3, 12));
+    String folded = distinctAsciiLiteral(data.consumeInt(3, 12));
+    String regex =
+        data.consumeBoolean()
+            ? "(?-i:" + exact + ")[0-9]" + folded
+            : folded + "[0-9](?-i:" + exact + ")";
+    String input =
+        regex.startsWith("(?-i")
+            ? exact.toLowerCase(Locale.ROOT) + "1" + folded.toLowerCase(Locale.ROOT)
+            : folded.toLowerCase(Locale.ROOT) + "1" + exact.toLowerCase(Locale.ROOT);
+
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, CI);
+    if (pattern != null) {
+      pattern.matcher(input).find();
+    }
+  }
+
+  private static String distinctAsciiLiteral(int count) {
+    StringBuilder literal = new StringBuilder(count);
+    for (int i = 0; i < count; i++) {
+      literal.append((char) ('A' + i % 26));
+    }
+    return literal.toString();
+  }
+
+  private static void assertMultiAnchorGapBoundsMatchJdk(FuzzedDataProvider data) {
+    int repeatedDigits = data.consumeInt(3, 12);
+    String driver = distinctAsciiLiteral(data.consumeInt(8, 16));
+    String regex;
+    String input;
+    if (data.consumeBoolean()) {
+      regex = "111[0-9]+" + driver;
+      input = "1".repeat(repeatedDigits) + "2" + driver;
+    } else {
+      int maximum = data.consumeInt(1, 4);
+      regex = "(?s)TARGET.{1," + maximum + "}";
+      input = "TARGET" + "😀".repeat(maximum + 1);
+    }
 
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
     if (pattern != null) {

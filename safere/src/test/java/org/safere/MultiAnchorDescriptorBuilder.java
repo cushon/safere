@@ -25,6 +25,8 @@ final class MultiAnchorDescriptorBuilder {
   private final List<Segment> segments = new ArrayList<>();
   private Gap trailingGap = Gap.EMPTY;
   private int[] checkOrder = null;
+  private Integer driverIndex = null;
+  private Boolean isUpstreamBounded = null;
   private Integer minTotalLength = null;
   private boolean isStartAnchored = false;
   private boolean isEndAnchored = false;
@@ -42,20 +44,7 @@ final class MultiAnchorDescriptorBuilder {
   }
 
   MultiAnchorDescriptorBuilder segment(GapKind gapKind, String literal) {
-    Gap gap =
-        switch (gapKind) {
-          case EMPTY -> Gap.EMPTY;
-          case WORD_BOUNDARY -> Gap.WORD_BOUNDARY;
-          case NO_WORD_BOUNDARY -> Gap.NO_WORD_BOUNDARY;
-          case LINE_START -> Gap.LINE_START;
-          case LINE_END -> Gap.LINE_END;
-          case ANY_STAR -> Gap.ANY_STAR_GREEDY;
-          case SINGLE_LINE_ANY_STAR -> Gap.SINGLE_LINE_ANY_STAR_GREEDY;
-          case BOUNDED_CLASS_REPEAT ->
-              new Gap(
-                  GapKind.BOUNDED_CLASS_REPEAT, 0, Integer.MAX_VALUE, null, null, null, null, true);
-        };
-    return segment(gap, Anchor.create(literal));
+    return segment(gapOf(gapKind), Anchor.create(literal));
   }
 
   MultiAnchorDescriptorBuilder segment(Gap gap, String literal) {
@@ -74,24 +63,22 @@ final class MultiAnchorDescriptorBuilder {
   }
 
   MultiAnchorDescriptorBuilder trailingGap(GapKind gapKind) {
-    this.trailingGap =
-        switch (gapKind) {
-          case EMPTY -> Gap.EMPTY;
-          case WORD_BOUNDARY -> Gap.WORD_BOUNDARY;
-          case NO_WORD_BOUNDARY -> Gap.NO_WORD_BOUNDARY;
-          case LINE_START -> Gap.LINE_START;
-          case LINE_END -> Gap.LINE_END;
-          case ANY_STAR -> Gap.ANY_STAR_GREEDY;
-          case SINGLE_LINE_ANY_STAR -> Gap.SINGLE_LINE_ANY_STAR_GREEDY;
-          case BOUNDED_CLASS_REPEAT ->
-              new Gap(
-                  GapKind.BOUNDED_CLASS_REPEAT, 0, Integer.MAX_VALUE, null, null, null, null, true);
-        };
+    this.trailingGap = gapOf(gapKind);
     return this;
   }
 
   MultiAnchorDescriptorBuilder checkOrder(int... checkOrder) {
     this.checkOrder = checkOrder;
+    return this;
+  }
+
+  MultiAnchorDescriptorBuilder driverIndex(int driverIndex) {
+    this.driverIndex = driverIndex;
+    return this;
+  }
+
+  MultiAnchorDescriptorBuilder isUpstreamBounded(boolean isUpstreamBounded) {
+    this.isUpstreamBounded = isUpstreamBounded;
     return this;
   }
 
@@ -133,15 +120,44 @@ final class MultiAnchorDescriptorBuilder {
   MultiAnchorDescriptor build() {
     Segment[] segs = segments.toArray(new Segment[0]);
     int[] order = this.checkOrder != null ? this.checkOrder : defaultOrder(segs.length);
+    int driver = this.driverIndex != null ? this.driverIndex : (order.length > 0 ? order[0] : 0);
     int minLen =
         this.minTotalLength != null ? this.minTotalLength : computeMinLength(segs, trailingGap);
+    boolean upstreamBounded =
+        this.isUpstreamBounded != null
+            ? this.isUpstreamBounded
+            : computeUpstreamBounded(segs, driver);
 
     return new MultiAnchorDescriptor(
-        new Chain(segs, trailingGap, order, minLen, isStartAnchored, isEndAnchored),
+        new Chain(
+            segs,
+            trailingGap,
+            order,
+            driver,
+            upstreamBounded,
+            minLen,
+            isStartAnchored,
+            isEndAnchored),
         startPlan,
         rejectPlan,
         anchoredPrefix,
         anchoredCharClassPrefix);
+  }
+
+  private static Gap gapOf(GapKind gapKind) {
+    return switch (gapKind) {
+      case EMPTY -> Gap.EMPTY;
+      case TEXT_START -> Gap.TEXT_START;
+      case TEXT_END -> Gap.TEXT_END;
+      case WORD_BOUNDARY -> Gap.WORD_BOUNDARY;
+      case NO_WORD_BOUNDARY -> Gap.NO_WORD_BOUNDARY;
+      case LINE_START -> Gap.LINE_START;
+      case LINE_END -> Gap.LINE_END;
+      case ANY_STAR -> Gap.ANY_STAR_GREEDY;
+      case SINGLE_LINE_ANY_STAR -> Gap.SINGLE_LINE_ANY_STAR_GREEDY;
+      case BOUNDED_CLASS_REPEAT ->
+          new Gap(GapKind.BOUNDED_CLASS_REPEAT, 0, Integer.MAX_VALUE, null, null, null, null, true);
+    };
   }
 
   private static int[] defaultOrder(int n) {
@@ -162,5 +178,14 @@ final class MultiAnchorDescriptorBuilder {
       len += trailingGap.minLength();
     }
     return len;
+  }
+
+  private static boolean computeUpstreamBounded(Segment[] segs, int driverIdx) {
+    for (int i = 0; i <= driverIdx && i < segs.length; i++) {
+      if (segs[i].gap().maxLength() == Integer.MAX_VALUE) {
+        return false;
+      }
+    }
+    return true;
   }
 }
