@@ -12,9 +12,12 @@ package org.safere;
  * literal selectivity scoring. Higher rank indicates rarer characters (0 = most common, e.g. space;
  * 255 = rarest, e.g. out-of-range code points or rare control characters).
  *
- * <p>The frequency distribution is adapted from BurntSushi's {@code regex-automata} / {@code
- * aho-corasick} / {@code memchr} background distribution ({@code BYTE_FREQUENCIES}, licensed under
- * MIT / Unlicense), inverted so higher rank indicates rarer bytes.
+ * <p>The frequency distribution is adapted from the {@code BYTE_FREQUENCIES} table used by {@code
+ * regex-automata}, {@code aho-corasick}, and {@code memchr} (licensed under MIT / Unlicense). The
+ * table's original generator analyzed UTF-8 bytes from the CIA World Factbook, the Rust compiler
+ * source, and the Septuagint. It normalized each corpus independently so that each contributed
+ * equal total weight, summed those normalized frequencies, and converted the result to ordinal byte
+ * ranks. SafeRE inverts those ranks so that higher values indicate rarer bytes.
  *
  * <p><b>UTF-8 Lead-Byte Clamping and Character Domain Boundary:</b> In the original UTF-8 byte
  * distribution, bytes {@code 192..255} ({@code 0xC0..0xFF}) are clamped to maximum frequency
@@ -27,21 +30,16 @@ package org.safere;
  * when selecting broadcast anchors for ASCII-only SIMD and SWAR case-folding loops, {@link
  * #rarestAsciiOffset} strictly restricts anchor selection to the ASCII range ({@code c < 128}).
  *
- * <p>Two distinct frequency distributions are calibrated:
+ * <p>Two distinct frequency distributions are used:
  *
  * <ul>
- *   <li><b>Exact-case rarity ({@link #exactByteRarity(int)}):</b> Calibrated against corpus
- *       distributions across source code, JSON payloads, log streams, and English prose. In exact
- *       matching, lowercase letters (e.g. {@code 'e'}, {@code 't'}, {@code 'a'}) appear at
- *       substantially higher frequencies than uppercase letters (e.g. {@code 'E'}, {@code 'T'},
- *       {@code 'A'}). Anchoring on uppercase letters in camelCase or ALL_CAPS tokens (such as
- *       {@code AbstractBeanFactory} or {@code HTTP_REQUEST}) drastically reduces false-positive
- *       candidate checks.
- *   <li><b>Case-folded rarity ({@link #caseFoldedByteRarity(int)}):</b> Calibrated for
- *       case-insensitive search (such as {@link Matcher#indexOfIgnoreCase}), where a candidate
- *       broadcast lane must match both lowercase and uppercase variations ({@code P(c) +
- *       P(swapCase(c))}). In this mode, {@code 'e'} and {@code 'E'} share the same combined
- *       frequency rank.
+ *   <li><b>Exact-case rarity ({@link #exactByteRarity(int)}):</b> Uses the inverted upstream byte
+ *       ranks directly. In exact matching, lowercase and uppercase letters retain their distinct
+ *       corpus-derived ranks.
+ *   <li><b>Case-folded rarity ({@link #caseFoldedByteRarity(int)}):</b> For each ASCII letter pair,
+ *       assigns both cases the lower rarity rank (the more common member's rank). This conservative
+ *       proxy prevents a case-insensitive anchor from being scored as rarer than either case it can
+ *       match. For example, {@code 'e'} and {@code 'E'} share the same rank in this model.
  * </ul>
  */
 final class RarityOracle {
