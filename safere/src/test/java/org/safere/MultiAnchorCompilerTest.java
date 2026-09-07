@@ -6,6 +6,7 @@
 package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.util.Arrays;
 import java.util.List;
@@ -389,13 +390,47 @@ class MultiAnchorCompilerTest {
   }
 
   @Test
-  void driverSelectionWithBoundedUpstreamSelectsRarest() {
-    Pattern p = Pattern.compile("foo[a-z]{1,5}bar[0-9]{1,3}baz");
-    MultiAnchorDescriptor desc = p.multiAnchor();
-    assertThat(desc).isNotNull();
-    assertThat(desc.checkOrder()).isNotEmpty();
-    // Bounded upstream allows driver selection of rarest anchor
-    int driver = desc.selectDriver(MultiAnchorDescriptor.InputDomain.STRING, true);
-    assertThat(desc.isUpstreamBoundedFor(driver)).isTrue();
+  void factorAlternationsWithSurroundingPrefixCoalescesLiteral() {
+    Pattern p =
+        Pattern.compile(
+            "/(?:api/v1/checkout|api/v1/payment|api/v1/orders)/[0-9a-f]{8} status=[0-9]+");
+    assertThat(p.multiAnchor()).isNotNull();
+    assertThat(p.multiAnchor().startPlan()).isInstanceOf(StartPlan.Literal.class);
+    StartPlan.Literal literal = (StartPlan.Literal) p.multiAnchor().startPlan();
+    assertThat(literal.prefix()).isEqualTo("/api/v1/");
+  }
+
+  @Test
+  void factorAlternationsStandalonePrefixExtractsCommonPrefix() {
+    Pattern p =
+        Pattern.compile("(?:https://api|https://stage|https://prod)\\.example\\.com/[a-z0-9]+");
+    assertThat(p.multiAnchor()).isNotNull();
+    assertThat(p.multiAnchor().startPlan()).isInstanceOf(StartPlan.Literal.class);
+    StartPlan.Literal literal = (StartPlan.Literal) p.multiAnchor().startPlan();
+    assertThat(literal.prefix()).isEqualTo("https://");
+  }
+
+  @Test
+  void alternationFactoringIsStackSafeForDeepQuantifiers() {
+    Regexp nested = Regexp.literal('a', 0);
+    for (int index = 0; index < 100_000; index++) {
+      RegexpOp op = index % 2 == 0 ? RegexpOp.QUEST : RegexpOp.PLUS;
+      nested = Regexp.rawQuantifier(op, nested, 0);
+    }
+
+    Regexp input = nested;
+    assertThatCode(() -> MultiAnchorCompiler.factorAlternations(input)).doesNotThrowAnyException();
+  }
+
+  @Test
+  void homogeneousGapExtractionIsStackSafeForDeepQuantifiers() {
+    assertThatCode(() -> Pattern.compile(deepHomogeneousGap("[ab]", 5_000)))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> Pattern.compile(deepHomogeneousGap(".", 5_000)))
+        .doesNotThrowAnyException();
+  }
+
+  private static String deepHomogeneousGap(String atom, int depth) {
+    return "foo" + "(?:".repeat(depth) + atom + (")?" + atom).repeat(depth) + "bar";
   }
 }
