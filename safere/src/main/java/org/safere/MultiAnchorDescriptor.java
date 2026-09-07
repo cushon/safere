@@ -1019,8 +1019,8 @@ record MultiAnchorDescriptor(
       if (kind != GapKind.BOUNDED_CLASS_REPEAT) {
         return null;
       }
-      long b0 = 0L;
-      long b1 = 0L;
+      long b0;
+      long b1;
       if (scanInfo != null) {
         b0 = scanInfo.bitmap0();
         b1 = scanInfo.bitmap1();
