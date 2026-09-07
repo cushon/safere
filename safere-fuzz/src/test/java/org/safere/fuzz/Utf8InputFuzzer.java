@@ -27,6 +27,7 @@ final class Utf8InputFuzzer {
   void arbitraryWindow(FuzzedDataProvider data) {
     assertLiteralSearchMatchesString("XXXXXX", "..XXXXXX");
     assertLiteralSearchMatchesString(data.consumeBoolean() ? "^XXXXXX" : "\\AXXXXXX", "..XXXXXX");
+    assertStartAnchoredAccelerationMatchesJdk(data);
     assertBoundarySensitiveRegionCaptures();
     assertKeywordAlternationMatchesString(data);
     assertFixedOffsetAccelerationMatchesString(data);
@@ -34,6 +35,7 @@ final class Utf8InputFuzzer {
     assertFinalLineTerminatorEndAnchorsMatchJdk(data);
     assertPositionDependentStartAccelerationMatchesJdk(data);
     assertGraphemeSearchMatchesString(data);
+    assertMultibyteMultiAnchorReverseWindowMatchesString(data);
     String repeatedLiteral =
         String.valueOf((char) data.consumeInt('A', 'Z')).repeat(data.consumeInt(2, 32));
     String suffix = new String(data.consumeBytes(data.consumeInt(0, 64)), StandardCharsets.UTF_8);
@@ -125,6 +127,27 @@ final class Utf8InputFuzzer {
     }
   }
 
+  private static void assertStartAnchoredAccelerationMatchesJdk(FuzzedDataProvider data) {
+    String regex =
+        data.pickValue(
+            List.of("\\Ahttps://.*", "\\A\\bhttps://.*", "(\\A)https://.*", "\\A[0-9]+"));
+    String input =
+        data.pickValue(
+            List.of(
+                "https://example.com",
+                "http://example.com",
+                "prefix https://example.com",
+                "123abc",
+                "abc123"));
+    boolean expected = java.util.regex.Pattern.compile(regex).matcher(input).find();
+    Pattern pattern = Pattern.compile(regex);
+    boolean stringFound = pattern.matcher(input).find();
+    boolean utf8Found = pattern.find(Utf8Input.validated(input.getBytes(StandardCharsets.UTF_8)));
+    if (stringFound != expected || utf8Found != expected) {
+      throw new AssertionError("start-anchored acceleration differs from JDK anchor semantics");
+    }
+  }
+
   private static void assertFinalLineTerminatorEndAnchorsMatchJdk(FuzzedDataProvider data) {
     String terminator = data.pickValue(List.of("\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029"));
     String anchor = data.consumeBoolean() ? "$" : "\\Z";
@@ -184,6 +207,27 @@ final class Utf8InputFuzzer {
           || !Objects.equals(stringMatcher.group(), decodeGroup(bytes, utf8Matcher))) {
         throw new AssertionError("UTF-8 grapheme search bounds differ from String search");
       }
+    }
+  }
+
+  private static void assertMultibyteMultiAnchorReverseWindowMatchesString(
+      FuzzedDataProvider data) {
+    String upstream = data.pickValue(List.of("é", "軖", "😀")).repeat(data.consumeInt(2, 12));
+    String downstream = "z".repeat(data.consumeInt(16, 40));
+    String regex = upstream + "[0-9]" + downstream;
+    String input = upstream + data.consumeInt(0, 9) + downstream;
+    Pattern pattern = Pattern.compile(regex);
+    org.safere.Matcher stringMatcher = pattern.matcher(input);
+    byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+    Utf8Matcher utf8Matcher = pattern.matcher(Utf8Input.validated(bytes));
+
+    boolean stringFound = stringMatcher.find();
+    boolean utf8Found = utf8Matcher.find();
+    if (utf8Found != stringFound
+        || (stringFound
+            && (utf8Matcher.start() != utf8Offset(input, stringMatcher.start())
+                || utf8Matcher.end() != utf8Offset(input, stringMatcher.end())))) {
+      throw new AssertionError("UTF-8 multi-anchor reverse window differs from String matching");
     }
   }
 

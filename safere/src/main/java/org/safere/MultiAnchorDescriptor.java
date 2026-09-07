@@ -34,17 +34,24 @@ record MultiAnchorDescriptor(
     Objects.requireNonNull(rejectPlan, "rejectPlan");
   }
 
+  enum InputDomain {
+    STRING,
+    UTF8
+  }
+
   @SuppressWarnings("ArrayRecordComponent")
   record Chain(
       Segment[] segments,
       Gap trailingGap,
       int[] checkOrder,
+      int driverIndex,
+      boolean isUpstreamBounded,
       int minTotalLength,
       boolean isStartAnchored,
       boolean isEndAnchored) {
 
     public static final Chain EMPTY =
-        new Chain(new Segment[0], Gap.EMPTY, new int[0], 0, false, false);
+        new Chain(new Segment[0], Gap.EMPTY, new int[0], 0, false, 0, false, false);
 
     public Chain {
       Objects.requireNonNull(segments, "segments");
@@ -60,6 +67,91 @@ record MultiAnchorDescriptor(
           minTotalLength,
           isStartAnchored,
           false);
+    }
+
+    Chain(
+        Segment[] segments,
+        Gap trailingGap,
+        int[] checkOrder,
+        int minTotalLength,
+        boolean isStartAnchored,
+        boolean isEndAnchored) {
+      this(
+          segments,
+          trailingGap,
+          checkOrder,
+          computeDefaultDriverIndex(segments, checkOrder),
+          computeIsUpstreamBounded(segments, computeDefaultDriverIndex(segments, checkOrder)),
+          minTotalLength,
+          isStartAnchored,
+          isEndAnchored);
+    }
+
+    public int selectDriver(InputDomain domain, boolean vectorAvailable) {
+      if (checkOrder == null
+          || checkOrder.length == 0
+          || segments == null
+          || segments.length == 0) {
+        return 0;
+      }
+      for (int candidate : checkOrder) {
+        if (candidate >= 0 && candidate < segments.length) {
+          if (candidate > 0 && !hasOnlyFixedUpstreamGaps(segments, candidate)) {
+            continue;
+          }
+          Anchor a = segments[candidate].anchor();
+          if (domain == InputDomain.UTF8) {
+            if (a.isHardwareAccelerated(InputDomain.UTF8)
+                || (vectorAvailable && a.minLength() >= 1)) {
+              return candidate;
+            }
+          } else if (domain == InputDomain.STRING) {
+            if (a.isHardwareAccelerated(InputDomain.STRING)) {
+              return candidate;
+            }
+          }
+        }
+      }
+      return 0;
+    }
+
+    private static boolean hasOnlyFixedUpstreamGaps(Segment[] segments, int driverIdx) {
+      for (int i = 1; i <= driverIdx; i++) {
+        if (!segments[i].gap().isExecutorFixedGap()) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    public boolean isUpstreamBoundedFor(int driverIdx) {
+      return computeIsUpstreamBounded(segments, driverIdx);
+    }
+
+    private static int computeDefaultDriverIndex(Segment[] segments, int[] checkOrder) {
+      if (segments == null || segments.length == 0) {
+        return 0;
+      }
+      if (checkOrder != null && checkOrder.length > 0) {
+        int rarest = checkOrder[0];
+        if (rarest >= 0 && rarest < segments.length) {
+          return rarest;
+        }
+      }
+      return 0;
+    }
+
+    private static boolean computeIsUpstreamBounded(Segment[] segments, int driverIdx) {
+      if (segments == null || segments.length == 0 || driverIdx <= 0) {
+        return true;
+      }
+      for (int i = 0; i <= driverIdx; i++) {
+        Gap g = segments[i].gap();
+        if (g.maxLength() == Integer.MAX_VALUE || g.kind() == GapKind.ANY_STAR) {
+          return false;
+        }
+      }
+      return true;
     }
   }
 
@@ -210,6 +302,22 @@ record MultiAnchorDescriptor(
     return chain.checkOrder();
   }
 
+  int driverIndex() {
+    return chain.driverIndex();
+  }
+
+  int selectDriver(InputDomain domain, boolean vectorAvailable) {
+    return chain.selectDriver(domain, vectorAvailable);
+  }
+
+  boolean isUpstreamBounded() {
+    return chain.isUpstreamBounded();
+  }
+
+  boolean isUpstreamBoundedFor(int driverIdx) {
+    return chain.isUpstreamBoundedFor(driverIdx);
+  }
+
   int minTotalLength() {
     return chain.minTotalLength();
   }
@@ -247,14 +355,23 @@ record MultiAnchorDescriptor(
   }
 
   String prefix() {
+    if (chain.isStartAnchored()) {
+      return null;
+    }
     return startPlan instanceof StartPlan.Literal lit ? lit.prefix() : null;
   }
 
   boolean prefixFoldCase() {
+    if (chain.isStartAnchored()) {
+      return false;
+    }
     return startPlan instanceof StartPlan.Literal lit && lit.foldCase();
   }
 
   CharClassScanInfo charClassPrefix() {
+    if (chain.isStartAnchored()) {
+      return null;
+    }
     return startPlan instanceof StartPlan.CharClass cc ? cc.scanInfo() : null;
   }
 
@@ -288,16 +405,116 @@ record MultiAnchorDescriptor(
             || chain.segments()[0].gap().kind() == GapKind.SINGLE_LINE_ANY_STAR);
   }
 
+  enum QuantifierFlavor {
+    EXACT,
+    GREEDY_UNBOUNDED,
+    GREEDY_BOUNDED,
+    RELUCTANT_UNBOUNDED,
+    RELUCTANT_BOUNDED,
+    POSSESSIVE;
+
+    boolean isGreedy() {
+      return this == GREEDY_UNBOUNDED || this == GREEDY_BOUNDED;
+    }
+
+    boolean isReluctant() {
+      return this == RELUCTANT_UNBOUNDED || this == RELUCTANT_BOUNDED;
+    }
+
+    boolean isExact() {
+      return this == EXACT;
+    }
+  }
+
   boolean isExecutableChain() {
-    if (chain.segments().length < 2 || isReverseAnchor()) {
+    int n = chain.segments().length;
+    if (n < 1 || chain.isEndAnchored() || !isExecutableLeadingGap(chain.segments()[0].gap())) {
+      return false;
+    }
+    if (n == 1
+        && chain.segments()[0].gap().kind() == GapKind.EMPTY
+        && chain.trailingGap().kind() == GapKind.EMPTY) {
+      return false;
+    }
+    for (int i = 0; i < n; i++) {
+      Segment segment = chain.segments()[i];
+      if (!isExecutableAnchor(segment.anchor())) {
+        return false;
+      }
+      if (i > 0 && !isExecutableInteriorGap(segment.gap())) {
+        return false;
+      }
+    }
+    return isExecutableTrailingGap(chain.trailingGap());
+  }
+
+  private static boolean isExecutableAnchor(Anchor anchor) {
+    return anchor instanceof Anchor.Single || anchor instanceof Anchor.CharClass;
+  }
+
+  private static boolean isExecutableLeadingGap(Gap gap) {
+    return switch (gap.kind()) {
+      case EMPTY, TEXT_START -> true;
+      case BOUNDED_CLASS_REPEAT -> gap.isExecutorFixedGap();
+      case ANY_STAR,
+          SINGLE_LINE_ANY_STAR,
+          TEXT_END,
+          LINE_START,
+          LINE_END,
+          WORD_BOUNDARY,
+          NO_WORD_BOUNDARY ->
+          false;
+    };
+  }
+
+  private static boolean isExecutableInteriorGap(Gap gap) {
+    return gap.isExecutorFixedGap();
+  }
+
+  private static boolean isExecutableTrailingGap(Gap gap) {
+    return switch (gap.kind()) {
+      case EMPTY, TEXT_END -> true;
+      case BOUNDED_CLASS_REPEAT -> gap.isExecutorFixedGap();
+      case ANY_STAR,
+          SINGLE_LINE_ANY_STAR,
+          TEXT_START,
+          LINE_START,
+          LINE_END,
+          WORD_BOUNDARY,
+          NO_WORD_BOUNDARY ->
+          false;
+    };
+  }
+
+  boolean isExecutableUtf8Chain() {
+    if (!isExecutableChain()) {
       return false;
     }
     for (Segment segment : chain.segments()) {
-      if (segment.gap().kind() == GapKind.BOUNDED_CLASS_REPEAT) {
-        return false;
+      switch (segment.anchor()) {
+        case Anchor.Single single -> {
+          if (single.foldCase() && !isAscii(single.literal())) {
+            return false;
+          }
+        }
+        case Anchor.Alternation alt -> {
+          if (alt.foldCase()) {
+            for (String lit : alt.literals()) {
+              if (!isAscii(lit)) {
+                return false;
+              }
+            }
+          }
+        }
+        case Anchor.CharClass unusedCc -> {}
       }
-      if (!(segment.anchor() instanceof Anchor.Single)
-          && !(segment.anchor() instanceof Anchor.Alternation)) {
+    }
+    return true;
+  }
+
+  private static boolean isAscii(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      if (value.charAt(i) > 0x7f) {
         return false;
       }
     }
@@ -307,14 +524,18 @@ record MultiAnchorDescriptor(
   enum GapKind {
     /** Zero-width gap (adjacent anchors or no leading/trailing gap). */
     EMPTY,
+    /** Zero-width text start assertion (\A or ^ in single-line mode). */
+    TEXT_START,
+    /** Zero-width line start assertion (^ or (?m)^). */
+    LINE_START,
+    /** Zero-width text end assertion (\z). */
+    TEXT_END,
+    /** Zero-width line end assertion ($ or (?m)$). */
+    LINE_END,
     /** Zero-width word boundary assertion (\b). */
     WORD_BOUNDARY,
     /** Zero-width non-word boundary assertion (\B). */
     NO_WORD_BOUNDARY,
-    /** Zero-width line start assertion (^ or (?m)^). */
-    LINE_START,
-    /** Zero-width line end assertion ($ or (?m)$). */
-    LINE_END,
     /** Unbounded arbitrary characters ({@code .*} in DOTALL mode). */
     ANY_STAR,
     /** Unbounded single-line characters ({@code .*} in non-DOTALL mode or {@code [^\n]*}). */
@@ -334,6 +555,8 @@ record MultiAnchorDescriptor(
       CharClassScanInfo scanInfo,
       boolean isGreedy) {
     static final Gap EMPTY = new Gap(GapKind.EMPTY, 0, 0, null, null, null, null, true);
+    static final Gap TEXT_START = new Gap(GapKind.TEXT_START, 0, 0, null, null, null, null, true);
+    static final Gap TEXT_END = new Gap(GapKind.TEXT_END, 0, 0, null, null, null, null, true);
     static final Gap WORD_BOUNDARY =
         new Gap(GapKind.WORD_BOUNDARY, 0, 0, null, null, null, null, true);
     static final Gap NO_WORD_BOUNDARY =
@@ -353,6 +576,137 @@ record MultiAnchorDescriptor(
       return minLength == maxLength;
     }
 
+    QuantifierFlavor quantifierFlavor() {
+      if (isFixed() || equals(EMPTY)) {
+        return QuantifierFlavor.EXACT;
+      }
+      if (isGreedy) {
+        return maxLength == Integer.MAX_VALUE
+            ? QuantifierFlavor.GREEDY_UNBOUNDED
+            : QuantifierFlavor.GREEDY_BOUNDED;
+      } else {
+        return maxLength == Integer.MAX_VALUE
+            ? QuantifierFlavor.RELUCTANT_UNBOUNDED
+            : QuantifierFlavor.RELUCTANT_BOUNDED;
+      }
+    }
+
+    boolean isExecutorFixedGap() {
+      return equals(EMPTY)
+          || (kind == GapKind.BOUNDED_CLASS_REPEAT && isFixed() && scanInfo != null);
+    }
+
+    int scanClassEnd(String text, int fromPos, int maxPos) {
+      if (kind == GapKind.BOUNDED_CLASS_REPEAT) {
+        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        int cur = fromPos;
+        while (cur < limit) {
+          int cp = text.codePointAt(cur);
+          if (scanInfo != null && !scanInfo.contains(cp)) {
+            break;
+          }
+          cur += Character.charCount(cp);
+        }
+        return cur;
+      }
+      if (kind == GapKind.SINGLE_LINE_ANY_STAR) {
+        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        int cur = fromPos;
+        while (cur < limit) {
+          int cp = text.codePointAt(cur);
+          if (Nfa.isLineTerminator(cp)) {
+            break;
+          }
+          cur += Character.charCount(cp);
+        }
+        return cur;
+      }
+      if (maxLength != Integer.MAX_VALUE) {
+        return Math.min(maxPos, fromPos + maxLength);
+      }
+      return maxPos;
+    }
+
+    int scanClassEnd(Utf8InputScanner scanner, int fromPos, int maxPos) {
+      if (kind == GapKind.BOUNDED_CLASS_REPEAT) {
+        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        int cur = fromPos;
+        while (cur < limit) {
+          long decoded = scanner.decodeForward(cur);
+          int cp = InputScanner.codePoint(decoded);
+          int nextPos = InputScanner.position(decoded);
+          if (scanInfo != null && !scanInfo.contains(cp)) {
+            break;
+          }
+          cur = nextPos;
+        }
+        return cur;
+      }
+      if (kind == GapKind.SINGLE_LINE_ANY_STAR) {
+        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        int cur = fromPos;
+        while (cur < limit) {
+          long decoded = scanner.decodeForward(cur);
+          int cp = InputScanner.codePoint(decoded);
+          if (Nfa.isLineTerminator(cp)) {
+            break;
+          }
+          cur = InputScanner.position(decoded);
+        }
+        return cur;
+      }
+      if (maxLength != Integer.MAX_VALUE) {
+        return Math.min(maxPos, fromPos + maxLength);
+      }
+      return maxPos;
+    }
+
+    int matchExecutorFixedForward(String text, int fromPos, int maxPos) {
+      if (equals(EMPTY)) {
+        return fromPos;
+      }
+      if (!isExecutorFixedGap()) {
+        return -1;
+      }
+      int cur = fromPos;
+      for (int count = 0; count < minLength; count++) {
+        if (cur >= maxPos) {
+          return -1;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        int cp = text.codePointAt(cur);
+        if (scanInfo != null && !scanInfo.contains(cp)) {
+          return -1;
+        }
+        cur += Character.charCount(cp);
+      }
+      return cur <= maxPos ? cur : -1;
+    }
+
+    int matchExecutorFixedForward(Utf8InputScanner scanner, int fromPos, int maxPos) {
+      if (equals(EMPTY)) {
+        return fromPos;
+      }
+      if (!isExecutorFixedGap()) {
+        return -1;
+      }
+      int cur = fromPos;
+      for (int count = 0; count < minLength; count++) {
+        if (cur >= maxPos) {
+          return -1;
+        }
+        long decoded = scanner.decodeForward(cur);
+        int cp = InputScanner.codePoint(decoded);
+        if (scanInfo != null && !scanInfo.contains(cp)) {
+          return -1;
+        }
+        cur = InputScanner.position(decoded);
+      }
+      return cur <= maxPos ? cur : -1;
+    }
+
     Gap(GapKind kind, int minLength, int maxLength, AsciiBitmap charClass, boolean isGreedy) {
       this(
           kind,
@@ -361,7 +715,7 @@ record MultiAnchorDescriptor(
           null,
           charClass,
           charClass != null ? charClass.toRanges() : null,
-          null,
+          charClass != null ? CharClassScanInfo.fromAsciiBitmap(charClass) : null,
           isGreedy);
     }
 
@@ -444,77 +798,121 @@ record MultiAnchorDescriptor(
     }
 
     boolean matchesSlice(String text, int from, int to) {
-      int len = to - from;
-      if (len < minLength || len > maxLength) {
+      if (from > to) {
         return false;
       }
+      int len = to - from;
       return switch (kind) {
         case EMPTY -> len == 0;
+        case TEXT_START -> len == 0 && from == 0;
+        case TEXT_END -> len == 0 && from == text.length();
         case WORD_BOUNDARY -> len == 0 && isWordBoundary(text, from);
         case NO_WORD_BOUNDARY -> len == 0 && !isWordBoundary(text, from);
         case LINE_START -> len == 0 && isLineStart(text, from);
         case LINE_END -> len == 0 && isLineEnd(text, from);
-        case ANY_STAR -> true;
-        case SINGLE_LINE_ANY_STAR -> text.indexOf('\n', from) < 0 || text.indexOf('\n', from) >= to;
-        case BOUNDED_CLASS_REPEAT -> {
-          if (charClass == null) {
-            yield true;
-          }
-          for (int i = from; i < to; i++) {
-            char c = text.charAt(i);
-            if (c > 127 || !charClass.containsAscii(c)) {
+        case ANY_STAR -> len >= minLength && len <= maxLength;
+        case SINGLE_LINE_ANY_STAR -> {
+          int count = 0;
+          for (int i = from; i < to; ) {
+            int cp = text.codePointAt(i);
+            if (Nfa.isLineTerminator(cp)) {
               yield false;
             }
+            count++;
+            i += Character.charCount(cp);
           }
-          yield true;
+          yield count >= minLength && count <= maxLength;
+        }
+        case BOUNDED_CLASS_REPEAT -> {
+          int count = 0;
+          for (int i = from; i < to; ) {
+            int cp = text.codePointAt(i);
+            if (scanInfo != null) {
+              if (!scanInfo.contains(cp)) {
+                yield false;
+              }
+            } else if (charClass != null) {
+              if (!charClass.contains(cp)) {
+                yield false;
+              }
+            }
+            count++;
+            i += Character.charCount(cp);
+          }
+          yield count >= minLength && count <= maxLength;
         }
       };
     }
 
     boolean matchesSlice(Utf8InputScanner scanner, int from, int to) {
-      int len = to - from;
-      if (len < minLength || len > maxLength) {
+      if (from > to) {
         return false;
       }
+      int len = to - from;
       return switch (kind) {
         case EMPTY -> len == 0;
+        case TEXT_START -> len == 0 && from == 0;
+        case TEXT_END -> len == 0 && from == scanner.length();
         case WORD_BOUNDARY -> len == 0 && isWordBoundary(scanner, from);
         case NO_WORD_BOUNDARY -> len == 0 && !isWordBoundary(scanner, from);
         case LINE_START -> len == 0 && isLineStart(scanner, from);
         case LINE_END -> len == 0 && isLineEnd(scanner, from);
-        case ANY_STAR -> true;
+        case ANY_STAR -> len >= minLength && len <= maxLength;
         case SINGLE_LINE_ANY_STAR -> {
-          int nl = scanner.indexOfAscii('\n', from, to);
-          yield nl < 0 || nl >= to;
-        }
-        case BOUNDED_CLASS_REPEAT -> {
-          if (charClass == null) {
-            yield true;
-          }
-          for (int i = from; i < to; i++) {
-            if (!charClass.contains(scanner.asciiAt(i))) {
+          int count = 0;
+          for (int i = from; i < to; ) {
+            long decoded = scanner.decodeForward(i);
+            int cp = InputScanner.codePoint(decoded);
+            if (Nfa.isLineTerminator(cp)) {
               yield false;
             }
+            count++;
+            i = InputScanner.position(decoded);
           }
-          yield true;
+          yield count >= minLength && count <= maxLength;
+        }
+        case BOUNDED_CLASS_REPEAT -> {
+          int count = 0;
+          for (int i = from; i < to; ) {
+            long decoded = scanner.decodeForward(i);
+            int cp = InputScanner.codePoint(decoded);
+            if (scanInfo != null) {
+              if (!scanInfo.contains(cp)) {
+                yield false;
+              }
+            } else if (charClass != null) {
+              if (!charClass.contains(cp)) {
+                yield false;
+              }
+            }
+            count++;
+            i = InputScanner.position(decoded);
+          }
+          yield count >= minLength && count <= maxLength;
         }
       };
     }
 
-    int matchBackward(String text, int anchorPos, int minPos) {
+    int expandLeading(String text, int anchorPos, int minPos) {
       return switch (kind) {
         case EMPTY -> anchorPos;
+        case TEXT_START -> anchorPos == 0 ? 0 : -1;
+        case TEXT_END -> anchorPos == text.length() ? anchorPos : -1;
         case WORD_BOUNDARY -> isWordBoundary(text, anchorPos) ? anchorPos : -1;
         case NO_WORD_BOUNDARY -> !isWordBoundary(text, anchorPos) ? anchorPos : -1;
         case LINE_START -> isLineStart(text, anchorPos) ? anchorPos : -1;
         case LINE_END -> isLineEnd(text, anchorPos) ? anchorPos : -1;
         case BOUNDED_CLASS_REPEAT -> {
-          int limit = Math.max(minPos, maxLength == Integer.MAX_VALUE ? 0 : anchorPos - maxLength);
+          int count = 0;
           int cur = anchorPos;
-          while (cur > limit) {
+          int minMatchPos = -1;
+          if (minLength == 0) {
+            minMatchPos = cur;
+          }
+          while (count < maxLength && cur > minPos) {
             int cp = text.codePointBefore(cur);
             int prevPos = cur - Character.charCount(cp);
-            if (prevPos < limit) {
+            if (prevPos < minPos) {
               break;
             }
             if (scanInfo != null) {
@@ -527,45 +925,42 @@ record MultiAnchorDescriptor(
               }
             }
             cur = prevPos;
+            count++;
+            if (count == minLength) {
+              minMatchPos = cur;
+            }
           }
-          int matched = anchorPos - cur;
-          if (matched < minLength) {
+          if (count < minLength) {
             yield -1;
           }
-          yield isGreedy ? cur : anchorPos - minLength;
+          yield isGreedy ? cur : minMatchPos;
         }
-        case SINGLE_LINE_ANY_STAR -> {
-          if (!isGreedy) {
-            yield anchorPos - minLength >= minPos ? anchorPos - minLength : -1;
-          }
-          int nl = text.lastIndexOf('\n', anchorPos - 1);
-          int start = (nl >= minPos) ? nl + 1 : minPos;
-          yield (anchorPos - start >= minLength) ? start : -1;
-        }
-        case ANY_STAR -> {
-          if (!isGreedy) {
-            yield anchorPos - minLength >= minPos ? anchorPos - minLength : -1;
-          }
-          yield (anchorPos - minPos >= minLength) ? minPos : -1;
-        }
+        case SINGLE_LINE_ANY_STAR -> expandLeadingWildcard(text, anchorPos, minPos, true);
+        case ANY_STAR -> expandLeadingWildcard(text, anchorPos, minPos, false);
       };
     }
 
-    int matchBackward(Utf8InputScanner scanner, int anchorPos, int minPos) {
+    int expandLeading(Utf8InputScanner scanner, int anchorPos, int minPos) {
       return switch (kind) {
         case EMPTY -> anchorPos;
+        case TEXT_START -> anchorPos == 0 ? 0 : -1;
+        case TEXT_END -> anchorPos == scanner.length() ? anchorPos : -1;
         case WORD_BOUNDARY -> isWordBoundary(scanner, anchorPos) ? anchorPos : -1;
         case NO_WORD_BOUNDARY -> !isWordBoundary(scanner, anchorPos) ? anchorPos : -1;
         case LINE_START -> isLineStart(scanner, anchorPos) ? anchorPos : -1;
         case LINE_END -> isLineEnd(scanner, anchorPos) ? anchorPos : -1;
         case BOUNDED_CLASS_REPEAT -> {
-          int limit = Math.max(minPos, maxLength == Integer.MAX_VALUE ? 0 : anchorPos - maxLength);
+          int count = 0;
           int cur = anchorPos;
-          while (cur > limit) {
+          int minMatchPos = -1;
+          if (minLength == 0) {
+            minMatchPos = cur;
+          }
+          while (count < maxLength && cur > minPos) {
             long decoded = scanner.decodeBackward(cur);
             int cp = InputScanner.codePoint(decoded);
             int prevPos = InputScanner.position(decoded);
-            if (prevPos < limit) {
+            if (prevPos < minPos) {
               break;
             }
             if (scanInfo != null) {
@@ -578,108 +973,197 @@ record MultiAnchorDescriptor(
               }
             }
             cur = prevPos;
-          }
-          int matched = anchorPos - cur;
-          if (matched < minLength) {
-            yield -1;
-          }
-          yield isGreedy ? cur : anchorPos - minLength;
-        }
-        case SINGLE_LINE_ANY_STAR -> {
-          if (!isGreedy) {
-            yield anchorPos - minLength >= minPos ? anchorPos - minLength : -1;
-          }
-          int nl = -1;
-          for (int i = anchorPos - 1; i >= minPos; i--) {
-            if (scanner.asciiAt(i) == '\n') {
-              nl = i;
-              break;
+            count++;
+            if (count == minLength) {
+              minMatchPos = cur;
             }
           }
-          int start = (nl >= minPos) ? nl + 1 : minPos;
-          yield (anchorPos - start >= minLength) ? start : -1;
-        }
-        case ANY_STAR -> {
-          if (!isGreedy) {
-            yield anchorPos - minLength >= minPos ? anchorPos - minLength : -1;
+          if (count < minLength) {
+            yield -1;
           }
-          yield (anchorPos - minPos >= minLength) ? minPos : -1;
+          yield isGreedy ? cur : minMatchPos;
         }
+        case SINGLE_LINE_ANY_STAR -> expandLeadingWildcard(scanner, anchorPos, minPos, true);
+        case ANY_STAR -> expandLeadingWildcard(scanner, anchorPos, minPos, false);
       };
     }
 
-    int matchForward(String text, int fromPos, int maxPos) {
+    int expandTrailing(String text, int fromPos, int maxPos) {
       return switch (kind) {
         case EMPTY -> fromPos;
+        case TEXT_START -> fromPos == 0 ? 0 : -1;
+        case TEXT_END -> fromPos == text.length() ? fromPos : -1;
         case WORD_BOUNDARY -> isWordBoundary(text, fromPos) ? fromPos : -1;
         case NO_WORD_BOUNDARY -> !isWordBoundary(text, fromPos) ? fromPos : -1;
         case LINE_START -> isLineStart(text, fromPos) ? fromPos : -1;
         case LINE_END -> isLineEnd(text, fromPos) ? fromPos : -1;
         case BOUNDED_CLASS_REPEAT -> {
-          int limit =
-              Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+          int count = 0;
           int cur = fromPos;
-          while (cur < limit && (charClass == null || charClass.contains(text.charAt(cur)))) {
-            cur++;
+          int minMatchPos = -1;
+          if (minLength == 0) {
+            minMatchPos = cur;
           }
-          int matched = cur - fromPos;
-          if (matched < minLength) {
+          while (count < maxLength && cur < maxPos) {
+            int cp = text.codePointAt(cur);
+            if (scanInfo != null) {
+              if (!scanInfo.contains(cp)) {
+                break;
+              }
+            } else if (charClass != null) {
+              if (!charClass.contains(cp)) {
+                break;
+              }
+            }
+            cur += Character.charCount(cp);
+            count++;
+            if (count == minLength) {
+              minMatchPos = cur;
+            }
+          }
+          if (count < minLength) {
             yield -1;
           }
-          yield isGreedy ? cur : fromPos + minLength;
+          yield isGreedy ? cur : minMatchPos;
         }
-        case SINGLE_LINE_ANY_STAR -> {
-          if (!isGreedy) {
-            yield fromPos + minLength <= maxPos ? fromPos + minLength : -1;
-          }
-          int nl = text.indexOf('\n', fromPos);
-          int end = (nl >= fromPos && nl <= maxPos) ? nl : maxPos;
-          yield (end - fromPos >= minLength) ? end : -1;
-        }
-        case ANY_STAR -> {
-          if (!isGreedy) {
-            yield fromPos + minLength <= maxPos ? fromPos + minLength : -1;
-          }
-          yield (maxPos - fromPos >= minLength) ? maxPos : -1;
-        }
+        case SINGLE_LINE_ANY_STAR -> expandTrailingWildcard(text, fromPos, maxPos, true);
+        case ANY_STAR -> expandTrailingWildcard(text, fromPos, maxPos, false);
       };
     }
 
-    int matchForward(Utf8InputScanner scanner, int fromPos, int maxPos) {
+    int expandTrailing(Utf8InputScanner scanner, int fromPos, int maxPos) {
       return switch (kind) {
         case EMPTY -> fromPos;
+        case TEXT_START -> fromPos == 0 ? 0 : -1;
+        case TEXT_END -> fromPos == scanner.length() ? fromPos : -1;
         case WORD_BOUNDARY -> isWordBoundary(scanner, fromPos) ? fromPos : -1;
         case NO_WORD_BOUNDARY -> !isWordBoundary(scanner, fromPos) ? fromPos : -1;
         case LINE_START -> isLineStart(scanner, fromPos) ? fromPos : -1;
         case LINE_END -> isLineEnd(scanner, fromPos) ? fromPos : -1;
         case BOUNDED_CLASS_REPEAT -> {
-          int limit =
-              Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+          int count = 0;
           int cur = fromPos;
-          while (cur < limit && (charClass == null || charClass.contains(scanner.asciiAt(cur)))) {
-            cur++;
+          int minMatchPos = -1;
+          if (minLength == 0) {
+            minMatchPos = cur;
           }
-          int matched = cur - fromPos;
-          if (matched < minLength) {
+          while (count < maxLength && cur < maxPos) {
+            long decoded = scanner.decodeForward(cur);
+            int cp = InputScanner.codePoint(decoded);
+            int nextPos = InputScanner.position(decoded);
+            if (scanInfo != null) {
+              if (!scanInfo.contains(cp)) {
+                break;
+              }
+            } else if (charClass != null) {
+              if (!charClass.contains(cp)) {
+                break;
+              }
+            }
+            cur = nextPos;
+            count++;
+            if (count == minLength) {
+              minMatchPos = cur;
+            }
+          }
+          if (count < minLength) {
             yield -1;
           }
-          yield isGreedy ? cur : fromPos + minLength;
+          yield isGreedy ? cur : minMatchPos;
         }
-        case SINGLE_LINE_ANY_STAR -> {
-          if (!isGreedy) {
-            yield fromPos + minLength <= maxPos ? fromPos + minLength : -1;
-          }
-          int nl = scanner.indexOfAscii('\n', fromPos, maxPos);
-          int end = (nl >= fromPos && nl <= maxPos) ? nl : maxPos;
-          yield (end - fromPos >= minLength) ? end : -1;
-        }
-        case ANY_STAR -> {
-          if (!isGreedy) {
-            yield fromPos + minLength <= maxPos ? fromPos + minLength : -1;
-          }
-          yield (maxPos - fromPos >= minLength) ? maxPos : -1;
-        }
+        case SINGLE_LINE_ANY_STAR -> expandTrailingWildcard(scanner, fromPos, maxPos, true);
+        case ANY_STAR -> expandTrailingWildcard(scanner, fromPos, maxPos, false);
       };
+    }
+
+    private int expandLeadingWildcard(
+        String text, int anchorPos, int minPos, boolean stopAtLineTerminator) {
+      int count = 0;
+      int cur = anchorPos;
+      int minMatchPos = minLength == 0 ? cur : -1;
+      while (count < maxLength && cur > minPos) {
+        int cp = text.codePointBefore(cur);
+        if (stopAtLineTerminator && Nfa.isLineTerminator(cp)) {
+          break;
+        }
+        cur -= Character.charCount(cp);
+        count++;
+        if (count == minLength) {
+          minMatchPos = cur;
+        }
+      }
+      if (count < minLength) {
+        return -1;
+      }
+      return isGreedy ? cur : minMatchPos;
+    }
+
+    private int expandLeadingWildcard(
+        Utf8InputScanner scanner, int anchorPos, int minPos, boolean stopAtLineTerminator) {
+      int count = 0;
+      int cur = anchorPos;
+      int minMatchPos = minLength == 0 ? cur : -1;
+      while (count < maxLength && cur > minPos) {
+        long decoded = scanner.decodeBackward(cur);
+        int cp = InputScanner.codePoint(decoded);
+        if (stopAtLineTerminator && Nfa.isLineTerminator(cp)) {
+          break;
+        }
+        cur = InputScanner.position(decoded);
+        count++;
+        if (count == minLength) {
+          minMatchPos = cur;
+        }
+      }
+      if (count < minLength) {
+        return -1;
+      }
+      return isGreedy ? cur : minMatchPos;
+    }
+
+    private int expandTrailingWildcard(
+        String text, int fromPos, int maxPos, boolean stopAtLineTerminator) {
+      int count = 0;
+      int cur = fromPos;
+      int minMatchPos = minLength == 0 ? cur : -1;
+      while (count < maxLength && cur < maxPos) {
+        int cp = text.codePointAt(cur);
+        if (stopAtLineTerminator && Nfa.isLineTerminator(cp)) {
+          break;
+        }
+        cur += Character.charCount(cp);
+        count++;
+        if (count == minLength) {
+          minMatchPos = cur;
+        }
+      }
+      if (count < minLength) {
+        return -1;
+      }
+      return isGreedy ? cur : minMatchPos;
+    }
+
+    private int expandTrailingWildcard(
+        Utf8InputScanner scanner, int fromPos, int maxPos, boolean stopAtLineTerminator) {
+      int count = 0;
+      int cur = fromPos;
+      int minMatchPos = minLength == 0 ? cur : -1;
+      while (count < maxLength && cur < maxPos) {
+        long decoded = scanner.decodeForward(cur);
+        int cp = InputScanner.codePoint(decoded);
+        if (stopAtLineTerminator && Nfa.isLineTerminator(cp)) {
+          break;
+        }
+        cur = InputScanner.position(decoded);
+        count++;
+        if (count == minLength) {
+          minMatchPos = cur;
+        }
+      }
+      if (count < minLength) {
+        return -1;
+      }
+      return isGreedy ? cur : minMatchPos;
     }
   }
 
@@ -710,6 +1194,8 @@ record MultiAnchorDescriptor(
 
     boolean foldCase();
 
+    boolean isHardwareAccelerated(InputDomain domain);
+
     default String literal() {
       return primaryLiteral();
     }
@@ -723,6 +1209,48 @@ record MultiAnchorDescriptor(
     int findNext(String text, int fromIndex);
 
     int findNext(Utf8InputScanner scanner, int fromIndex);
+
+    default int findNextWithin(String text, int fromIndex, int toIndex) {
+      if (fromIndex > toIndex) {
+        return -1;
+      }
+      int idx = findNext(text, fromIndex);
+      return idx >= 0 && idx <= toIndex ? idx : -1;
+    }
+
+    default int findNextWithin(Utf8InputScanner scanner, int fromIndex, int toIndex) {
+      if (fromIndex > toIndex) {
+        return -1;
+      }
+      int idx = findNext(scanner, fromIndex);
+      return idx >= 0 && idx <= toIndex ? idx : -1;
+    }
+
+    default int lastIndexOf(String text, int fromIndex, int toIndex) {
+      int upper = Math.min(toIndex, text.length() - minLength());
+      if (fromIndex > upper || fromIndex < 0) {
+        return -1;
+      }
+      for (int i = upper; i >= fromIndex; i--) {
+        if (startsWith(text, i)) {
+          return i;
+        }
+      }
+      return -1;
+    }
+
+    default int lastIndexOf(Utf8InputScanner scanner, int fromIndex, int toIndex) {
+      int upper = Math.min(toIndex, scanner.length() - minLength());
+      if (fromIndex > upper || fromIndex < 0) {
+        return -1;
+      }
+      for (int i = upper; i >= fromIndex; i--) {
+        if (startsWith(scanner, i)) {
+          return i;
+        }
+      }
+      return -1;
+    }
 
     boolean startsWith(String text, int pos);
 
@@ -782,6 +1310,11 @@ record MultiAnchorDescriptor(
       }
 
       @Override
+      public boolean isHardwareAccelerated(InputDomain domain) {
+        return true;
+      }
+
+      @Override
       public int minLength() {
         return literal.length();
       }
@@ -812,6 +1345,79 @@ record MultiAnchorDescriptor(
               literal, failure, anchorOffset, anchorLowByte, anchorHighByte, fromIndex);
         }
         return scanner.indexOf(literalUtf8, failure, shifts, fromIndex);
+      }
+
+      @Override
+      public int findNextWithin(Utf8InputScanner scanner, int fromIndex, int toIndex) {
+        if (fromIndex > toIndex || fromIndex + literalUtf8.length > scanner.length()) {
+          return -1;
+        }
+        int maxStart = Math.min(toIndex, scanner.length() - literalUtf8.length);
+        if (fromIndex > maxStart) {
+          return -1;
+        }
+        if (maxStart - fromIndex <= 64) {
+          for (int i = fromIndex; i <= maxStart; i++) {
+            if (startsWith(scanner, i)) {
+              return i;
+            }
+          }
+          return -1;
+        }
+        int idx = findNext(scanner, fromIndex);
+        return idx >= 0 && idx <= maxStart ? idx : -1;
+      }
+
+      @Override
+      public int lastIndexOf(String text, int fromIndex, int toIndex) {
+        if (fromIndex > toIndex || fromIndex + literal.length() > text.length()) {
+          return -1;
+        }
+        int maxStart = Math.min(toIndex, text.length() - literal.length());
+        if (fromIndex > maxStart) {
+          return -1;
+        }
+        for (int i = maxStart; i >= fromIndex; i--) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record();
+          }
+          if (startsWith(text, i)) {
+            return i;
+          }
+        }
+        return -1;
+      }
+
+      @Override
+      public int lastIndexOf(Utf8InputScanner scanner, int fromIndex, int toIndex) {
+        if (fromIndex > toIndex || fromIndex + literalUtf8.length > scanner.length()) {
+          return -1;
+        }
+        int maxStart = Math.min(toIndex, scanner.length() - literalUtf8.length);
+        if (fromIndex > maxStart) {
+          return -1;
+        }
+        if (foldCase) {
+          for (int i = maxStart; i >= fromIndex; i--) {
+            if (startsWith(scanner, i)) {
+              return i;
+            }
+          }
+          return -1;
+        }
+        int firstByte = literalUtf8[0] & 0xFF;
+        int p = maxStart;
+        while (p >= fromIndex) {
+          int nextP = scanner.lastIndexOfAscii(firstByte, p, fromIndex);
+          if (nextP < fromIndex) {
+            return -1;
+          }
+          if (startsWith(scanner, nextP)) {
+            return nextP;
+          }
+          p = nextP - 1;
+        }
+        return -1;
       }
 
       @Override
@@ -880,6 +1486,14 @@ record MultiAnchorDescriptor(
         TeddyModel teddy = !foldCase ? TeddyModel.compileForSelectedProvider(literals) : null;
 
         return new Alternation(literals.clone(), utf8, foldCase, min, max, multiLit, teddy);
+      }
+
+      @Override
+      public boolean isHardwareAccelerated(InputDomain domain) {
+        if (domain == InputDomain.UTF8) {
+          return !foldCase && (teddyModel != null || multiLiteral != null);
+        }
+        return false;
       }
 
       @Override
@@ -1117,6 +1731,14 @@ record MultiAnchorDescriptor(
             scanInfo.isAscii() ? new AsciiBitmap(scanInfo.bitmap0(), scanInfo.bitmap1()) : null;
         int[] ranges = scanInfo.ranges();
         return new CharClass(bitmap, ranges, scanInfo);
+      }
+
+      @Override
+      public boolean isHardwareAccelerated(InputDomain domain) {
+        if (domain == InputDomain.UTF8) {
+          return bitmap != null || (scanInfo != null && scanInfo.isAscii());
+        }
+        return bitmap != null && bitmap.cardinality() <= 64;
       }
 
       @Override
