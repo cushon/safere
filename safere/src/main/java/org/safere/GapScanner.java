@@ -303,6 +303,27 @@ final class GapScanner {
     if (!gap.isExecutorFixedGap()) {
       return -1;
     }
+    if (gap.kind() == GapKind.COMPOUND_SEQUENCE) {
+      CharClassScanInfo[] seq = gap.classSequence();
+      if (seq == null) {
+        return -1;
+      }
+      int cur = fromPos;
+      for (int i = 0; i < seq.length; i++) {
+        if (cur >= maxPos) {
+          return -1;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        int cp = text.codePointAt(cur);
+        if (seq[i] != null && !seq[i].contains(cp)) {
+          return -1;
+        }
+        cur += Character.charCount(cp);
+      }
+      return cur <= maxPos ? cur : -1;
+    }
     int cur = fromPos;
     for (int count = 0; count < gap.minLength(); count++) {
       if (cur >= maxPos) {
@@ -326,6 +347,25 @@ final class GapScanner {
     }
     if (!gap.isExecutorFixedGap()) {
       return -1;
+    }
+    if (gap.kind() == GapKind.COMPOUND_SEQUENCE) {
+      CharClassScanInfo[] seq = gap.classSequence();
+      if (seq == null) {
+        return -1;
+      }
+      int cur = fromPos;
+      for (int i = 0; i < seq.length; i++) {
+        if (cur >= maxPos) {
+          return -1;
+        }
+        long decoded = scanner.decodeForward(cur);
+        int cp = InputScanner.codePoint(decoded);
+        if (seq[i] != null && !seq[i].contains(cp)) {
+          return -1;
+        }
+        cur = InputScanner.position(decoded);
+      }
+      return cur <= maxPos ? cur : -1;
     }
     int cur = fromPos;
     for (int count = 0; count < gap.minLength(); count++) {
@@ -448,6 +488,24 @@ final class GapScanner {
         }
         yield count >= gap.minLength() && count <= gap.maxLength();
       }
+      case COMPOUND_SEQUENCE -> {
+        CharClassScanInfo[] seq = gap.classSequence();
+        if (seq == null) {
+          yield false;
+        }
+        int cur = from;
+        for (int i = 0; i < seq.length; i++) {
+          if (cur >= to) {
+            yield false;
+          }
+          int cp = text.codePointAt(cur);
+          if (seq[i] != null && !seq[i].contains(cp)) {
+            yield false;
+          }
+          cur += Character.charCount(cp);
+        }
+        yield cur == to;
+      }
     };
   }
 
@@ -524,6 +582,25 @@ final class GapScanner {
         }
         yield count >= gap.minLength() && count <= gap.maxLength();
       }
+      case COMPOUND_SEQUENCE -> {
+        CharClassScanInfo[] seq = gap.classSequence();
+        if (seq == null) {
+          yield false;
+        }
+        int cur = from;
+        for (int i = 0; i < seq.length; i++) {
+          if (cur >= to) {
+            yield false;
+          }
+          long decoded = scanner.decodeForward(cur);
+          int cp = InputScanner.codePoint(decoded);
+          if (seq[i] != null && !seq[i].contains(cp)) {
+            yield false;
+          }
+          cur = InputScanner.position(decoded);
+        }
+        yield cur == to;
+      }
     };
   }
 
@@ -571,6 +648,24 @@ final class GapScanner {
       }
       case SINGLE_LINE_ANY_STAR -> expandLeadingWildcard(gap, text, anchorPos, minPos, true);
       case ANY_STAR -> expandLeadingWildcard(gap, text, anchorPos, minPos, false);
+      case COMPOUND_SEQUENCE -> {
+        CharClassScanInfo[] seq = gap.classSequence();
+        if (seq == null) {
+          yield -1;
+        }
+        int cur = anchorPos;
+        for (int i = seq.length - 1; i >= 0; i--) {
+          if (cur <= minPos) {
+            yield -1;
+          }
+          int cp = text.codePointBefore(cur);
+          if (seq[i] != null && !seq[i].contains(cp)) {
+            yield -1;
+          }
+          cur -= Character.charCount(cp);
+        }
+        yield cur >= minPos ? cur : -1;
+      }
     };
   }
 
@@ -619,6 +714,25 @@ final class GapScanner {
       }
       case SINGLE_LINE_ANY_STAR -> expandLeadingWildcard(gap, scanner, anchorPos, minPos, true);
       case ANY_STAR -> expandLeadingWildcard(gap, scanner, anchorPos, minPos, false);
+      case COMPOUND_SEQUENCE -> {
+        CharClassScanInfo[] seq = gap.classSequence();
+        if (seq == null) {
+          yield -1;
+        }
+        int cur = anchorPos;
+        for (int i = seq.length - 1; i >= 0; i--) {
+          if (cur <= minPos) {
+            yield -1;
+          }
+          long decoded = scanner.decodeBackward(cur);
+          int cp = InputScanner.codePoint(decoded);
+          if (seq[i] != null && !seq[i].contains(cp)) {
+            yield -1;
+          }
+          cur = InputScanner.position(decoded);
+        }
+        yield cur >= minPos ? cur : -1;
+      }
     };
   }
 
@@ -686,6 +800,7 @@ final class GapScanner {
       }
       case SINGLE_LINE_ANY_STAR -> expandTrailingWildcard(gap, text, fromPos, maxPos, true);
       case ANY_STAR -> expandTrailingWildcard(gap, text, fromPos, maxPos, false);
+      case COMPOUND_SEQUENCE -> matchExecutorFixedForward(gap, text, fromPos, maxPos);
     };
   }
 
@@ -761,6 +876,7 @@ final class GapScanner {
       }
       case SINGLE_LINE_ANY_STAR -> expandTrailingWildcard(gap, scanner, fromPos, maxPos, true);
       case ANY_STAR -> expandTrailingWildcard(gap, scanner, fromPos, maxPos, false);
+      case COMPOUND_SEQUENCE -> matchExecutorFixedForward(gap, scanner, fromPos, maxPos);
     };
   }
 
