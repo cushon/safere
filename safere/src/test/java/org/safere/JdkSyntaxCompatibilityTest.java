@@ -1133,6 +1133,25 @@ class JdkSyntaxCompatibilityTest {
     @ParameterizedTest
     @ValueSource(
         strings = {
+          "(?x)[ab& &b]",
+          "(?x)[ab&# intersection\n&b]",
+          "(?x)[a-z& # intersection\n &[def]]"
+        })
+    @DisplayName("comments-mode trivia between intersection ampersands is ignored")
+    void commentsModeTriviaBetweenIntersectionAmpersandsIsIgnored(String regex) {
+      assertFullMatchesSameForAll(regex, List.of("", "&", "a", "b", "d", "z"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"(?x)[a&& &b]", "(?x)[a& &&b]", "(?x)[a& & &b]", "(?x)[a&# one\n&&b]"})
+    @DisplayName("comments-mode split repeated intersection operators are rejected")
+    void commentsModeSplitRepeatedIntersectionOperatorsAreRejected(String regex) {
+      assertRejectedBySafeRe(regex);
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+        strings = {
           "[&&`+]˫]*",
           "[&&abc]",
           "[a&&&&b]",

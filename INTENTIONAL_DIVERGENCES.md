@@ -122,7 +122,7 @@ definition.
 
 ## Character Class Intersection and Ampersand Literals
 
-Issue reference: #801.
+Issue reference: #796.
 
 SafeRE models character classes using principled boolean algebra. The intersection
 operator `&&` is strictly an infix binary operator that requires non-empty left
@@ -143,10 +143,9 @@ characters inside right-hand operands can leak out of nested character classes i
 outer unions. Furthermore, this leakiness in the JDK is asymmetrical across the 8-bit
 boundary: characters <= 0xFF leak from `BitClass` into the outer match set (causing
 `[b&&[a]&]` to match `b`), whereas characters >= 0x100 bypass the bitmap and do not
-leak (so `[\u0100&&[a]&]` fails to match `\u0100`). This upstream inconsistency is
-tracked as [JDK-8320001](https://bugs.openjdk.org/browse/JDK-8320001). SafeRE treats
-all Unicode code points uniformly according to boolean set algebra rather than
-reproducing JDK parser bugs and implementation accidents.
+leak (so `[\u0100&&[a]&]` fails to match `\u0100`). SafeRE treats all Unicode code
+points uniformly according to boolean set algebra rather than reproducing JDK parser
+bugs and implementation accidents.
 
 ## Unicode Case-Insensitive Range Closure
 

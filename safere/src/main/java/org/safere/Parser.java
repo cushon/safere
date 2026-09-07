@@ -162,24 +162,29 @@ final class Parser {
    * formatted with whitespace and annotations for readability.
    */
   private void skipCommentsAndWhitespace() {
-    while (pos < pattern.length()) {
-      int c = pattern.codePointAt(pos);
+    pos = skipCommentsAndWhitespaceAt(pos);
+  }
+
+  private int skipCommentsAndWhitespaceAt(int index) {
+    while (index < pattern.length()) {
+      int c = pattern.codePointAt(index);
       if (c == '#') {
         // Skip from '#' to end of line (or end of pattern).
-        pos++;
-        while (pos < pattern.length()) {
-          int commentChar = pattern.codePointAt(pos);
+        index++;
+        while (index < pattern.length()) {
+          int commentChar = pattern.codePointAt(index);
           if (isCommentTerminator(commentChar)) {
             break;
           }
-          pos += Character.charCount(commentChar);
+          index += Character.charCount(commentChar);
         }
       } else if (isCommentsWhitespace(c)) {
-        pos += Character.charCount(c);
+        index += Character.charCount(c);
       } else {
         break;
       }
     }
+    return index;
   }
 
   private void skipQuantifierModifierTrivia() {
@@ -1138,16 +1143,22 @@ final class Parser {
         continue;
       }
 
-      // Check for intersection operator '&&'
-      if (c == '&' && pos + 1 < pattern.length() && pattern.charAt(pos + 1) == '&') {
-        if (pos + 2 < pattern.length() && pattern.charAt(pos + 2) == '&') {
+      // Check for intersection operator '&&'. COMMENTS-mode trivia is lexically insignificant,
+      // including between the two ampersands.
+      int intersectionEnd = scanClassIntersectionEnd();
+      if (intersectionEnd >= 0) {
+        int nextToken = intersectionEnd;
+        if ((flags & ParseFlags.COMMENTS) != 0) {
+          nextToken = skipCommentsAndWhitespaceAt(nextToken);
+        }
+        if (nextToken < pattern.length() && pattern.charAt(nextToken) == '&') {
           throw new PatternSyntaxException("invalid character class intersection", pattern, pos);
         }
         if (!frame.hasItems || frame.afterIntersection) {
           throw new PatternSyntaxException(
               "empty left side of character class intersection", pattern, pos);
         }
-        pos += 2; // consume '&&'
+        pos = intersectionEnd;
         if (frame.leftOperand == null) {
           frame.leftOperand = frame.currentUnion;
         } else {
@@ -1189,6 +1200,20 @@ final class Parser {
     }
 
     throw new PatternSyntaxException("missing closing ]", pattern, rootStart);
+  }
+
+  private int scanClassIntersectionEnd() {
+    if (pattern.charAt(pos) != '&') {
+      return -1;
+    }
+    int secondAmpersand = pos + 1;
+    if ((flags & ParseFlags.COMMENTS) != 0) {
+      secondAmpersand = skipCommentsAndWhitespaceAt(secondAmpersand);
+    }
+    if (secondAmpersand >= pattern.length() || pattern.charAt(secondAmpersand) != '&') {
+      return -1;
+    }
+    return secondAmpersand + 1;
   }
 
   private CharClassBuilder completeClassExpression(ClassExpressionFrame frame) {
