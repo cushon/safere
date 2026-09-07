@@ -730,7 +730,7 @@ class DiagnosticsTest {
   }
 
   @Test
-  void variableGapChainsFallBackToTheGeneralEngine() {
+  void variableGapChainsFallBackToGeneralEngine() {
     Pattern.setDiagnostics(diagnostics);
     Pattern pattern = Pattern.compile(".*error:\\[[A-Z]+\\]\\s+code:500\\s+msg:crash");
     String input = "2026-08-27 12:00:00 [worker-1] error:[CRITICAL] code:500 msg:crash\n";
@@ -741,7 +741,7 @@ class DiagnosticsTest {
         .singleElement()
         .satisfies(
             event -> {
-              assertThat(event.boundaryStrategy()).isNotEqualTo(MatchStrategy.MULTI_ANCHOR);
+              assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
               assertThat(event.forwardDfaSearchCount()).isPositive();
             });
   }

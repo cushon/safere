@@ -56,6 +56,8 @@ final class MatchFuzzer {
     assertDfaSandwichLeftmostStartCasesMatchJdk();
     assertMixedAsciiAndExactUnicodeCaseFoldingMatchesJdk(data);
     assertScopedCaseFoldingMatchesJdk(data);
+    assertMultiAnchorGapBoundsMatchJdk(data);
+    assertLeadingClassAssertionsMatchJdk(data);
     assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(data);
 
     String regex;
@@ -108,6 +110,17 @@ final class MatchFuzzer {
     FuzzSupport.MatcherPair matcher = pattern.matcher(boundary);
     matcher.region(1, boundary.length()).lookingAt();
     matcher.reset(nonBoundary).region(1, nonBoundary.length()).lookingAt();
+  }
+
+  private static void assertLeadingClassAssertionsMatchJdk(FuzzedDataProvider data) {
+    String leadingClass = data.pickValue(List.of("[a-z]", "[ ]", "[0-9]", "[^A-Z]"));
+    String assertion = data.consumeBoolean() ? "\\b" : "\\B";
+    String suffix = data.consumeBoolean() ? "AAA" : "AAA[0-9]RAREST_TOKEN";
+    String regex = leadingClass + assertion + suffix;
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
+    if (pattern != null) {
+      pattern.matcher(data.pickValue(List.of("xAAA", " AAA", "11AAA", "xAAA1RAREST_TOKEN"))).find();
+    }
   }
 
   private static void assertTrailingLineTerminatorEndAnchorFindsMatchJdk() {
@@ -250,6 +263,26 @@ final class MatchFuzzer {
       literal.append((char) ('A' + i % 26));
     }
     return literal.toString();
+  }
+
+  private static void assertMultiAnchorGapBoundsMatchJdk(FuzzedDataProvider data) {
+    int repeatedDigits = data.consumeInt(3, 12);
+    String driver = distinctAsciiLiteral(data.consumeInt(8, 16));
+    String regex;
+    String input;
+    if (data.consumeBoolean()) {
+      regex = "111[0-9]+" + driver;
+      input = "1".repeat(repeatedDigits) + "2" + driver;
+    } else {
+      int maximum = data.consumeInt(1, 4);
+      regex = "(?s)TARGET.{1," + maximum + "}";
+      input = "TARGET" + "😀".repeat(maximum + 1);
+    }
+
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
+    if (pattern != null) {
+      pattern.matcher(input).find();
+    }
   }
 
   private static void assertAlternationAndQuantifierPriorityLookingAtMatchesJdk(
