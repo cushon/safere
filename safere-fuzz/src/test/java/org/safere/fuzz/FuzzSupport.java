@@ -6,6 +6,7 @@
 package org.safere.fuzz;
 
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -830,9 +831,7 @@ final class FuzzSupport {
     if (description == null || errorIndex < 0 || errorIndex > regex.length()) {
       return false;
     }
-    boolean comments =
-        (flags & org.safere.Pattern.COMMENTS) != 0
-            || regex.substring(0, errorIndex).contains("(?x)");
+    boolean comments = commentsModeAt(regex, flags, errorIndex);
     if (description.equals("invalid character class intersection")) {
       return logicalAmpersandRunLength(regex, errorIndex, comments) >= 3;
     }
@@ -853,6 +852,104 @@ final class FuzzSupport {
       operand = operand.substring(1);
     }
     return operand.isEmpty() || operand.endsWith("&&");
+  }
+
+  private static boolean commentsModeAt(String regex, int flags, int end) {
+    boolean comments = (flags & org.safere.Pattern.COMMENTS) != 0;
+    ArrayDeque<Boolean> enclosingGroupComments = new ArrayDeque<>();
+    int classDepth = 0;
+    int index = 0;
+    while (index < end) {
+      int cp = regex.codePointAt(index);
+      if (cp == '\\') {
+        if (index + 1 < end && regex.charAt(index + 1) == 'Q') {
+          int quoteEnd = regex.indexOf("\\E", index + 2);
+          index = quoteEnd < 0 || quoteEnd >= end ? end : quoteEnd + 2;
+        } else {
+          index = Math.min(end, index + 2);
+        }
+        continue;
+      }
+      if (comments && cp == '#') {
+        index++;
+        while (index < end && !isCommentTerminator(regex.codePointAt(index))) {
+          index += Character.charCount(regex.codePointAt(index));
+        }
+        continue;
+      }
+      if (comments && (cp == ' ' || ('\t' <= cp && cp <= '\r'))) {
+        index += Character.charCount(cp);
+        continue;
+      }
+      if (classDepth > 0) {
+        if (cp == '[') {
+          classDepth++;
+        } else if (cp == ']') {
+          classDepth--;
+        }
+        index += Character.charCount(cp);
+        continue;
+      }
+      if (cp == '[') {
+        classDepth = 1;
+        index++;
+        continue;
+      }
+      if (cp == '(') {
+        int flagEnd = inlineFlagEnd(regex, index + 2, end);
+        if (index + 1 < end && regex.charAt(index + 1) == '?' && flagEnd >= 0) {
+          boolean scoped = regex.charAt(flagEnd) == ':';
+          boolean updatedComments = applyInlineCommentsFlag(regex, index + 2, flagEnd, comments);
+          if (scoped) {
+            enclosingGroupComments.push(comments);
+          }
+          comments = updatedComments;
+          index = flagEnd + 1;
+          continue;
+        }
+        enclosingGroupComments.push(comments);
+      } else if (cp == ')' && !enclosingGroupComments.isEmpty()) {
+        comments = enclosingGroupComments.pop();
+      }
+      index += Character.charCount(cp);
+    }
+    return comments;
+  }
+
+  private static int inlineFlagEnd(String regex, int start, int end) {
+    boolean sawFlag = false;
+    for (int index = start; index < end; index++) {
+      char c = regex.charAt(index);
+      if (c == ':' || c == ')') {
+        return sawFlag ? index : -1;
+      }
+      if (c == '-') {
+        continue;
+      }
+      if ("dimsuxU".indexOf(c) < 0) {
+        return -1;
+      }
+      sawFlag = true;
+    }
+    return -1;
+  }
+
+  private static boolean applyInlineCommentsFlag(
+      String regex, int start, int end, boolean comments) {
+    boolean enabled = true;
+    for (int index = start; index < end; index++) {
+      char c = regex.charAt(index);
+      if (c == '-') {
+        enabled = false;
+      } else if (c == 'x') {
+        comments = enabled;
+      }
+    }
+    return comments;
+  }
+
+  private static boolean isCommentTerminator(int cp) {
+    return cp == '\n' || cp == '\r' || cp == '\u0085' || cp == '\u2028' || cp == '\u2029';
   }
 
   private static int logicalAmpersandRunLength(String regex, int index, boolean comments) {

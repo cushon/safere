@@ -62,4 +62,27 @@ final class FuzzSupportOracleTimeoutTest {
         FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
             "[a&&-b]", 0, "dangling character class '-'", 4));
   }
+
+  @Test
+  @DisplayName("malformed intersection exclusion observes inline comments flag scope")
+  void malformedIntersectionExclusionObservesInlineCommentsFlagScope() {
+    assertMalformedLogicalAmpersandRun("(?x:[a& & &b])", 0, true);
+    assertMalformedLogicalAmpersandRun("(?ix)[a& & &b]", 0, true);
+    assertMalformedLogicalAmpersandRun("(?i-x:[a& & &b])", 0, false);
+    assertMalformedLogicalAmpersandRun("(?x:(?-x:[a& & &b]))", 0, false);
+    assertMalformedLogicalAmpersandRun("(?x:(?-x:(?x:[a& & &b])))", 0, true);
+    assertMalformedLogicalAmpersandRun("(?-x:[a& & &b])", org.safere.Pattern.COMMENTS, false);
+  }
+
+  private static void assertMalformedLogicalAmpersandRun(
+      String regex, int flags, boolean expected) {
+    boolean actual =
+        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
+            regex, flags, "invalid character class intersection", regex.indexOf('&'));
+    if (expected) {
+      assertTrue(actual, regex);
+    } else {
+      assertFalse(actual, regex);
+    }
+  }
 }
