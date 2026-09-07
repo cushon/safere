@@ -133,8 +133,7 @@ final class RarityOracle {
   }
 
   /**
-   * Maximum rarity rank considered unselective ("poisonous") for single-character start
-   * prefilters.
+   * Maximum rarity rank considered unselective ("poisonous") for single-character start prefilters.
    *
    * <p>Single-character candidates with rarity &le; 6 (such as spaces and high-frequency letters
    * like {@code 'e'}, {@code 't'}, {@code 'a'}) trigger excessive false-positive candidate
