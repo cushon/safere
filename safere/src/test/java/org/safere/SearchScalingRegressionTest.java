@@ -20,6 +20,132 @@ import org.junit.jupiter.api.Test;
 class SearchScalingRegressionTest {
 
   @Test
+  void stringMultiAnchorExecutionWorkIsCountedAndLinear() {
+    MultiAnchorDescriptor descriptor = Pattern.compile("AAA[0-9]BB").multiAnchor();
+
+    long smallerWork =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(
+                        MultiAnchorExecutor.find(descriptor, "AAA0BC".repeat(2_000), 0)
+                            .isDefiniteMismatch())
+                    .isTrue());
+    long largerWork =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(
+                        MultiAnchorExecutor.find(descriptor, "AAA0BC".repeat(10_000), 0)
+                            .isDefiniteMismatch())
+                    .isTrue());
+
+    assertThat(smallerWork).as("String multi-anchor execution work must be observed").isPositive();
+    assertThat(largerWork)
+        .as("String multi-anchor execution should scale linearly")
+        .isLessThan(smallerWork * 6);
+  }
+
+  @Test
+  void stringMultiAnchorFixedGapValidationWorkIsCounted() {
+    CharClassScanInfo scanInfo =
+        CharClassScanInfo.fromAsciiBitmap(new AsciiBitmap.Builder().addRange('A', 'Z').build());
+    MultiAnchorDescriptor.Gap fixedGap =
+        new MultiAnchorDescriptor.Gap(
+            MultiAnchorDescriptor.GapKind.BOUNDED_CLASS_REPEAT,
+            1_000,
+            1_000,
+            null,
+            null,
+            null,
+            scanInfo,
+            true);
+    String text = "A".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(fixedGap.matchExecutorFixedForward(text, 0, text.length()))
+                    .isEqualTo(1_000));
+
+    assertThat(work)
+        .as("every code point examined while validating a String fixed gap must be observed")
+        .isGreaterThanOrEqualTo(1_000);
+  }
+
+  @Test
+  void reverseLiteralSearchExaminesOnlyTheRequestedWindow() {
+    MultiAnchorDescriptor.Anchor anchor = MultiAnchorDescriptor.Anchor.Single.create("AAA");
+    String text = "x".repeat(10_000);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(anchor.lastIndexOf(text, 9_900, 9_999)).isEqualTo(-1));
+
+    assertThat(work).as("bounded reverse search work must be observed").isPositive();
+    assertThat(work).as("reverse search must stay within its requested window").isLessThan(200);
+  }
+
+  @Test
+  void variableGapCandidateFailuresRemainLinear() {
+    Pattern pattern = Pattern.compile("AAA[A-Z]+RAREST_TOKEN");
+
+    long smallerWork =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(pattern.matcher("AAA".repeat(2_000) + "xRAREST_TOKEN").find())
+                    .isFalse());
+    long largerWork =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(pattern.matcher("AAA".repeat(10_000) + "xRAREST_TOKEN").find())
+                    .isFalse());
+
+    assertThat(smallerWork).isPositive();
+    assertThat(largerWork)
+        .as("variable-gap candidate failures must not rescan overlapping suffixes")
+        .isLessThan(smallerWork * 6);
+  }
+
+  @Test
+  void multiAnchorCompilationDoesNotRepeatAstAnalysis() {
+    Regexp regexp = Parser.parse("foo.*bar.*baz", Pattern.toParseFlags(0));
+
+    long analysisWork = WorkCounter.countForTesting(() -> MultiAnchorCompiler.analyze(regexp));
+    long compilationWork =
+        WorkCounter.countForTesting(() -> MultiAnchorCompiler.compile(regexp, 0));
+
+    assertThat(analysisWork).isPositive();
+    assertThat(compilationWork)
+        .as(
+            "Compilation work includes one analysis and descriptor assembly, "
+                + "analysisWork=%d compilationWork=%d",
+            analysisWork, compilationWork)
+        .isLessThan(analysisWork * 3);
+  }
+
+  @Test
+  void shiftDfaTransitionsAreCountedForStringInput() {
+    Pattern pattern = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
+    String input = "a".repeat(10_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).matches()).isTrue());
+
+    assertThat(work).isGreaterThanOrEqualTo(input.length());
+  }
+
+  @Test
+  void shiftDfaTransitionsAreCountedForUtf8Input() {
+    Pattern pattern = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
+    byte[] input = "a".repeat(10_000).getBytes(UTF_8);
+
+    long work =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input)).matches()).isTrue());
+
+    assertThat(work).isGreaterThanOrEqualTo(input.length);
+  }
+
+  @Test
   void reverseDfaSuffixFailureIsConstantWorkForStringInput() {
     Pattern pattern = Pattern.compile("[ -~]*ABCDEFGHIJKLMNOPQRSTUVWXYZ$");
     assertReverseDfaSuffixFailureIsConstantWork(size -> pattern.matcher("a".repeat(size)).find());
@@ -439,6 +565,33 @@ class SearchScalingRegressionTest {
         "Case-insensitive literal find");
   }
 
+  @Test
+  void preselectedUtf8DfaCandidateSkipsRedundantStartScan() {
+    Pattern pattern = Pattern.compile("\\d{3}/\\d{3}/\\d{4}");
+    byte[] bytes = ("123/456/7890" + "x".repeat(100)).getBytes(UTF_8);
+    Utf8InputScanner scanner = new Utf8InputScanner(bytes, 0, bytes.length);
+    int candidate =
+        Utf8StartAccelerator.findNextCandidate(pattern.utf8StartAccelerator(), scanner, 0);
+    Dfa dfa = pattern.forwardFirstMatchDfa();
+
+    assertThat(candidate).isZero();
+    dfa.doSearch(scanner, candidate, false, false, false);
+    long ordinaryWork =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(dfa.doSearch(scanner, candidate, false, false, false).matched())
+                    .isTrue());
+    long preselectedWork =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(dfa.doSearch(scanner, candidate, false, false, true).matched())
+                    .isTrue());
+
+    assertThat(preselectedWork)
+        .as("DFA must trust a candidate already selected by the caller")
+        .isLessThan(ordinaryWork);
+  }
+
   private static void assertRepeatedFindWorkIsLinear(
       IntFunction<FindIterator> matcherFactory, String description) {
     long smallerWork = countAllMatches(matcherFactory.apply(500), 500);
@@ -767,6 +920,117 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void classHashChainAchievesSublinearWorkOnCaseInsensitiveLiteralForStringInput() {
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("content_length_header");
+    String text = "The quick brown fox jumps over the lazy dog. ".repeat(5); // 225 chars
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(chc.search(text, 0, WorkLimit.forRemaining(text.length())))
+                    .isEqualTo(-1));
+
+    // 225 / 6 = ~37 operations (vs 225 operations for linear scan)
+    assertThat(work)
+        .as(
+            "Class-HashChain must perform sublinear work on case-insensitive patterns for String"
+                + " input")
+        .isLessThanOrEqualTo(text.length() / 6 + 10);
+  }
+
+  @Test
+  void classHashChainAchievesSublinearWorkOnNonAsciiCaseInsensitiveLiteralForStringInput() {
+    ClassHashChain chc = ClassHashChain.compileCaseInsensitive("конфигурация_сервера"); // M = 20
+    String text = "текст_без_совпадений_для_проверки_производительности_".repeat(5); // 270 chars
+    long work =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(chc.search(text, 0, WorkLimit.forRemaining(text.length())))
+                    .isEqualTo(-1));
+
+    // Sublinear bound: 270 / 19 = ~14 operations (vs 270 for linear scan)
+    assertThat(work)
+        .as(
+            "ClassHashChain must perform sublinear work on non-ASCII case-insensitive patterns"
+                + " for String input")
+        .isLessThanOrEqualTo(text.length() / 15 + 10);
+  }
+
+  @Test
+  void hybridCaseInsensitiveSearchIsImmuneToFalseAnchorStormsForStringInput() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find"); // anchor is 'k' / 'K'
+    String text = "k_other_words_".repeat(20); // 280 chars with 20 'k' false anchors
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(text).find()).isFalse());
+
+    // shiftAt skips forward on false anchors, keeping work well below quadratic O(N * M)
+    assertThat(work)
+        .as("Hybrid search with shiftAt must avoid quadratic work on false anchor floods")
+        .isLessThanOrEqualTo(text.length() * 2);
+  }
+
+  @Test
+  void unicodeCaseInsensitiveLinearChainUsesOnePassForSubmatchExtraction() {
+    // (?iu) triggers inst.foldCase = true on literal runes (e.g. Kelvin sign K <-> K <-> k)
+    Pattern pattern = Pattern.compile("(?iu)key:([0-9]+)");
+    assertThat(pattern.canOnePassSubmatch()).isTrue();
+    assertThat(pattern.onePass()).isNotNull();
+
+    String input = "prefix noise KEY:98765 trailing text";
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(0)).isEqualTo("KEY:98765");
+              assertThat(matcher.group(1)).isEqualTo("98765");
+            });
+    assertThat(groupReadWork)
+        .as(
+            "Unicode case-insensitive linear chain submatch extraction must run in OnePass with"
+                + " zero NFA allocations")
+        .isLessThanOrEqualTo(30);
+  }
+
+  @Test
+  void unanchoredLinearChainSubmatchWorkIsBoundedByMatchSlice() {
+    Pattern pattern = Pattern.compile("([a-z]+)@([a-z]+)\\.com");
+    String prefix = "noise ".repeat(500);
+    String match = "alice@google.com";
+    String suffix = " trailing".repeat(500);
+    String input = prefix + match + suffix;
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+    long groupReadWork =
+        WorkCounter.countForTesting(
+            () -> {
+              assertThat(matcher.group(1)).isEqualTo("alice");
+              assertThat(matcher.group(2)).isEqualTo("google");
+            });
+    assertThat(groupReadWork)
+        .as(
+            "Submatch extraction work must be strictly bounded by match slice length, not haystack"
+                + " length")
+        .isLessThanOrEqualTo(match.length() * 2L + 20);
+  }
+
+  @Test
+  void directDfaStartStateAcceleratesUnanchoredAlternationOnString() {
+    Prog prog = Compiler.compile(Parser.parse("apple|banana|cherry", ParseFlags.MATCH_NL));
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    String input = "x".repeat(10_000) + "cherry";
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              Dfa.SearchResult res = dfa.doSearch(input, false, false);
+              assertThat(res).isNotNull();
+              assertThat(res.matched()).isTrue();
+            });
+    assertThat(work)
+        .as("Direct DFA start state acceleration must scan input linearly")
+        .isLessThanOrEqualTo(input.length() + 20);
+  }
+
+  @Test
   void multiLiteralPrefilterOnDenseCandidateNoiseIsBoundedByWorkLimit() {
     Pattern pattern = Pattern.compile("APPLE|BANANA|CHERRY");
     byte[] noise = "A B C A B C ".repeat(10_000).getBytes(UTF_8);
@@ -814,6 +1078,24 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void directDfaStartStateAcceleratesUnanchoredAlternationOnUtf8() {
+    Prog prog = Compiler.compile(Parser.parse("apple|banana|cherry", ParseFlags.MATCH_NL));
+    Dfa dfa = new Dfa(prog, 1000, Dfa.buildSetup(prog), false);
+    byte[] input = ("x".repeat(10_000) + "cherry").getBytes(UTF_8);
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              Dfa.SearchResult res =
+                  dfa.doSearch(new Utf8InputScanner(input, 0, input.length), 0, false, false);
+              assertThat(res).isNotNull();
+              assertThat(res.matched()).isTrue();
+            });
+    assertThat(work)
+        .as("Direct DFA start state acceleration on UTF-8 must scan input linearly")
+        .isLessThanOrEqualTo(input.length + 20);
+  }
+
+  @Test
   void lookingAtWithCapturesDefersNfaWorkUntilGroupIsRead() {
     // Non-OnePass pattern due to overlapping alternation branches
     Pattern pattern = Pattern.compile("(?:apple|application|apply):([0-9]+)");
@@ -853,5 +1135,106 @@ class SearchScalingRegressionTest {
     } catch (ClassNotFoundException e) {
       return false;
     }
+  }
+
+  @Test
+  void leadingWhitespaceCharClassExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
+    String input2000 = "a".repeat(2_000);
+    String input10000 = "a".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion char class find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("   [123] ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void leadingWhitespaceCharClassExpansionIsLinearForUtf8Input() {
+    Pattern pattern = Pattern.compile("\\s*[\\[\\uff3b]\\d+[\\]\\uff3d]");
+    byte[] input2000 = "a".repeat(2_000).getBytes(UTF_8);
+    byte[] input10000 = "a".repeat(10_000).getBytes(UTF_8);
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input2000)).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input10000)).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion char class find on UTF-8 should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher(Utf8Input.trusted("   [123] ".repeat(size).getBytes(UTF_8)))::find,
+        "UTF-8");
+  }
+
+  @Test
+  void leadingWhitespaceLiteralExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s+https?://\\w+");
+    String input2000 = "a".repeat(2_000);
+    String input10000 = "a".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion literal find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("  http://example ".repeat(size))::find, "String");
+  }
+
+  @Test
+  void leadingWhitespaceMultiLiteralExpansionIsLinearForStringInput() {
+    Pattern pattern = Pattern.compile("\\s*(?:apple|banana|cherry)");
+    String input2000 = "x".repeat(2_000);
+    String input10000 = "x".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion multi-literal find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void leadingUnicodeExpansionIsLinearForStringAndUtf8Input() {
+    Pattern pattern = Pattern.compile("[\\u00e9\\u00e8]+:target");
+    String input2000 = "x".repeat(2_000);
+    String input10000 = "x".repeat(10_000);
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isFalse());
+
+    assertThat(work10000)
+        .as("Leading expansion unicode find on String should scale linearly")
+        .isLessThan(work2000 * 6);
+
+    assertRepeatedFindWorkIsLinear(
+        size -> pattern.matcher("  \u00e9\u00e9:target ".repeat(size))::find, "String");
+    assertRepeatedFindWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted("  \u00e9\u00e9:target ".repeat(size).getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
   }
 }

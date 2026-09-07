@@ -120,13 +120,13 @@ class DiagnosticsTest {
             foldedUtf8LookingAt.matcher(Utf8Input.validated("FOObar".getBytes(UTF_8))).lookingAt())
         .isTrue();
     assertThat(operationsFor(foldedUtf8LookingAt).getLast().boundaryStrategy())
-        .isEqualTo(MatchStrategy.ONE_PASS);
+        .isEqualTo(MatchStrategy.DFA);
 
     Pattern foldedUtf8Matches = Pattern.compile("(?i)foo");
     assertThat(foldedUtf8Matches.matcher(Utf8Input.validated("FOO".getBytes(UTF_8))).matches())
         .isTrue();
     assertThat(operationsFor(foldedUtf8Matches).getLast().boundaryStrategy())
-        .isEqualTo(MatchStrategy.ONE_PASS);
+        .isEqualTo(MatchStrategy.SHIFT_DFA);
 
     Pattern foldedUtf8Find = Pattern.compile("(?i)foo");
     assertThat(foldedUtf8Find.matcher(Utf8Input.validated("xxFOO".getBytes(UTF_8))).find())
@@ -143,6 +143,7 @@ class DiagnosticsTest {
             .literalFastPaths(false)
             .charClassMatchFastPaths(false)
             .keywordAlternationFastPath(false)
+            .shiftDfa(false)
             .onePass(false)
             .dfa(false)
             .build();
@@ -157,6 +158,7 @@ class DiagnosticsTest {
             .literalFastPaths(false)
             .charClassMatchFastPaths(false)
             .keywordAlternationFastPath(false)
+            .shiftDfa(false)
             .onePass(false)
             .dfa(false)
             .bitState(false)
@@ -236,6 +238,7 @@ class DiagnosticsTest {
             .charClassMatchFastPaths(false)
             .charClassReplacementFastPath(false)
             .keywordAlternationFastPath(false)
+            .shiftDfa(false)
             .onePass(false)
             .dfa(false)
             .build();
@@ -577,6 +580,7 @@ class DiagnosticsTest {
             .literalFastPaths(false)
             .charClassMatchFastPaths(false)
             .keywordAlternationFastPath(false)
+            .shiftDfa(false)
             .onePass(false)
             .dfa(false)
             .build();
@@ -723,6 +727,57 @@ class DiagnosticsTest {
         .forEach(ignored -> assertThat(pattern.matcher("abc").matches()).isTrue());
 
     assertThat(counts.get(MatchStrategy.LITERAL).sum()).isEqualTo(64);
+  }
+
+  @Test
+  void variableGapChainsFallBackToGeneralEngine() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile(".*error:\\[[A-Z]+\\]\\s+code:500\\s+msg:crash");
+    String input = "2026-08-27 12:00:00 [worker-1] error:[CRITICAL] code:500 msg:crash\n";
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isTrue();
+
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(
+            event -> {
+              assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
+              assertThat(event.forwardDfaSearchCount()).isPositive();
+            });
+  }
+
+  @Test
+  void multiAnchorNegativeShortCircuitBypassesDfa() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile(".*error:\\[[A-Z]+\\]\\s+code:500\\s+msg:crash");
+    String input = "2026-08-27 12:00:00 [worker-1] error:[NORMAL] code:200 msg:ok\n";
+    Matcher matcher = pattern.matcher(input);
+    assertThat(matcher.find()).isFalse();
+
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(
+            event -> {
+              assertThat(event.forwardDfaSearchCount()).isZero();
+            });
+  }
+
+  @Test
+  void executableMultiAnchorMismatchRecordsParticipation() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile("AAA[0-9]BB");
+
+    assertThat(pattern.matcher("AAA-BB").find()).isFalse();
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(
+            event -> {
+              assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.MULTI_ANCHOR);
+              assertThat(event.auxiliaryStrategies())
+                  .contains(
+                      new StrategyParticipation(
+                          MatchStrategy.MULTI_ANCHOR, StrategyRole.CANDIDATE_VERIFICATION));
+            });
   }
 
   private List<OperationDiagnostics> operationsFor(Pattern pattern) {

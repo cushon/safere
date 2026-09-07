@@ -96,6 +96,51 @@ class UnicodeCaseTest {
   }
 
   @Test
+  void findWithShortMultiMemberSimpleFoldPrefix() {
+    Pattern p = Pattern.compile("(?iu)ϑϑ");
+    Matcher m = p.matcher("ϴϴ");
+    assertThat(m.find()).isTrue();
+    assertThat(m.group()).isEqualTo("ϴϴ");
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {"ß|ẞ", "ﬅ|ﬆ"})
+  void asciiCaseInsensitivePrefixKeepsNonAsciiLiteralCaseSensitive(
+      String patternCharacter, String foldedCharacter) {
+    String input = "A" + foldedCharacter;
+
+    assertThat(Pattern.compile("(?i:a" + patternCharacter + ")").matcher(input).find()).isFalse();
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {"ϑ|ϴ"})
+  void replacementFindsSingleCodeUnitUnicodeFoldedPrefix(
+      String patternCharacter, String foldedCharacter) {
+    assertReplacementFindsSingleCodeUnitUnicodeFoldedPrefix(patternCharacter, foldedCharacter);
+  }
+
+  @Test
+  @DisabledForCrosscheck(
+      "SafeRE follows JDK 26 Unicode folding for ß and ẞ; JDK 21 through 25 differ")
+  void replacementFindsCapitalSharpSUnicodeFoldedPrefix() {
+    assertReplacementFindsSingleCodeUnitUnicodeFoldedPrefix("ß", "ẞ");
+  }
+
+  private static void assertReplacementFindsSingleCodeUnitUnicodeFoldedPrefix(
+      String patternCharacter, String foldedCharacter) {
+    Pattern pattern = Pattern.compile("(?iu)" + patternCharacter + ".");
+    String input = "--" + foldedCharacter + "x--" + foldedCharacter + "y--";
+
+    assertThat(pattern.matcher(input).replaceFirst("z"))
+        .isEqualTo("--z--" + foldedCharacter + "y--");
+    assertThat(pattern.matcher(input).replaceAll("z")).isEqualTo("--z--z--");
+  }
+
+  @Test
   void splitWithUnicodeCase() {
     Pattern p = Pattern.compile("café", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     String[] parts = p.split("xCAFÉyCaféz");
@@ -106,6 +151,12 @@ class UnicodeCaseTest {
   void replaceAllWithUnicodeCase() {
     Pattern p = Pattern.compile("naïve", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     assertThat(p.matcher("He is NAÏVE").replaceAll("smart")).isEqualTo("He is smart");
+  }
+
+  @Test
+  void replaceAllWithCapturedCaseInsensitiveLiteral() {
+    Pattern p = Pattern.compile("(?i)(abc)");
+    assertThat(p.matcher("ABC abc").replaceAll("x")).isEqualTo("x x");
   }
 
   @Test

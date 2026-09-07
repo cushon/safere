@@ -1213,6 +1213,252 @@
       "shared": true
     },
     {
+      "id": "realWorldRegex.fixedAnchorLog.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "2026-08-27 12:00:00 error:[N] code:200 msg:ok\n",
+        "suffix": "2026-08-27 12:00:00 error:[C] code:500 msg:crash\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.fixedAnchorLog.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "2026-08-27 12:00:00 error:[N] code:200 msg:ok",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.multiInfixLog.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "2026-08-27 12:00:00.123 [worker-42] error:[NORMAL] code:200 msg:Operation completed successfully for transaction 987654321\n",
+        "suffix": "2026-08-27 12:00:00.123 [worker-42] error:[CRITICAL] code:500 msg:crash\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.multiInfixLog.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "2026-08-27 12:00:00.123 [worker-42] error:[NORMAL] code:200 msg:Operation completed successfully for transaction 987654321",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.multiClauseSequence.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "foo ",
+        "unit": "data payload channel verification token buffer stream block record alpha beta gamma delta ",
+        "suffix": " bar data payload channel verification token buffer stream block record alpha beta gamma delta baz\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.multiClauseSequence.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "foo ",
+        "unit": "data payload channel verification token buffer stream block record alpha beta gamma delta ",
+        "suffix": " bar data payload channel verification token buffer stream block record alpha beta gamma delta qux\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.structuredJsonPath.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "{\"header\":{\"id\":\"12345\",\"type\":\"event\"},\"body\":{\"status\":\"pending\",\"payload\":\"data\"}}\n",
+        "suffix": "{\"header\":{\"id\":\"99999\",\"type\":\"event\"},\"body\":{\"status\":\"ok\",\"payload\":\"data\"}}\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.structuredJsonPath.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "{\"header\":{\"id\":\"12345\",\"type\":\"event\"},\"body\":{\"status\":\"pending\",\"payload\":\"data\"}}",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.uuidExtraction.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "session_token=abc123xyz log_id=normal_event status=200\n",
+        "suffix": "session_token=abc123xyz log_id=critical_event id:a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d status=500\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.uuidExtraction.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "session_token=abc123xyz log_id=normal_event status=200",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.isoTimestampLog.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "2026/08/30 12:00:00 [worker-42] info: normal periodic heartbeat\n",
+        "suffix": "2026-08-30T12:00:00Z error: unexpected service termination\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.isoTimestampLog.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "2026/08/30 12:00:00 [worker-42] info: normal periodic heartbeat",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.wideFactoredApiRoute.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "192.168.1.42 - - [30/Aug/2026:12:00:01 +0000] \"GET /static/bundle.min.js HTTP/1.1\" 200 4821 \"https://app.corp.net\"\n192.168.1.43 - - [30/Aug/2026:12:00:02 +0000] \"GET /api/v1/health HTTP/1.1\" 200 128 \"https://app.corp.net\"\n192.168.1.44 - - [30/Aug/2026:12:00:03 +0000] \"POST /assets/styles.css HTTP/1.1\" 200 954 \"https://app.corp.net\"\n",
+        "suffix": "192.168.1.99 - - [30/Aug/2026:12:00:04 +0000] \"POST /api/v2/checkout/98765432 HTTP/1.1\" 200 1024 \"https://app.corp.net\"\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.wideFactoredApiRoute.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "192.168.1.42 - - [30/Aug/2026:12:00:01 +0000] \"GET /static/bundle.min.js HTTP/1.1\" 200 4821 \"https://app.corp.net\"\n192.168.1.43 - - [30/Aug/2026:12:00:02 +0000] \"GET /api/v1/health HTTP/1.1\" 200 128 \"https://app.corp.net\"\n192.168.1.44 - - [30/Aug/2026:12:00:03 +0000] \"POST /assets/styles.css HTTP/1.1\" 200 954 \"https://app.corp.net\"",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "realWorldRegex.blockedTags1.match.{size}",
       "axes": {
         "size": [
@@ -2487,6 +2733,199 @@
       "recipe": {
         "kind": "literal",
         "text": "application:12345 (and trailing data that is not matched)"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.markdownCitationScrub.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "According to source documentation [1.2.3.4, 5.6.7.8], the query completed in 42ms. For details, see [System Overview](https://example.com/sys) and metrics [9.10.11.12].",
+        "delimiterAlphabet": "\n\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.markdownCitationScrub.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "For more information, see the [User Guide](https://example.com/guide) and [API Reference](https://example.com/api). This section describes standard operational behavior without recitation data.",
+        "delimiterAlphabet": "\n\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.llmCitationScrub.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "## 1. Overview\n\nThe SafeRE execution engine processes regular expressions in linear O(N) time with guaranteed bounds [1.2.3.4, 5.6.7.8]. As documented in version 2.4 release notes, queries execute in approximately 15ms. For further details on configuration parameters and error handling, refer to the [SafeRE Documentation](https://github.com/safere/docs/v2) and review the [Architecture Guide](https://github.com/safere/arch/v2). All operations maintain backward compatibility.\n\n",
+        "delimiterAlphabet": "\n\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.llmCitationScrub.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "## 1. Overview\n\nThe SafeRE execution engine processes regular expressions in linear O(N) time with guaranteed bounds. As documented in version 2.4 release notes, queries execute in approximately 15ms. For further details on configuration parameters and error handling, refer to the [SafeRE Documentation](https://github.com/safere/docs/v2) and review the [Architecture Guide](https://github.com/safere/arch/v2). All operations maintain backward compatibility.\n\n",
+        "delimiterAlphabet": "\n\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaInteriorLoopBenchmark.quotedString.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "start \"",
+        "unit": "x",
+        "suffix": "\" end",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaLoopMatchesBenchmark.ambiguousLoop.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "1",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaInteriorLoopBenchmark.cComment.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "/*",
+        "unit": "a",
+        "suffix": "*/",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.DfaLoopMatchesBenchmark.wildcardQuote.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "\"",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.booleanToken.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "false"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.identifier.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "variable_name_",
+        "unit": "x",
+        "suffix": "",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.digitsRange.input",
+      "recipe": {
+        "kind": "literal",
+        "text": "1234"
+      },
+      "shared": true
+    },
+    {
+      "id": "crossEngine.ShiftDfaBenchmark.stringLiteral.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "a",
+        "suffix": "\"",
+        "length": "{size}"
       },
       "shared": true
     }
@@ -3878,6 +4317,273 @@
       }
     },
     {
+      "id": "RealWorldRegexBenchmark.runBenchmark.fixedAnchorLog.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "error:\\[[A-Z]\\] code:500"
+      ],
+      "inputs": [
+        "realWorldRegex.fixedAnchorLog.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.multiInfixLog.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        ".*error:\\[[A-Z]+\\]\\s+code:500\\s+msg:crash"
+      ],
+      "inputs": [
+        "realWorldRegex.multiInfixLog.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.multiInfixLogCaptures.{matchLabel}.{size}",
+      "operation": "findGroup",
+      "patterns": [
+        ".*error:\\[([A-Z]+)\\]\\s+code:(500)\\s+msg:(crash)"
+      ],
+      "inputs": [
+        "realWorldRegex.multiInfixLog.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "group": 1
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.unanchoredLogCaptures.{matchLabel}.{size}",
+      "operation": "findGroup",
+      "patterns": [
+        "error:\\[([A-Z]+)\\]\\s+code:(500)\\s+msg:([^\\n]+)"
+      ],
+      "inputs": [
+        "realWorldRegex.multiInfixLog.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "group": 1
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.multiClauseSequence.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "foo[^\\n]*bar[^\\n]*baz"
+      ],
+      "inputs": [
+        "realWorldRegex.multiClauseSequence.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.structuredJsonPath.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "(?s).*\"id\":\\s*\"99999\".*\"status\":\\s*\"ok\""
+      ],
+      "inputs": [
+        "realWorldRegex.structuredJsonPath.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.uuidExtraction.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+      ],
+      "inputs": [
+        "realWorldRegex.uuidExtraction.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.isoTimestampLog.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z error"
+      ],
+      "inputs": [
+        "realWorldRegex.isoTimestampLog.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.wideFactoredApiRoute.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "/(?:api/v2/users|api/v2/orders|api/v2/payments|api/v2/checkout|api/v2/inventory|api/v2/catalog|api/v2/shipping|api/v2/customers|api/v2/discounts|api/v2/invoices|api/v2/refunds|api/v2/analytics|api/v2/notifications|api/v2/webhooks|api/v2/subscriptions|api/v2/transactions)/[0-9]+"
+      ],
+      "inputs": [
+        "realWorldRegex.wideFactoredApiRoute.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
       "id": "RealWorldRegexBenchmark.runBenchmark.recitation.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
@@ -4077,6 +4783,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.64",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.64"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.alternationScaled.64",
       "operation": "find",
       "patterns": [
@@ -4095,6 +4819,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.256",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.256"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.alternationScaled.256",
       "operation": "find",
       "patterns": [
@@ -4102,6 +4844,24 @@
       ],
       "inputs": [
         "searchScaling.prose.256"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.1024",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.1024"
       ],
       "resultConsumption": "boolean",
       "measurement": {
@@ -4293,6 +5053,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.10240",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.10240"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.alternationScaled.10240",
       "operation": "find",
       "patterns": [
@@ -4473,6 +5251,24 @@
       }
     },
     {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.102400",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "SearchScalingBenchmark.alternationScaled.102400",
       "operation": "find",
       "patterns": [
@@ -4647,6 +5443,24 @@
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.starredAlternationScaled.1048576",
+      "operation": "find",
+      "patterns": [
+        "(?:a*x|b*y|c*z)"
+      ],
+      "inputs": [
+        "searchScaling.prose.1048576"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
         ]
@@ -9390,6 +10204,29 @@
       }
     },
     {
+      "id": "Utf8MatchingBenchmark.literalScan.longWordPrefix",
+      "operation": "find",
+      "patterns": [
+        "coolfunctionname.*"
+      ],
+      "inputs": [
+        "utf8Matching.literalScan.text"
+      ],
+      "inputRepresentations": [
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "Exercises the long-literal prefix through the start accelerator rather than the pure-literal fast path, matching how SQL engines rewrite LIKE-style patterns.",
+      "requirements": [],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "Utf8MatchingBenchmark.hardFailure.1024",
       "operation": "find",
       "patterns": [
@@ -11299,6 +12136,31 @@
       }
     },
     {
+      "id": "UnicodeCaseFoldingBenchmark.linearChainCapture",
+      "operation": "matchesGroupLengthSum",
+      "patterns": [
+        "^(?iu)([a-z]+)://([^:/]+):([0-9]+)$"
+      ],
+      "inputs": [
+        "onePassScaling.withCaptures.4096"
+      ],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "groups": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
       "id": "ValidationBenchmark.ambiguousLoopMatches.match",
       "operation": "matches",
       "patterns": [
@@ -11409,6 +12271,316 @@
       },
       "lifecycle": {
         "matcher": "newPerInvocation"
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.markdownCitationScrub.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\s*[\\[\\uff3b]\\s*(?:(?:[0-9]+\\.?){3,4}(?:\\s*[,\\u3001]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]\\uff3d]"
+      ],
+      "inputs": [
+        "realWorldRegex.markdownCitationScrub.{matchLabel}.{size}"
+      ],
+      "trialExclusions": [
+        {
+          "engineIds": [
+            "jdk-string"
+          ],
+          "when": {
+            "size": [
+              10000,
+              100000
+            ]
+          },
+          "reason": "JDK backtracking matcher throws StackOverflowError on nested quantifiers"
+        }
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.llmCitationScrub.{matchLabel}.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        "\\s*[\\[\\uff3b]\\s*(?:(?:[0-9]+\\.?){3,4}(?:\\s*[,\\u3001]\\s*(?:[0-9]+\\.?){3,4})*)\\s*[\\]\\uff3d]"
+      ],
+      "inputs": [
+        "realWorldRegex.llmCitationScrub.{matchLabel}.{size}"
+      ],
+      "trialExclusions": [
+        {
+          "engineIds": [
+            "jdk-string"
+          ],
+          "when": {
+            "size": [
+              10000,
+              100000
+            ]
+          },
+          "reason": "JDK backtracking matcher throws StackOverflowError on nested quantifiers"
+        }
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "DfaInteriorLoopBenchmark.quotedString.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "\"[^\"]*\""
+      ],
+      "inputs": [
+        "crossEngine.DfaInteriorLoopBenchmark.quotedString.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaLoopMatchesBenchmark.ambiguousLoop.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "(?s)^[a-zA-Z0-9_]*[0-9][a-zA-Z0-9_]*$"
+      ],
+      "inputs": [
+        "crossEngine.DfaLoopMatchesBenchmark.ambiguousLoop.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaInteriorLoopBenchmark.cComment.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "(?s)/\\*.*?\\*/"
+      ],
+      "inputs": [
+        "crossEngine.DfaInteriorLoopBenchmark.cComment.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "DfaLoopMatchesBenchmark.wildcardQuote.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "(?s)^.*\"$"
+      ],
+      "inputs": [
+        "crossEngine.DfaLoopMatchesBenchmark.wildcardQuote.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.booleanToken",
+      "operation": "matches",
+      "patterns": [
+        "(?:true|false) ?"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.booleanToken.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.identifier.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "[a-zA-Z_][a-zA-Z0-9_]*"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.identifier.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.digitsRange",
+      "operation": "matches",
+      "patterns": [
+        "[0-9]{1,4}"
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.digitsRange.input"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.stringLiteral.{size}",
+      "axes": {
+        "size": [
+          16,
+          256,
+          4096
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "[\\x00-\\x21\\x23-\\x7F]*\""
+      ],
+      "inputs": [
+        "crossEngine.ShiftDfaBenchmark.stringLiteral.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
       }
     }
   ]

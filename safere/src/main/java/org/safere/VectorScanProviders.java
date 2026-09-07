@@ -24,6 +24,10 @@ final class VectorScanProviders {
     return SELECTED != null;
   }
 
+  static VectorScanProvider providerForByteLength(int length) {
+    return SELECTED != null && length >= SELECTED.minimumPairInputLength() ? SELECTED : null;
+  }
+
   static VectorScanProvider providerForMultiLiteralLength(int length) {
     return SELECTED != null && length >= SELECTED.minimumMultiLiteralInputLength()
         ? SELECTED

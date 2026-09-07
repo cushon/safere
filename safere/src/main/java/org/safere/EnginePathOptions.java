@@ -20,11 +20,13 @@ record EnginePathOptions(
     boolean charClassReplacementFastPath,
     boolean keywordAlternationFastPath,
     boolean startAcceleration,
+    boolean shiftDfa,
     boolean onePass,
     boolean dfa,
     boolean reverseDfa,
     boolean bitState,
-    boolean lazyCaptureExtraction) {
+    boolean lazyCaptureExtraction,
+    boolean multiAnchorGapEngine) {
 
   private static final EnginePathOptions ALL_ENABLED = builder().build();
   private static final Map<EnginePath, OptionAccessor> ACCESSORS = buildAccessors();
@@ -52,11 +54,13 @@ record EnginePathOptions(
     accessors.put(
         EnginePath.KEYWORD_ALTERNATION_FAST_PATH, EnginePathOptions::keywordAlternationFastPath);
     accessors.put(EnginePath.START_ACCELERATION, EnginePathOptions::startAcceleration);
+    accessors.put(EnginePath.SHIFT_DFA, EnginePathOptions::shiftDfa);
     accessors.put(EnginePath.ONE_PASS, EnginePathOptions::onePass);
     accessors.put(EnginePath.DFA, EnginePathOptions::dfa);
     accessors.put(EnginePath.REVERSE_DFA, EnginePathOptions::reverseDfa);
     accessors.put(EnginePath.BIT_STATE, EnginePathOptions::bitState);
     accessors.put(EnginePath.LAZY_CAPTURE_EXTRACTION, EnginePathOptions::lazyCaptureExtraction);
+    accessors.put(EnginePath.MULTI_ANCHOR_GAP_ENGINE, EnginePathOptions::multiAnchorGapEngine);
     return Map.copyOf(accessors);
   }
 
@@ -70,11 +74,13 @@ record EnginePathOptions(
     private boolean charClassReplacementFastPath = true;
     private boolean keywordAlternationFastPath = true;
     private boolean startAcceleration = true;
+    private boolean shiftDfa = true;
     private boolean onePass = true;
     private boolean dfa = true;
     private boolean reverseDfa = true;
     private boolean bitState = true;
     private boolean lazyCaptureExtraction = true;
+    private boolean multiAnchorGapEngine = true;
 
     Builder literalFastPaths(boolean enabled) {
       literalFastPaths = enabled;
@@ -98,6 +104,11 @@ record EnginePathOptions(
 
     Builder startAcceleration(boolean enabled) {
       startAcceleration = enabled;
+      return this;
+    }
+
+    Builder shiftDfa(boolean enabled) {
+      shiftDfa = enabled;
       return this;
     }
 
@@ -126,6 +137,11 @@ record EnginePathOptions(
       return this;
     }
 
+    Builder multiAnchorGapEngine(boolean enabled) {
+      multiAnchorGapEngine = enabled;
+      return this;
+    }
+
     EnginePathOptions build() {
       return new EnginePathOptions(
           literalFastPaths,
@@ -133,11 +149,13 @@ record EnginePathOptions(
           charClassReplacementFastPath,
           keywordAlternationFastPath,
           startAcceleration,
+          shiftDfa,
           onePass,
           dfa,
           reverseDfa,
           bitState,
-          lazyCaptureExtraction);
+          lazyCaptureExtraction,
+          multiAnchorGapEngine);
     }
   }
 }
