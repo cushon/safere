@@ -126,7 +126,14 @@ sealed interface Utf8StartAccelerator {
 
   @SuppressWarnings("ArrayRecordComponent")
   record CaseInsensitiveLiteral(
-      String prefix, int[] failure, int anchorOffset, byte anchorLow, byte anchorHigh)
+      String prefix,
+      int[] failure,
+      int anchorOffset,
+      byte anchorLow,
+      byte anchorHigh,
+      int anchorOffset2,
+      byte anchorLow2,
+      byte anchorHigh2)
       implements Utf8StartAccelerator {
 
     static Utf8StartAccelerator create(String prefix) {
@@ -135,12 +142,27 @@ sealed interface Utf8StartAccelerator {
           return null;
         }
       }
-      int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefix.length());
+      int len = prefix.length();
+      if (len >= 2) {
+        RarityOracle.AsciiPair pair = RarityOracle.rarestAsciiPairIgnoreCase(prefix, len);
+        if (pair != null) {
+          return new CaseInsensitiveLiteral(
+              prefix,
+              Ascii.ignoreCaseFailure(prefix),
+              pair.offset1(),
+              pair.low1(),
+              pair.high1(),
+              pair.offset2(),
+              pair.low2(),
+              pair.high2());
+        }
+      }
+      int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, len);
       char anchor = prefix.charAt(anchorOffset);
       byte low = (byte) Ascii.toLowerCase(anchor);
       byte high = (byte) Ascii.toUpperCase(anchor);
       return new CaseInsensitiveLiteral(
-          prefix, Ascii.ignoreCaseFailure(prefix), anchorOffset, low, high);
+          prefix, Ascii.ignoreCaseFailure(prefix), anchorOffset, low, high, -1, (byte) 0, (byte) 0);
     }
 
     @Override
@@ -149,6 +171,18 @@ sealed interface Utf8StartAccelerator {
     }
 
     int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      if (anchorOffset2 >= 0) {
+        return scanner.indexOfPairIgnoreCase(
+            prefix,
+            failure,
+            anchorOffset,
+            anchorLow,
+            anchorHigh,
+            anchorOffset2,
+            anchorLow2,
+            anchorHigh2,
+            fromIndex);
+      }
       return scanner.indexOfIgnoreCase(
           prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
     }

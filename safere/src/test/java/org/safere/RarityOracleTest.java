@@ -53,4 +53,40 @@ class RarityOracleTest {
     assertThat(RarityOracle.literalSelectivityScore(" ".repeat(32)))
         .isGreaterThan(RarityOracle.literalSelectivityScore("ee"));
   }
+
+  @Test
+  void rarestAsciiPairIgnoreCaseReturnsNullForShortOrNonAscii() {
+    assertThat(RarityOracle.rarestAsciiPairIgnoreCase("", 0)).isNull();
+    assertThat(RarityOracle.rarestAsciiPairIgnoreCase("a", 1)).isNull();
+    assertThat(RarityOracle.rarestAsciiPairIgnoreCase("a\u0080", 2)).isNull();
+    assertThat(RarityOracle.rarestAsciiPairIgnoreCase("hello\u00FFworld", 12)).isNull();
+  }
+
+  @Test
+  void rarestAsciiPairIgnoreCaseFindsTwoRarestWithOrderedOffsets() {
+    String prefix = "content-type";
+    RarityOracle.AsciiPair pair = RarityOracle.rarestAsciiPairIgnoreCase(prefix, prefix.length());
+    assertThat(pair).isNotNull();
+    assertThat(pair.offset1()).isLessThan(pair.offset2());
+    char c1 = prefix.charAt(pair.offset1());
+    char c2 = prefix.charAt(pair.offset2());
+    assertThat(pair.low1()).isEqualTo((byte) Ascii.toLowerCase(c1));
+    assertThat(pair.high1()).isEqualTo((byte) Ascii.toUpperCase(c1));
+    assertThat(pair.low2()).isEqualTo((byte) Ascii.toLowerCase(c2));
+    assertThat(pair.high2()).isEqualTo((byte) Ascii.toUpperCase(c2));
+  }
+
+  @Test
+  void rarestAsciiPairIgnoreCaseHandlesIdenticalCharacters() {
+    String prefix = "banana";
+    RarityOracle.AsciiPair pair = RarityOracle.rarestAsciiPairIgnoreCase(prefix, prefix.length());
+    assertThat(pair).isNotNull();
+    assertThat(pair.offset1()).isLessThan(pair.offset2());
+    char c1 = prefix.charAt(pair.offset1());
+    char c2 = prefix.charAt(pair.offset2());
+    assertThat(pair.low1()).isEqualTo((byte) Ascii.toLowerCase(c1));
+    assertThat(pair.high1()).isEqualTo((byte) Ascii.toUpperCase(c1));
+    assertThat(pair.low2()).isEqualTo((byte) Ascii.toLowerCase(c2));
+    assertThat(pair.high2()).isEqualTo((byte) Ascii.toUpperCase(c2));
+  }
 }

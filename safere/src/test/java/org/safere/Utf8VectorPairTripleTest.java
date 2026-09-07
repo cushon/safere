@@ -213,4 +213,113 @@ class Utf8VectorPairTripleTest {
     assertThat(mTriple.find()).isTrue();
     assertThat(mTriple.end()).isEqualTo(46);
   }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 1, 15, 16, 31, 32, 63, 64, 100, 128, 256, 500})
+  void testPairIgnoreCaseEquivalenceWithSwar(int length) {
+    assumeTrue(isVectorApiAvailable(), "Vector API not available on module path");
+
+    String prefix = "content-type:";
+    int prefixLen = prefix.length();
+    RarityOracle.AsciiPair pair = RarityOracle.rarestAsciiPairIgnoreCase(prefix, prefixLen);
+    assertThat(pair).isNotNull();
+    Random rnd = new Random(3000 + length);
+
+    for (int trial = 0; trial < 50; trial++) {
+      byte[] bytes = new byte[length];
+      for (int i = 0; i < length; i++) {
+        bytes[i] = (byte) ('a' + rnd.nextInt(20));
+      }
+      int start = length == 0 ? 0 : rnd.nextInt(length);
+
+      // Absent check
+      int swarAbsent =
+          ByteSwarScan.indexOfPairIgnoreCase(
+              bytes,
+              0,
+              length,
+              prefix,
+              prefixLen,
+              pair.offset1(),
+              pair.low1(),
+              pair.high1(),
+              pair.offset2(),
+              pair.low2(),
+              pair.high2(),
+              start);
+      int vectorAbsent =
+          ByteVectorScan.indexOfPairIgnoreCase(
+              bytes,
+              0,
+              length,
+              prefix,
+              prefixLen,
+              pair.offset1(),
+              pair.low1(),
+              pair.high1(),
+              pair.offset2(),
+              pair.low2(),
+              pair.high2(),
+              start);
+      assertThat(vectorAbsent)
+          .as("pair ignore case absent trial %d len %d", trial, length)
+          .isEqualTo(swarAbsent);
+
+      // Present check
+      if (length >= start + prefixLen) {
+        int pos = start + rnd.nextInt(length - start - prefixLen + 1);
+        for (int i = 0; i < prefixLen; i++) {
+          char c = prefix.charAt(i);
+          bytes[pos + i] = (byte) (rnd.nextBoolean() ? Ascii.toLowerCase(c) : Ascii.toUpperCase(c));
+        }
+
+        int swarHit =
+            ByteSwarScan.indexOfPairIgnoreCase(
+                bytes,
+                0,
+                length,
+                prefix,
+                prefixLen,
+                pair.offset1(),
+                pair.low1(),
+                pair.high1(),
+                pair.offset2(),
+                pair.low2(),
+                pair.high2(),
+                start);
+        int vectorHit =
+            ByteVectorScan.indexOfPairIgnoreCase(
+                bytes,
+                0,
+                length,
+                prefix,
+                prefixLen,
+                pair.offset1(),
+                pair.low1(),
+                pair.high1(),
+                pair.offset2(),
+                pair.low2(),
+                pair.high2(),
+                start);
+        assertThat(vectorHit)
+            .as("pair ignore case hit trial %d len %d", trial, length)
+            .isEqualTo(swarHit);
+      }
+    }
+  }
+
+  @Test
+  void testPatternMatchingWithCaseInsensitivePair() {
+    byte[] input = "header: some-value\r\nCoNtEnT-TyPe: application/json\r\n\r\n".getBytes(UTF_8);
+    Utf8Input utf8 = Utf8Input.trusted(input);
+
+    Pattern p = Pattern.compile("(?i)content-type:");
+    assertThat(p.utf8StartAccelerator())
+        .isInstanceOf(Utf8StartAccelerator.CaseInsensitiveLiteral.class);
+
+    Utf8Matcher m = p.matcher(utf8);
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(20);
+    assertThat(m.end()).isEqualTo(33);
+  }
 }
