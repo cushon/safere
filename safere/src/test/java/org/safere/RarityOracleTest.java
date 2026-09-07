@@ -102,6 +102,17 @@ class RarityOracleTest {
   }
 
   @Test
+  void foldedPreparedLiteralSelectsRarestCaseFoldedAnchor() {
+    Matcher.PreparedMatchRunner runner = Pattern.compile("(?i)jq").preparedMatchRunner(false);
+
+    assertThat(runner).isInstanceOf(Matcher.LiteralPreparedRunner.class);
+    Matcher.LiteralPreparedRunner literalRunner = (Matcher.LiteralPreparedRunner) runner;
+    assertThat(literalRunner.anchorOffset()).isEqualTo(1);
+    assertThat(literalRunner.anchorLow()).isEqualTo('q');
+    assertThat(literalRunner.anchorHigh()).isEqualTo('Q');
+  }
+
+  @Test
   void nonAsciiLiteralsAreNotScoredAsUtf8ByteValues() {
     assertThat(RarityOracle.literalSelectivityScore("é"))
         .isGreaterThan(RarityOracle.literalSelectivityScore("eee"));
