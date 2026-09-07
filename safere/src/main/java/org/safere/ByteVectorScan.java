@@ -300,6 +300,160 @@ final class ByteVectorScan {
     return -1;
   }
 
+  public static int indexOfPairIgnoreCase(
+      byte[] bytes,
+      int offset,
+      int length,
+      String prefix,
+      int prefixLen,
+      int offset1,
+      byte low1,
+      byte high1,
+      int offset2,
+      byte low2,
+      byte high2,
+      int start) {
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    int pos = Math.max(0, start);
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
+
+    int maxAnchorOffset = Math.max(offset1, offset2);
+    int scalarPrologueLimit = Math.min(length - prefixLen + 1, pos + Integer.BYTES);
+    for (; pos < scalarPrologueLimit; pos++) {
+      int b1 = bytes[offset + pos + offset1] & 0xFF;
+      if ((b1 == (low1 & 0xFF) || b1 == (high1 & 0xFF))) {
+        int b2 = bytes[offset + pos + offset2] & 0xFF;
+        if ((b2 == (low2 & 0xFF) || b2 == (high2 & 0xFF))) {
+          if (Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+            return pos;
+          }
+          verificationWork += prefixLen;
+          if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+            return VectorScanProvider.UNSUPPORTED;
+          }
+        }
+      }
+    }
+
+    int vectorLen = SPECIES.length();
+    int limit = length - vectorLen - maxAnchorOffset;
+    if (pos > limit) {
+      int limitScalar = length - prefixLen;
+      for (int p = pos; p <= limitScalar; p++) {
+        int b1 = bytes[offset + p + offset1] & 0xFF;
+        if (b1 == (low1 & 0xFF) || b1 == (high1 & 0xFF)) {
+          int b2 = bytes[offset + p + offset2] & 0xFF;
+          if (b2 == (low2 & 0xFF) || b2 == (high2 & 0xFF)) {
+            if (Ascii.regionMatchesIgnoreCase(bytes, offset + p, prefix, prefixLen)) {
+              return p;
+            }
+            verificationWork += prefixLen;
+            if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+              return VectorScanProvider.UNSUPPORTED;
+            }
+          }
+        }
+      }
+      return -1;
+    }
+
+    ByteVector lowVec1 = ByteVector.broadcast(SPECIES, low1);
+    ByteVector highVec1 = ByteVector.broadcast(SPECIES, high1);
+    ByteVector lowVec2 = ByteVector.broadcast(SPECIES, low2);
+    ByteVector highVec2 = ByteVector.broadcast(SPECIES, high2);
+    int baseOffset1 = offset + offset1;
+    int baseOffset2 = offset + offset2;
+    boolean hasHigh1 = (low1 != high1);
+    boolean hasHigh2 = (low2 != high2);
+
+    if (hasHigh1 && hasHigh2) {
+      for (; pos <= limit; pos += vectorLen) {
+        ByteVector inputVec1 = ByteVector.fromArray(SPECIES, bytes, baseOffset1 + pos);
+        VectorMask<Byte> mask1 = inputVec1.compare(EQ, lowVec1).or(inputVec1.compare(EQ, highVec1));
+        if (!mask1.anyTrue()) {
+          continue;
+        }
+        ByteVector inputVec2 = ByteVector.fromArray(SPECIES, bytes, baseOffset2 + pos);
+        VectorMask<Byte> mask2 = inputVec2.compare(EQ, lowVec2).or(inputVec2.compare(EQ, highVec2));
+        VectorMask<Byte> matchMask = mask1.and(mask2);
+
+        if (matchMask.anyTrue()) {
+          long activeLanes = matchMask.toLong();
+          while (activeLanes != 0) {
+            int bit = Long.numberOfTrailingZeros(activeLanes);
+            int candidatePos = pos + bit;
+            if (candidatePos <= length - prefixLen) {
+              if (Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
+                return candidatePos;
+              }
+              verificationWork += prefixLen;
+              if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+                return VectorScanProvider.UNSUPPORTED;
+              }
+            }
+            activeLanes &= activeLanes - 1;
+          }
+        }
+      }
+    } else {
+      for (; pos <= limit; pos += vectorLen) {
+        ByteVector inputVec1 = ByteVector.fromArray(SPECIES, bytes, baseOffset1 + pos);
+        VectorMask<Byte> mask1 =
+            hasHigh1
+                ? inputVec1.compare(EQ, lowVec1).or(inputVec1.compare(EQ, highVec1))
+                : inputVec1.compare(EQ, lowVec1);
+        if (!mask1.anyTrue()) {
+          continue;
+        }
+        ByteVector inputVec2 = ByteVector.fromArray(SPECIES, bytes, baseOffset2 + pos);
+        VectorMask<Byte> mask2 =
+            hasHigh2
+                ? inputVec2.compare(EQ, lowVec2).or(inputVec2.compare(EQ, highVec2))
+                : inputVec2.compare(EQ, lowVec2);
+        VectorMask<Byte> matchMask = mask1.and(mask2);
+
+        if (matchMask.anyTrue()) {
+          long activeLanes = matchMask.toLong();
+          while (activeLanes != 0) {
+            int bit = Long.numberOfTrailingZeros(activeLanes);
+            int candidatePos = pos + bit;
+            if (candidatePos <= length - prefixLen) {
+              if (Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
+                return candidatePos;
+              }
+              verificationWork += prefixLen;
+              if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+                return VectorScanProvider.UNSUPPORTED;
+              }
+            }
+            activeLanes &= activeLanes - 1;
+          }
+        }
+      }
+    }
+
+    int limitScalar = length - prefixLen;
+    for (int p = pos; p <= limitScalar; p++) {
+      int b1 = bytes[offset + p + offset1] & 0xFF;
+      if (b1 == (low1 & 0xFF) || b1 == (high1 & 0xFF)) {
+        int b2 = bytes[offset + p + offset2] & 0xFF;
+        if (b2 == (low2 & 0xFF) || b2 == (high2 & 0xFF)) {
+          if (Ascii.regionMatchesIgnoreCase(bytes, offset + p, prefix, prefixLen)) {
+            return p;
+          }
+          verificationWork += prefixLen;
+          if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+            return VectorScanProvider.UNSUPPORTED;
+          }
+        }
+      }
+    }
+    return -1;
+  }
+
   static int indexOfMultiLiteral(
       byte[] bytes,
       int offset,

@@ -120,6 +120,38 @@ behavior is correct because it follows the documented predicate rather than an
 extra implementation detail that makes `\b` disagree with the default `\w`
 definition.
 
+## Character Class Intersection and Ampersand Literals
+
+Issue reference: #796.
+
+Upstream JDK bug:
+[JDK-8391732: Pattern inconsistency with comments mode][jdk-8391732].
+
+[jdk-8391732]: https://bugs.openjdk.org/browse/JDK-8391732
+
+SafeRE models character classes using principled boolean algebra. The intersection
+operator `&&` is strictly an infix binary operator that requires non-empty left
+and right operands. A single ampersand `&` is always treated strictly as a
+literal character, not as a partial operator token.
+
+Consequently, SafeRE rejects malformed character class intersection syntax with
+`PatternSyntaxException`, including:
+- Leading `&&` without a left operand (e.g. `[&&a]`, `[^&&a]`)
+- Trailing `&&` without a right operand (e.g. `[a&&]`, `[a-z&&]`)
+- Repeated operator runs of three or more ampersands (e.g. `[a&&&b]`, `[a&&&&b]`)
+- Empty operands created by empty quotes or empty nested classes (e.g. `[a&&\Q\E&&b]`)
+- Ambiguous unescaped hyphens directly following intersection operators (e.g. `[a&&-b]`)
+
+Observed JDK behavior accepts repeated ampersands, leading and trailing
+ampersands, and exhibits idiosyncratic parser leakiness where solitary `&`
+characters inside right-hand operands can leak out of nested character classes into
+outer unions. Furthermore, this leakiness in the JDK is asymmetrical across the 8-bit
+boundary: characters <= 0xFF leak from `BitClass` into the outer match set (causing
+`[b&&[a]&]` to match `b`), whereas characters >= 0x100 bypass the bitmap and do not
+leak (so `[\u0100&&[a]&]` fails to match `\u0100`). SafeRE treats all Unicode code
+points uniformly according to boolean set algebra rather than reproducing JDK parser
+bugs and implementation accidents.
+
 ## Unicode Case-Insensitive Range Closure
 
 Issue reference: #452.

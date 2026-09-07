@@ -473,6 +473,46 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void exactCaseFixedOffsetSelectsUppercaseAnchorToAvoidCandidateWork() {
+    // "AbstractBeanFactory" contains uppercase 'B' and 'F'.
+    // The input is filled with lowercase vowels and common consonants ('e', 'a', 't', 'r', 's',
+    // 'c').
+    Pattern pattern = Pattern.compile("[0-9]{3}AbstractBeanFactory[0-9]{3}");
+    String input = "the create starter test transaction context service\n".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    assertThat(work)
+        .as(
+            "Exact-case RarityOracle must anchor on uppercase letters to avoid false candidates in"
+                + " lowercase text")
+        .isLessThanOrEqualTo(input.length() + 100);
+  }
+
+  @Test
+  void caseInsensitiveStartAccelerationIsInvariantToPatternCapitalization() {
+    Pattern pLower = Pattern.compile("(?i)userid");
+    Pattern pUpper = Pattern.compile("(?i)USERID");
+    Pattern pMixed = Pattern.compile("(?i)UserId");
+    String input = "the_quick_brown_fox_jumps_over_the_lazy_dog\n".repeat(500);
+
+    long workLower =
+        WorkCounter.countForTesting(() -> assertThat(pLower.matcher(input).find()).isFalse());
+    long workUpper =
+        WorkCounter.countForTesting(() -> assertThat(pUpper.matcher(input).find()).isFalse());
+    long workMixed =
+        WorkCounter.countForTesting(() -> assertThat(pMixed.matcher(input).find()).isFalse());
+
+    assertThat(workLower)
+        .as(
+            "Case-folded RarityOracle must produce identical work counts regardless of pattern"
+                + " casing")
+        .isEqualTo(workUpper)
+        .isEqualTo(workMixed);
+  }
+
+  @Test
   void requiredInfixLiteralRejectsDensePrefixNoiseWithSinglePassWork() {
     // Prefix "{Link:" is common (appears 1,000 times).
     // Infix "<<!nav>>" is rare and absent.
@@ -553,6 +593,24 @@ class SearchScalingRegressionTest {
     // it must remain strictly linear (work(10000) <= work(2000) * 6).
     assertThat(work10000)
         .as("Dense false candidate verification must fall back to linear KMP")
+        .isLessThanOrEqualTo(work2000 * 6);
+  }
+
+  @Test
+  void caseInsensitivePairDenseFalseCandidatesScaleLinearlyForUtf8Input() {
+    Pattern pattern = Pattern.compile("(?i)keyword_to_find");
+    byte[] input2000 = "kind knowledge token lock keep track ".repeat(50).getBytes(UTF_8);
+    byte[] input10000 = "kind knowledge token lock keep track ".repeat(250).getBytes(UTF_8);
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input2000)).find()).isFalse());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(input10000)).find()).isFalse());
+
+    assertThat(work10000)
+        .as("UTF-8 case-insensitive false candidate search must remain linearly bounded")
         .isLessThanOrEqualTo(work2000 * 6);
   }
 

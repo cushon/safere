@@ -6,6 +6,7 @@
 package org.safere.fuzz;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import java.time.Duration;
@@ -40,5 +41,21 @@ final class FuzzSupportOracleTimeoutTest {
   @DisplayName("JDK oracle stack overflow marks recursive matching unavailable")
   void jdkOracleStackOverflowMarksRecursiveMatchingUnavailable() {
     assertFalse(FuzzSupport.jdkOracleStackOverflowIsAvailableForTesting());
+  }
+
+  @Test
+  @DisplayName("only parser-marked intentional syntax errors are excluded")
+  void onlyParserMarkedIntentionalSyntaxErrorsAreExcluded() {
+    assertNull(FuzzSupport.compileCompatibleOrSkip("[a&&&b]", 0));
+    assertNull(FuzzSupport.compileCompatibleOrSkip("(?x:[a& & &b])", 0));
+    assertNull(FuzzSupport.compileCompatibleOrSkip("(?ix)[a& & &b]", 0));
+    assertNull(
+        FuzzSupport.compileCompatibleOrSkip(
+            "#\r(?-x)\n[a& & &b]", org.safere.Pattern.COMMENTS | org.safere.Pattern.UNIX_LINES));
+    assertNull(FuzzSupport.compileCompatibleOrSkip("(?x)[](?-x)][a& & &b]", 0));
+    assertFalse(
+        FuzzSupport.isIntentionalCharacterClassIntersectionForTesting(
+            new java.util.regex.PatternSyntaxException(
+                "invalid character class intersection", "[a-z&&[def]]", 4)));
   }
 }

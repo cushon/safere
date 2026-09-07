@@ -991,12 +991,10 @@ class PatternTest {
     }
 
     @Test
-    @DisplayName("[a-z&&] keeps the left-hand class when intersection has no right operand")
-    void trailingIntersectionKeepsLeftHandClass() {
-      Pattern p = Pattern.compile("[a-z&&]");
-      assertThat(p.matcher("a").matches()).isTrue();
-      assertThat(p.matcher("z").matches()).isTrue();
-      assertThat(p.matcher("&").matches()).isFalse();
+    @DisplayName("[a-z&&] is rejected because intersection requires a right operand")
+    void trailingIntersectionIsRejected() {
+      assertThatThrownBy(() -> Pattern.compile("[a-z&&]"))
+          .isInstanceOf(PatternSyntaxException.class);
     }
 
     @Test

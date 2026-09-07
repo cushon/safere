@@ -2307,7 +2307,7 @@ public final class Matcher implements MatchResult {
           ? Ascii.indexOfIgnoreCase(text, prefix.charAt(0), fromIndex)
           : Utf16.indexOfUnicodeIgnoreCase(text, prefix, fromIndex);
     }
-    int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen);
+    int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen, true);
     char anchor = prefix.charAt(anchorOffset);
     char low = Ascii.toLowerCase(anchor);
     char high = Ascii.toUpperCase(anchor);
@@ -3550,7 +3550,7 @@ public final class Matcher implements MatchResult {
           anchorLow = Ascii.toLowerCase(anchor);
           anchorHigh = Ascii.toUpperCase(anchor);
         } else {
-          anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen);
+          anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen, true);
           char anchor = literal.charAt(anchorOffset);
           anchorLow = Ascii.toLowerCase(anchor);
           anchorHigh = Ascii.toUpperCase(anchor);
@@ -4763,7 +4763,7 @@ public final class Matcher implements MatchResult {
           this.anchorLow = Ascii.toLowerCase(c);
           this.anchorHigh = Ascii.toUpperCase(c);
         } else {
-          this.anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen);
+          this.anchorOffset = RarityOracle.rarestAsciiOffset(literal, literalLen, true);
           char c = literal.charAt(this.anchorOffset);
           this.anchorLow = Ascii.toLowerCase(c);
           this.anchorHigh = Ascii.toUpperCase(c);

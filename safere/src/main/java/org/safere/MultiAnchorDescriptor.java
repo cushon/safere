@@ -1752,7 +1752,7 @@ record MultiAnchorDescriptor(
               literal, false, utf8, failure, shifts, 0, '\0', '\0', (byte) 0, (byte) 0);
         }
         int[] failure = Ascii.ignoreCaseFailure(literal);
-        int anchorOffset = RarityOracle.rarestAsciiOffset(literal, literal.length());
+        int anchorOffset = RarityOracle.rarestAsciiOffset(literal, literal.length(), true);
         char anchor = literal.charAt(anchorOffset);
         char anchorLow = Ascii.toLowerCase(anchor);
         char anchorHigh = Ascii.toUpperCase(anchor);
@@ -1772,6 +1772,11 @@ record MultiAnchorDescriptor(
       @Override
       public boolean isHardwareAccelerated(InputDomain domain) {
         return true;
+      }
+
+      @Override
+      public int selectivityScore() {
+        return RarityOracle.literalSelectivityScore(literal, foldCase);
       }
 
       @Override
@@ -1963,7 +1968,7 @@ record MultiAnchorDescriptor(
         }
         int minScore = Integer.MAX_VALUE;
         for (String lit : literals) {
-          minScore = Math.min(minScore, RarityOracle.literalSelectivityScore(lit));
+          minScore = Math.min(minScore, RarityOracle.literalSelectivityScore(lit, foldCase));
         }
         return minScore == Integer.MAX_VALUE ? 0 : minScore;
       }

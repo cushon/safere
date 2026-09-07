@@ -815,7 +815,16 @@ final class FuzzSupport {
     return hasLookaround(regex)
         || hasBackreference(regex)
         || hasPossessiveQuantifier(regex)
-        || isOverCompilerBudget(safeReException);
+        || isOverCompilerBudget(safeReException)
+        || isIntentionalCharacterClassIntersectionForTesting(safeReException);
+  }
+
+  static boolean isIntentionalCharacterClassIntersectionForTesting(
+      PatternSyntaxException exception) {
+    return exception
+        .getClass()
+        .getName()
+        .equals("org.safere.Parser$IntentionalDivergenceSyntaxException");
   }
 
   private static boolean isOverCompilerBudget(PatternSyntaxException safeReException) {

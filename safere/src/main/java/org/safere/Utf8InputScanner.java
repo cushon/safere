@@ -570,6 +570,41 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
   }
 
+  int indexOfPairIgnoreCase(
+      String prefix,
+      int[] failure,
+      int offset1,
+      byte low1,
+      byte high1,
+      int offset2,
+      byte low2,
+      byte high2,
+      int start) {
+    int prefixLen = prefix.length();
+    if (prefixLen == 0) {
+      return start;
+    }
+    if (!WorkCounterConfig.ENABLED) {
+      if (scanProvider != null && length - start >= scanProvider.minimumInputLength()) {
+        int result =
+            ByteVectorScan.indexOfPairIgnoreCase(
+                bytes, offset, length, prefix, prefixLen, offset1, low1, high1, offset2, low2,
+                high2, start);
+        if (result != VectorScanProvider.UNSUPPORTED) {
+          return result;
+        }
+      }
+      int swarResult =
+          ByteSwarScan.indexOfPairIgnoreCase(
+              bytes, offset, length, prefix, prefixLen, offset1, low1, high1, offset2, low2, high2,
+              start);
+      if (swarResult != VectorScanProvider.UNSUPPORTED) {
+        return swarResult;
+      }
+    }
+    return indexOfLinearIgnoreCase(bytes, offset, length, prefix, failure, start);
+  }
+
   static int indexOfLinearIgnoreCase(
       byte[] bytes, int offset, int length, String prefix, int[] failure, int start) {
     int prefixLen = prefix.length();
