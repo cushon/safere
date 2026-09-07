@@ -7,6 +7,7 @@ package org.safere.fuzz;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
@@ -40,5 +41,25 @@ final class FuzzSupportOracleTimeoutTest {
   @DisplayName("JDK oracle stack overflow marks recursive matching unavailable")
   void jdkOracleStackOverflowMarksRecursiveMatchingUnavailable() {
     assertFalse(FuzzSupport.jdkOracleStackOverflowIsAvailableForTesting());
+  }
+
+  @Test
+  @DisplayName("malformed intersection exclusion validates the syntax at the error index")
+  void malformedIntersectionExclusionValidatesSyntaxAtErrorIndex() {
+    assertTrue(
+        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
+            "[a&&&b]", 0, "invalid character class intersection", 2));
+    assertFalse(
+        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
+            "(?x)[a& &b]", 0, "invalid character class intersection", 6));
+    assertFalse(
+        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
+            "[a-z&&[def]]", 0, "empty left side of character class intersection", 4));
+    assertTrue(
+        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
+            "[a&&]", 0, "empty right side of character class intersection", 4));
+    assertTrue(
+        FuzzSupport.isMalformedCharacterClassIntersectionForTesting(
+            "[a&&-b]", 0, "dangling character class '-'", 4));
   }
 }

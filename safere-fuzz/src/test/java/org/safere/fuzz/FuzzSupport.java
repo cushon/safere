@@ -66,7 +66,7 @@ final class FuzzSupport {
     if (safeReException != null && jdkException != null) {
       return null;
     }
-    if (safeReException != null && isIntentionallyUnsupported(regex, safeReException)) {
+    if (safeReException != null && isIntentionallyUnsupported(regex, flags, safeReException)) {
       return null;
     }
 
@@ -811,20 +811,106 @@ final class FuzzSupport {
   }
 
   private static boolean isIntentionallyUnsupported(
-      String regex, PatternSyntaxException safeReException) {
+      String regex, int flags, PatternSyntaxException safeReException) {
     return hasLookaround(regex)
         || hasBackreference(regex)
         || hasPossessiveQuantifier(regex)
         || isOverCompilerBudget(safeReException)
-        || isMalformedCharacterClassIntersection(safeReException);
+        || isMalformedCharacterClassIntersection(regex, flags, safeReException);
   }
 
   private static boolean isMalformedCharacterClassIntersection(
-      PatternSyntaxException safeReException) {
-    String desc = safeReException.getDescription();
-    return desc != null
-        && (desc.contains("character class intersection")
-            || desc.contains("dangling character class '-'"));
+      String regex, int flags, PatternSyntaxException safeReException) {
+    return isMalformedCharacterClassIntersectionForTesting(
+        regex, flags, safeReException.getDescription(), safeReException.getIndex());
+  }
+
+  static boolean isMalformedCharacterClassIntersectionForTesting(
+      String regex, int flags, String description, int errorIndex) {
+    if (description == null || errorIndex < 0 || errorIndex > regex.length()) {
+      return false;
+    }
+    boolean comments =
+        (flags & org.safere.Pattern.COMMENTS) != 0
+            || regex.substring(0, errorIndex).contains("(?x)");
+    if (description.equals("invalid character class intersection")) {
+      return logicalAmpersandRunLength(regex, errorIndex, comments) >= 3;
+    }
+    String prefix = normalizedClassSyntax(regex, errorIndex, comments);
+    if (description.equals("empty right side of character class intersection")
+        || description.equals("dangling character class '-'")) {
+      return prefix.endsWith("&&");
+    }
+    if (!description.equals("empty left side of character class intersection")) {
+      return false;
+    }
+    int classStart = prefix.lastIndexOf('[');
+    if (classStart < 0) {
+      return false;
+    }
+    String operand = prefix.substring(classStart + 1);
+    if (operand.startsWith("^")) {
+      operand = operand.substring(1);
+    }
+    return operand.isEmpty() || operand.endsWith("&&");
+  }
+
+  private static int logicalAmpersandRunLength(String regex, int index, boolean comments) {
+    int count = 0;
+    int current = index;
+    while (current < regex.length() && regex.charAt(current) == '&') {
+      count++;
+      current = skipClassOperatorTrivia(regex, current + 1, comments);
+    }
+    return count;
+  }
+
+  private static String normalizedClassSyntax(String regex, int end, boolean comments) {
+    StringBuilder normalized = new StringBuilder(end);
+    int index = 0;
+    while (index < end) {
+      int next = skipClassOperatorTrivia(regex, index, comments);
+      if (next != index) {
+        index = next;
+        continue;
+      }
+      normalized.append(regex.charAt(index));
+      index++;
+    }
+    return normalized.toString();
+  }
+
+  private static int skipClassOperatorTrivia(String regex, int index, boolean comments) {
+    while (index < regex.length()) {
+      if (index + 3 < regex.length() && regex.startsWith("\\Q\\E", index)) {
+        index += 4;
+        continue;
+      }
+      if (!comments) {
+        return index;
+      }
+      int cp = regex.codePointAt(index);
+      if (cp == ' ' || ('\t' <= cp && cp <= '\r')) {
+        index += Character.charCount(cp);
+        continue;
+      }
+      if (cp != '#') {
+        return index;
+      }
+      index++;
+      while (index < regex.length()) {
+        int commentCp = regex.codePointAt(index);
+        if (commentCp == '\n'
+            || commentCp == '\r'
+            || commentCp == '\u0085'
+            || commentCp == '\u2028'
+            || commentCp == '\u2029') {
+          break;
+        }
+        index += Character.charCount(commentCp);
+      }
+    }
+    return index;
   }
 
   private static boolean isOverCompilerBudget(PatternSyntaxException safeReException) {

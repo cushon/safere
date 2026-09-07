@@ -1147,10 +1147,7 @@ final class Parser {
       // including between the two ampersands.
       int intersectionEnd = scanClassIntersectionEnd();
       if (intersectionEnd >= 0) {
-        int nextToken = intersectionEnd;
-        if ((flags & ParseFlags.COMMENTS) != 0) {
-          nextToken = skipCommentsAndWhitespaceAt(nextToken);
-        }
+        int nextToken = skipClassOperatorTriviaAt(intersectionEnd);
         if (nextToken < pattern.length() && pattern.charAt(nextToken) == '&') {
           throw new PatternSyntaxException("invalid character class intersection", pattern, pos);
         }
@@ -1206,14 +1203,25 @@ final class Parser {
     if (pattern.charAt(pos) != '&') {
       return -1;
     }
-    int secondAmpersand = pos + 1;
-    if ((flags & ParseFlags.COMMENTS) != 0) {
-      secondAmpersand = skipCommentsAndWhitespaceAt(secondAmpersand);
-    }
+    int secondAmpersand = skipClassOperatorTriviaAt(pos + 1);
     if (secondAmpersand >= pattern.length() || pattern.charAt(secondAmpersand) != '&') {
       return -1;
     }
     return secondAmpersand + 1;
+  }
+
+  private int skipClassOperatorTriviaAt(int index) {
+    while (true) {
+      int next = index;
+      if ((flags & ParseFlags.COMMENTS) != 0) {
+        next = skipCommentsAndWhitespaceAt(next);
+      }
+      if (startsEmptyQuotedLiteralAt(next)) {
+        index = next + 4;
+        continue;
+      }
+      return next;
+    }
   }
 
   private CharClassBuilder completeClassExpression(ClassExpressionFrame frame) {

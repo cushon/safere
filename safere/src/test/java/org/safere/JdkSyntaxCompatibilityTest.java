@@ -1135,7 +1135,10 @@ class JdkSyntaxCompatibilityTest {
         strings = {
           "(?x)[ab& &b]",
           "(?x)[ab&# intersection\n&b]",
-          "(?x)[a-z& # intersection\n &[def]]"
+          "(?x)[a-z& # intersection\n &[def]]",
+          "[ab&\\Q\\E&b]",
+          "[a-z&\\Q\\E\\Q\\E&[def]]",
+          "(?x)[a-z& # intersection\n \\Q\\E&[def]]"
         })
     @DisplayName("comments-mode trivia between intersection ampersands is ignored")
     void commentsModeTriviaBetweenIntersectionAmpersandsIsIgnored(String regex) {
@@ -1143,7 +1146,15 @@ class JdkSyntaxCompatibilityTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"(?x)[a&& &b]", "(?x)[a& &&b]", "(?x)[a& & &b]", "(?x)[a&# one\n&&b]"})
+    @ValueSource(
+        strings = {
+          "(?x)[a&& &b]",
+          "(?x)[a& &&b]",
+          "(?x)[a& & &b]",
+          "(?x)[a&# one\n&&b]",
+          "[a&\\Q\\E&]",
+          "[a&&\\Q\\E&b]"
+        })
     @DisplayName("comments-mode split repeated intersection operators are rejected")
     void commentsModeSplitRepeatedIntersectionOperatorsAreRejected(String regex) {
       assertRejectedBySafeRe(regex);
