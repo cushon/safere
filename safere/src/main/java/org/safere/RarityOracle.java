@@ -206,6 +206,57 @@ final class RarityOracle {
     return bestOffset;
   }
 
+  record AsciiPair(int offset1, byte low1, byte high1, int offset2, byte low2, byte high2) {}
+
+  /**
+   * Returns the two rarest ASCII characters in the prefix (up to prefixLen) with offset1 < offset2.
+   * Returns null if prefixLen < 2 or if any character in the prefix is non-ASCII.
+   */
+  static AsciiPair rarestAsciiPairIgnoreCase(CharSequence prefix, int prefixLen) {
+    if (prefixLen < 2) {
+      return null;
+    }
+    for (int i = 0; i < prefixLen; i++) {
+      if (prefix.charAt(i) > 127) {
+        return null;
+      }
+    }
+    int best1 = 0;
+    int maxRank1 = caseFoldedByteRarity(prefix.charAt(0));
+    for (int i = 1; i < prefixLen; i++) {
+      char c = prefix.charAt(i);
+      int rank = caseFoldedByteRarity(c);
+      if (rank > maxRank1) {
+        maxRank1 = rank;
+        best1 = i;
+      }
+    }
+    int best2 = -1;
+    int maxRank2 = -1;
+    for (int i = 0; i < prefixLen; i++) {
+      if (i == best1) {
+        continue;
+      }
+      char c = prefix.charAt(i);
+      int rank = caseFoldedByteRarity(c);
+      if (rank > maxRank2) {
+        maxRank2 = rank;
+        best2 = i;
+      }
+    }
+    int offset1 = Math.min(best1, best2);
+    int offset2 = Math.max(best1, best2);
+    char c1 = prefix.charAt(offset1);
+    char c2 = prefix.charAt(offset2);
+    return new AsciiPair(
+        offset1,
+        (byte) Ascii.toLowerCase(c1),
+        (byte) Ascii.toUpperCase(c1),
+        offset2,
+        (byte) Ascii.toLowerCase(c2),
+        (byte) Ascii.toUpperCase(c2));
+  }
+
   /**
    * Computes a selectivity score for a literal string. Combines string length with individual
    * character rarity.

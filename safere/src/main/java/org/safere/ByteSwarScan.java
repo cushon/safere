@@ -178,12 +178,140 @@ abstract class ByteSwarScan {
         return -2;
       }
     }
+    if (prefixLen >= 2) {
+      RarityOracle.AsciiPair pair = RarityOracle.rarestAsciiPairIgnoreCase(prefix, prefixLen);
+      if (pair != null) {
+        return indexOfPairIgnoreCase(
+            bytes,
+            offset,
+            length,
+            prefix,
+            prefixLen,
+            pair.offset1(),
+            pair.low1(),
+            pair.high1(),
+            pair.offset2(),
+            pair.low2(),
+            pair.high2(),
+            start);
+      }
+    }
     int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, prefixLen, true);
     char anchor = prefix.charAt(anchorOffset);
     byte low = (byte) Ascii.toLowerCase(anchor);
     byte high = (byte) Ascii.toUpperCase(anchor);
     return indexOfIgnoreCase(
         bytes, offset, length, prefix, prefixLen, anchorOffset, low, high, start);
+  }
+
+  static int indexOfPairIgnoreCase(
+      byte[] bytes,
+      int offset,
+      int length,
+      String prefix,
+      int prefixLen,
+      int offset1,
+      byte low1,
+      byte high1,
+      int offset2,
+      byte low2,
+      byte high2,
+      int start) {
+    if (prefixLen == 0) {
+      return Math.min(Math.max(0, start), length);
+    }
+    int pos = Math.max(0, start);
+    if (pos <= length - prefixLen
+        && Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+      return pos;
+    }
+    long verificationWork = 0;
+    long workLimit = WorkLimit.forRemaining(length - pos);
+
+    int maxAnchorOffset = Math.max(offset1, offset2);
+    int wordEnd = length - maxAnchorOffset - Long.BYTES;
+    long repeatedLow1 = (low1 & 0xFFL) * BYTE_ONES;
+    long repeatedHigh1 = (high1 & 0xFFL) * BYTE_ONES;
+    long repeatedLow2 = (low2 & 0xFFL) * BYTE_ONES;
+    long repeatedHigh2 = (high2 & 0xFFL) * BYTE_ONES;
+    boolean hasHigh1 = (low1 != high1);
+    boolean hasHigh2 = (low2 != high2);
+
+    while (pos <= wordEnd) {
+      byte c1 = bytes[offset + pos + offset1];
+      if (c1 == low1 || c1 == high1) {
+        byte c2 = bytes[offset + pos + offset2];
+        if (c2 == low2 || c2 == high2) {
+          if (Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+            return pos;
+          }
+          verificationWork += prefixLen;
+          if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+            return VectorScanProvider.UNSUPPORTED;
+          }
+          pos++;
+          continue;
+        }
+      }
+
+      long word1 = (long) LONG_VIEW.get(bytes, offset + pos + offset1);
+      long lowDiff1 = word1 ^ repeatedLow1;
+      long match1 = (lowDiff1 - BYTE_ONES) & ~lowDiff1;
+      if (hasHigh1) {
+        long highDiff1 = word1 ^ repeatedHigh1;
+        match1 |= (highDiff1 - BYTE_ONES) & ~highDiff1;
+      }
+      long highBits1 = match1 & BYTE_HIGH_BITS;
+      if (highBits1 == 0) {
+        pos += Long.BYTES;
+        continue;
+      }
+
+      long word2 = (long) LONG_VIEW.get(bytes, offset + pos + offset2);
+      long lowDiff2 = word2 ^ repeatedLow2;
+      long match2 = (lowDiff2 - BYTE_ONES) & ~lowDiff2;
+      if (hasHigh2) {
+        long highDiff2 = word2 ^ repeatedHigh2;
+        match2 |= (highDiff2 - BYTE_ONES) & ~highDiff2;
+      }
+
+      long candidates = highBits1 & match2;
+      if (candidates != 0) {
+        for (int index = 0; index < Long.BYTES; index++) {
+          int candidatePos = pos + index;
+          if (candidatePos <= length - prefixLen) {
+            byte v1 = bytes[offset + candidatePos + offset1];
+            byte v2 = bytes[offset + candidatePos + offset2];
+            if ((v1 == low1 || v1 == high1) && (v2 == low2 || v2 == high2)) {
+              if (Ascii.regionMatchesIgnoreCase(bytes, offset + candidatePos, prefix, prefixLen)) {
+                return candidatePos;
+              }
+              verificationWork += prefixLen;
+              if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+                return VectorScanProvider.UNSUPPORTED;
+              }
+            }
+          }
+        }
+      }
+      pos += Long.BYTES;
+    }
+
+    int limitScalar = length - prefixLen;
+    for (; pos <= limitScalar; pos++) {
+      byte v1 = bytes[offset + pos + offset1];
+      byte v2 = bytes[offset + pos + offset2];
+      if ((v1 == low1 || v1 == high1) && (v2 == low2 || v2 == high2)) {
+        if (Ascii.regionMatchesIgnoreCase(bytes, offset + pos, prefix, prefixLen)) {
+          return pos;
+        }
+        verificationWork += prefixLen;
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return VectorScanProvider.UNSUPPORTED;
+        }
+      }
+    }
+    return -1;
   }
 
   static int indexOfIgnoreCase(
