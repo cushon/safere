@@ -83,4 +83,29 @@ class RarityOracleTest {
     int exactLowerScore = RarityOracle.literalSelectivityScore("error", false);
     assertThat(exactUpperScore).isGreaterThan(exactLowerScore);
   }
+
+  @Test
+  void foldedMultiAnchorSelectionIsInvariantToPatternCapitalization() {
+    MultiAnchorDescriptor.Anchor.Single upper =
+        MultiAnchorDescriptor.Anchor.Single.create("Xq", true);
+    MultiAnchorDescriptor.Anchor.Single lower =
+        MultiAnchorDescriptor.Anchor.Single.create("xq", true);
+
+    assertThat(upper.anchorOffset()).isEqualTo(lower.anchorOffset()).isEqualTo(1);
+    assertThat(upper.selectivityScore()).isEqualTo(lower.selectivityScore());
+
+    MultiAnchorDescriptor.Anchor upperAlternation =
+        MultiAnchorDescriptor.Anchor.create(new String[] {"Xq", "Za"}, true);
+    MultiAnchorDescriptor.Anchor lowerAlternation =
+        MultiAnchorDescriptor.Anchor.create(new String[] {"xq", "za"}, true);
+    assertThat(upperAlternation.selectivityScore()).isEqualTo(lowerAlternation.selectivityScore());
+  }
+
+  @Test
+  void nonAsciiLiteralsAreNotScoredAsUtf8ByteValues() {
+    assertThat(RarityOracle.literalSelectivityScore("é"))
+        .isGreaterThan(RarityOracle.literalSelectivityScore("eee"));
+    assertThat(RarityOracle.literalSelectivityScore("é"))
+        .isEqualTo(RarityOracle.literalSelectivityScore("Ā"));
+  }
 }

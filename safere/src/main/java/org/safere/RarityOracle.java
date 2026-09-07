@@ -158,6 +158,10 @@ final class RarityOracle {
     return exactByteRarity(c);
   }
 
+  private static int characterRarity(int c, boolean caseFolded) {
+    return c >= 0 && c < 128 ? byteRarity(c, caseFolded) : 255;
+  }
+
   /**
    * Returns the offset of the rarest ASCII character in the prefix (up to {@code prefixLen}). If
    * all characters have identical rank or length is 0, returns 0.
@@ -214,7 +218,7 @@ final class RarityOracle {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }
-      int r = byteRarity(s.charAt(i), caseFolded);
+      int r = characterRarity(s.charAt(i), caseFolded);
       score += r + 1;
       if (r > maxCharRarity) {
         maxCharRarity = r;
