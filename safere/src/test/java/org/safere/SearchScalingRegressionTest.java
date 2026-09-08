@@ -45,6 +45,46 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void guardedGapRetriesReuseDelimiterScanWork() {
+    Pattern pattern = Pattern.compile("AAAA[^;]*RAREBBB");
+
+    assertGuardedGapRetryWorkIsLinear(
+        size -> pattern.matcher("A".repeat(size) + ";RAREBBB")::find, "String");
+    assertGuardedGapRetryWorkIsLinear(
+        size ->
+            pattern.matcher(Utf8Input.trusted(("A".repeat(size) + ";RAREBBB").getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
+
+  @Test
+  void guardedGapRetriesReuseSuccessfulSliceValidation() {
+    Pattern pattern = Pattern.compile("AAAA[^;]*RAREBBB[^;]X");
+
+    assertGuardedGapRetryWorkIsLinear(
+        size -> pattern.matcher("X" + "AAAA".repeat(size) + "RAREBBBy")::find, "String");
+    assertGuardedGapRetryWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted(("X" + "AAAA".repeat(size) + "RAREBBBy").getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
+
+  private static void assertGuardedGapRetryWorkIsLinear(
+      IntFunction<FindIterator> matcher, String inputKind) {
+    long smallerWork =
+        WorkCounter.countForTesting(() -> assertThat(matcher.apply(2_000).find()).isFalse());
+    long largerWork =
+        WorkCounter.countForTesting(() -> assertThat(matcher.apply(10_000).find()).isFalse());
+
+    assertThat(smallerWork).as("%s guarded-gap work must be observed", inputKind).isPositive();
+    assertThat(largerWork)
+        .as("%s guarded-gap retries should scale linearly", inputKind)
+        .isLessThan(smallerWork * 6);
+  }
+
+  @Test
   void stringMultiAnchorFixedGapValidationWorkIsCounted() {
     CharClassScanInfo scanInfo =
         CharClassScanInfo.fromAsciiBitmap(new AsciiBitmap.Builder().addRange('A', 'Z').build());

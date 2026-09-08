@@ -445,6 +445,10 @@ record MultiAnchorDescriptor(
       if (i > 0 && !isExecutableInteriorGap(segment.gap())) {
         return false;
       }
+      if (segment.gap().isExecutorGuardedGap()
+          && (i != n - 1 || !isInfallibleTrailingGap(chain.trailingGap()))) {
+        return false;
+      }
     }
     return isExecutableTrailingGap(chain.trailingGap());
   }
@@ -485,6 +489,10 @@ record MultiAnchorDescriptor(
           NO_WORD_BOUNDARY ->
           false;
     };
+  }
+
+  private static boolean isInfallibleTrailingGap(Gap gap) {
+    return gap.kind() == GapKind.EMPTY || gap.isExecutorGuardedGap();
   }
 
   boolean isExecutableUtf8Chain() {
@@ -649,42 +657,56 @@ record MultiAnchorDescriptor(
     }
 
     boolean isExecutorGuardedGap() {
-      return kind == GapKind.BOUNDED_CLASS_REPEAT && guardBytes != null && isPureComplement;
+      return kind == GapKind.BOUNDED_CLASS_REPEAT
+          && minLength == 0
+          && guardBytes != null
+          && isPureComplement;
     }
 
     int findFirstGuardByte(String text, int from, int to) {
       if (guardBytes == null || from >= to) {
         return -1;
       }
+      if (WorkCounterConfig.ENABLED) {
+        for (int i = from; i < to; i++) {
+          WorkCounter.record();
+          char c = text.charAt(i);
+          for (byte guardByte : guardBytes) {
+            if (c == (char) guardByte) {
+              return i;
+            }
+          }
+        }
+        return -1;
+      }
       int len = guardBytes.length;
       if (len == 1) {
-        int idx = text.indexOf((char) guardBytes[0], from);
-        return (idx >= from && idx < to) ? idx : -1;
+        return text.indexOf((char) guardBytes[0], from, to);
       }
       if (len == 2) {
-        int i0 = text.indexOf((char) guardBytes[0], from);
-        int i1 = text.indexOf((char) guardBytes[1], from);
+        int i0 = text.indexOf((char) guardBytes[0], from, to);
+        int i1 = text.indexOf((char) guardBytes[1], from, to);
         int min = -1;
-        if (i0 >= from && i0 < to) {
+        if (i0 >= from) {
           min = i0;
         }
-        if (i1 >= from && i1 < to && (min < 0 || i1 < min)) {
+        if (i1 >= from && (min < 0 || i1 < min)) {
           min = i1;
         }
         return min;
       }
       if (len == 3) {
-        int i0 = text.indexOf((char) guardBytes[0], from);
-        int i1 = text.indexOf((char) guardBytes[1], from);
-        int i2 = text.indexOf((char) guardBytes[2], from);
+        int i0 = text.indexOf((char) guardBytes[0], from, to);
+        int i1 = text.indexOf((char) guardBytes[1], from, to);
+        int i2 = text.indexOf((char) guardBytes[2], from, to);
         int min = -1;
-        if (i0 >= from && i0 < to) {
+        if (i0 >= from) {
           min = i0;
         }
-        if (i1 >= from && i1 < to && (min < 0 || i1 < min)) {
+        if (i1 >= from && (min < 0 || i1 < min)) {
           min = i1;
         }
-        if (i2 >= from && i2 < to && (min < 0 || i2 < min)) {
+        if (i2 >= from && (min < 0 || i2 < min)) {
           min = i2;
         }
         return min;
@@ -792,9 +814,40 @@ record MultiAnchorDescriptor(
       return max;
     }
 
+    private int boundedCodePointEnd(String text, int fromPos, int maxPos) {
+      if (maxLength == Integer.MAX_VALUE) {
+        return maxPos;
+      }
+      int cur = fromPos;
+      for (int count = 0; count < maxLength && cur < maxPos; count++) {
+        int width = Character.charCount(text.codePointAt(cur));
+        if (cur + width > maxPos) {
+          break;
+        }
+        cur += width;
+      }
+      return cur;
+    }
+
+    private int boundedCodePointEnd(Utf8InputScanner scanner, int fromPos, int maxPos) {
+      if (maxLength == Integer.MAX_VALUE) {
+        return maxPos;
+      }
+      int cur = fromPos;
+      for (int count = 0; count < maxLength && cur < maxPos; count++) {
+        long decoded = scanner.decodeForward(cur);
+        int next = InputScanner.position(decoded);
+        if (next > maxPos) {
+          break;
+        }
+        cur = next;
+      }
+      return cur;
+    }
+
     int scanClassEnd(String text, int fromPos, int maxPos) {
       if (kind == GapKind.BOUNDED_CLASS_REPEAT) {
-        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        int limit = boundedCodePointEnd(text, fromPos, maxPos);
         if (guardBytes != null) {
           int g = findFirstGuardByte(text, fromPos, limit);
           if (g >= fromPos && g < limit) {
@@ -843,7 +896,7 @@ record MultiAnchorDescriptor(
 
     int scanClassEnd(Utf8InputScanner scanner, int fromPos, int maxPos) {
       if (kind == GapKind.BOUNDED_CLASS_REPEAT) {
-        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        int limit = boundedCodePointEnd(scanner, fromPos, maxPos);
         if (guardBytes != null) {
           int g = findFirstGuardByte(scanner, fromPos, limit);
           if (g >= fromPos && g < limit) {
@@ -1415,8 +1468,7 @@ record MultiAnchorDescriptor(
         case LINE_END -> isLineEnd(text, fromPos) ? fromPos : -1;
         case BOUNDED_CLASS_REPEAT -> {
           if (guardBytes != null && isPureComplement) {
-            int limit =
-                Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+            int limit = boundedCodePointEnd(text, fromPos, maxPos);
             int g = findFirstGuardByte(text, fromPos, limit);
             int end = (g >= fromPos && g < limit) ? g : limit;
             int count = Character.codePointCount(text, fromPos, end);
@@ -1476,8 +1528,7 @@ record MultiAnchorDescriptor(
         case LINE_END -> isLineEnd(scanner, fromPos) ? fromPos : -1;
         case BOUNDED_CLASS_REPEAT -> {
           if (guardBytes != null && isPureComplement) {
-            int limit =
-                Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+            int limit = boundedCodePointEnd(scanner, fromPos, maxPos);
             int g = findFirstGuardByte(scanner, fromPos, limit);
             int end = (g >= fromPos && g < limit) ? g : limit;
             int count = 0;

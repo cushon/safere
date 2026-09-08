@@ -286,13 +286,43 @@ final class MatchFuzzer {
     String driver = distinctAsciiLiteral(data.consumeInt(8, 16));
     String regex;
     String input;
-    if (data.consumeBoolean()) {
-      regex = "111[0-9]+" + driver;
-      input = "1".repeat(repeatedDigits) + "2" + driver;
-    } else {
-      int maximum = data.consumeInt(1, 4);
-      regex = "(?s)TARGET.{1," + maximum + "}";
-      input = "TARGET" + "😀".repeat(maximum + 1);
+    switch (data.consumeInt(0, 7)) {
+      case 0 -> {
+        regex = "111[0-9]+" + driver;
+        input = "1".repeat(repeatedDigits) + "2" + driver;
+      }
+      case 1 -> {
+        int maximum = data.consumeInt(1, 4);
+        regex = "(?s)TARGET.{1," + maximum + "}";
+        input = "TARGET" + "😀".repeat(maximum + 1);
+      }
+      case 2 -> {
+        int maximum = data.consumeInt(1, 4);
+        boolean interior = data.consumeBoolean();
+        regex = interior ? "TARGET[^;]?" + driver : "TARGET[^;]{0," + maximum + "}";
+        input = "xxTARGET" + "😀".repeat(interior ? 1 : maximum) + (interior ? driver : "zz");
+      }
+      case 3 -> {
+        regex = "TARGET[^;]*" + driver;
+        input = "TARGET" + driver + ";" + driver;
+      }
+      case 4 -> {
+        String upstream = data.consumeBoolean() ? "TARGET;" : "é;";
+        regex = upstream + "[^;]" + driver;
+        input = "xx" + upstream + "x" + driver + "yy";
+      }
+      case 5 -> {
+        regex = "TARGET[^;]*" + driver + "[^;]X";
+        input = "X" + "TARGET".repeat(data.consumeInt(16, 128)) + driver + "y";
+      }
+      case 6 -> {
+        regex = "TARGET[^;]*MID[^;]*" + driver;
+        input = "TARGETMID" + driver + "MID;" + driver;
+      }
+      default -> {
+        regex = "TARGET[^;]*?MID[^:]*" + driver;
+        input = "TARGETMID:MID" + driver;
+      }
     }
 
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);

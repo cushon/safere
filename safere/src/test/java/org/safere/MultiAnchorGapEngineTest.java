@@ -792,6 +792,55 @@ class MultiAnchorGapEngineTest {
     assertThat(findMatches(pattern, acrossLines, useUtf8)).isEmpty();
   }
 
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void guardedGreedyGapChoosesSuffixBeforeFirstGuard(boolean useUtf8) {
+    Pattern pattern = Pattern.compile("AAA[^;]*BBB");
+
+    assertThat(findMatches(pattern, "AAABBB;BBB", useUtf8)).containsExactly("AAABBB");
+    assertThat(findMatches(pattern, "AAAxxBBB;BBB", useUtf8)).containsExactly("AAAxxBBB");
+    assertThat(findMatches(pattern, "AAA;BBB", useUtf8)).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void reverseGuardPruningRetainsUpstreamAnchorContainingGuard(boolean useUtf8) {
+    Pattern ascii = Pattern.compile("AAA;[^;]RAREBBBB");
+    Pattern nonAscii = Pattern.compile("é;[^;]RAREBBBBBBBB");
+
+    assertThat(findMatches(ascii, "xxAAA;xRAREBBBByy", useUtf8)).containsExactly("AAA;xRAREBBBB");
+    assertThat(findMatches(nonAscii, "é;xRAREBBBBBBBB", useUtf8))
+        .containsExactly("é;xRAREBBBBBBBB");
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void guardedGapWithFallibleContinuationUsesGeneralEngine(boolean useUtf8) {
+    Pattern greedy = Pattern.compile("AAA[^;]*BBB[^;]*CCC");
+    Pattern reluctant = Pattern.compile("AAA[^;]*?BBB[^:]*CCC");
+
+    assertThat(greedy.multiAnchor().isExecutableChain()).isFalse();
+    assertThat(reluctant.multiAnchor().isExecutableChain()).isFalse();
+    assertThat(findMatches(greedy, "AAABBBCCCBBB;CCC", useUtf8)).containsExactly("AAABBBCCC");
+    assertThat(findMatches(reluctant, "AAABBB:BBBCCC", useUtf8)).containsExactly("AAABBB:BBBCCC");
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void guardedBoundedTrailingGapEndsOnCodePointBoundary(boolean useUtf8) {
+    Pattern optional = Pattern.compile("AAA[^;]?");
+    Pattern bounded = Pattern.compile("AAA[^;]{0,2}");
+    Pattern interior = Pattern.compile("AAA[^;]?BBB");
+
+    assertThat(findMatches(optional, "xxAAA\ud83d\ude00zz", useUtf8))
+        .containsExactly("AAA\ud83d\ude00");
+    assertThat(findMatches(bounded, "xxAAA\ud83d\ude00\ud83d\ude03z", useUtf8))
+        .containsExactly("AAA\ud83d\ude00\ud83d\ude03");
+    assertThat(findMatches(interior, "xxAAA\ud83d\ude00BBBzz", useUtf8))
+        .containsExactly("AAA\ud83d\ude00BBB");
+    assertThat(findMatches(optional, "xxAAA;zz", useUtf8)).containsExactly("AAA");
+  }
+
   @Test
   void unixLinesDotMatchesCarriageReturnAndStopsAtNewline() {
     Pattern pattern = Pattern.compile("AAA.*BBB", Pattern.UNIX_LINES);
@@ -816,9 +865,10 @@ class MultiAnchorGapEngineTest {
   private static List<String> findMatches(Pattern pattern, String text, boolean useUtf8) {
     List<String> matches = new ArrayList<>();
     if (useUtf8) {
-      Utf8Matcher matcher = pattern.matcher(Utf8Input.validated(text.getBytes(UTF_8)));
+      byte[] bytes = text.getBytes(UTF_8);
+      Utf8Matcher matcher = pattern.matcher(Utf8Input.validated(bytes));
       while (matcher.find()) {
-        matches.add(text.substring(matcher.start(), matcher.end()));
+        matches.add(new String(bytes, matcher.start(), matcher.end() - matcher.start(), UTF_8));
       }
     } else {
       Matcher matcher = pattern.matcher(text);

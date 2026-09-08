@@ -106,6 +106,8 @@ final class MultiAnchorExecutor {
     int minReverseWatermark = Math.max(0, searchFrom);
     int[] downstreamWatermarks = new int[numSegments];
     Arrays.fill(downstreamWatermarks, searchFrom);
+    int[] downstreamGuardEnds = new int[numSegments];
+    Arrays.fill(downstreamGuardEnds, -1);
     int candidatePos = Math.max(0, searchFrom);
     MultiAnchorDescriptor.Segment driverSeg = segments[driverIdx];
     MultiAnchorDescriptor.Anchor driverAnchor = driverSeg.anchor();
@@ -178,7 +180,9 @@ final class MultiAnchorExecutor {
           if (gap.guardBytes() != null) {
             int lastGuard = gap.findLastGuardByte(scanner, searchLowerBound, curAnchorStart - 1);
             if (lastGuard >= 0) {
-              searchLowerBound = Math.max(searchLowerBound, lastGuard + 1);
+              long maxAnchorBytes = (long) upstreamAnchor.maxLength() * 4;
+              int firstOverlappingAnchorStart = (int) Math.max(0L, lastGuard - maxAnchorBytes + 1L);
+              searchLowerBound = Math.max(searchLowerBound, firstOverlappingAnchorStart);
             }
           }
 
@@ -275,8 +279,19 @@ final class MultiAnchorExecutor {
             chainMatched = false;
             break;
           }
-          int maxScan = gap.scanClassEnd(scanner, currentPos, textLen);
-          int maxHop = Math.min(textLen, maxScan + anchor.maxLength());
+          int maxScan;
+          if (gap.isExecutorGuardedGap() && gap.maxLength() == Integer.MAX_VALUE) {
+            int cachedGuardEnd = downstreamGuardEnds[i];
+            if (cachedGuardEnd >= currentPos) {
+              maxScan = cachedGuardEnd;
+            } else {
+              maxScan = gap.scanClassEnd(scanner, currentPos, textLen);
+              downstreamGuardEnds[i] = maxScan;
+            }
+          } else {
+            maxScan = gap.scanClassEnd(scanner, currentPos, textLen);
+          }
+          int maxHop = maxScan;
 
           int searchStart = Math.max(minHop, downstreamWatermarks[i]);
           if (searchStart > maxHop) {
@@ -298,7 +313,7 @@ final class MultiAnchorExecutor {
             downstreamWatermarks[i] = p;
           }
 
-          if (!gap.matchesSlice(scanner, currentPos, p)) {
+          if (!gap.isExecutorGuardedGap() && !gap.matchesSlice(scanner, currentPos, p)) {
             chainMatched = false;
             break;
           }
@@ -388,6 +403,8 @@ final class MultiAnchorExecutor {
     int minReverseWatermark = Math.max(0, searchFrom);
     int[] downstreamWatermarks = new int[numSegments];
     Arrays.fill(downstreamWatermarks, searchFrom);
+    int[] downstreamGuardEnds = new int[numSegments];
+    Arrays.fill(downstreamGuardEnds, -1);
     int candidatePos = Math.max(0, searchFrom);
     MultiAnchorDescriptor.Segment driverSeg = segments[driverIdx];
     MultiAnchorDescriptor.Anchor driverAnchor = driverSeg.anchor();
@@ -460,7 +477,9 @@ final class MultiAnchorExecutor {
           if (gap.guardBytes() != null) {
             int lastGuard = gap.findLastGuardByte(text, searchLowerBound, curAnchorStart - 1);
             if (lastGuard >= 0) {
-              searchLowerBound = Math.max(searchLowerBound, lastGuard + 1);
+              int firstOverlappingAnchorStart =
+                  (int) Math.max(0L, (long) lastGuard - upstreamAnchor.maxLength() + 1L);
+              searchLowerBound = Math.max(searchLowerBound, firstOverlappingAnchorStart);
             }
           }
 
@@ -557,8 +576,19 @@ final class MultiAnchorExecutor {
             chainMatched = false;
             break;
           }
-          int maxScan = gap.scanClassEnd(text, currentPos, textLen);
-          int maxHop = Math.min(textLen, maxScan + anchor.maxLength());
+          int maxScan;
+          if (gap.isExecutorGuardedGap() && gap.maxLength() == Integer.MAX_VALUE) {
+            int cachedGuardEnd = downstreamGuardEnds[i];
+            if (cachedGuardEnd >= currentPos) {
+              maxScan = cachedGuardEnd;
+            } else {
+              maxScan = gap.scanClassEnd(text, currentPos, textLen);
+              downstreamGuardEnds[i] = maxScan;
+            }
+          } else {
+            maxScan = gap.scanClassEnd(text, currentPos, textLen);
+          }
+          int maxHop = maxScan;
 
           int searchStart = Math.max(minHop, downstreamWatermarks[i]);
           if (searchStart > maxHop) {
@@ -580,7 +610,7 @@ final class MultiAnchorExecutor {
             downstreamWatermarks[i] = p;
           }
 
-          if (!gap.matchesSlice(text, currentPos, p)) {
+          if (!gap.isExecutorGuardedGap() && !gap.matchesSlice(text, currentPos, p)) {
             chainMatched = false;
             break;
           }
