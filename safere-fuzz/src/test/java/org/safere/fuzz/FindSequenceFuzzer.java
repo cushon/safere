@@ -31,6 +31,8 @@ final class FindSequenceFuzzer {
     assertAnchoredContinuation("a*", "a!", true, false);
     assertAnchoredContinuation("a", "ba a", false, true);
     assertAnchoredContinuation("a*", "!a", false, false);
+    assertAnchoredContinuation("^[ab]*", "!a😀b!", false, true);
+    assertAnchoredContinuation("\\A(a?)", "!a", true, true);
   }
 
   private static void assertAnchoredContinuation(
@@ -83,7 +85,7 @@ final class FindSequenceFuzzer {
     String input;
     boolean splitSurrogateFindStart = false;
     String warmInput = null;
-    switch (data.consumeInt(0, 9)) {
+    switch (data.consumeInt(0, 10)) {
       case 0 -> {
         regex = nestedCapturingGroups(data.consumeInt(0, 512)) + "*";
         flags = 0;
@@ -139,6 +141,24 @@ final class FindSequenceFuzzer {
         assertAnchoredContinuation(regex, input, data.consumeBoolean(), data.consumeBoolean());
       }
       case 9 -> {
+        String anchor = data.pickValue(List.of("^", "\\A", "(?m)^"));
+        String body = data.pickValue(List.of("[ab]*", "(a?)", "(a|b)*", "(?:😀)*"));
+        regex = anchor + body;
+        flags = 0;
+        input = "!" + data.consumeString(64);
+        FuzzSupport.MatcherPair matcher = FuzzSupport.compileOrSkip(regex, flags).matcher(input);
+        if (data.consumeBoolean()) {
+          matcher.find(data.consumeInt(0, input.length()));
+        } else if (data.consumeBoolean()) {
+          matcher.find();
+        } else {
+          matcher.lookingAt();
+        }
+        for (int i = 0, steps = data.consumeInt(3, 8); i < steps; i++) {
+          matcher.find();
+        }
+      }
+      case 10 -> {
         String atom = data.pickValue(List.of("\\W", "\\s", "[\\r\\n ]"));
         String quantifier = data.pickValue(List.of("*", "+", "?", "*?", "{0,3}"));
         regex = atom + quantifier + "(?m:$)";
