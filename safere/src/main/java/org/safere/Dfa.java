@@ -1604,12 +1604,14 @@ final class Dfa {
               matchEnd = endPos;
             }
           }
-          sId = nsId;
-          pos++;
-          if (isAcceleratedStateOffset[sId]) {
+          if (nsId == sId && isAcceleratedStateOffset[sId]) {
+            sId = nsId;
+            pos++;
             hitAcceleratedState = true;
             break;
           }
+          sId = nsId;
+          pos++;
         }
       } else {
         while (pos < limit) {
