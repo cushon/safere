@@ -78,14 +78,50 @@ final class FindSequenceFuzzer {
     pattern.matcher("😀bX😀b").find(1);
   }
 
+  @Test
+  void scopedEndAnchorLineModes() {
+    for (String anchor : List.of("$", "\\Z")) {
+      for (String terminator : List.of("\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029")) {
+        for (String mode : List.of("d", "-d")) {
+          for (int flags : new int[] {0, java.util.regex.Pattern.UNIX_LINES}) {
+            FuzzSupport.CompiledPattern pattern =
+                FuzzSupport.compileOrSkip("(?:foo|bar)(?" + mode + ":" + anchor + ")", flags);
+            FuzzSupport.MatcherPair matcher = pattern.matcher("foo" + terminator);
+            while (matcher.find()) {
+              matcher.start();
+              matcher.end();
+              matcher.group();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  void mixedCrLfAndStandaloneLfCacheRegressions() {
+    for (String regex : List.of("(?-d:(?m:$))(?dm:$)", "(?dm:$)(?-d:(?m:$))")) {
+      FuzzSupport.CompiledPattern pattern =
+          FuzzSupport.compileOrSkip(regex, java.util.regex.Pattern.UNIX_LINES);
+      for (String input : List.of("\r\na\na", "\na\r\na", "a\na", "\r\na\na")) {
+        FuzzSupport.MatcherPair matcher = pattern.matcher(input);
+        while (matcher.find()) {
+          matcher.start();
+          matcher.end();
+        }
+      }
+    }
+  }
+
   @FuzzTest(maxDuration = "30s")
   void sequence(FuzzedDataProvider data) {
     String regex;
     int flags;
     String input;
     boolean splitSurrogateFindStart = false;
+    boolean warmLineEndCache = false;
     String warmInput = null;
-    switch (data.consumeInt(0, 10)) {
+    switch (data.consumeInt(0, 12)) {
       case 0 -> {
         regex = nestedCapturingGroups(data.consumeInt(0, 512)) + "*";
         flags = 0;
@@ -132,6 +168,33 @@ final class FindSequenceFuzzer {
         splitSurrogateFindStart = true;
       }
       case 8 -> {
+        String anchor = data.pickValue(List.of("$", "\\Z", "(?m:$)"));
+        String localMode = data.consumeBoolean() ? "d" : "-d";
+        String scopedAnchor = "(?" + localMode + ":" + anchor + ")";
+        String body = data.pickValue(List.of("foo", "(?:foo|bar)", "(foo|bar)", "[a-z]+"));
+        regex = body + scopedAnchor + (data.consumeBoolean() ? anchor : "");
+        flags = data.consumeBoolean() ? java.util.regex.Pattern.UNIX_LINES : 0;
+        String terminator =
+            data.pickValue(List.of("", "\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029"));
+        input = "x".repeat(data.consumeInt(0, 2048)) + "foo" + terminator;
+      }
+      case 9 -> {
+        regex =
+            data.pickValue(
+                List.of(
+                    "(?-d:(?m:$))(?dm:$)",
+                    "(?dm:$)(?-d:(?m:$))",
+                    "((?-d:(?m:$)))(?dm:$)",
+                    "(?-d:(?m:^))(?dm:^)[ab]"));
+        flags = data.consumeBoolean() ? java.util.regex.Pattern.UNIX_LINES : 0;
+        StringBuilder mixedLines = new StringBuilder("x".repeat(data.consumeInt(0, 600)));
+        for (int i = data.consumeInt(1, 16); i > 0; i--) {
+          mixedLines.append(data.pickValue(List.of("\r\na", "\na", "\rb", "\u0085a", "b")));
+        }
+        input = mixedLines.toString();
+        warmLineEndCache = true;
+      }
+      case 10 -> {
         String atom = data.pickValue(List.of("a", "😀", "[ab]", "(a|b)"));
         String anchor = data.consumeBoolean() ? "^" : "";
         regex = anchor + atom + data.pickValue(List.of("", "*", "+", "{1,3}"));
@@ -140,7 +203,7 @@ final class FindSequenceFuzzer {
         input = prefix + "a😀b".repeat(data.consumeInt(1, 200)) + "!";
         assertAnchoredContinuation(regex, input, data.consumeBoolean(), data.consumeBoolean());
       }
-      case 9 -> {
+      case 12 -> {
         String anchor = data.pickValue(List.of("^", "\\A", "(?m)^"));
         String body = data.pickValue(List.of("[ab]*", "(a?)", "(a|b)*", "(?:😀)*"));
         regex = anchor + body;
@@ -158,7 +221,7 @@ final class FindSequenceFuzzer {
           matcher.find();
         }
       }
-      case 10 -> {
+      case 11 -> {
         String atom = data.pickValue(List.of("\\W", "\\s", "[\\r\\n ]"));
         String quantifier = data.pickValue(List.of("*", "+", "?", "*?", "{0,3}"));
         regex = atom + quantifier + "(?m:$)";
@@ -171,6 +234,13 @@ final class FindSequenceFuzzer {
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
     if (pattern == null) {
       return;
+    }
+    if (warmLineEndCache) {
+      FuzzSupport.MatcherPair warmup = pattern.matcher(data.consumeBoolean() ? "\r\na" : "a\na");
+      while (warmup.find()) {
+        warmup.start();
+        warmup.end();
+      }
     }
     if (warmInput != null) {
       pattern.matcher(warmInput).find();
