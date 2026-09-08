@@ -47,6 +47,18 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiOrNonAscii(int ascii, int fromIndex, int limit) {
+    if (!WorkCounterConfig.ENABLED
+        && scanProvider != null
+        && limit - fromIndex >= scanProvider.minimumInputLength()) {
+      int idx = StringVectorScan.indexOfAsciiOrNonAscii(text, ascii, fromIndex, limit);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
+      }
+    }
+    return scalarIndexOfAsciiOrNonAscii(ascii, fromIndex, limit);
+  }
+
+  private int scalarIndexOfAsciiOrNonAscii(int ascii, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
       if (WorkCounterConfig.ENABLED) {
@@ -89,6 +101,18 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiPairOrNonAscii(int c1, int c2, int fromIndex, int limit) {
+    if (!WorkCounterConfig.ENABLED
+        && scanProvider != null
+        && limit - fromIndex >= scanProvider.minimumInputLength()) {
+      int idx = StringVectorScan.indexOfAsciiPairOrNonAscii(text, c1, c2, fromIndex, limit);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
+      }
+    }
+    return scalarIndexOfAsciiPairOrNonAscii(c1, c2, fromIndex, limit);
+  }
+
+  private int scalarIndexOfAsciiPairOrNonAscii(int c1, int c2, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
       if (WorkCounterConfig.ENABLED) {
@@ -131,6 +155,18 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfAsciiTripleOrNonAscii(int c1, int c2, int c3, int fromIndex, int limit) {
+    if (!WorkCounterConfig.ENABLED
+        && scanProvider != null
+        && limit - fromIndex >= scanProvider.minimumInputLength()) {
+      int idx = StringVectorScan.indexOfAsciiTripleOrNonAscii(text, c1, c2, c3, fromIndex, limit);
+      if (idx != VectorScanProvider.UNSUPPORTED) {
+        return idx;
+      }
+    }
+    return scalarIndexOfAsciiTripleOrNonAscii(c1, c2, c3, fromIndex, limit);
+  }
+
+  private int scalarIndexOfAsciiTripleOrNonAscii(int c1, int c2, int c3, int fromIndex, int limit) {
     int end = Math.min(limit, text.length());
     for (int i = Math.max(0, fromIndex); i < end; i++) {
       if (WorkCounterConfig.ENABLED) {

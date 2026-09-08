@@ -10,6 +10,8 @@ import static java.nio.ByteOrder.nativeOrder;
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_16;
 import static jdk.incubator.vector.VectorOperators.EQ;
+import static jdk.incubator.vector.VectorOperators.GE;
+import static jdk.incubator.vector.VectorOperators.LT;
 import static org.safere.Ascii.regionMatchesIgnoreCase;
 import static org.safere.Ascii.toLowerCase;
 import static org.safere.Ascii.toUpperCase;
@@ -29,17 +31,7 @@ final class StringVectorScan {
   private static final VectorSpecies<Short> SHORT_SPECIES = ShortVector.SPECIES_PREFERRED;
 
   static int indexOfAsciiClass(String text, int[] ranges, int start) {
-    if (StringSupport.isLatin1(text) && Swar.supportsAsciiRanges(ranges, 4)) {
-      return ByteVectorScan.indexOfAsciiClass(
-          StringSupport.value(text), 0, text.length(), ranges, start);
-    }
-    if (StringSupport.isUtf16(text) && Swar.supportsAsciiRanges(ranges, 4)) {
-      return indexOfUtf16Class(text, ranges, start, text.length());
-    }
-    if (text.length() - start >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
-      return indexOfCharClassChunked(text, ranges, start, text.length());
-    }
-    return VectorScanProvider.UNSUPPORTED;
+    return indexOfCharClass(text, ranges, start, text.length());
   }
 
   static int indexOfCharClass(String text, int[] ranges, int start) {
@@ -50,8 +42,7 @@ final class StringVectorScan {
     if (StringSupport.isLatin1(text)) {
       int[] clamped = clampRangesForLatin1(ranges);
       if (clamped != null) {
-        return ByteVectorScan.indexOfAsciiClass(
-            StringSupport.value(text), 0, Math.min(limit, text.length()), clamped, start);
+        return indexOfAsciiClassLatin1(text, clamped, start, limit);
       }
       return VectorScanProvider.UNSUPPORTED;
     }
@@ -62,6 +53,32 @@ final class StringVectorScan {
       return indexOfCharClassChunked(text, ranges, start, limit);
     }
     return VectorScanProvider.UNSUPPORTED;
+  }
+
+  private static int indexOfAsciiClassLatin1(String text, int[] ranges, int start, int limit) {
+    if (!Swar.supportsAsciiRanges(ranges, 4)) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    int scanLimit = Math.min(limit, text.length());
+    int position = Math.max(0, start);
+    int vectorLen = BYTE_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    for (; position <= vecLimit; position += vectorLen) {
+      ByteVector values = StringSupport.byteVectorFromString(BYTE_SPECIES, text, position);
+      VectorMask<Byte> matches = ByteVectorScan.matches(values, ranges);
+      if (matches.anyTrue()) {
+        int bit = matches.firstTrue();
+        int found = position + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; position < scanLimit; position++) {
+      if (ByteVectorScan.matches((byte) text.charAt(position), ranges)) {
+        return position;
+      }
+    }
+    return -1;
   }
 
   static int indexOfIgnoreCase(String text, String prefix, int start) {
@@ -211,6 +228,229 @@ final class StringVectorScan {
     for (; pos < scanLimit; pos++) {
       char c = text.charAt(pos);
       if (c == c1 || c == c2 || c == c3) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiOrNonAscii(String text, int ascii, int fromIndex, int limit) {
+    if (StringSupport.isLatin1(text)) {
+      return indexOfAsciiOrNonAsciiLatin1(text, ascii, fromIndex, limit);
+    }
+    if (StringSupport.isUtf16(text) && nativeOrder() != BIG_ENDIAN) {
+      return indexOfAsciiOrNonAsciiUtf16(text, ascii, fromIndex, limit);
+    }
+    if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return indexOfAsciiOrNonAsciiChunked(text, ascii, fromIndex, limit);
+    }
+    return VectorScanProvider.UNSUPPORTED;
+  }
+
+  private static int indexOfAsciiOrNonAsciiLatin1(
+      String text, int ascii, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = BYTE_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ByteVector v = ByteVector.broadcast(BYTE_SPECIES, (byte) ascii);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ByteVector inputVec = StringSupport.byteVectorFromString(BYTE_SPECIES, text, pos);
+      VectorMask<Byte> matchMask = inputVec.compare(EQ, v).or(inputVec.compare(LT, (byte) 0));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == ascii || c >= 0x80) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  private static VectorMask<Short> nonAsciiMask(ShortVector inputVec) {
+    return inputVec.compare(GE, (short) 0x80).or(inputVec.compare(LT, (short) 0));
+  }
+
+  private static int indexOfAsciiOrNonAsciiUtf16(String text, int ascii, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = SHORT_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ShortVector v = ShortVector.broadcast(SHORT_SPECIES, (short) ascii);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ShortVector inputVec = StringSupport.shortVectorFromString(SHORT_SPECIES, text, pos);
+      VectorMask<Short> matchMask = inputVec.compare(EQ, v).or(nonAsciiMask(inputVec));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == ascii || c >= 0x80) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiPairOrNonAscii(String text, int c1, int c2, int fromIndex, int limit) {
+    if (StringSupport.isLatin1(text)) {
+      return indexOfAsciiPairOrNonAsciiLatin1(text, c1, c2, fromIndex, limit);
+    }
+    if (StringSupport.isUtf16(text) && nativeOrder() != BIG_ENDIAN) {
+      return indexOfAsciiPairOrNonAsciiUtf16(text, c1, c2, fromIndex, limit);
+    }
+    if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return indexOfAsciiPairOrNonAsciiChunked(text, c1, c2, fromIndex, limit);
+    }
+    return VectorScanProvider.UNSUPPORTED;
+  }
+
+  private static int indexOfAsciiPairOrNonAsciiLatin1(
+      String text, int c1, int c2, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = BYTE_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ByteVector v1 = ByteVector.broadcast(BYTE_SPECIES, (byte) c1);
+    ByteVector v2 = ByteVector.broadcast(BYTE_SPECIES, (byte) c2);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ByteVector inputVec = StringSupport.byteVectorFromString(BYTE_SPECIES, text, pos);
+      VectorMask<Byte> matchMask =
+          inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2)).or(inputVec.compare(LT, (byte) 0));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == c1 || c == c2 || c >= 0x80) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiPairOrNonAsciiUtf16(
+      String text, int c1, int c2, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = SHORT_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ShortVector v1 = ShortVector.broadcast(SHORT_SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SHORT_SPECIES, (short) c2);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ShortVector inputVec = StringSupport.shortVectorFromString(SHORT_SPECIES, text, pos);
+      VectorMask<Short> matchMask =
+          inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2)).or(nonAsciiMask(inputVec));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == c1 || c == c2 || c >= 0x80) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  static int indexOfAsciiTripleOrNonAscii(
+      String text, int c1, int c2, int c3, int fromIndex, int limit) {
+    if (StringSupport.isLatin1(text)) {
+      return indexOfAsciiTripleOrNonAsciiLatin1(text, c1, c2, c3, fromIndex, limit);
+    }
+    if (StringSupport.isUtf16(text) && nativeOrder() != BIG_ENDIAN) {
+      return indexOfAsciiTripleOrNonAsciiUtf16(text, c1, c2, c3, fromIndex, limit);
+    }
+    if (limit - fromIndex >= StringChunkBuffer.MIN_CHUNK_THRESHOLD) {
+      return indexOfAsciiTripleOrNonAsciiChunked(text, c1, c2, c3, fromIndex, limit);
+    }
+    return VectorScanProvider.UNSUPPORTED;
+  }
+
+  private static int indexOfAsciiTripleOrNonAsciiLatin1(
+      String text, int c1, int c2, int c3, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = BYTE_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ByteVector v1 = ByteVector.broadcast(BYTE_SPECIES, (byte) c1);
+    ByteVector v2 = ByteVector.broadcast(BYTE_SPECIES, (byte) c2);
+    ByteVector v3 = ByteVector.broadcast(BYTE_SPECIES, (byte) c3);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ByteVector inputVec = StringSupport.byteVectorFromString(BYTE_SPECIES, text, pos);
+      VectorMask<Byte> matchMask =
+          inputVec
+              .compare(EQ, v1)
+              .or(inputVec.compare(EQ, v2))
+              .or(inputVec.compare(EQ, v3))
+              .or(inputVec.compare(LT, (byte) 0));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == c1 || c == c2 || c == c3 || c >= 0x80) {
+        return pos;
+      }
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiTripleOrNonAsciiUtf16(
+      String text, int c1, int c2, int c3, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    int vectorLen = SHORT_SPECIES.length();
+    int vecLimit = scanLimit - vectorLen;
+
+    ShortVector v1 = ShortVector.broadcast(SHORT_SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SHORT_SPECIES, (short) c2);
+    ShortVector v3 = ShortVector.broadcast(SHORT_SPECIES, (short) c3);
+
+    for (; pos <= vecLimit; pos += vectorLen) {
+      ShortVector inputVec = StringSupport.shortVectorFromString(SHORT_SPECIES, text, pos);
+      VectorMask<Short> matchMask =
+          inputVec
+              .compare(EQ, v1)
+              .or(inputVec.compare(EQ, v2))
+              .or(inputVec.compare(EQ, v3))
+              .or(nonAsciiMask(inputVec));
+      if (matchMask.anyTrue()) {
+        int bit = matchMask.firstTrue();
+        int found = pos + bit;
+        return found < scanLimit ? found : -1;
+      }
+    }
+    for (; pos < scanLimit; pos++) {
+      char c = text.charAt(pos);
+      if (c == c1 || c == c2 || c == c3 || c >= 0x80) {
         return pos;
       }
     }
@@ -477,16 +717,8 @@ final class StringVectorScan {
         }
         anchorRanges = builder.build().toRanges();
       }
-      return ByteVectorScan.indexOfMultiLiteral(
-          StringSupport.value(text),
-          0,
-          text.length(),
-          literals,
-          anchorChars,
-          anchorOffsets,
-          anchorRanges,
-          minLength,
-          start);
+      return indexOfMultiLiteralLatin1(
+          text, literals, anchorChars, anchorOffsets, anchorRanges, minLength, start);
     }
     if (StringSupport.isUtf16(text)) {
       return indexOfMultiLiteralUtf16(text, literals, anchorChars, anchorOffsets, minLength, start);
@@ -496,6 +728,75 @@ final class StringVectorScan {
           text, literals, anchorChars, anchorOffsets, minLength, start);
     }
     return VectorScanProvider.UNSUPPORTED;
+  }
+
+  private static int indexOfMultiLiteralLatin1(
+      String text,
+      String[] literals,
+      char[] anchorChars,
+      int[] anchorOffsets,
+      int[] anchorRanges,
+      int minLength,
+      int start) {
+    int numLits = literals.length;
+    int length = text.length();
+    int pos = Math.max(0, start);
+    int vectorLen = BYTE_SPECIES.length();
+    int limit = length - vectorLen;
+
+    ByteVector v0 = ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[0]);
+    ByteVector v1 = numLits >= 2 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[1]) : null;
+    ByteVector v2 = numLits >= 3 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[2]) : null;
+    ByteVector v3 = numLits >= 4 ? ByteVector.broadcast(BYTE_SPECIES, (byte) anchorChars[3]) : null;
+
+    for (; pos <= limit; pos += vectorLen) {
+      ByteVector inputVec = StringSupport.byteVectorFromString(BYTE_SPECIES, text, pos);
+      VectorMask<Byte> matchMask;
+      if (anchorRanges != null && Swar.supportsAsciiRanges(anchorRanges, 4)) {
+        matchMask = ByteVectorScan.matches(inputVec, anchorRanges);
+      } else {
+        matchMask = inputVec.compare(EQ, v0);
+        if (numLits >= 2) {
+          matchMask = matchMask.or(inputVec.compare(EQ, v1));
+        }
+        if (numLits >= 3) {
+          matchMask = matchMask.or(inputVec.compare(EQ, v2));
+        }
+        if (numLits >= 4) {
+          matchMask = matchMask.or(inputVec.compare(EQ, v3));
+        }
+      }
+
+      if (matchMask.anyTrue()) {
+        long activeLanes = matchMask.toLong();
+        while (activeLanes != 0) {
+          int bit = Long.numberOfTrailingZeros(activeLanes);
+          int matchIndex = pos + bit;
+          for (int i = 0; i < numLits; i++) {
+            int candidatePos = matchIndex - anchorOffsets[i];
+            String lit = literals[i];
+            if (candidatePos >= start
+                && candidatePos + lit.length() <= length
+                && text.charAt(matchIndex) == anchorChars[i]
+                && text.startsWith(lit, candidatePos)) {
+              return candidatePos;
+            }
+          }
+          activeLanes &= activeLanes - 1;
+        }
+      }
+    }
+
+    int scalarLimit = length - minLength;
+    for (; pos <= scalarLimit; pos++) {
+      for (int i = 0; i < numLits; i++) {
+        String lit = literals[i];
+        if (pos + lit.length() <= length && text.startsWith(lit, pos)) {
+          return pos;
+        }
+      }
+    }
+    return -1;
   }
 
   static int indexOfMultiLiteral(
@@ -585,8 +886,7 @@ final class StringVectorScan {
       return VectorScanProvider.UNSUPPORTED;
     }
     if (StringSupport.isLatin1(text)) {
-      return TeddyVectorScan.indexOfTeddyUtf8(
-          StringSupport.value(text), 0, text.length(), model, start);
+      return TeddyVectorScan.indexOfTeddyLatin1(text, model, start);
     }
     if (StringSupport.isUtf16(text) && nativeOrder() != BIG_ENDIAN) {
       return TeddyVectorScan.indexOfTeddyUtf16(text, model, start);
@@ -645,6 +945,66 @@ final class StringVectorScan {
     while (pos < scanLimit) {
       int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
       int matchInChunk = scanChunkAsciiTriple(chunk, chunkSize, c1, c2, c3);
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize;
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiOrNonAsciiChunked(
+      String text, int ascii, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    char[] chunk = StringChunkBuffer.get();
+
+    while (pos < scanLimit) {
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk = scanChunkAsciiOrNonAscii(chunk, chunkSize, ascii);
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize;
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiPairOrNonAsciiChunked(
+      String text, int c1, int c2, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    char[] chunk = StringChunkBuffer.get();
+
+    while (pos < scanLimit) {
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk = scanChunkAsciiPairOrNonAscii(chunk, chunkSize, c1, c2);
+      if (matchInChunk >= 0) {
+        return pos + matchInChunk;
+      }
+      if (chunkSize < StringChunkBuffer.CHUNK_SIZE) {
+        break;
+      }
+      pos += chunkSize;
+    }
+    return -1;
+  }
+
+  private static int indexOfAsciiTripleOrNonAsciiChunked(
+      String text, int c1, int c2, int c3, int fromIndex, int limit) {
+    int scanLimit = Math.min(limit, text.length());
+    int pos = Math.max(0, fromIndex);
+    char[] chunk = StringChunkBuffer.get();
+
+    while (pos < scanLimit) {
+      int chunkSize = StringChunkBuffer.copyChunk(text, pos, scanLimit, chunk);
+      int matchInChunk = scanChunkAsciiTripleOrNonAscii(chunk, chunkSize, c1, c2, c3);
       if (matchInChunk >= 0) {
         return pos + matchInChunk;
       }
@@ -741,6 +1101,79 @@ final class StringVectorScan {
     for (; p < chunkSize; p++) {
       char c = chunk[p];
       if (c == c1 || c == c2 || c == c3) {
+        return p;
+      }
+    }
+    return -1;
+  }
+
+  private static int scanChunkAsciiOrNonAscii(char[] chunk, int chunkSize, int ascii) {
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+    ShortVector v = ShortVector.broadcast(SHORT_SPECIES, (short) ascii);
+
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector inputVec = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> matchMask = inputVec.compare(EQ, v).or(nonAsciiMask(inputVec));
+      if (matchMask.anyTrue()) {
+        return p + matchMask.firstTrue();
+      }
+    }
+    for (; p < chunkSize; p++) {
+      char c = chunk[p];
+      if (c == ascii || c >= 0x80) {
+        return p;
+      }
+    }
+    return -1;
+  }
+
+  private static int scanChunkAsciiPairOrNonAscii(char[] chunk, int chunkSize, int c1, int c2) {
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+    ShortVector v1 = ShortVector.broadcast(SHORT_SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SHORT_SPECIES, (short) c2);
+
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector inputVec = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> matchMask =
+          inputVec.compare(EQ, v1).or(inputVec.compare(EQ, v2)).or(nonAsciiMask(inputVec));
+      if (matchMask.anyTrue()) {
+        return p + matchMask.firstTrue();
+      }
+    }
+    for (; p < chunkSize; p++) {
+      char c = chunk[p];
+      if (c == c1 || c == c2 || c >= 0x80) {
+        return p;
+      }
+    }
+    return -1;
+  }
+
+  private static int scanChunkAsciiTripleOrNonAscii(
+      char[] chunk, int chunkSize, int c1, int c2, int c3) {
+    int vecLimit = chunkSize - SHORT_SPECIES.length();
+    int p = 0;
+    ShortVector v1 = ShortVector.broadcast(SHORT_SPECIES, (short) c1);
+    ShortVector v2 = ShortVector.broadcast(SHORT_SPECIES, (short) c2);
+    ShortVector v3 = ShortVector.broadcast(SHORT_SPECIES, (short) c3);
+
+    for (; p <= vecLimit; p += SHORT_SPECIES.length()) {
+      ShortVector inputVec = ShortVector.fromCharArray(SHORT_SPECIES, chunk, p);
+      VectorMask<Short> matchMask =
+          inputVec
+              .compare(EQ, v1)
+              .or(inputVec.compare(EQ, v2))
+              .or(inputVec.compare(EQ, v3))
+              .or(nonAsciiMask(inputVec));
+      if (matchMask.anyTrue()) {
+        return p + matchMask.firstTrue();
+      }
+    }
+    for (; p < chunkSize; p++) {
+      char c = chunk[p];
+      if (c == c1 || c == c2 || c == c3 || c >= 0x80) {
         return p;
       }
     }

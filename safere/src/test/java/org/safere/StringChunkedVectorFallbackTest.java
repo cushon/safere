@@ -132,4 +132,52 @@ class StringChunkedVectorFallbackTest {
             text, literals, anchorChars, anchorOffsets, minLength, 0);
     assertThat(found).isEqualTo(targetOffset);
   }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 15, 64, 255, 300})
+  @DisplayName("indexOfAsciiOrNonAscii and OrNonAscii pair/triple find matches correctly")
+  void testIndexOfOrNonAscii(int targetOffset) {
+    if (!isVectorApiAvailable()) {
+      return;
+    }
+    int totalLength = 350;
+    char[] chars = new char[totalLength];
+    Arrays.fill(chars, 'a');
+    chars[targetOffset] = 'Z';
+    String textLatin1 = new String(chars);
+
+    assertThat(StringVectorScan.indexOfAsciiOrNonAscii(textLatin1, 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+    assertThat(StringVectorScan.indexOfAsciiPairOrNonAscii(textLatin1, 'Y', 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+    assertThat(
+            StringVectorScan.indexOfAsciiTripleOrNonAscii(
+                textLatin1, 'X', 'Y', 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+
+    // Test non-ASCII character in Latin-1
+    chars[targetOffset] = '\u00E9';
+    String textNonAsciiLatin1 = new String(chars);
+    assertThat(StringVectorScan.indexOfAsciiOrNonAscii(textNonAsciiLatin1, 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+    assertThat(
+            StringVectorScan.indexOfAsciiPairOrNonAscii(
+                textNonAsciiLatin1, 'Y', 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+    assertThat(
+            StringVectorScan.indexOfAsciiTripleOrNonAscii(
+                textNonAsciiLatin1, 'X', 'Y', 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+
+    // Test UTF-16 string
+    chars[targetOffset] = '\u4E16';
+    String textUtf16 = new String(chars);
+    assertThat(StringVectorScan.indexOfAsciiOrNonAscii(textUtf16, 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+    assertThat(StringVectorScan.indexOfAsciiPairOrNonAscii(textUtf16, 'Y', 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+    assertThat(
+            StringVectorScan.indexOfAsciiTripleOrNonAscii(textUtf16, 'X', 'Y', 'Z', 0, totalLength))
+        .isEqualTo(targetOffset);
+  }
 }
