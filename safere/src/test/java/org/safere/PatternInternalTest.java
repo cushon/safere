@@ -235,7 +235,7 @@ class PatternInternalTest {
 
   @Test
   void deeplyNestedFixedOffsetWidthExtractionIsStackSafe() {
-    Pattern p = Pattern.compile(nestedFixedOffsetPattern(2_000));
+    Pattern p = Pattern.compile(nestedFixedOffsetPattern(10_000));
 
     assertThat(p.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.FixedOffset.class);
   }

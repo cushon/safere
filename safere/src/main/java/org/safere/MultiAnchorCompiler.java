@@ -307,7 +307,7 @@ final class MultiAnchorCompiler {
     Set<String> excludeStartLiterals = new LinkedHashSet<>();
     boolean skipRequiredCharClass = false;
     CharClassScanInfo ccPrefix = null;
-    boolean hasLeadingExpansion = false;
+    boolean hasLeadingExpansion = startPlan instanceof StartPlan.LeadingExpansion;
 
     switch (startPlan) {
       case StartPlan.Literal lit -> {
@@ -320,7 +320,6 @@ final class MultiAnchorCompiler {
         skipRequiredCharClass = true;
       }
       case StartPlan.CharClass cc -> ccPrefix = cc.scanInfo();
-      case StartPlan.LeadingExpansion unusedLe -> hasLeadingExpansion = true;
       case null, default -> {}
     }
 
@@ -2762,33 +2761,38 @@ final class MultiAnchorCompiler {
     AsciiWidthRange prefixWidth = AsciiWidthRange.ZERO;
     for (int index = 0; index < node.subs.size(); index++) {
       Regexp sub = node.subs.get(index);
-      collectAsciiLiterals(sub, literals);
       prefixWidth = concatenateWidths(prefixWidth, computeAsciiWidthRange(sub));
       if (!prefixWidth.isValid()) {
         break;
       }
+      collectAsciiLiterals(sub, literals);
     }
     return literals;
   }
 
   private static void collectAsciiLiterals(Regexp re, Set<String> literals) {
-    Regexp unwrapped = unwrapCaptures(re);
-    if (unwrapped == null) {
-      return;
-    }
-    String exact = extractExactAsciiLiteral(unwrapped);
+    String exact = extractExactAsciiLiteral(re);
     if (exact != null && exact.length() >= 2) {
       literals.add(exact);
     }
-    if ((unwrapped.op == RegexpOp.LITERAL_STRING || unwrapped.op == RegexpOp.LITERAL)
-        && (unwrapped.flags & ParseFlags.FOLD_CASE) == 0
-        && unwrapped.runes != null
-        && unwrapped.runes.length >= 2) {
-      literals.add(new String(unwrapped.runes, 0, unwrapped.runes.length));
-    }
-    if (unwrapped.subs != null) {
-      for (Regexp child : unwrapped.subs) {
-        collectAsciiLiterals(child, literals);
+
+    Deque<Regexp> pending = new ArrayDeque<>();
+    pending.addLast(re);
+    while (!pending.isEmpty()) {
+      Regexp node = unwrapCaptures(pending.removeLast());
+      if (node == null) {
+        continue;
+      }
+      if ((node.op == RegexpOp.LITERAL_STRING || node.op == RegexpOp.LITERAL)
+          && (node.flags & ParseFlags.FOLD_CASE) == 0
+          && node.runes != null
+          && node.runes.length >= 2) {
+        literals.add(new String(node.runes, 0, node.runes.length));
+      }
+      if (node.subs != null) {
+        for (Regexp child : node.subs) {
+          pending.addLast(child);
+        }
       }
     }
   }
@@ -2851,16 +2855,12 @@ final class MultiAnchorCompiler {
       return false;
     }
     if (excludedSuffix != null
-        && (candidate.equals(excludedSuffix)
-            || excludedSuffix.contains(candidate)
-            || candidate.contains(excludedSuffix))) {
+        && (candidate.equals(excludedSuffix) || excludedSuffix.contains(candidate))) {
       return true;
     }
     if (excludedPrefixes != null) {
       for (String excluded : excludedPrefixes) {
-        if (candidate.equals(excluded)
-            || excluded.contains(candidate)
-            || candidate.contains(excluded)) {
+        if (candidate.equals(excluded) || excluded.contains(candidate)) {
           return true;
         }
       }
