@@ -157,7 +157,7 @@ sealed interface Utf8StartAccelerator {
               pair.high2());
         }
       }
-      int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, len);
+      int anchorOffset = RarityOracle.rarestAsciiOffset(prefix, len, true);
       char anchor = prefix.charAt(anchorOffset);
       byte low = (byte) Ascii.toLowerCase(anchor);
       byte high = (byte) Ascii.toUpperCase(anchor);

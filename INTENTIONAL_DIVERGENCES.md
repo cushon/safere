@@ -38,6 +38,38 @@ SafeRE preserves a coherent overall match instead of reproducing that
 implementation behavior. The JDK inconsistency is tracked upstream as
 [JDK-8390449](https://bugs.openjdk.org/browse/JDK-8390449).
 
+## Initial `find()` after a Failed Full Match
+
+Issue reference: #818.
+
+If a newly created or region-reset matcher fails `matches()` before any
+successful match, SafeRE preserves the region beginning as the initial
+`find()` search position. Failed full-match attempts do not consume input for
+that search. This follows the
+[JDK 26 `Matcher.find()` specification](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/regex/Matcher.html#find()),
+which starts searching at the region beginning unless a previous `find()`
+succeeded and the matcher has not since been reset.
+
+For example:
+
+```java
+var matcher = Pattern.compile("\\A(a?)").matcher("a!");
+matcher.matches(); // false: the pattern cannot consume the trailing '!'
+matcher.find();    // SafeRE: true, matching "a" at [0, 1); JDK 26.0.1: false
+```
+
+The JDK result contradicts the documented initial search position. SafeRE
+intentionally preserves its specification-based behavior rather than copying
+state left by the JDK's failed full-match attempt. Calling `reset()` before
+`find()` also produces the initial match on the JDK.
+
+`FailedFullMatchFindTest` covers repeated failed full matches, optional and
+repeated captures, greedy and reluctant quantifiers, empty matches,
+supplementary characters, and nonzero region starts. These expectations are
+disabled only in generated JDK crosscheck tests because the difference is
+intentional. This policy concerns the initial search; it does not redefine
+continuation after an earlier successful match.
+
 ## Unsupported Backtracking Features
 
 Sweep names:
@@ -119,6 +151,38 @@ rule is not part of the documented default ASCII word-character model. SafeRE's
 behavior is correct because it follows the documented predicate rather than an
 extra implementation detail that makes `\b` disagree with the default `\w`
 definition.
+
+## Character Class Intersection and Ampersand Literals
+
+Issue reference: #796.
+
+Upstream JDK bug:
+[JDK-8391732: Pattern inconsistency with comments mode][jdk-8391732].
+
+[jdk-8391732]: https://bugs.openjdk.org/browse/JDK-8391732
+
+SafeRE models character classes using principled boolean algebra. The intersection
+operator `&&` is strictly an infix binary operator that requires non-empty left
+and right operands. A single ampersand `&` is always treated strictly as a
+literal character, not as a partial operator token.
+
+Consequently, SafeRE rejects malformed character class intersection syntax with
+`PatternSyntaxException`, including:
+- Leading `&&` without a left operand (e.g. `[&&a]`, `[^&&a]`)
+- Trailing `&&` without a right operand (e.g. `[a&&]`, `[a-z&&]`)
+- Repeated operator runs of three or more ampersands (e.g. `[a&&&b]`, `[a&&&&b]`)
+- Empty operands created by empty quotes or empty nested classes (e.g. `[a&&\Q\E&&b]`)
+- Ambiguous unescaped hyphens directly following intersection operators (e.g. `[a&&-b]`)
+
+Observed JDK behavior accepts repeated ampersands, leading and trailing
+ampersands, and exhibits idiosyncratic parser leakiness where solitary `&`
+characters inside right-hand operands can leak out of nested character classes into
+outer unions. Furthermore, this leakiness in the JDK is asymmetrical across the 8-bit
+boundary: characters <= 0xFF leak from `BitClass` into the outer match set (causing
+`[b&&[a]&]` to match `b`), whereas characters >= 0x100 bypass the bitmap and do not
+leak (so `[\u0100&&[a]&]` fails to match `\u0100`). SafeRE treats all Unicode code
+points uniformly according to boolean set algebra rather than reproducing JDK parser
+bugs and implementation accidents.
 
 ## Unicode Case-Insensitive Range Closure
 

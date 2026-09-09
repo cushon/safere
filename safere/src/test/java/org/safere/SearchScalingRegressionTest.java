@@ -473,6 +473,46 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void exactCaseFixedOffsetSelectsUppercaseAnchorToAvoidCandidateWork() {
+    // "AbstractBeanFactory" contains uppercase 'B' and 'F'.
+    // The input is filled with lowercase vowels and common consonants ('e', 'a', 't', 'r', 's',
+    // 'c').
+    Pattern pattern = Pattern.compile("[0-9]{3}AbstractBeanFactory[0-9]{3}");
+    String input = "the create starter test transaction context service\n".repeat(1_000);
+
+    long work =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input).find()).isFalse());
+
+    assertThat(work)
+        .as(
+            "Exact-case RarityOracle must anchor on uppercase letters to avoid false candidates in"
+                + " lowercase text")
+        .isLessThanOrEqualTo(input.length() + 100);
+  }
+
+  @Test
+  void caseInsensitiveStartAccelerationIsInvariantToPatternCapitalization() {
+    Pattern pLower = Pattern.compile("(?i)userid");
+    Pattern pUpper = Pattern.compile("(?i)USERID");
+    Pattern pMixed = Pattern.compile("(?i)UserId");
+    String input = "the_quick_brown_fox_jumps_over_the_lazy_dog\n".repeat(500);
+
+    long workLower =
+        WorkCounter.countForTesting(() -> assertThat(pLower.matcher(input).find()).isFalse());
+    long workUpper =
+        WorkCounter.countForTesting(() -> assertThat(pUpper.matcher(input).find()).isFalse());
+    long workMixed =
+        WorkCounter.countForTesting(() -> assertThat(pMixed.matcher(input).find()).isFalse());
+
+    assertThat(workLower)
+        .as(
+            "Case-folded RarityOracle must produce identical work counts regardless of pattern"
+                + " casing")
+        .isEqualTo(workUpper)
+        .isEqualTo(workMixed);
+  }
+
+  @Test
   void requiredInfixLiteralRejectsDensePrefixNoiseWithSinglePassWork() {
     // Prefix "{Link:" is common (appears 1,000 times).
     // Infix "<<!nav>>" is rare and absent.
@@ -738,6 +778,50 @@ class SearchScalingRegressionTest {
 
     assertThat(work10000)
         .as("DFA self-loop state accelerator with newline on String should scale linearly")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void dfaReacceleratesStartStateAfterFalseCandidateWorkIsLinear() {
+    Pattern pattern = Pattern.compile("fo[0-9]+");
+    String input2000 = "foox" + "a".repeat(2_000) + "fo123";
+    String input10000 = "foox" + "a".repeat(10_000) + "fo123";
+
+    long work2000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input2000).find()).isTrue());
+    long work10000 =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(input10000).find()).isTrue());
+
+    assertThat(work10000)
+        .as("DFA start state re-acceleration work must scale linearly with non-matching span")
+        .isLessThan(work2000 * 6);
+  }
+
+  @Test
+  void dfaInteriorSelfLoopEscapeAccelerationIsLinearOnWarmDfa() {
+    Pattern pattern = Pattern.compile("\"[^\"]*\"");
+    String input2000 = "\"" + "a".repeat(2_000) + "\"";
+    String input10000 = "\"" + "a".repeat(10_000) + "\"";
+    Dfa dfa = pattern.forwardFirstMatchDfa();
+
+    // Warm up DFA transitions
+    dfa.doSearch(new StringInputScanner(input2000), 0, false, false);
+
+    long work2000 =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(
+                        dfa.doSearch(new StringInputScanner(input2000), 0, false, false).matched())
+                    .isTrue());
+    long work10000 =
+        WorkCounter.countForTesting(
+            () ->
+                assertThat(
+                        dfa.doSearch(new StringInputScanner(input10000), 0, false, false).matched())
+                    .isTrue());
+
+    assertThat(work10000)
+        .as("Warm DFA should scale linearly on interior self-loop escape")
         .isLessThan(work2000 * 6);
   }
 
