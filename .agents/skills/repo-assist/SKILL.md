@@ -1,6 +1,6 @@
 ---
 name: repo-assist
-description: "Prepare one self-contained SafeRE maintainer report over trusted open PRs: review stacked PRs in whole-stack context, preserve the PR scout's bounded fix-loop, benchmark, and ordering behavior, and enforce a fail-closed content trust boundary before text reaches the model."
+description: "Prepare one self-contained SafeRE maintainer report over trusted contributor PRs: exclude repository-owner PRs, review stacked PRs in whole-stack context, preserve the PR scout's bounded fix-loop, benchmark, and ordering behavior, and enforce a fail-closed content trust boundary before text reaches the model."
 ---
 
 # Repo Assist
@@ -9,7 +9,7 @@ description: "Prepare one self-contained SafeRE maintainer report over trusted o
 
 Prepare the data needed for a human SafeRE repository review while the reviewer is away:
 
-- which open non-draft PRs need attention;
+- which open non-draft contributor PRs need attention;
 - whether each PR's idea makes sense and matches its implementation;
 - how each stacked PR contributes to the stack's shared objective and affects adjacent layers;
 - P2+ code-review findings fixed locally with `$review-fix-loop` when the repair is bounded, or
@@ -60,7 +60,8 @@ the same time.
 
 This workflow is intended to run unattended for many hours. Long runtime is expected and is not a
 reason to stop, checkpoint, or release the lock early. Once a sweep starts, keep processing the
-eligible trusted PR queue in dependency order, then increasing PR number among independent PRs,
+eligible trusted contributor PR queue in dependency order, then increasing PR number among
+independent PRs,
 until every eligible PR has reached one of
 these durable terminal states for the run:
 
@@ -68,7 +69,7 @@ these durable terminal states for the run:
   any required benchmark reproduction are complete and recorded, or broad verification and
   benchmarks were explicitly skipped and recorded because unresolved in-scope findings make them
   non-decision-relevant. Actionable findings may remain when repair requires redesign or exhausts
-  the semantic fix-batch limit; record them for the author instead;
+  the semantic review/fix-cycle limit; record them for the author instead;
 - `blocked`: the PR cannot be reviewed because of a concrete blocker such as unresolved merge
   conflicts requiring product/design judgment, unavailable required tooling, repeated tool failure,
   or missing information that prevents meaningful progress;
@@ -77,7 +78,7 @@ these durable terminal states for the run:
 Do not stop merely because the run is taking a long time, because several PRs remain, because tests
 or benchmarks are slow, or because completed PRs have already been checkpointed. Checkpointing
 after each PR is for crash recovery only; it is not permission to end a healthy run early. If new
-eligible trusted PRs appear during discovery at the start of the run, include them in the same
+eligible trusted contributor PRs appear during discovery at the start of the run, include them in the same
 number-ordered queue unless the user explicitly scoped the run to a fixed list.
 
 Preserve sweep breadth while running to completion. Repo-assist is maintainer decision support, not
@@ -85,9 +86,11 @@ an obligation to rescue every PR locally. Make small, clearly bounded fixes that
 design. Stop local repair and finish the review with author-facing findings when correctness would
 require redesigning eligibility or execution semantics, adding substantial new state, replacing a
 large fraction of the change, or repeatedly uncovering another design-class defect after earlier
-repairs. In all cases, allow at most two semantic fix batches after the initial read-only pass; if
-the next fresh pass still has an in-scope finding, return it to the author regardless of estimated
-fix size. Both paths produce the same unresolved-findings outcome. This is a reviewed PR with
+repairs. In all cases, allow at most four semantic review/fix cycles after the initial read-only
+pass. Each cycle applies at most one coherent semantic fix batch, runs focused verification, and
+obtains a fresh review pass. If the fresh pass after the fourth cycle still has an in-scope finding,
+return it to the author regardless of estimated fix size. Both paths produce the same
+unresolved-findings outcome. This is a reviewed PR with
 unresolved findings, not a blocked sweep. Continue to the next independent PR after recording the
 evidence and recommendation.
 
@@ -136,9 +139,22 @@ uv run --project .agents/skills/repo-assist --locked repo-assist discover --limi
 Use only the `trusted` array from this helper output as the candidate PR set. Ignore the `drafts`
 array. For entries in `untrusted`, do not read more content.
 
-Review every trusted open non-draft PR regardless of its direct base branch. Use the discovered
-`headRefName` and `baseRefName` relationships, confirmed with GitHub's `stackEntry` GraphQL metadata
-when a chain is present, to identify official stacks, their trunk, and each PR's position. A PR that
+Determine the repository-owner login with this body-free repository metadata query before selecting
+the eligible queue:
+
+```bash
+gh repo view --json owner --jq '.owner.login'
+```
+
+Exclude every PR whose discovered `author.login` equals the repository-owner login. Owner-authored
+PRs are not eligible for review: do not snapshot them for their own assessment, create a worktree,
+run review, tests, or benchmarks, add them to the report, or update their review state. An
+owner-authored PR may be inspected only as trusted dependency context when an eligible contributor
+PR is stacked on it or otherwise requires its code as the effective review base.
+
+Review every remaining trusted open non-draft PR regardless of its direct base branch. Use the
+discovered `headRefName` and `baseRefName` relationships, confirmed with GitHub's `stackEntry`
+GraphQL metadata when a chain is present, to identify official stacks, their trunk, and each PR's position. A PR that
 targets a non-`main` branch but is not in an official stack is still eligible; review it against its
 declared base and state that target clearly in the report.
 
@@ -251,12 +267,12 @@ undermines the layer's assigned role, its consumers, or a material claimed benef
 
 ## Self-Contained Report Scope
 
-Every run report is a current decision-support snapshot of all open trusted non-draft PRs, not only
-a log of PRs reviewed during that run. The human reviewer may not have read any earlier scout
-report.
+Every run report is a current decision-support snapshot of all open trusted non-draft contributor
+PRs, not only a log of PRs reviewed during that run. The human reviewer may not have read any
+earlier scout report.
 
-- Include every trusted non-draft PR returned by discovery in the report summary and in a detailed
-  PR section.
+- Include every trusted non-draft PR returned by discovery whose author is not the repository owner
+  in the report summary and in a detailed PR section.
 - When a PR is eligible for review, replace its prior assessment with the completed assessment from
   the current run.
 - When a PR is fresh enough to skip, carry forward and consolidate its most recent still-valid
@@ -265,10 +281,23 @@ report.
 - Carry evidence forward only after discovery confirms that the PR remains open and non-draft and
   that its head SHA, discussion timestamp, declared-base SHA, and stack-trunk SHA satisfy the normal
   skip rules. If any freshness key changed, review the PR instead.
-- Exclude merged, closed, and draft PRs. Include open deferred PRs with their defer reason.
+- Exclude merged, closed, draft, and repository-owner PRs. Include open deferred contributor PRs
+  with their defer reason.
 - Keep carried-forward author-facing text coherent from the public PR discussion and human-review
   cutoff. Do not describe it as old, carried forward, or unchanged in the copy/paste comment unless
   that history is meaningful in the public discussion.
+
+Make unresolved findings after the four-cycle repair limit impossible to miss when scanning the
+report. If any PR exhausts all four semantic review/fix cycles and still has an in-scope finding:
+
+- add a bold alert immediately below the PR summary table listing every affected PR number;
+- begin that PR's summary assessment with **OPEN REVIEW FINDINGS AFTER FOUR REVIEW/FIX CYCLES**; and
+- add the same bold callout at the start of its detailed `Review Fix Loop` section, followed by a
+  concise statement of the remaining findings.
+
+Apply this treatment only when the four-cycle limit was actually exhausted with unresolved in-scope
+findings. Do not use it for benchmark-evidence gaps, ordinary human-review focus, blocked reviews,
+or PRs returned to the author before four cycles because the required change was already a redesign.
 
 The report may identify internally which sections were reviewed in this run and which reused valid
 evidence, but it must contain all information the human needs to decide and comment without opening
@@ -277,7 +306,7 @@ an earlier scout report.
 ## Merge Ordering Assessment
 
 After the per-PR assessments are current, give the human a practical merge-order recommendation for
-the open trusted non-draft PRs in the report. Check:
+the eligible trusted non-draft contributor PRs in the report. Check:
 
 - explicit stacked-PR or base-branch relationships;
 - commit ancestry between PR heads;
@@ -437,9 +466,9 @@ uv run --project .agents/skills/repo-assist --locked repo-assist \
      design, run `$review-fix-loop` using the same prepared review-base SHA and otherwise follow it
      with two task-specific overrides: set per-fix verification to the focused tests or invariant
      checks relevant to the finding instead of a broad normal repository command, and stop after
-     two semantic fix batches even if another in-scope finding remains. Repo-assist performs
+     four semantic review/fix cycles even if another in-scope finding remains. Repo-assist performs
      proportionate broad verification after convergence.
-   - If the findings trigger the breadth-preserving repair rule or the fix-batch limit is exhausted,
+   - If the findings trigger the breadth-preserving repair rule or the four-cycle limit is exhausted,
      preserve all reproductions and return the remaining findings to the author instead.
    - The final state should be no remaining P2+ findings, a documented blocker/false positive, or
      complete author-facing findings when the breadth-preserving repair rule above applies.
@@ -473,10 +502,10 @@ git diff <post-update-pre-fix-head>..HEAD > <artifact-dir>/review-fixes.patch
      already completed exhaustive behavior tests when no semantic bytecode changed. Report the
      split verification accurately.
    - If a preflight or broad test exposes a problem that requires a semantic source edit, return to
-     focused verification and a fresh review pass, counting the edit as another semantic fix batch,
-     then repeat the preflights and affected broad validation on the new final semantic tree. If two
-     batches were already consumed, preserve the failing reproduction and use the unresolved-findings
-     outcome instead of editing. The formatting-only shortcut does not apply.
+     focused verification and a fresh review pass, counting the edit as another semantic review/fix
+     cycle, then repeat the preflights and affected broad validation on the new final semantic tree.
+     If four cycles were already consumed, preserve the failing reproduction and use the
+     unresolved-findings outcome instead of editing. The formatting-only shortcut does not apply.
 
 7. For optimization PRs only, reproduce benchmarks:
    - Skip benchmark execution when the PR ended with unresolved in-scope findings; focused
@@ -628,24 +657,37 @@ git diff <post-update-pre-fix-head>..HEAD > <artifact-dir>/review-fixes.patch
      or "refreshed against main" unless the public discussion makes that history meaningful to the
      author. When the author has not been told about a finding, introduce it directly: "I noticed
      that ... I've pushed a commit that fixes it."
-   - Perform the standalone-read check from `Author-Facing Copy/Paste Review` after writing the
-     entire report. Read only the fenced copy/paste content. If any material conclusion, request,
-     evidence, or rationale requires another section, copy the necessary author-relevant content
-     into the review and check it again.
-
 9. Update the durable report and state after each PR, not only at the end. Update that PR's row in
    the report's PR Summary table at the same checkpoint while preserving its reviewer-owned `Done`
    value. If the sweep is interrupted, completed PRs should still be discoverable.
 
+10. After writing the complete report, perform a final author-copy audit before marking the report
+    completed or updating `LATEST.md`. Extract every fenced `Copy/Paste PR Review` and read each one
+    without its surrounding report section. Rewrite any review that fails any of these checks:
+    - It must contain every author-relevant finding, impact, fix, benchmark conclusion, tradeoff,
+      request, rationale, and recommendation needed to act without reading the report.
+    - It must exclude local validation bookkeeping, commands, test counts, worktree or artifact
+      paths, local-only commit language, and references to agents or automated review passes.
+    - When a resolved fix will be pushed before the comment is posted, it must say that a fixing
+      commit was pushed, explain the material change, and end with `LGTM` when merge criteria are
+      satisfied. It must not ask the author to apply a scout-local commit.
+    - Every numeric benchmark claim must appear in a self-contained Markdown table with the ratio
+      direction or an unambiguous speedup column; prose alone is insufficient.
+    - The voice, chronology, terminology, line wrapping, and tone must satisfy the author-facing
+      rules above, and the recommendation must match the detailed assessment.
+    After any rewrite, read the fenced review alone again. If its conclusion changes, update the
+    detailed assessment and summary row before completing the report.
+
 ## Report Format
 
-Include every open trusted non-draft PR in the run report, using the current run's assessment for
-reviewed items and a self-contained copy of the latest still-valid assessment for skipped items. Also
-update `$HOME/.codex/safere-pr-review/LATEST.md` with a pointer to the latest run report.
+Include every open trusted non-draft contributor PR in the run report, using the current run's
+assessment for reviewed items and a self-contained copy of the latest still-valid assessment for
+skipped items. Also update `$HOME/.codex/safere-pr-review/LATEST.md` with a pointer to the latest run
+report.
 
 At the top of the run report, after any report title or run metadata and before other report
-sections, include a compact decision-oriented summary of every open trusted non-draft PR. Keep each
-assessment to one brief sentence or phrase. Make the PR text in each row an
+sections, include a compact decision-oriented summary of every open trusted non-draft contributor
+PR. Keep each assessment to one brief sentence or phrase. Make the PR text in each row an
 internal link to that PR's detailed section. Use an explicit `pr-<number>` HTML anchor immediately
 before every detailed PR heading so the link remains stable regardless of punctuation or Unicode
 in the PR title. Include reviewed, blocked, and deferred PRs; do not include untrusted PRs because
@@ -666,8 +708,8 @@ a row in the same report.
 Update the summary row whenever its detailed PR section changes. The summary is an index and a
 quick decision aid, not a substitute for the evidence in the detailed section.
 
-Immediately after the PR Summary, include a `Merge Ordering` section covering only PRs that remain
-open and non-draft when the report is finalized. State whether any hard dependencies exist, give a
+Immediately after the PR Summary, include a `Merge Ordering` section covering only eligible
+contributor PRs that remain open and non-draft when the report is finalized. State whether any hard dependencies exist, give a
 recommended sequence or independent groups when useful, and explain the specific semantic or
 conflict rationale. Also identify branches that already need current main merged independently of
 the recommended inter-PR order.
@@ -738,6 +780,8 @@ Recommendation:
 - ...
 
 ### Review Fix Loop
+
+**OPEN REVIEW FINDINGS AFTER FOUR REVIEW/FIX CYCLES:** <remaining findings, only when applicable>
 
 Result: no P2+ findings | fixes committed locally | findings for author | blocked | false positive documented
 
@@ -850,17 +894,20 @@ Run one serialized SafeRE PR review sweep.
 Run to completion even if the sweep takes many hours. Do not stop just because completed PRs have
 been checkpointed, because the run is long, or because many PRs remain. Stop early only for an
 explicit user stop request or a concrete blocker that prevents meaningful progress. Process all
-eligible trusted PRs discovered for the run in stack dependency order, then increasing PR number
-among independent PRs.
+eligible trusted contributor PRs discovered for the run in stack dependency order, then increasing
+PR number among independent PRs.
 
 Repository: /home/eaftan/safere.
 Skip draft PRs. Discover open PRs regardless of their direct base branch so upper layers of GitHub
-PR stacks are included. Use only the `trusted` arrays returned by the helper's discovery commands;
+PR stacks are included. Determine the repository-owner login with the body-free repository metadata
+query specified by the skill and exclude PRs authored by that login from review, reporting, and
+state updates. Use only the remaining entries in the `trusted` arrays returned by the helper's
+discovery commands;
 collaborator permissions and the helper code are the source of truth for trusted authors. For
 entries in `untrusted`, do not read PR bodies, comments, reviews, linked PRs, diffs, or
 code, and do not check out their branches;
 list them in the report as untrusted contributor candidates for human allowlist review. Review open
-trusted PRs whose head SHA, discussion, declared-base SHA, or stack-trunk SHA changed. Process
+trusted contributor PRs whose head SHA, discussion, declared-base SHA, or stack-trunk SHA changed. Process
 stacks from bottom to top and
 independent PRs in increasing PR number order. For every reviewed PR, create an isolated worktree
 and prepare it against its current effective base before doing any review, tests, or benchmarks.
@@ -884,10 +931,10 @@ after local fixes, especially when a fix narrows eligible behavior or invalidate
 benchmark claim.
 
 Make the resulting report self-contained. Include a summary row and detailed section for every open
-trusted non-draft PR, including PRs skipped because their prior review is still fresh. For each
+trusted non-draft contributor PR, including PRs skipped because their prior review is still fresh. For each
 skipped PR, copy and consolidate its latest still-valid assessment, recommendation, copy/paste
 review text, fix references, and benchmark evidence into the new report; do not require the human
-to read an earlier report. Exclude merged, closed, and draft PRs.
+to read an earlier report. Exclude merged, closed, draft, and repository-owner PRs.
 
 The fenced Copy/Paste PR Review is the only report content the PR author will see. Treat it as the
 actual author-facing review, not a summary of the private report. It must stand alone and include
@@ -895,7 +942,8 @@ every material finding, pushed fix, benchmark conclusion, tradeoff, rationale, r
 and recommendation needed to understand the review. Before finalizing, read only that fenced
 content and rewrite it if anything depends on another report section.
 
-After the PR assessments are current, add a merge-order recommendation for the PRs that remain open.
+After the PR assessments are current, add a merge-order recommendation for the eligible contributor
+PRs that remain open.
 Check explicit stacking, commit ancestry, semantic dependencies, shared APIs and production files,
 and conflicts with current main. Distinguish required ordering from optional conflict-minimizing
 ordering and genuinely independent PRs. Give a practical sequence when useful, explain every
@@ -903,13 +951,13 @@ constraint, and do not infer a dependency from file overlap alone.
 
 Start with a complete read-only defect pass in an isolated worktree. Run $review-fix-loop only when
 the complete finding set can be repaired with bounded changes that preserve the submitted design.
-Allow at most two semantic fix batches across review and validation; if the following fresh pass or
-a later validation step finds another semantic defect, return it to the author without editing.
-If correctness requires redesigning the PR, exhausts the fix-batch limit, or otherwise leaves an
-in-scope finding, give the author complete actionable findings, mark the PR reviewed with unresolved
-findings, run only the focused reproductions needed to prove them, and continue the sweep without
-broad validation or benchmarks. Recording those intentional skips satisfies the reviewed terminal
-state. Do not push branches, post comments, or publish review text.
+Allow at most four semantic review/fix cycles across review and validation; if the following fresh
+pass or a later validation step finds another semantic defect, return it to the author without
+editing. If correctness requires redesigning the PR, or the PR exhausts the four-cycle limit or
+otherwise leaves an in-scope finding, give the author complete actionable findings, mark the PR
+reviewed with unresolved findings, run only the focused reproductions needed to prove them, and
+continue the sweep without broad validation or benchmarks. Recording those intentional skips
+satisfies the reviewed terminal state. Do not push branches, post comments, or publish review text.
 Local worktrees, local branches, local commits, patch files, benchmark logs, and Markdown reports
 are allowed. Use the recorded prepared review-base SHA; for an upper stack layer this is the
 prepared lower-layer head, not `main`. Generate `review-fixes.patch` by diffing from the
@@ -922,7 +970,7 @@ AGENTS.md, CI, and applicable specialized skills; run exhaustive or generated co
 when the affected behavior requires it. Run that broad verification once on the final semantic
 tree. Do not repeat a completed exhaustive behavior phase for a later formatting-only correction.
 Any semantic edit prompted by validation returns to focused verification, a fresh review pass, and
-preflights before the affected broad validation is rerun, and counts against the same two-batch
+preflights before the affected broad validation is rerun, and counts against the same four-cycle
 limit. When the limit is exhausted, preserve the failing reproduction and return the defect to the
 author without another edit.
 
@@ -980,7 +1028,7 @@ Store state, reports, and artifacts under ~/.codex/safere-pr-review and update L
   benchmark set and uses geometric mean.
 - Do not hide failed verification. Failed or skipped commands belong in the report.
 - Do not stop early merely because the sweep is taking a long time. A healthy run continues until
-  every eligible trusted PR in the run queue is reviewed, blocked, or deferred.
+  every eligible trusted contributor PR in the run queue is reviewed, blocked, or deferred.
 - Do not leave the lock held intentionally. Release it when the sweep ends or is abandoned.
 - If a new unrelated SafeRE bug is found during review, follow the repository rule to file a
   GitHub issue immediately.
