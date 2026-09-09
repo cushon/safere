@@ -685,31 +685,17 @@ record MultiAnchorDescriptor(
       }
       if (len == 2) {
         int i0 = text.indexOf((char) guardBytes[0], from, to);
-        int i1 = text.indexOf((char) guardBytes[1], from, to);
-        int min = -1;
-        if (i0 >= from) {
-          min = i0;
-        }
-        if (i1 >= from && (min < 0 || i1 < min)) {
-          min = i1;
-        }
-        return min;
+        int bound = (i0 >= from) ? i0 : to;
+        int i1 = text.indexOf((char) guardBytes[1], from, bound);
+        return (i1 >= from) ? i1 : (i0 >= from ? i0 : -1);
       }
       if (len == 3) {
         int i0 = text.indexOf((char) guardBytes[0], from, to);
-        int i1 = text.indexOf((char) guardBytes[1], from, to);
-        int i2 = text.indexOf((char) guardBytes[2], from, to);
-        int min = -1;
-        if (i0 >= from) {
-          min = i0;
-        }
-        if (i1 >= from && (min < 0 || i1 < min)) {
-          min = i1;
-        }
-        if (i2 >= from && (min < 0 || i2 < min)) {
-          min = i2;
-        }
-        return min;
+        int bound = (i0 >= from) ? i0 : to;
+        int i1 = text.indexOf((char) guardBytes[1], from, bound);
+        bound = (i1 >= from) ? i1 : bound;
+        int i2 = text.indexOf((char) guardBytes[2], from, bound);
+        return (i2 >= from) ? i2 : (bound < to ? bound : -1);
       }
       for (int i = from; i < to; i++) {
         char c = text.charAt(i);
