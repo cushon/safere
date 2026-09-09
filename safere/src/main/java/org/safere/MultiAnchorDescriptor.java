@@ -744,36 +744,36 @@ record MultiAnchorDescriptor(
       }
       int len = guardBytes.length;
       if (len == 1) {
-        int idx = text.lastIndexOf((char) guardBytes[0], fromIndex);
-        return (idx >= minLimit) ? idx : -1;
+        char g0 = (char) guardBytes[0];
+        for (int i = fromIndex; i >= minLimit; i--) {
+          if (text.charAt(i) == g0) {
+            return i;
+          }
+        }
+        return -1;
       }
       if (len == 2) {
-        int i0 = text.lastIndexOf((char) guardBytes[0], fromIndex);
-        int i1 = text.lastIndexOf((char) guardBytes[1], fromIndex);
-        int max = -1;
-        if (i0 >= minLimit) {
-          max = i0;
+        char g0 = (char) guardBytes[0];
+        char g1 = (char) guardBytes[1];
+        for (int i = fromIndex; i >= minLimit; i--) {
+          char c = text.charAt(i);
+          if (c == g0 || c == g1) {
+            return i;
+          }
         }
-        if (i1 >= minLimit && i1 > max) {
-          max = i1;
-        }
-        return max;
+        return -1;
       }
       if (len == 3) {
-        int i0 = text.lastIndexOf((char) guardBytes[0], fromIndex);
-        int i1 = text.lastIndexOf((char) guardBytes[1], fromIndex);
-        int i2 = text.lastIndexOf((char) guardBytes[2], fromIndex);
-        int max = -1;
-        if (i0 >= minLimit) {
-          max = i0;
+        char g0 = (char) guardBytes[0];
+        char g1 = (char) guardBytes[1];
+        char g2 = (char) guardBytes[2];
+        for (int i = fromIndex; i >= minLimit; i--) {
+          char c = text.charAt(i);
+          if (c == g0 || c == g1 || c == g2) {
+            return i;
+          }
         }
-        if (i1 >= minLimit && i1 > max) {
-          max = i1;
-        }
-        if (i2 >= minLimit && i2 > max) {
-          max = i2;
-        }
-        return max;
+        return -1;
       }
       for (int i = fromIndex; i >= minLimit; i--) {
         char c = text.charAt(i);
@@ -1082,6 +1082,33 @@ record MultiAnchorDescriptor(
         for (int i = 0; i < 64; i++) {
           if ((b1 & (1L << i)) == 0) {
             guards[idx++] = (byte) (i + 64);
+          }
+        }
+        if (missing == 2) {
+          if (RarityOracle.exactByteRarity(guards[0] & 0xFF)
+              > RarityOracle.exactByteRarity(guards[1] & 0xFF)) {
+            byte tmp = guards[0];
+            guards[0] = guards[1];
+            guards[1] = tmp;
+          }
+        } else if (missing == 3) {
+          if (RarityOracle.exactByteRarity(guards[0] & 0xFF)
+              > RarityOracle.exactByteRarity(guards[1] & 0xFF)) {
+            byte tmp = guards[0];
+            guards[0] = guards[1];
+            guards[1] = tmp;
+          }
+          if (RarityOracle.exactByteRarity(guards[1] & 0xFF)
+              > RarityOracle.exactByteRarity(guards[2] & 0xFF)) {
+            byte tmp = guards[1];
+            guards[1] = guards[2];
+            guards[2] = tmp;
+          }
+          if (RarityOracle.exactByteRarity(guards[0] & 0xFF)
+              > RarityOracle.exactByteRarity(guards[1] & 0xFF)) {
+            byte tmp = guards[0];
+            guards[0] = guards[1];
+            guards[1] = tmp;
           }
         }
         return guards;
