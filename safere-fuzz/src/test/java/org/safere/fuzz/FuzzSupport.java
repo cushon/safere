@@ -7,6 +7,7 @@ package org.safere.fuzz;
 
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
@@ -41,16 +42,26 @@ final class FuzzSupport {
     org.safere.Pattern.UNICODE_CHARACTER_CLASS
   };
 
-  private static final java.util.regex.Pattern FAILED_PATH_CAPTURE_LEAKAGE_PATTERN =
-      java.util.regex.Pattern.compile(
-          "\\([^)]*\\)[^)]*(?:\\{\\d+[,}]|[*+?]).*(?:\\{\\d+[,}]|[*+?])|"
-              + "\\([^)]*\\)[^)]*(?:[*+?]|\\{\\d+[,}]).*\\$");
-
-  static boolean isFailedPathCaptureLeakagePattern(String regex) {
-    return regex != null && FAILED_PATH_CAPTURE_LEAKAGE_PATTERN.matcher(regex).find();
-  }
-
   private FuzzSupport() {}
+
+  // This is a deliberate fuzzing tradeoff: missing quantified captures can be JDK
+  // failed-path residue, but can also be real SafeRE bugs. Prefer fewer false alarms
+  // for this class, while comparing full matches and all other capture differences.
+  private static boolean isWaivedCaptureDifference(
+      MatchResult safeRe, MatchResult jdk, int group, BitSet quantifiedGroups) {
+    return group > 0
+        && safeRe.group(group) == null
+        && safeRe.start(group) == -1
+        && safeRe.end(group) == -1
+        && jdk.group(group) != null
+        && jdk.start(group) >= 0
+        && jdk.end(group) >= jdk.start(group)
+        && (quantifiedGroups.get(group)
+            || (jdk.start(group) < jdk.start() && jdk.end(group) <= jdk.start()))
+        && safeRe.start() == jdk.start()
+        && safeRe.end() == jdk.end()
+        && Objects.equals(safeRe.group(), jdk.group());
+  }
 
   static CompiledPattern compileCompatibleOrSkip(String regex, int flags) {
     org.safere.Pattern safeRePattern = null;
@@ -245,6 +256,7 @@ final class FuzzSupport {
     private String lastReplacement;
     private final org.safere.Matcher safeReMatcher;
     private final java.util.regex.Matcher jdkMatcher;
+    private final BitSet quantifiedGroups;
     private boolean jdkOracleAvailable = true;
 
     MatcherPair(
@@ -258,6 +270,8 @@ final class FuzzSupport {
       this.input = input;
       this.safeReMatcher = safeReMatcher;
       this.jdkMatcher = jdkMatcher;
+      this.quantifiedGroups =
+          org.safere.FuzzCaptureStructure.quantifiedGroups(safeReMatcher.pattern());
     }
 
     boolean matches() {
@@ -339,7 +353,7 @@ final class FuzzSupport {
     String group(int group) {
       String safeRe = safeReMatcher.group(group);
       String jdk = runJdkOracle("group(" + group + ")", safeRe, () -> jdkMatcher.group(group));
-      if (!isFailedPathCaptureLeakage(group, safeRe, jdk)) {
+      if (!isWaivedCapture(group)) {
         assertSame("group(" + group + ")", safeRe, jdk);
       }
       return safeRe;
@@ -348,7 +362,7 @@ final class FuzzSupport {
     String group(String name) {
       String safeRe = safeReMatcher.group(name);
       String jdk = runJdkOracle("group(" + name + ")", safeRe, () -> jdkMatcher.group(name));
-      if (!isFailedPathCaptureLeakage(name, safeRe, jdk)) {
+      if (!isWaivedCapture(name)) {
         assertSame("group(" + name + ")", safeRe, jdk);
       }
       return safeRe;
@@ -364,7 +378,7 @@ final class FuzzSupport {
     int start(int group) {
       int safeRe = safeReMatcher.start(group);
       int jdk = runJdkOracle("start(" + group + ")", safeRe, () -> jdkMatcher.start(group));
-      if (!isFailedPathCaptureLeakage(group, safeReMatcher.group(group), jdkMatcher.group(group))) {
+      if (!isWaivedCapture(group)) {
         assertSame("start(" + group + ")", safeRe, jdk);
       }
       return safeRe;
@@ -373,7 +387,7 @@ final class FuzzSupport {
     int start(String name) {
       int safeRe = safeReMatcher.start(name);
       int jdk = runJdkOracle("start(" + name + ")", safeRe, () -> jdkMatcher.start(name));
-      if (!isFailedPathCaptureLeakage(name, safeReMatcher.group(name), jdkMatcher.group(name))) {
+      if (!isWaivedCapture(name)) {
         assertSame("start(" + name + ")", safeRe, jdk);
       }
       return safeRe;
@@ -389,7 +403,7 @@ final class FuzzSupport {
     int end(int group) {
       int safeRe = safeReMatcher.end(group);
       int jdk = runJdkOracle("end(" + group + ")", safeRe, () -> jdkMatcher.end(group));
-      if (!isFailedPathCaptureLeakage(group, safeReMatcher.group(group), jdkMatcher.group(group))) {
+      if (!isWaivedCapture(group)) {
         assertSame("end(" + group + ")", safeRe, jdk);
       }
       return safeRe;
@@ -398,44 +412,20 @@ final class FuzzSupport {
     int end(String name) {
       int safeRe = safeReMatcher.end(name);
       int jdk = runJdkOracle("end(" + name + ")", safeRe, () -> jdkMatcher.end(name));
-      if (!isFailedPathCaptureLeakage(name, safeReMatcher.group(name), jdkMatcher.group(name))) {
+      if (!isWaivedCapture(name)) {
         assertSame("end(" + name + ")", safeRe, jdk);
       }
       return safeRe;
     }
 
-    private boolean isFailedPathCaptureLeakage(int group, Object safeRe, Object jdk) {
-      if (group <= 0 || !jdkOracleAvailable) {
-        return false;
-      }
-      boolean safeReEmpty = safeRe == null || (safeRe instanceof Integer i && i == -1);
-      boolean jdkMatched = jdk != null && (!(jdk instanceof Integer i) || i != -1);
-      if (!safeReEmpty || !jdkMatched) {
-        return false;
-      }
-      int matchStart = safeReMatcher.start();
-      int jdkGroupStart = runJdkOracle("start(" + group + ")", -1, () -> jdkMatcher.start(group));
-      if (jdkGroupStart != -1 && jdkGroupStart < matchStart) {
-        return true;
-      }
-      return isFailedPathCaptureLeakagePattern(regex);
+    private boolean isWaivedCapture(int group) {
+      return jdkOracleAvailable
+          && isWaivedCaptureDifference(safeReMatcher, jdkMatcher, group, quantifiedGroups);
     }
 
-    private boolean isFailedPathCaptureLeakage(String name, Object safeRe, Object jdk) {
-      if (name == null || !jdkOracleAvailable) {
-        return false;
-      }
-      boolean safeReEmpty = safeRe == null || (safeRe instanceof Integer i && i == -1);
-      boolean jdkMatched = jdk != null && (!(jdk instanceof Integer i) || i != -1);
-      if (!safeReEmpty || !jdkMatched) {
-        return false;
-      }
-      int matchStart = safeReMatcher.start();
-      int jdkGroupStart = runJdkOracle("start(" + name + ")", -1, () -> jdkMatcher.start(name));
-      if (jdkGroupStart != -1 && jdkGroupStart < matchStart) {
-        return true;
-      }
-      return isFailedPathCaptureLeakagePattern(regex);
+    private boolean isWaivedCapture(String name) {
+      Integer group = safeReMatcher.pattern().namedGroups().get(name);
+      return group != null && isWaivedCapture(group);
     }
 
     MatcherPair region(int start, int end) {
@@ -642,7 +632,7 @@ final class FuzzSupport {
       int groupCount = safeRe.groupCount();
       assertSame(operation + ".groupCount", groupCount, jdk.groupCount());
       for (int i = 0; i <= groupCount; i++) {
-        if (isFailedPathCaptureLeakage(safeRe, jdk, i)) {
+        if (isWaivedCaptureDifference(safeRe, jdk, i, quantifiedGroups)) {
           continue;
         }
         assertSame(operation + ".group(" + i + ")", safeRe.group(i), jdk.group(i));
@@ -651,24 +641,12 @@ final class FuzzSupport {
       }
     }
 
-    private boolean isFailedPathCaptureLeakage(MatchResult safeRe, MatchResult jdk, int group) {
-      if (group <= 0) {
-        return false;
-      }
-      if (safeRe.group(group) == null && jdk.group(group) != null) {
-        if (jdk.start(group) != -1 && jdk.start(group) < safeRe.start()) {
-          return true;
-        }
-        return isFailedPathCaptureLeakagePattern(regex);
-      }
-      return false;
-    }
-
     private boolean assertSameReplacementOutcome(
         String operation,
         String replacement,
         StringOperation safeReOperation,
         StringOperation jdkOperation) {
+      boolean waiveOutput = replacementHasWaivedCapture(operation);
       OperationResult<String> safeRe = OperationResult.capture(safeReOperation);
       if (!jdkOracleAvailable) {
         return false;
@@ -678,11 +656,9 @@ final class FuzzSupport {
         return false;
       }
       if (safeRe.throwable() == null && jdk.throwable() == null) {
-        if (!Objects.equals(safeRe.value(), jdk.value())
-            && isFailedPathCaptureLeakagePattern(regex)) {
-          return true;
+        if (!waiveOutput) {
+          assertSame(operation, replacement, safeRe.value(), jdk.value());
         }
-        assertSame(operation, replacement, safeRe.value(), jdk.value());
         return true;
       }
       if (safeRe.throwable() != null
@@ -692,6 +668,51 @@ final class FuzzSupport {
         return false;
       }
       throw divergence(operation, replacement, safeRe.describe(), jdk.describe());
+    }
+
+    private boolean hasWaivedCapture() {
+      for (int group = 1; group <= safeReMatcher.groupCount(); group++) {
+        if (isWaivedCapture(group)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    private boolean replacementHasWaivedCapture(String operation) {
+      if (!jdkOracleAvailable) {
+        return false;
+      }
+      if (operation.equals("appendReplacement")) {
+        if (!safeReMatcher.hasMatch() || !jdkMatcher.hasMatch()) {
+          return false;
+        }
+        assertMatchState("appendReplacement captures");
+        return hasWaivedCapture();
+      }
+      // replaceAll/replaceFirst reset to the full input, retaining bounds settings.
+      // Check their match sequence on independent matchers before executing the actual
+      // replacement APIs. Do not invoke a functional replacer during this check.
+      MatcherPair probe =
+          new MatcherPair(
+              regex,
+              flags,
+              input,
+              safeReMatcher.pattern().matcher(input),
+              jdkMatcher.pattern().matcher(interruptible(input)));
+      probe.safeReMatcher.useAnchoringBounds(safeReMatcher.hasAnchoringBounds());
+      probe.safeReMatcher.useTransparentBounds(safeReMatcher.hasTransparentBounds());
+      probe.jdkMatcher.useAnchoringBounds(jdkMatcher.hasAnchoringBounds());
+      probe.jdkMatcher.useTransparentBounds(jdkMatcher.hasTransparentBounds());
+      boolean waived = false;
+      while (probe.find()) {
+        waived |= probe.hasWaivedCapture();
+        if (operation.equals("replaceFirst")) {
+          break;
+        }
+      }
+      // An incomplete oracle trace is not evidence for waiving output comparison.
+      return probe.jdkOracleAvailable && waived;
     }
 
     private AssertionError divergence(
