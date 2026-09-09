@@ -1904,17 +1904,26 @@ record MultiAnchorDescriptor(
           }
           return -1;
         }
-        int idx = text.lastIndexOf(literal, maxStart);
-        if (idx < fromIndex) {
+        int endBound = Math.min(text.length(), maxStart + literal.length());
+        int first = text.indexOf(literal, fromIndex, endBound);
+        if (first < 0) {
           if (WorkCounterConfig.ENABLED) {
             WorkCounter.record(Math.max(1, maxStart - fromIndex + 1));
           }
           return -1;
         }
-        if (WorkCounterConfig.ENABLED) {
-          WorkCounter.record(Math.max(1, maxStart - idx + 1));
+        int last = first;
+        while (true) {
+          int next = text.indexOf(literal, last + 1, endBound);
+          if (next < 0) {
+            break;
+          }
+          last = next;
         }
-        return idx;
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(Math.max(1, maxStart - last + 1));
+        }
+        return last;
       }
 
       @Override
