@@ -243,8 +243,9 @@ final class MultiAnchorCompiler {
     boolean prefixFoldCase = start.prefix().foldCase();
     FixedOffsetLiteral fol = start.fixedOffsetLiteral();
 
-    boolean prefixPoisonous = prefix != null && RarityOracle.isPoisonousAnchor(prefix);
-    boolean folPoisonous = fol != null && RarityOracle.isPoisonousAnchor(fol.literal());
+    boolean prefixPoisonous =
+        prefix != null && RarityOracle.isPoisonousAnchor(prefix, prefixFoldCase);
+    boolean folPoisonous = fol != null && RarityOracle.isPoisonousAnchor(fol.literal(), false);
 
     // When a fixed-offset literal is available and not poisonous:
     //  (a) If the leading prefix is poisonous (e.g. single space or high-frequency letter),
@@ -260,7 +261,7 @@ final class MultiAnchorCompiler {
             start.charClassPrefix());
       }
       if (prefix.length() <= 2) {
-        int prefixScore = RarityOracle.literalSelectivityScore(prefix);
+        int prefixScore = RarityOracle.literalSelectivityScore(prefix, prefixFoldCase);
         int folScore = RarityOracle.literalSelectivityScore(fol.literal());
         if (folScore > prefixScore * 2) {
           return new MultiAnchorDescriptor.StartPlan.FixedOffset(
@@ -290,7 +291,7 @@ final class MultiAnchorCompiler {
       }
     }
 
-    if (start.charClassPrefix() != null) {
+    if (start.charClassPrefix() != null && !(prefixPoisonous && prefixFoldCase)) {
       return new MultiAnchorDescriptor.StartPlan.CharClass(start.charClassPrefix());
     }
 

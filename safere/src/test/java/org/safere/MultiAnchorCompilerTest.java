@@ -451,6 +451,36 @@ class MultiAnchorCompilerTest {
     assertThat(multiSpace.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.Literal.class);
     assertThat(((MultiAnchorDescriptor.StartPlan.Literal) multiSpace.startPlan()).prefix())
         .isEqualTo("  ");
+
+    Pattern exactUppercase = Pattern.compile("E[0-9]+");
+    assertThat(exactUppercase.startPlan())
+        .isInstanceOf(MultiAnchorDescriptor.StartPlan.Literal.class);
+    assertThat(exactUppercase.stringStartAccelerator()).isNotNull();
+    assertThat(exactUppercase.utf8StartAccelerator()).isNotNull();
+
+    Pattern foldedCommonLetter = Pattern.compile("(?i:E)[0-9]+");
+    assertThat(foldedCommonLetter.startPlan())
+        .isInstanceOf(MultiAnchorDescriptor.StartPlan.None.class);
+    assertThat(foldedCommonLetter.stringStartAccelerator()).isNull();
+    assertThat(foldedCommonLetter.utf8StartAccelerator()).isNull();
+
+    Pattern foldedRareLetter = Pattern.compile("(?i:Q)[0-9]+");
+    assertThat(foldedRareLetter.startPlan())
+        .isInstanceOf(MultiAnchorDescriptor.StartPlan.Literal.class);
+    assertThat(foldedRareLetter.stringStartAccelerator()).isNotNull();
+    assertThat(foldedRareLetter.utf8StartAccelerator()).isNotNull();
+
+    Pattern latin1Singleton = Pattern.compile("é+(?:ab|cd)?");
+    assertThat(latin1Singleton.startPlan())
+        .isInstanceOf(MultiAnchorDescriptor.StartPlan.CharClass.class);
+    assertThat(latin1Singleton.stringStartAccelerator()).isNotNull();
+    assertThat(latin1Singleton.utf8StartAccelerator()).isNotNull();
+
+    Pattern unicodeSingleton = Pattern.compile("Ā+(?:ab|cd)?");
+    assertThat(unicodeSingleton.startPlan())
+        .isInstanceOf(MultiAnchorDescriptor.StartPlan.CharClass.class);
+    assertThat(unicodeSingleton.stringStartAccelerator()).isNotNull();
+    assertThat(unicodeSingleton.utf8StartAccelerator()).isNotNull();
   }
 
   @Test

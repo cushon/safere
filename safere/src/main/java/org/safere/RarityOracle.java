@@ -305,7 +305,14 @@ final class RarityOracle {
    * anchor that should not be attached as a standalone start prefilter.
    */
   static boolean isPoisonousAnchor(CharSequence s) {
-    return s != null && s.length() == 1 && byteRarity(s.charAt(0)) <= POISONOUS_ANCHOR_MAX_RARITY;
+    return isPoisonousAnchor(s, false);
+  }
+
+  /** Returns whether a single-character literal is poisonous in the requested matching mode. */
+  static boolean isPoisonousAnchor(CharSequence s, boolean caseFolded) {
+    return s != null
+        && s.length() == 1
+        && characterRarity(s.charAt(0), caseFolded) <= POISONOUS_ANCHOR_MAX_RARITY;
   }
 
   private RarityOracle() {}

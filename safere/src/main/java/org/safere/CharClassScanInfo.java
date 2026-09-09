@@ -29,15 +29,14 @@ sealed interface CharClassScanInfo {
    * characters (e.g. {@code [ ]}) are not selective and delegate to DFA matching.
    */
   default boolean isSelective() {
-    int count = Long.bitCount(bitmap0()) + Long.bitCount(bitmap1());
-    if (count > 3) {
+    int[] classRanges = ranges();
+    int asciiCount = Long.bitCount(bitmap0()) + Long.bitCount(bitmap1());
+    if (asciiCount > 3) {
       return false;
     }
-    if (count == 1) {
-      long b0 = bitmap0();
-      long b1 = bitmap1();
-      int ch = b0 != 0 ? Long.numberOfTrailingZeros(b0) : 64 + Long.numberOfTrailingZeros(b1);
-      if (RarityOracle.byteRarity(ch) <= RarityOracle.POISONOUS_ANCHOR_MAX_RARITY) {
+    if (classRanges.length == 2 && classRanges[0] == classRanges[1]) {
+      int ch = classRanges[0];
+      if (ch < 128 && RarityOracle.byteRarity(ch) <= RarityOracle.POISONOUS_ANCHOR_MAX_RARITY) {
         return false;
       }
     }

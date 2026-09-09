@@ -79,15 +79,16 @@ class RarityOracleTest {
 
   @Test
   void poisonousAnchorDetection() {
-    assertThat(RarityOracle.isPoisonousAnchor(" ")).isTrue();
-    assertThat(RarityOracle.isPoisonousAnchor("e")).isTrue();
-    assertThat(RarityOracle.isPoisonousAnchor("E")).isTrue();
-    assertThat(RarityOracle.isPoisonousAnchor("z")).isFalse();
-    assertThat(RarityOracle.isPoisonousAnchor("q")).isFalse();
-    assertThat(RarityOracle.isPoisonousAnchor("404")).isFalse();
-    assertThat(RarityOracle.isPoisonousAnchor("  ")).isFalse();
-    assertThat(RarityOracle.isPoisonousAnchor(null)).isFalse();
-    assertThat(RarityOracle.isPoisonousAnchor("")).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor(" ", false)).isTrue();
+    assertThat(RarityOracle.isPoisonousAnchor("e", false)).isTrue();
+    assertThat(RarityOracle.isPoisonousAnchor("E", false)).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("E", true)).isTrue();
+    assertThat(RarityOracle.isPoisonousAnchor("z", false)).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("q", true)).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("404", false)).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("  ", false)).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor(null, false)).isFalse();
+    assertThat(RarityOracle.isPoisonousAnchor("", false)).isFalse();
   }
 
   @Test
