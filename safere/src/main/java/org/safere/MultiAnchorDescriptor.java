@@ -1893,15 +1893,28 @@ record MultiAnchorDescriptor(
         if (fromIndex > maxStart) {
           return -1;
         }
-        for (int i = maxStart; i >= fromIndex; i--) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record();
+        if (foldCase) {
+          for (int i = maxStart; i >= fromIndex; i--) {
+            if (WorkCounterConfig.ENABLED) {
+              WorkCounter.record();
+            }
+            if (startsWith(text, i)) {
+              return i;
+            }
           }
-          if (startsWith(text, i)) {
-            return i;
-          }
+          return -1;
         }
-        return -1;
+        int idx = text.lastIndexOf(literal, maxStart);
+        if (idx < fromIndex) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(Math.max(1, maxStart - fromIndex + 1));
+          }
+          return -1;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(Math.max(1, maxStart - idx + 1));
+        }
+        return idx;
       }
 
       @Override
