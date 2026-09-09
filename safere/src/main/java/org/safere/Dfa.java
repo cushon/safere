@@ -77,6 +77,18 @@ final class Dfa {
   /** Maximum number of DFA states before bailing out to NFA. */
   private static final int DEFAULT_MAX_STATES = 10_000;
 
+  /** Initial quarantine window (in bytes/chars) when candidate density trips adaptive defeat. */
+  private static final int INITIAL_QUARANTINE_WINDOW = 2048;
+
+  /** Maximum quarantine window (in bytes/chars) under exponential backoff. */
+  private static final int MAX_QUARANTINE_WINDOW = 65536;
+
+  /** Number of candidate strikes tolerated before triggering a quarantine window. */
+  private static final int ADAPTIVE_STRIKE_LIMIT = 16;
+
+  /** Minimum candidate stride (in bytes/chars); candidates closer than this count as strikes. */
+  private static final int MIN_DENSITY_STRIDE = 64;
+
   // ---------------------------------------------------------------------------
   // State representation
   // ---------------------------------------------------------------------------
@@ -241,6 +253,8 @@ final class Dfa {
 
   private int[] transitions;
   private State[] offsetToState;
+  private boolean[] isAcceleratedStateOffset;
+  private boolean hasStateAccelerators;
   private int nextStateId;
 
   private final Utf8StartAccelerator utf8StartAccelerator;
@@ -315,6 +329,7 @@ final class Dfa {
     this.nextStateId = 1;
     this.transitions = new int[1024];
     this.offsetToState = new State[1024];
+    this.isAcceleratedStateOffset = new boolean[1024];
     addStateToFlatArrays(deadState);
   }
 
@@ -324,8 +339,13 @@ final class Dfa {
       int newLen = Math.max(transitions.length * 2, minTransLen);
       transitions = Arrays.copyOf(transitions, newLen);
       offsetToState = Arrays.copyOf(offsetToState, newLen);
+      isAcceleratedStateOffset = Arrays.copyOf(isAcceleratedStateOffset, newLen);
     }
     offsetToState[s.id * numClasses] = s;
+    isAcceleratedStateOffset[s.id * numClasses] = s.isStartState || s.accelerator != null;
+    if (s.accelerator != null) {
+      hasStateAccelerators = true;
+    }
   }
 
   private void setTransition(int fromId, int cls, int toId) {
@@ -963,6 +983,7 @@ final class Dfa {
     State s = getOrCreate(insts, flags);
     if (s != null) {
       s.isStartState = true;
+      isAcceleratedStateOffset[s.id * numClasses] = true;
       startStateContextKeys[cacheIndex] = cacheKey;
       startStateByContext[cacheIndex] = s;
     }
@@ -1466,27 +1487,28 @@ final class Dfa {
     AcceleratorPolicy activePolicy = startAccelerationPolicy(text, s);
     boolean canAccelerate = activePolicy != null && !anchored;
     int minSkip = AcceleratorPolicy.DEFAULT.minProfitableSkip();
-    int maxStrikes = AcceleratorPolicy.DEFAULT.strikeBudget();
-    boolean isExact = false;
     if (canAccelerate) {
       minSkip = activePolicy.minProfitableSkip();
-      maxStrikes = activePolicy.strikeBudget();
-      isExact = activePolicy.isExactMatchCandidate();
     }
 
-    // Adaptive defeat detection: track consecutive sub-threshold skips to avoid repeatedly paying
-    // accelerator setup and candidate check overhead on dense matching inputs.
-    boolean accelerationDisabled = false;
-    int consecutiveShortSkips = 0;
+    // Adaptive defeat detection: track candidate progress density to avoid repeatedly paying
+    // accelerator setup and candidate check overhead on dense non-matching inputs.
+    // When candidates occur too frequently without sufficient progress, temporarily quarantine
+    // acceleration and fall back to the linear scalar DFA with exponential backoff.
+    int candidateStrikes = 0;
+    int lastCandidatePos = startPos;
+    int accelerationResumePos = startPos;
+    int quarantineWindow = INITIAL_QUARANTINE_WINDOW;
 
     int[] transitions = this.transitions;
     State[] offsetToState = this.offsetToState;
+    boolean[] isAcceleratedStateOffset = this.isAcceleratedStateOffset;
     int[] asciiClassMap = this.asciiClassMap;
     int pos = startPos;
     // Fast path: loop through ASCII characters (characters < 128)
     while (pos < textLen) {
       if (canAccelerate
-          && !accelerationDisabled
+          && pos >= accelerationResumePos
           && s.isStartState
           && (!startPositionPreselected || pos != startPos)
           && (textLen - pos >= minSkip)) {
@@ -1495,14 +1517,18 @@ final class Dfa {
           return new SearchResult(matched, matchEnd);
         }
         if (nextPos > pos) {
-          int skip = nextPos - pos;
-          if (!isExact) {
-            if (skip < minSkip) {
-              if (++consecutiveShortSkips >= maxStrikes) {
-                accelerationDisabled = true;
-              }
-            } else {
-              consecutiveShortSkips = 0;
+          int stride = nextPos - lastCandidatePos;
+          lastCandidatePos = nextPos;
+          if (stride < MIN_DENSITY_STRIDE) {
+            if (++candidateStrikes >= ADAPTIVE_STRIKE_LIMIT) {
+              accelerationResumePos = nextPos + quarantineWindow;
+              quarantineWindow = Math.min(quarantineWindow << 1, MAX_QUARANTINE_WINDOW);
+              candidateStrikes = ADAPTIVE_STRIKE_LIMIT >>> 1;
+            }
+          } else if (stride >= 256 && candidateStrikes > 0) {
+            candidateStrikes = Math.max(0, candidateStrikes - (stride >>> 8));
+            if (candidateStrikes == 0) {
+              quarantineWindow = INITIAL_QUARANTINE_WINDOW;
             }
           }
           pos = nextPos;
@@ -1513,12 +1539,24 @@ final class Dfa {
           if (s == null) {
             return null;
           }
+          if (s.isMatch()) {
+            if (isRequiredEndMatch(pos, needEndMatch, textLen, trailingTermStart)) {
+              matched = true;
+              matchEnd = pos;
+              if (!longest && canStopAtFirstMatch(s, text, pos, needEndMatch)) {
+                return new SearchResult(true, pos);
+              }
+            }
+          }
           if (s == deadState) {
             return new SearchResult(matched, matchEnd);
           }
-        } else if (!isExact) {
-          if (++consecutiveShortSkips >= maxStrikes) {
-            accelerationDisabled = true;
+        } else {
+          lastCandidatePos = pos;
+          if (++candidateStrikes >= ADAPTIVE_STRIKE_LIMIT) {
+            accelerationResumePos = pos + quarantineWindow;
+            quarantineWindow = Math.min(quarantineWindow << 1, MAX_QUARANTINE_WINDOW);
+            candidateStrikes = ADAPTIVE_STRIKE_LIMIT >>> 1;
           }
         }
       }
@@ -1535,40 +1573,82 @@ final class Dfa {
           }
         }
       }
+      boolean breakOnAcceleratedState =
+          (canAccelerate && pos >= accelerationResumePos) || hasStateAccelerators;
+      boolean hitAcceleratedState = false;
       int limit =
           hasPositionDependentTransitions ? Math.min(textLen, posDepThreshold - 1) : textLen;
       int sId = s.id * numClasses;
-      while (pos < limit) {
-        int ch = text.asciiAt(pos);
-        if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
-          break;
-        }
-        int cls = asciiClassMap[ch];
-        int nsId = transitions[sId + cls];
-        if (nsId == 0) {
-          break;
-        }
-        if (nsId < 0) {
-          nsId = -nsId;
-          State ns = offsetToState[nsId];
-          if (ns.isMatch() && !needEndMatch) {
-            boolean useBefore =
-                (ns.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
-            int endPos = useBefore ? pos : pos + 1;
-            if (!longest && ns.isHighestPriorityMatch) {
-              return new SearchResult(true, endPos);
-            }
-            matched = true;
-            matchEnd = endPos;
+      if (breakOnAcceleratedState) {
+        while (pos < limit) {
+          int ch = text.asciiAt(pos);
+          if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
+            break;
           }
+          int cls = asciiClassMap[ch];
+          int nsId = transitions[sId + cls];
+          if (nsId == 0) {
+            break;
+          }
+          if (nsId < 0) {
+            nsId = -nsId;
+            State ns = offsetToState[nsId];
+            if (ns.isMatch() && !needEndMatch) {
+              boolean useBefore =
+                  (ns.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
+              int endPos = useBefore ? pos : pos + 1;
+              if (!longest && ns.isHighestPriorityMatch) {
+                return new SearchResult(true, endPos);
+              }
+              matched = true;
+              matchEnd = endPos;
+            }
+          }
+          if (nsId == sId && isAcceleratedStateOffset[sId]) {
+            sId = nsId;
+            pos++;
+            hitAcceleratedState = true;
+            break;
+          }
+          sId = nsId;
+          pos++;
         }
-        sId = nsId;
-        pos++;
+      } else {
+        while (pos < limit) {
+          int ch = text.asciiAt(pos);
+          if (ch < 0 || transitionDependsOnPosition(ch, pos + 1, posDepThreshold)) {
+            break;
+          }
+          int cls = asciiClassMap[ch];
+          int nsId = transitions[sId + cls];
+          if (nsId == 0) {
+            break;
+          }
+          if (nsId < 0) {
+            nsId = -nsId;
+            State ns = offsetToState[nsId];
+            if (ns.isMatch() && !needEndMatch) {
+              boolean useBefore =
+                  (ns.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
+              int endPos = useBefore ? pos : pos + 1;
+              if (!longest && ns.isHighestPriorityMatch) {
+                return new SearchResult(true, endPos);
+              }
+              matched = true;
+              matchEnd = endPos;
+            }
+          }
+          sId = nsId;
+          pos++;
+        }
       }
       s = offsetToState[sId];
 
       if (pos >= textLen) {
         break;
+      }
+      if (hitAcceleratedState) {
+        continue;
       }
       if (hasPositionDependentTransitions && pos + 1 >= posDepThreshold) {
         break; // fall back to general loop for position-dependent flags
@@ -1589,6 +1669,7 @@ final class Dfa {
         addTransition(s, cls, ns);
         transitions = this.transitions;
         offsetToState = this.offsetToState;
+        isAcceleratedStateOffset = this.isAcceleratedStateOffset;
       }
       s = ns;
       if (s == deadState) {
@@ -1612,7 +1693,7 @@ final class Dfa {
     // General loop handles non-ASCII, position-dependent checks, and trailing end-of-text sentinel
     while (pos <= textLen) {
       if (canAccelerate
-          && !accelerationDisabled
+          && pos >= accelerationResumePos
           && s.isStartState
           && (!startPositionPreselected || pos != startPos)
           && (textLen - pos >= minSkip)) {
@@ -1621,14 +1702,18 @@ final class Dfa {
           return new SearchResult(matched, matchEnd);
         }
         if (nextPos > pos) {
-          int skip = nextPos - pos;
-          if (!isExact) {
-            if (skip < minSkip) {
-              if (++consecutiveShortSkips >= maxStrikes) {
-                accelerationDisabled = true;
-              }
-            } else {
-              consecutiveShortSkips = 0;
+          int stride = nextPos - lastCandidatePos;
+          lastCandidatePos = nextPos;
+          if (stride < MIN_DENSITY_STRIDE) {
+            if (++candidateStrikes >= ADAPTIVE_STRIKE_LIMIT) {
+              accelerationResumePos = nextPos + quarantineWindow;
+              quarantineWindow = Math.min(quarantineWindow << 1, MAX_QUARANTINE_WINDOW);
+              candidateStrikes = ADAPTIVE_STRIKE_LIMIT >>> 1;
+            }
+          } else if (stride >= 256 && candidateStrikes > 0) {
+            candidateStrikes = Math.max(0, candidateStrikes - (stride >>> 8));
+            if (candidateStrikes == 0) {
+              quarantineWindow = INITIAL_QUARANTINE_WINDOW;
             }
           }
           pos = nextPos;
@@ -1639,12 +1724,24 @@ final class Dfa {
           if (s == null) {
             return null;
           }
+          if (s.isMatch()) {
+            if (isRequiredEndMatch(pos, needEndMatch, textLen, trailingTermStart)) {
+              matched = true;
+              matchEnd = pos;
+              if (!longest && canStopAtFirstMatch(s, text, pos, needEndMatch)) {
+                return new SearchResult(true, pos);
+              }
+            }
+          }
           if (s == deadState) {
             return new SearchResult(matched, matchEnd);
           }
-        } else if (!isExact) {
-          if (++consecutiveShortSkips >= maxStrikes) {
-            accelerationDisabled = true;
+        } else {
+          lastCandidatePos = pos;
+          if (++candidateStrikes >= ADAPTIVE_STRIKE_LIMIT) {
+            accelerationResumePos = pos + quarantineWindow;
+            quarantineWindow = Math.min(quarantineWindow << 1, MAX_QUARANTINE_WINDOW);
+            candidateStrikes = ADAPTIVE_STRIKE_LIMIT >>> 1;
           }
         }
       }
