@@ -1353,6 +1353,41 @@
       "shared": true
     },
     {
+      "id": "realWorldRegex.guardByteDelimitedRecord.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "record:item=123;field=abc;code=ok\n",
+        "suffix": "record:item_valid_target_payload_val=200\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.guardByteDelimitedRecord.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "record:item=123;field=abc;code=ok",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "realWorldRegex.multiInfixLog.match.{size}",
       "axes": {
         "size": [
@@ -4516,6 +4551,35 @@
       ],
       "inputs": [
         "realWorldRegex.guardByteHeader.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.guardByteDelimitedRecord.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "record:[^\r\n;]*val=200"
+      ],
+      "inputs": [
+        "realWorldRegex.guardByteDelimitedRecord.{matchLabel}.{size}"
       ],
       "resultConsumption": "boolean",
       "measurement": {
