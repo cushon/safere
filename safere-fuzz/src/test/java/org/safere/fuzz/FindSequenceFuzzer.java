@@ -10,7 +10,7 @@ import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-final class FindSequenceFuzzer {
+public final class FindSequenceFuzzer {
   private static final List<String> LINE_TERMINATORS =
       List.of("\n", "\r", "\r\n", "\u0085", "\u2028", "\u2029");
 
@@ -123,6 +123,10 @@ final class FindSequenceFuzzer {
 
   @FuzzTest(maxDuration = "30s")
   void sequence(FuzzedDataProvider data) {
+    fuzzerTestOneInput(data);
+  }
+
+  public static void fuzzerTestOneInput(FuzzedDataProvider data) {
     String regex;
     int flags;
     String input;
