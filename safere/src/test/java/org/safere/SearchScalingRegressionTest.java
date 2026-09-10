@@ -20,6 +20,29 @@ import org.junit.jupiter.api.Test;
 class SearchScalingRegressionTest {
 
   @Test
+  void sparseDriverSearchDoesNotPrescanDownstreamAnchors() {
+    for (String regex : new String[] {"start:[^;]*ZZZ", "start:[^;]*?ZZZ", "start:[0-9]ZZZ"}) {
+      MultiAnchorDescriptor descriptor = Pattern.compile(regex).multiAnchor();
+      assertThat(descriptor.isExecutableChain()).isTrue();
+      for (int size : new int[] {1_000, 10_000}) {
+        String suffix = regex.contains("[0-9]") ? "start:1ZZZ" : "start:payloadZZZ";
+        String text = "x".repeat(size) + suffix;
+        long work =
+            WorkCounter.countForTesting(
+                () -> {
+                  MultiAnchorExecutor.Result result = MultiAnchorExecutor.find(descriptor, text, 0);
+                  assertThat(result.isMatched()).isTrue();
+                  assertThat(result.start()).isEqualTo(size);
+                  assertThat(result.end()).isEqualTo(text.length());
+                });
+        assertThat(work)
+            .as("one search across the unrelated prefix for %s", regex)
+            .isLessThanOrEqualTo(text.length() + 128L);
+      }
+    }
+  }
+
+  @Test
   void stringMultiAnchorExecutionWorkIsCountedAndLinear() {
     MultiAnchorDescriptor descriptor = Pattern.compile("AAA[0-9]BB").multiAnchor();
 
@@ -41,6 +64,98 @@ class SearchScalingRegressionTest {
     assertThat(smallerWork).as("String multi-anchor execution work must be observed").isPositive();
     assertThat(largerWork)
         .as("String multi-anchor execution should scale linearly")
+        .isLessThan(smallerWork * 6);
+  }
+
+  @Test
+  void guardedGapRetriesReuseDelimiterScanWork() {
+    Pattern pattern = Pattern.compile("AAAA[^;]*RAREBBB");
+
+    assertGuardedGapRetryWorkIsLinear(
+        size -> pattern.matcher("A".repeat(size) + ";RAREBBB")::find, "String");
+    assertGuardedGapRetryWorkIsLinear(
+        size ->
+            pattern.matcher(Utf8Input.trusted(("A".repeat(size) + ";RAREBBB").getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
+
+  @Test
+  void guardedGapRetriesReuseSuccessfulSliceValidation() {
+    Pattern pattern = Pattern.compile("AAAA[^;]*RAREBBB[^;]X");
+
+    assertGuardedGapRetryWorkIsLinear(
+        size -> pattern.matcher("X" + "AAAA".repeat(size) + "RAREBBBy")::find, "String");
+    assertGuardedGapRetryWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted(("X" + "AAAA".repeat(size) + "RAREBBBy").getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
+
+  @Test
+  void reluctantGuardedTrailingGapFindAllWorkIsLinear() {
+    Pattern pattern = Pattern.compile("AAA[^;]*?");
+
+    assertFindAllWorkIsLinear(
+        size -> {
+          Matcher matcher = pattern.matcher("AAA".repeat(size));
+          return matcher::find;
+        },
+        "String");
+    assertFindAllWorkIsLinear(
+        size -> {
+          Utf8Matcher matcher =
+              pattern.matcher(Utf8Input.trusted("AAA".repeat(size).getBytes(UTF_8)));
+          return matcher::find;
+        },
+        "UTF-8");
+  }
+
+  @Test
+  void reluctantGuardedAnchorSearchStopsAtDelimiter() {
+    Pattern pattern = Pattern.compile("AAA[^;]*?BBB");
+
+    assertGuardedGapRetryWorkIsLinear(
+        size -> pattern.matcher(("AAA" + "x".repeat(100) + ";").repeat(size) + "BBB")::find,
+        "String");
+    assertGuardedGapRetryWorkIsLinear(
+        size ->
+            pattern.matcher(
+                    Utf8Input.trusted(
+                        (("AAA" + "x".repeat(100) + ";").repeat(size) + "BBB").getBytes(UTF_8)))
+                ::find,
+        "UTF-8");
+  }
+
+  private static void assertFindAllWorkIsLinear(
+      IntFunction<FindIterator> matcher, String inputKind) {
+    long smallerWork = WorkCounter.countForTesting(() -> consumeMatches(matcher.apply(200)));
+    long largerWork = WorkCounter.countForTesting(() -> consumeMatches(matcher.apply(1_000)));
+
+    assertThat(smallerWork).as("%s reluctant-gap work must be observed", inputKind).isPositive();
+    assertThat(largerWork)
+        .as("%s reluctant-gap iteration should scale linearly", inputKind)
+        .isLessThan(smallerWork * 6);
+  }
+
+  private static void consumeMatches(FindIterator matcher) {
+    while (matcher.find()) {
+      // Consume every match so repeated find() work is included.
+    }
+  }
+
+  private static void assertGuardedGapRetryWorkIsLinear(
+      IntFunction<FindIterator> matcher, String inputKind) {
+    long smallerWork =
+        WorkCounter.countForTesting(() -> assertThat(matcher.apply(2_000).find()).isFalse());
+    long largerWork =
+        WorkCounter.countForTesting(() -> assertThat(matcher.apply(10_000).find()).isFalse());
+
+    assertThat(smallerWork).as("%s guarded-gap work must be observed", inputKind).isPositive();
+    assertThat(largerWork)
+        .as("%s guarded-gap retries should scale linearly", inputKind)
         .isLessThan(smallerWork * 6);
   }
 

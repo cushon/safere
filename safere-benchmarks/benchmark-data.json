@@ -1248,6 +1248,146 @@
       "shared": true
     },
     {
+      "id": "realWorldRegex.compoundDateLog.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "SYSLOG_ENTRY standard log payload without date token\n",
+        "suffix": "SYSLOG_ENTRY DATE_2026-09-07_LOG audit record\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.compoundDateLog.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "SYSLOG_ENTRY standard log payload without date token",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.pairedDelimitersHtml.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "<p>Paragraph content without div tag</p>\n",
+        "suffix": "<div class=\"container\" id=\"box\">hello paragraph</div>\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.pairedDelimitersHtml.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "<p>Paragraph content without div tag</p>",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.guardByteHeader.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "noise_record_field_entry;other=123\n",
+        "suffix": "header:valid_target_payload_val\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.guardByteHeader.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "header:item_123;extra_metadata=xyz",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.guardByteDelimitedRecord.match.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "record:item=123;field=abc;code=ok\n",
+        "suffix": "record:item_valid_target_payload_val=200\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.guardByteDelimitedRecord.noMatch.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "delimitedRepeatToLength",
+        "value": "record:item=123;field=abc;code=ok",
+        "delimiterAlphabet": "\n",
+        "seed": 42,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "realWorldRegex.competitiveFixedOffset.match.{size}",
       "axes": {
         "size": [
@@ -1702,41 +1842,6 @@
       "recipe": {
         "kind": "delimitedRepeatToLength",
         "value": "other_random_words",
-        "delimiterAlphabet": " ",
-        "seed": 42,
-        "length": "{size}"
-      },
-      "shared": true
-    },
-    {
-      "id": "realWorldRegex.caseInsensitiveKeywordNoise.match.{size}",
-      "axes": {
-        "size": [
-          1000,
-          10000,
-          100000
-        ]
-      },
-      "recipe": {
-        "kind": "suffixToLength",
-        "prefixUnit": "kind knowledge block check token mark keep track make lock ",
-        "suffix": "KEYWORD_TO_FIND",
-        "length": "{size}"
-      },
-      "shared": true
-    },
-    {
-      "id": "realWorldRegex.caseInsensitiveKeywordNoise.noMatch.{size}",
-      "axes": {
-        "size": [
-          1000,
-          10000,
-          100000
-        ]
-      },
-      "recipe": {
-        "kind": "delimitedRepeatToLength",
-        "value": "kind knowledge block check token mark keep track make lock",
         "delimiterAlphabet": " ",
         "seed": 42,
         "length": "{size}"
@@ -3943,44 +4048,6 @@
       "requirements": []
     },
     {
-      "id": "RealWorldRegexBenchmark.runBenchmark.caseInsensitiveKeywordNoise.{matchLabel}.{size}",
-      "operation": "find",
-      "patterns": [
-        {
-          "java": "(?i)keyword_to_find",
-          "alternates": {
-            "dotnet": {
-              "unsupported": true,
-              "reason": ".NET non-backtracking mode cannot express Java's ASCII-only case-insensitive semantics"
-            }
-          }
-        }
-      ],
-      "inputs": [
-        "realWorldRegex.caseInsensitiveKeywordNoise.{matchLabel}.{size}"
-      ],
-      "resultConsumption": "boolean",
-      "measurement": {
-        "mode": "averageTime",
-        "timingUnit": "nanoseconds",
-        "constraints": [
-          "prematerializedInput"
-        ]
-      },
-      "axes": {
-        "matchLabel": [
-          "match",
-          "noMatch"
-        ],
-        "size": [
-          1000,
-          10000,
-          100000
-        ]
-      },
-      "requirements": []
-    },
-    {
       "id": "RealWorldRegexBenchmark.runBenchmark.boundedNameMatch.{matchLabel}.{size}",
       "operation": "replaceAll",
       "patterns": [
@@ -4503,6 +4570,151 @@
       ],
       "inputs": [
         "realWorldRegex.fixedAnchorLog.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.compoundDateLog.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "DATE_(?:\\d{4}-\\d{2}-\\d{2})_LOG"
+      ],
+      "inputs": [
+        "realWorldRegex.compoundDateLog.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.pairedDelimitersHtml.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "(?s)<div[^>]*>.*?</div>"
+      ],
+      "inputs": [
+        "realWorldRegex.pairedDelimitersHtml.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.guardByteHeader.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "header:[^\\r\\n;]*val"
+      ],
+      "inputs": [
+        "realWorldRegex.guardByteHeader.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.guardByteDelimitedRecord.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "record:[^\r\n;]*val=200"
+      ],
+      "inputs": [
+        "realWorldRegex.guardByteDelimitedRecord.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.metadataBlockFind.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "(?s)<meta_start>.*?<meta_end>"
+      ],
+      "inputs": [
+        "realWorldRegex.metadataBlock.{matchLabel}.{size}"
       ],
       "resultConsumption": "boolean",
       "measurement": {

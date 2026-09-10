@@ -6,6 +6,7 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Objects;
 
 /**
@@ -485,6 +486,10 @@ final class MultiAnchorDescriptor {
       if (i > 0 && !isExecutableInteriorGap(segment.gap())) {
         return false;
       }
+      if (segment.gap().isExecutorGuardedGap()
+          && (i != n - 1 || !isInfallibleTrailingGap(chain.trailingGap()))) {
+        return false;
+      }
     }
     return isExecutableTrailingGap(chain.trailingGap());
   }
@@ -509,13 +514,13 @@ final class MultiAnchorDescriptor {
   }
 
   private static boolean isExecutableInteriorGap(Gap gap) {
-    return gap.isExecutorFixedGap();
+    return gap.isExecutorFixedGap() || gap.isExecutorGuardedGap();
   }
 
   private static boolean isExecutableTrailingGap(Gap gap) {
     return switch (gap.kind()) {
       case EMPTY, TEXT_END -> true;
-      case BOUNDED_CLASS_REPEAT -> gap.isExecutorFixedGap();
+      case BOUNDED_CLASS_REPEAT -> gap.isExecutorFixedGap() || gap.isExecutorGuardedGap();
       case ANY_STAR,
           SINGLE_LINE_ANY_STAR,
           TEXT_START,
@@ -525,6 +530,10 @@ final class MultiAnchorDescriptor {
           NO_WORD_BOUNDARY ->
           false;
     };
+  }
+
+  private static boolean isInfallibleTrailingGap(Gap gap) {
+    return gap.kind() == GapKind.EMPTY || gap.isExecutorGuardedGap();
   }
 
   boolean isExecutableUtf8Chain() {
@@ -541,6 +550,9 @@ final class MultiAnchorDescriptor {
       }
       switch (segment.anchor()) {
         case Anchor.Single single -> {
+          if (hasUnpairedSurrogate(single.literal())) {
+            return false;
+          }
           if (single.foldCase() && !isAscii(single.literal())) {
             return false;
           }
@@ -558,6 +570,21 @@ final class MultiAnchorDescriptor {
       }
     }
     return true;
+  }
+
+  private static boolean hasUnpairedSurrogate(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      char c = value.charAt(i);
+      if (Character.isHighSurrogate(c)) {
+        if (i + 1 >= value.length() || !Character.isLowSurrogate(value.charAt(i + 1))) {
+          return true;
+        }
+        i++;
+      } else if (Character.isLowSurrogate(c)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static boolean isAscii(String value) {
@@ -601,24 +628,75 @@ final class MultiAnchorDescriptor {
       AsciiBitmap charClass,
       int[] charClassRanges,
       CharClassScanInfo scanInfo,
-      boolean isGreedy) {
-    static final Gap EMPTY = new Gap(GapKind.EMPTY, 0, 0, null, null, null, null, true);
-    static final Gap TEXT_START = new Gap(GapKind.TEXT_START, 0, 0, null, null, null, null, true);
-    static final Gap TEXT_END = new Gap(GapKind.TEXT_END, 0, 0, null, null, null, null, true);
+      boolean isGreedy,
+      byte[] guardBytes,
+      boolean isPureComplement) {
+    static final Gap EMPTY =
+        new Gap(GapKind.EMPTY, 0, 0, null, null, null, null, true, null, false);
+    static final Gap TEXT_START =
+        new Gap(GapKind.TEXT_START, 0, 0, null, null, null, null, true, null, false);
+    static final Gap TEXT_END =
+        new Gap(GapKind.TEXT_END, 0, 0, null, null, null, null, true, null, false);
     static final Gap WORD_BOUNDARY =
-        new Gap(GapKind.WORD_BOUNDARY, 0, 0, null, null, null, null, true);
+        new Gap(GapKind.WORD_BOUNDARY, 0, 0, null, null, null, null, true, null, false);
     static final Gap NO_WORD_BOUNDARY =
-        new Gap(GapKind.NO_WORD_BOUNDARY, 0, 0, null, null, null, null, true);
-    static final Gap LINE_START = new Gap(GapKind.LINE_START, 0, 0, null, null, null, null, true);
-    static final Gap LINE_END = new Gap(GapKind.LINE_END, 0, 0, null, null, null, null, true);
+        new Gap(GapKind.NO_WORD_BOUNDARY, 0, 0, null, null, null, null, true, null, false);
+    static final Gap LINE_START =
+        new Gap(GapKind.LINE_START, 0, 0, null, null, null, null, true, null, false);
+    static final Gap LINE_END =
+        new Gap(GapKind.LINE_END, 0, 0, null, null, null, null, true, null, false);
     static final Gap ANY_STAR_GREEDY =
-        new Gap(GapKind.ANY_STAR, 0, Integer.MAX_VALUE, null, null, null, null, true);
+        new Gap(GapKind.ANY_STAR, 0, Integer.MAX_VALUE, null, null, null, null, true, null, false);
     static final Gap ANY_STAR_LAZY =
-        new Gap(GapKind.ANY_STAR, 0, Integer.MAX_VALUE, null, null, null, null, false);
+        new Gap(GapKind.ANY_STAR, 0, Integer.MAX_VALUE, null, null, null, null, false, null, false);
     static final Gap SINGLE_LINE_ANY_STAR_GREEDY =
-        new Gap(GapKind.SINGLE_LINE_ANY_STAR, 0, Integer.MAX_VALUE, null, null, null, null, true);
+        new Gap(
+            GapKind.SINGLE_LINE_ANY_STAR,
+            0,
+            Integer.MAX_VALUE,
+            null,
+            null,
+            null,
+            null,
+            true,
+            new byte[] {'\n', '\r'},
+            true);
     static final Gap SINGLE_LINE_ANY_STAR_LAZY =
-        new Gap(GapKind.SINGLE_LINE_ANY_STAR, 0, Integer.MAX_VALUE, null, null, null, null, false);
+        new Gap(
+            GapKind.SINGLE_LINE_ANY_STAR,
+            0,
+            Integer.MAX_VALUE,
+            null,
+            null,
+            null,
+            null,
+            false,
+            new byte[] {'\n', '\r'},
+            true);
+    static final Gap SINGLE_LINE_ANY_STAR_UNIX_GREEDY =
+        new Gap(
+            GapKind.SINGLE_LINE_ANY_STAR,
+            0,
+            Integer.MAX_VALUE,
+            null,
+            null,
+            null,
+            null,
+            true,
+            new byte[] {'\n'},
+            true);
+    static final Gap SINGLE_LINE_ANY_STAR_UNIX_LAZY =
+        new Gap(
+            GapKind.SINGLE_LINE_ANY_STAR,
+            0,
+            Integer.MAX_VALUE,
+            null,
+            null,
+            null,
+            null,
+            false,
+            new byte[] {'\n'},
+            true);
 
     boolean isFixed() {
       return minLength == maxLength;
@@ -644,9 +722,214 @@ final class MultiAnchorDescriptor {
           || (kind == GapKind.BOUNDED_CLASS_REPEAT && isFixed() && scanInfo != null);
     }
 
+    boolean isExecutorGuardedGap() {
+      return kind == GapKind.BOUNDED_CLASS_REPEAT
+          && minLength == 0
+          && guardBytes != null
+          && isPureComplement;
+    }
+
+    int findFirstGuardByte(String text, int from, int to) {
+      if (guardBytes == null || from >= to) {
+        return -1;
+      }
+      int len = guardBytes.length;
+      if (len == 1 && !WorkCounterConfig.ENABLED) {
+        return text.indexOf((char) guardBytes[0], from, to);
+      }
+      if (len == 2) {
+        char g0 = (char) guardBytes[0];
+        char g1 = (char) guardBytes[1];
+        for (int i = from; i < to; i++) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record();
+          }
+          char c = text.charAt(i);
+          if (c == g0 || c == g1) {
+            return i;
+          }
+        }
+        return -1;
+      }
+      if (len == 3) {
+        char g0 = (char) guardBytes[0];
+        char g1 = (char) guardBytes[1];
+        char g2 = (char) guardBytes[2];
+        for (int i = from; i < to; i++) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record();
+          }
+          char c = text.charAt(i);
+          if (c == g0 || c == g1 || c == g2) {
+            return i;
+          }
+        }
+        return -1;
+      }
+      for (int i = from; i < to; i++) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        char c = text.charAt(i);
+        for (byte b : guardBytes) {
+          if (c == (char) b) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    }
+
+    int findFirstGuardByte(Utf8InputScanner scanner, int from, int to) {
+      if (guardBytes == null || from >= to) {
+        return -1;
+      }
+      int len = guardBytes.length;
+      if (len == 1) {
+        int idx = scanner.indexOfAscii(guardBytes[0] & 0xFF, from, to);
+        return (idx >= from && idx < to) ? idx : -1;
+      }
+      if (len == 2) {
+        int idx = scanner.indexOfAsciiPair(guardBytes[0] & 0xFF, guardBytes[1] & 0xFF, from, to);
+        return (idx >= from && idx < to) ? idx : -1;
+      }
+      if (len == 3) {
+        int idx =
+            scanner.indexOfAsciiTriple(
+                guardBytes[0] & 0xFF, guardBytes[1] & 0xFF, guardBytes[2] & 0xFF, from, to);
+        return (idx >= from && idx < to) ? idx : -1;
+      }
+      for (int i = from; i < to; i++) {
+        int b = scanner.asciiAt(i);
+        for (byte gb : guardBytes) {
+          if (b == (gb & 0xFF)) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    }
+
+    int findLastGuardByte(String text, int minLimit, int fromIndex) {
+      if (guardBytes == null || fromIndex < minLimit) {
+        return -1;
+      }
+      int len = guardBytes.length;
+      if (len == 1) {
+        char g0 = (char) guardBytes[0];
+        for (int i = fromIndex; i >= minLimit; i--) {
+          if (text.charAt(i) == g0) {
+            return i;
+          }
+        }
+        return -1;
+      }
+      if (len == 2) {
+        char g0 = (char) guardBytes[0];
+        char g1 = (char) guardBytes[1];
+        for (int i = fromIndex; i >= minLimit; i--) {
+          char c = text.charAt(i);
+          if (c == g0 || c == g1) {
+            return i;
+          }
+        }
+        return -1;
+      }
+      if (len == 3) {
+        char g0 = (char) guardBytes[0];
+        char g1 = (char) guardBytes[1];
+        char g2 = (char) guardBytes[2];
+        for (int i = fromIndex; i >= minLimit; i--) {
+          char c = text.charAt(i);
+          if (c == g0 || c == g1 || c == g2) {
+            return i;
+          }
+        }
+        return -1;
+      }
+      for (int i = fromIndex; i >= minLimit; i--) {
+        char c = text.charAt(i);
+        for (byte b : guardBytes) {
+          if (c == (char) b) {
+            return i;
+          }
+        }
+      }
+      return -1;
+    }
+
+    int findLastGuardByte(Utf8InputScanner scanner, int minLimit, int fromIndex) {
+      if (guardBytes == null || fromIndex < minLimit) {
+        return -1;
+      }
+      int max = -1;
+      for (byte gb : guardBytes) {
+        int idx = scanner.lastIndexOfAscii(gb & 0xFF, fromIndex, minLimit);
+        if (idx >= minLimit && idx > max) {
+          max = idx;
+        }
+      }
+      return max;
+    }
+
+    private int boundedCodePointEnd(String text, int fromPos, int maxPos) {
+      if (maxLength == Integer.MAX_VALUE) {
+        return maxPos;
+      }
+      int cur = fromPos;
+      for (int count = 0; count < maxLength && cur < maxPos; count++) {
+        int width = Character.charCount(text.codePointAt(cur));
+        if (cur + width > maxPos) {
+          break;
+        }
+        cur += width;
+      }
+      return cur;
+    }
+
+    int guardedSearchEnd(String text, int fromPos, int maxPos) {
+      return boundedCodePointEnd(text, fromPos, maxPos);
+    }
+
+    int guardedSearchEnd(Utf8InputScanner scanner, int fromPos, int maxPos) {
+      return boundedCodePointEnd(scanner, fromPos, maxPos);
+    }
+
+    boolean endsAtCodePointBoundary(String text, int position) {
+      return position <= 0
+          || position >= text.length()
+          || !Character.isLowSurrogate(text.charAt(position))
+          || !Character.isHighSurrogate(text.charAt(position - 1));
+    }
+
+    private int boundedCodePointEnd(Utf8InputScanner scanner, int fromPos, int maxPos) {
+      if (maxLength == Integer.MAX_VALUE) {
+        return maxPos;
+      }
+      int cur = fromPos;
+      for (int count = 0; count < maxLength && cur < maxPos; count++) {
+        long decoded = scanner.decodeForward(cur);
+        int next = InputScanner.position(decoded);
+        if (next > maxPos) {
+          break;
+        }
+        cur = next;
+      }
+      return cur;
+    }
+
     int scanClassEnd(String text, int fromPos, int maxPos) {
       if (kind == GapKind.BOUNDED_CLASS_REPEAT) {
-        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        int limit = boundedCodePointEnd(text, fromPos, maxPos);
+        if (guardBytes != null) {
+          int g = findFirstGuardByte(text, fromPos, limit);
+          if (g >= fromPos && g < limit) {
+            limit = g;
+          }
+          if (isPureComplement) {
+            return limit;
+          }
+        }
         int cur = fromPos;
         while (cur < limit) {
           int cp = text.codePointAt(cur);
@@ -659,6 +942,15 @@ final class MultiAnchorDescriptor {
       }
       if (kind == GapKind.SINGLE_LINE_ANY_STAR) {
         int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        if (guardBytes != null) {
+          int g = findFirstGuardByte(text, fromPos, limit);
+          if (g >= fromPos && g < limit) {
+            return g;
+          }
+          if (isPureComplement) {
+            return limit;
+          }
+        }
         int cur = fromPos;
         while (cur < limit) {
           int cp = text.codePointAt(cur);
@@ -677,7 +969,16 @@ final class MultiAnchorDescriptor {
 
     int scanClassEnd(Utf8InputScanner scanner, int fromPos, int maxPos) {
       if (kind == GapKind.BOUNDED_CLASS_REPEAT) {
-        int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        int limit = boundedCodePointEnd(scanner, fromPos, maxPos);
+        if (guardBytes != null) {
+          int g = findFirstGuardByte(scanner, fromPos, limit);
+          if (g >= fromPos && g < limit) {
+            limit = g;
+          }
+          if (isPureComplement) {
+            return limit;
+          }
+        }
         int cur = fromPos;
         while (cur < limit) {
           long decoded = scanner.decodeForward(cur);
@@ -692,6 +993,15 @@ final class MultiAnchorDescriptor {
       }
       if (kind == GapKind.SINGLE_LINE_ANY_STAR) {
         int limit = Math.min(maxPos, maxLength == Integer.MAX_VALUE ? maxPos : fromPos + maxLength);
+        if (guardBytes != null) {
+          int g = findFirstGuardByte(scanner, fromPos, limit);
+          if (g >= fromPos && g < limit) {
+            return g;
+          }
+          if (isPureComplement) {
+            return limit;
+          }
+        }
         int cur = fromPos;
         while (cur < limit) {
           long decoded = scanner.decodeForward(cur);
@@ -791,6 +1101,29 @@ final class MultiAnchorDescriptor {
         int maxLength,
         int[] discreteOffsets,
         AsciiBitmap charClass,
+        int[] charClassRanges,
+        CharClassScanInfo scanInfo,
+        boolean isGreedy) {
+      this(
+          kind,
+          minLength,
+          maxLength,
+          discreteOffsets,
+          charClass,
+          charClassRanges,
+          scanInfo,
+          isGreedy,
+          extractGuardBytes(kind, charClass, scanInfo),
+          isPureComplement(
+              kind, charClass, scanInfo, extractGuardBytes(kind, charClass, scanInfo)));
+    }
+
+    Gap(
+        GapKind kind,
+        int minLength,
+        int maxLength,
+        int[] discreteOffsets,
+        AsciiBitmap charClass,
         CharClassScanInfo scanInfo,
         boolean isGreedy) {
       this(
@@ -802,6 +1135,145 @@ final class MultiAnchorDescriptor {
           charClass != null ? charClass.toRanges() : (scanInfo != null ? scanInfo.ranges() : null),
           scanInfo,
           isGreedy);
+    }
+
+    static byte[] extractGuardBytes(
+        GapKind kind, AsciiBitmap charClass, CharClassScanInfo scanInfo) {
+      if (kind == GapKind.SINGLE_LINE_ANY_STAR) {
+        return new byte[] {'\n', '\r'};
+      }
+      if (kind != GapKind.BOUNDED_CLASS_REPEAT) {
+        return null;
+      }
+      long b0;
+      long b1;
+      if (scanInfo != null) {
+        b0 = scanInfo.bitmap0();
+        b1 = scanInfo.bitmap1();
+      } else if (charClass != null) {
+        b0 = charClass.bitmap0();
+        b1 = charClass.bitmap1();
+      } else {
+        return null;
+      }
+      int count = Long.bitCount(b0) + Long.bitCount(b1);
+      int missing = 128 - count;
+      if (missing >= 1 && missing <= 3) {
+        byte[] guards = new byte[missing];
+        int idx = 0;
+        for (int i = 0; i < 64; i++) {
+          if ((b0 & (1L << i)) == 0) {
+            guards[idx++] = (byte) i;
+          }
+        }
+        for (int i = 0; i < 64; i++) {
+          if ((b1 & (1L << i)) == 0) {
+            guards[idx++] = (byte) (i + 64);
+          }
+        }
+        if (missing == 2) {
+          if (RarityOracle.exactByteRarity(guards[0] & 0xFF)
+              > RarityOracle.exactByteRarity(guards[1] & 0xFF)) {
+            byte tmp = guards[0];
+            guards[0] = guards[1];
+            guards[1] = tmp;
+          }
+        } else if (missing == 3) {
+          if (RarityOracle.exactByteRarity(guards[0] & 0xFF)
+              > RarityOracle.exactByteRarity(guards[1] & 0xFF)) {
+            byte tmp = guards[0];
+            guards[0] = guards[1];
+            guards[1] = tmp;
+          }
+          if (RarityOracle.exactByteRarity(guards[1] & 0xFF)
+              > RarityOracle.exactByteRarity(guards[2] & 0xFF)) {
+            byte tmp = guards[1];
+            guards[1] = guards[2];
+            guards[2] = tmp;
+          }
+          if (RarityOracle.exactByteRarity(guards[0] & 0xFF)
+              > RarityOracle.exactByteRarity(guards[1] & 0xFF)) {
+            byte tmp = guards[0];
+            guards[0] = guards[1];
+            guards[1] = tmp;
+          }
+        }
+        return guards;
+      }
+      return null;
+    }
+
+    static boolean isPureComplement(
+        GapKind kind, AsciiBitmap charClass, CharClassScanInfo scanInfo, byte[] guardBytes) {
+      if (guardBytes == null) {
+        return false;
+      }
+      if (kind == GapKind.SINGLE_LINE_ANY_STAR) {
+        return true;
+      }
+      if (kind != GapKind.BOUNDED_CLASS_REPEAT) {
+        return false;
+      }
+      int[] ranges =
+          scanInfo != null ? scanInfo.ranges() : (charClass != null ? charClass.toRanges() : null);
+      if (ranges == null || ranges.length == 0) {
+        return false;
+      }
+      int numRanges = ranges.length / 2;
+      int lastHi = ranges[ranges.length - 1];
+      if (lastHi < 0x10FFFF) {
+        return false;
+      }
+      for (int i = 0; i < numRanges; i++) {
+        int lo = ranges[i * 2];
+        int hi = ranges[i * 2 + 1];
+        if (hi >= 128) {
+          if (lo > 128) {
+            return false;
+          }
+          int curHi = hi;
+          for (int j = i + 1; j < numRanges; j++) {
+            int nextLo = ranges[j * 2];
+            int nextHi = ranges[j * 2 + 1];
+            if (nextLo > curHi + 1) {
+              return false;
+            }
+            curHi = nextHi;
+          }
+          return curHi >= 0x10FFFF;
+        }
+      }
+      return false;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+      if (!(obj instanceof Gap other)) {
+        return false;
+      }
+      return kind == other.kind
+          && minLength == other.minLength
+          && maxLength == other.maxLength
+          && isGreedy == other.isGreedy
+          && isPureComplement == other.isPureComplement
+          && Arrays.equals(discreteOffsets, other.discreteOffsets)
+          && Objects.equals(charClass, other.charClass)
+          && Arrays.equals(charClassRanges, other.charClassRanges)
+          && Objects.equals(scanInfo, other.scanInfo)
+          && Arrays.equals(guardBytes, other.guardBytes);
+    }
+
+    @Override
+    public int hashCode() {
+      int result =
+          Objects.hash(kind, minLength, maxLength, charClass, scanInfo, isGreedy, isPureComplement);
+      result = 31 * result + Arrays.hashCode(discreteOffsets);
+      result = 31 * result + Arrays.hashCode(charClassRanges);
+      result = 31 * result + Arrays.hashCode(guardBytes);
+      return result;
     }
 
     private static boolean isAsciiWord(int ch) {
@@ -860,6 +1332,12 @@ final class MultiAnchorDescriptor {
         case LINE_END -> len == 0 && isLineEnd(text, from);
         case ANY_STAR -> len >= minLength && len <= maxLength;
         case SINGLE_LINE_ANY_STAR -> {
+          if (guardBytes != null) {
+            int g = findFirstGuardByte(text, from, to);
+            if (g >= from && g < to) {
+              yield false;
+            }
+          }
           int count = 0;
           for (int i = from; i < to; ) {
             int cp = text.codePointAt(i);
@@ -872,6 +1350,22 @@ final class MultiAnchorDescriptor {
           yield count >= minLength && count <= maxLength;
         }
         case BOUNDED_CLASS_REPEAT -> {
+          if (guardBytes != null) {
+            int g = findFirstGuardByte(text, from, to);
+            if (g >= from && g < to) {
+              yield false;
+            }
+            if (isPureComplement) {
+              if (len < minLength) {
+                yield false;
+              }
+              if (maxLength == Integer.MAX_VALUE && minLength == 0) {
+                yield true;
+              }
+              int count = Character.codePointCount(text, from, to);
+              yield count >= minLength && count <= maxLength;
+            }
+          }
           int count = 0;
           for (int i = from; i < to; ) {
             int cp = text.codePointAt(i);
@@ -907,6 +1401,12 @@ final class MultiAnchorDescriptor {
         case LINE_END -> len == 0 && isLineEnd(scanner, from);
         case ANY_STAR -> len >= minLength && len <= maxLength;
         case SINGLE_LINE_ANY_STAR -> {
+          if (guardBytes != null) {
+            int g = findFirstGuardByte(scanner, from, to);
+            if (g >= from && g < to) {
+              yield false;
+            }
+          }
           int count = 0;
           for (int i = from; i < to; ) {
             long decoded = scanner.decodeForward(i);
@@ -920,6 +1420,27 @@ final class MultiAnchorDescriptor {
           yield count >= minLength && count <= maxLength;
         }
         case BOUNDED_CLASS_REPEAT -> {
+          if (guardBytes != null) {
+            int g = findFirstGuardByte(scanner, from, to);
+            if (g >= from && g < to) {
+              yield false;
+            }
+            if (isPureComplement) {
+              if (len < minLength) {
+                yield false;
+              }
+              if (maxLength == Integer.MAX_VALUE && minLength == 0) {
+                yield true;
+              }
+              int count = 0;
+              for (int i = from; i < to; ) {
+                long decoded = scanner.decodeForward(i);
+                count++;
+                i = InputScanner.position(decoded);
+              }
+              yield count >= minLength && count <= maxLength;
+            }
+          }
           int count = 0;
           for (int i = from; i < to; ) {
             long decoded = scanner.decodeForward(i);
@@ -1046,6 +1567,30 @@ final class MultiAnchorDescriptor {
         case LINE_START -> isLineStart(text, fromPos) ? fromPos : -1;
         case LINE_END -> isLineEnd(text, fromPos) ? fromPos : -1;
         case BOUNDED_CLASS_REPEAT -> {
+          if (guardBytes != null && isPureComplement) {
+            if (!isGreedy) {
+              int cur = fromPos;
+              for (int count = 0; count < minLength; count++) {
+                if (cur >= maxPos) {
+                  yield -1;
+                }
+                int cp = text.codePointAt(cur);
+                if (scanInfo != null && !scanInfo.contains(cp)) {
+                  yield -1;
+                }
+                cur += Character.charCount(cp);
+              }
+              yield cur <= maxPos ? cur : -1;
+            }
+            int limit = boundedCodePointEnd(text, fromPos, maxPos);
+            int g = findFirstGuardByte(text, fromPos, limit);
+            int end = (g >= fromPos && g < limit) ? g : limit;
+            int count = Character.codePointCount(text, fromPos, end);
+            if (count < minLength) {
+              yield -1;
+            }
+            yield end;
+          }
           int count = 0;
           int cur = fromPos;
           int minMatchPos = -1;
@@ -1089,6 +1634,46 @@ final class MultiAnchorDescriptor {
         case LINE_START -> isLineStart(scanner, fromPos) ? fromPos : -1;
         case LINE_END -> isLineEnd(scanner, fromPos) ? fromPos : -1;
         case BOUNDED_CLASS_REPEAT -> {
+          if (guardBytes != null && isPureComplement) {
+            if (!isGreedy) {
+              int cur = fromPos;
+              for (int count = 0; count < minLength; count++) {
+                if (cur >= maxPos) {
+                  yield -1;
+                }
+                long decoded = scanner.decodeForward(cur);
+                int cp = InputScanner.codePoint(decoded);
+                if (scanInfo != null && !scanInfo.contains(cp)) {
+                  yield -1;
+                }
+                cur = InputScanner.position(decoded);
+              }
+              yield cur <= maxPos ? cur : -1;
+            }
+            int limit = boundedCodePointEnd(scanner, fromPos, maxPos);
+            int g = findFirstGuardByte(scanner, fromPos, limit);
+            int end = (g >= fromPos && g < limit) ? g : limit;
+            int count = 0;
+            int minMatchPos = -1;
+            if (minLength == 0) {
+              minMatchPos = fromPos;
+            }
+            for (int p = fromPos; p < end; ) {
+              long decoded = scanner.decodeForward(p);
+              p = InputScanner.position(decoded);
+              count++;
+              if (count == minLength) {
+                minMatchPos = p;
+                if (!isGreedy) {
+                  break;
+                }
+              }
+            }
+            if (count < minLength) {
+              yield -1;
+            }
+            yield isGreedy ? end : minMatchPos;
+          }
           int count = 0;
           int cur = fromPos;
           int minMatchPos = -1;
@@ -1384,11 +1969,19 @@ final class MultiAnchorDescriptor {
 
       @Override
       public int findNext(String text, int fromIndex) {
-        if (foldCase) {
-          return Matcher.indexOfIgnoreCase(
-              text, literal, anchorOffset, anchorLowChar, anchorHighChar, fromIndex);
+        int position = fromIndex;
+        while (position <= text.length() - literal.length()) {
+          int candidate =
+              foldCase
+                  ? Matcher.indexOfIgnoreCase(
+                      text, literal, anchorOffset, anchorLowChar, anchorHighChar, position)
+                  : text.indexOf(literal, position);
+          if (candidate < 0 || hasCodePointBoundaries(text, candidate)) {
+            return candidate;
+          }
+          position = candidate + 1;
         }
-        return text.indexOf(literal, fromIndex);
+        return -1;
       }
 
       @Override
@@ -1401,6 +1994,38 @@ final class MultiAnchorDescriptor {
       }
 
       @Override
+      public int findNextWithin(String text, int fromIndex, int toIndex) {
+        if (fromIndex > toIndex || fromIndex + literal.length() > text.length()) {
+          return -1;
+        }
+        int maxStart = Math.min(toIndex, text.length() - literal.length());
+        if (fromIndex > maxStart) {
+          return -1;
+        }
+        if (!foldCase) {
+          int endBound = Math.min(text.length(), maxStart + literal.length());
+          int position = fromIndex;
+          while (position <= maxStart) {
+            int candidate = text.indexOf(literal, position, endBound);
+            if (candidate < 0 || hasCodePointBoundaries(text, candidate)) {
+              return candidate;
+            }
+            position = candidate + 1;
+          }
+          return -1;
+        }
+        for (int i = fromIndex; i <= maxStart; i++) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record();
+          }
+          if (startsWith(text, i)) {
+            return i;
+          }
+        }
+        return -1;
+      }
+
+      @Override
       public int findNextWithin(Utf8InputScanner scanner, int fromIndex, int toIndex) {
         if (fromIndex > toIndex || fromIndex + literalUtf8.length > scanner.length()) {
           return -1;
@@ -1409,16 +2034,9 @@ final class MultiAnchorDescriptor {
         if (fromIndex > maxStart) {
           return -1;
         }
-        if (maxStart - fromIndex <= 64) {
-          for (int i = fromIndex; i <= maxStart; i++) {
-            if (startsWith(scanner, i)) {
-              return i;
-            }
-          }
-          return -1;
-        }
-        int idx = findNext(scanner, fromIndex);
-        return idx >= 0 && idx <= maxStart ? idx : -1;
+        return foldCase
+            ? scanner.indexOfIgnoreCaseWithin(literal, failure, fromIndex, maxStart)
+            : scanner.indexOfWithin(literalUtf8, failure, fromIndex, maxStart);
       }
 
       @Override
@@ -1430,15 +2048,37 @@ final class MultiAnchorDescriptor {
         if (fromIndex > maxStart) {
           return -1;
         }
-        for (int i = maxStart; i >= fromIndex; i--) {
-          if (WorkCounterConfig.ENABLED) {
-            WorkCounter.record();
+        if (foldCase) {
+          for (int i = maxStart; i >= fromIndex; i--) {
+            if (WorkCounterConfig.ENABLED) {
+              WorkCounter.record();
+            }
+            if (startsWith(text, i)) {
+              return i;
+            }
           }
-          if (startsWith(text, i)) {
-            return i;
+          return -1;
+        }
+        int endBound = Math.min(text.length(), maxStart + literal.length());
+        int first = text.indexOf(literal, fromIndex, endBound);
+        if (first < 0) {
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(Math.max(1, maxStart - fromIndex + 1));
+          }
+          return -1;
+        }
+        int last = -1;
+        for (int candidate = first;
+            candidate >= 0;
+            candidate = text.indexOf(literal, candidate + 1, endBound)) {
+          if (hasCodePointBoundaries(text, candidate)) {
+            last = candidate;
           }
         }
-        return -1;
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(Math.max(1, maxStart - last + 1));
+        }
+        return last;
       }
 
       @Override
@@ -1478,9 +2118,21 @@ final class MultiAnchorDescriptor {
         if (pos < 0 || pos + literal.length() > text.length()) {
           return false;
         }
-        return foldCase
-            ? Ascii.regionMatchesIgnoreCase(text, pos, literal, literal.length())
-            : text.startsWith(literal, pos);
+        return hasCodePointBoundaries(text, pos)
+            && (foldCase
+                ? Ascii.regionMatchesIgnoreCase(text, pos, literal, literal.length())
+                : text.startsWith(literal, pos));
+      }
+
+      private boolean hasCodePointBoundaries(String text, int pos) {
+        return isCodePointBoundary(text, pos) && isCodePointBoundary(text, pos + literal.length());
+      }
+
+      private static boolean isCodePointBoundary(String text, int pos) {
+        return pos <= 0
+            || pos >= text.length()
+            || !Character.isLowSurrogate(text.charAt(pos))
+            || !Character.isHighSurrogate(text.charAt(pos - 1));
       }
 
       @Override
@@ -1849,6 +2501,20 @@ final class MultiAnchorDescriptor {
       }
 
       @Override
+      public int findNextWithin(String text, int fromIndex, int toIndex) {
+        int limit = Math.min(text.length(), toIndex + 1);
+        for (int i = Math.max(0, fromIndex); i < limit; ) {
+          int cp = text.codePointAt(i);
+          if ((scanInfo != null && scanInfo.contains(cp))
+              || (scanInfo == null && cp < 128 && bitmap != null && bitmap.containsAscii(cp))) {
+            return i;
+          }
+          i += Character.charCount(cp);
+        }
+        return -1;
+      }
+
+      @Override
       public int findNext(Utf8InputScanner scanner, int fromIndex) {
         if (scanInfo != null) {
           return scanner.indexOfCodePointClass(
@@ -1860,6 +2526,26 @@ final class MultiAnchorDescriptor {
         }
         int len = scanner.length();
         for (int i = Math.max(0, fromIndex); i < len; i++) {
+          int c = scanner.asciiAt(i);
+          if (c >= 0 && bitmap != null && bitmap.containsAscii(c)) {
+            return i;
+          }
+        }
+        return -1;
+      }
+
+      @Override
+      public int findNextWithin(Utf8InputScanner scanner, int fromIndex, int toIndex) {
+        if (scanInfo != null) {
+          return scanner.indexOfCodePointClass(
+              scanInfo.ranges(),
+              scanInfo.bitmap0(),
+              scanInfo.bitmap1(),
+              fromIndex,
+              Math.min(scanner.length(), toIndex + 1));
+        }
+        int limit = Math.min(scanner.length(), toIndex + 1);
+        for (int i = Math.max(0, fromIndex); i < limit; i++) {
           int c = scanner.asciiAt(i);
           if (c >= 0 && bitmap != null && bitmap.containsAscii(c)) {
             return i;

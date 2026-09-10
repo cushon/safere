@@ -78,15 +78,8 @@ final class MultiAnchorExecutor {
       return Result.MISMATCH;
     }
 
-    // Phase 0: Negative short-circuit on rarest anchor if not at segment 0
-    int[] checkOrder = descriptor.checkOrder();
-    if (checkOrder != null && checkOrder.length > 0 && checkOrder[0] != 0) {
-      MultiAnchorDescriptor.Anchor rarestAnchor = segments[checkOrder[0]].anchor();
-      if (rarestAnchor.findNext(scanner, 0) < 0) {
-        return Result.MISMATCH;
-      }
-    }
-
+    // Matcher already applies the compiled reject prefilter. Search the driver directly here;
+    // execution verifies every anchor without a redundant full-input rejection pass.
     int driverIdx =
         descriptor.selectDriver(
             MultiAnchorDescriptor.InputDomain.UTF8, VectorScanProviders.teddyProviderAvailable());
@@ -106,6 +99,8 @@ final class MultiAnchorExecutor {
     int minReverseWatermark = Math.max(0, searchFrom);
     int[] downstreamWatermarks = new int[numSegments];
     Arrays.fill(downstreamWatermarks, searchFrom);
+    int[] downstreamGuardEnds = new int[numSegments];
+    Arrays.fill(downstreamGuardEnds, -1);
     int candidatePos = Math.max(0, searchFrom);
     MultiAnchorDescriptor.Segment driverSeg = segments[driverIdx];
     MultiAnchorDescriptor.Anchor driverAnchor = driverSeg.anchor();
@@ -175,6 +170,14 @@ final class MultiAnchorExecutor {
 
           int searchUpperBound = curAnchorStart - minHop;
           int searchLowerBound = Math.max(minReverseWatermark, curAnchorStart - maxHop);
+          if (gap.guardBytes() != null) {
+            int lastGuard = gap.findLastGuardByte(scanner, searchLowerBound, curAnchorStart - 1);
+            if (lastGuard >= 0) {
+              long maxAnchorBytes = (long) upstreamAnchor.maxLength() * 4;
+              int firstOverlappingAnchorStart = (int) Math.max(0L, lastGuard - maxAnchorBytes + 1L);
+              searchLowerBound = Math.max(searchLowerBound, firstOverlappingAnchorStart);
+            }
+          }
 
           if (searchUpperBound < searchLowerBound) {
             upstreamMatched = false;
@@ -269,8 +272,25 @@ final class MultiAnchorExecutor {
             chainMatched = false;
             break;
           }
-          int maxScan = gap.scanClassEnd(scanner, currentPos, textLen);
-          int maxHop = Math.min(textLen, maxScan + anchor.maxLength());
+          boolean reluctantGuardedGap = gap.isExecutorGuardedGap() && !gap.isGreedy();
+          int maxHop;
+          if (reluctantGuardedGap) {
+            maxHop = gap.guardedSearchEnd(scanner, currentPos, textLen);
+            int cachedGuardEnd = downstreamGuardEnds[i];
+            if (cachedGuardEnd >= currentPos) {
+              maxHop = Math.min(maxHop, cachedGuardEnd);
+            }
+          } else if (gap.isExecutorGuardedGap() && gap.maxLength() == Integer.MAX_VALUE) {
+            int cachedGuardEnd = downstreamGuardEnds[i];
+            if (cachedGuardEnd >= currentPos) {
+              maxHop = cachedGuardEnd;
+            } else {
+              maxHop = gap.scanClassEnd(scanner, currentPos, textLen);
+              downstreamGuardEnds[i] = maxHop;
+            }
+          } else {
+            maxHop = gap.scanClassEnd(scanner, currentPos, textLen);
+          }
 
           int searchStart = Math.max(minHop, downstreamWatermarks[i]);
           if (searchStart > maxHop) {
@@ -288,9 +308,18 @@ final class MultiAnchorExecutor {
             chainMatched = false;
             break;
           }
-          downstreamWatermarks[i] = p;
+          if (!gap.isGreedy()) {
+            downstreamWatermarks[i] = p;
+          }
 
-          if (!gap.matchesSlice(scanner, currentPos, p)) {
+          if (reluctantGuardedGap) {
+            int guard = gap.findFirstGuardByte(scanner, currentPos, p);
+            if (guard >= currentPos) {
+              downstreamGuardEnds[i] = guard;
+              chainMatched = false;
+              break;
+            }
+          } else if (!gap.isExecutorGuardedGap() && !gap.matchesSlice(scanner, currentPos, p)) {
             chainMatched = false;
             break;
           }
@@ -354,15 +383,8 @@ final class MultiAnchorExecutor {
       return Result.MISMATCH;
     }
 
-    // Phase 0: Negative short-circuit on rarest anchor if not at segment 0
-    int[] checkOrder = descriptor.checkOrder();
-    if (checkOrder != null && checkOrder.length > 0 && checkOrder[0] != 0) {
-      MultiAnchorDescriptor.Anchor rarestAnchor = segments[checkOrder[0]].anchor();
-      if (findNextCountingWork(rarestAnchor, text, 0) < 0) {
-        return Result.MISMATCH;
-      }
-    }
-
+    // Matcher already applies the compiled reject prefilter. Search the driver directly here;
+    // execution verifies every anchor without a redundant full-input rejection pass.
     int driverIdx = descriptor.selectDriver(MultiAnchorDescriptor.InputDomain.STRING, true);
     if (driverIdx < 0 || driverIdx >= numSegments) {
       driverIdx = 0;
@@ -380,6 +402,8 @@ final class MultiAnchorExecutor {
     int minReverseWatermark = Math.max(0, searchFrom);
     int[] downstreamWatermarks = new int[numSegments];
     Arrays.fill(downstreamWatermarks, searchFrom);
+    int[] downstreamGuardEnds = new int[numSegments];
+    Arrays.fill(downstreamGuardEnds, -1);
     int candidatePos = Math.max(0, searchFrom);
     MultiAnchorDescriptor.Segment driverSeg = segments[driverIdx];
     MultiAnchorDescriptor.Anchor driverAnchor = driverSeg.anchor();
@@ -449,6 +473,14 @@ final class MultiAnchorExecutor {
 
           int searchUpperBound = curAnchorStart - minHop;
           int searchLowerBound = Math.max(minReverseWatermark, curAnchorStart - maxHop);
+          if (gap.guardBytes() != null) {
+            int lastGuard = gap.findLastGuardByte(text, searchLowerBound, curAnchorStart - 1);
+            if (lastGuard >= 0) {
+              int firstOverlappingAnchorStart =
+                  (int) Math.max(0L, (long) lastGuard - upstreamAnchor.maxLength() + 1L);
+              searchLowerBound = Math.max(searchLowerBound, firstOverlappingAnchorStart);
+            }
+          }
 
           if (searchUpperBound < searchLowerBound) {
             upstreamMatched = false;
@@ -543,8 +575,25 @@ final class MultiAnchorExecutor {
             chainMatched = false;
             break;
           }
-          int maxScan = gap.scanClassEnd(text, currentPos, textLen);
-          int maxHop = Math.min(textLen, maxScan + anchor.maxLength());
+          boolean reluctantGuardedGap = gap.isExecutorGuardedGap() && !gap.isGreedy();
+          int maxHop;
+          if (reluctantGuardedGap) {
+            maxHop = gap.guardedSearchEnd(text, currentPos, textLen);
+            int cachedGuardEnd = downstreamGuardEnds[i];
+            if (cachedGuardEnd >= currentPos) {
+              maxHop = Math.min(maxHop, cachedGuardEnd);
+            }
+          } else if (gap.isExecutorGuardedGap() && gap.maxLength() == Integer.MAX_VALUE) {
+            int cachedGuardEnd = downstreamGuardEnds[i];
+            if (cachedGuardEnd >= currentPos) {
+              maxHop = cachedGuardEnd;
+            } else {
+              maxHop = gap.scanClassEnd(text, currentPos, textLen);
+              downstreamGuardEnds[i] = maxHop;
+            }
+          } else {
+            maxHop = gap.scanClassEnd(text, currentPos, textLen);
+          }
 
           int searchStart = Math.max(minHop, downstreamWatermarks[i]);
           if (searchStart > maxHop) {
@@ -562,9 +611,22 @@ final class MultiAnchorExecutor {
             chainMatched = false;
             break;
           }
-          downstreamWatermarks[i] = p;
+          if (!gap.isGreedy()) {
+            downstreamWatermarks[i] = p;
+          }
 
-          if (!gap.matchesSlice(text, currentPos, p)) {
+          if (!gap.endsAtCodePointBoundary(text, p)) {
+            chainMatched = false;
+            break;
+          }
+          if (reluctantGuardedGap) {
+            int guard = gap.findFirstGuardByte(text, currentPos, p);
+            if (guard >= currentPos) {
+              downstreamGuardEnds[i] = guard;
+              chainMatched = false;
+              break;
+            }
+          } else if (!gap.isExecutorGuardedGap() && !gap.matchesSlice(text, currentPos, p)) {
             chainMatched = false;
             break;
           }

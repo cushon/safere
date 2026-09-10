@@ -8,6 +8,8 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -761,5 +763,209 @@ class MultiAnchorGapEngineTest {
     String absent = "noise PREFIX_START_ab_MID_cd_OTHER_FINAL_TOKEN trailing";
     Matcher mAbsent = pattern.matcher(absent);
     assertThat(mAbsent.find()).isFalse();
+  }
+
+  @Test
+  void guardBytesExtractionAndPureComplement() {
+    Pattern p1 = Pattern.compile("header:[^\\r\\n;]*val");
+    MultiAnchorDescriptor d1 = p1.multiAnchor();
+    assertThat(d1.segments()).hasSize(2);
+    MultiAnchorDescriptor.Gap g1 = d1.segments()[1].gap();
+    assertThat(g1.guardBytes()).containsExactly((byte) '\n', (byte) '\r', (byte) ';');
+    assertThat(g1.isPureComplement()).isTrue();
+
+    Pattern p2 = Pattern.compile("START\"[^\"]*\"END");
+    MultiAnchorDescriptor d2 = p2.multiAnchor();
+    assertThat(d2.segments()).hasSize(2);
+    MultiAnchorDescriptor.Gap g2 = d2.segments()[1].gap();
+    assertThat(g2.guardBytes()).containsExactly((byte) '"');
+    assertThat(g2.isPureComplement()).isTrue();
+
+    Pattern p3 = Pattern.compile("START[^\\n]*END");
+    MultiAnchorDescriptor d3 = p3.multiAnchor();
+    assertThat(d3.segments()).hasSize(2);
+    MultiAnchorDescriptor.Gap g3 = d3.segments()[1].gap();
+    assertThat(g3.guardBytes()).containsExactly((byte) '\n', (byte) '\r');
+    assertThat(g3.isPureComplement()).isTrue();
+
+    Pattern p5 = Pattern.compile("START[^;]*END");
+    MultiAnchorDescriptor d5 = p5.multiAnchor();
+    assertThat(d5.segments()).hasSize(2);
+    MultiAnchorDescriptor.Gap g5 = d5.segments()[1].gap();
+    assertThat(g5.guardBytes()).containsExactly((byte) ';');
+    assertThat(g5.isPureComplement()).isTrue();
+
+    Pattern p4 = Pattern.compile("START[a-z]*END");
+    MultiAnchorDescriptor d4 = p4.multiAnchor();
+    assertThat(d4.segments()).hasSize(2);
+    MultiAnchorDescriptor.Gap g4 = d4.segments()[1].gap();
+    assertThat(g4.guardBytes()).isNull();
+    assertThat(g4.isPureComplement()).isFalse();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void structuredHeaderGuardByteRejection(boolean useUtf8) {
+    Pattern pattern = Pattern.compile("header:[^\\r\\n;]*val");
+    assertThat(pattern.multiAnchor().isExecutableChain()).isTrue();
+
+    String valid = "prefix header:custom-content-12345val suffix";
+    assertThat(findMatches(pattern, valid, useUtf8))
+        .containsExactly("header:custom-content-12345val");
+
+    // Newline in gap -> rejected
+    String withNl = "prefix header:custom\ncontentval suffix";
+    assertThat(findMatches(pattern, withNl, useUtf8)).isEmpty();
+
+    // Semicolon in gap -> rejected
+    String withSemi = "prefix header:custom;contentval suffix";
+    assertThat(findMatches(pattern, withSemi, useUtf8)).isEmpty();
+
+    // Carriage return in gap -> rejected
+    String withCr = "prefix header:custom\rcontentval suffix";
+    assertThat(findMatches(pattern, withCr, useUtf8)).isEmpty();
+
+    // Multiline runaway where false anchor "val" is on subsequent line
+    String multiline = "header:some_header_text\nother_text_without_start val";
+    assertThat(findMatches(pattern, multiline, useUtf8)).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void quotedStringDelimiterGuardByteRejection(boolean useUtf8) {
+    Pattern pattern = Pattern.compile("\"[^\"]*\"");
+
+    String simple = "leading \"hello world\" trailing";
+    assertThat(findMatches(pattern, simple, useUtf8)).containsExactly("\"hello world\"");
+
+    // Multiple quoted strings on one line: engine must stop at the first quote delimiter
+    String multi = "first \"foo\" and second \"bar\" end";
+    assertThat(findMatches(pattern, multi, useUtf8)).containsExactly("\"foo\"", "\"bar\"");
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void singleLineDelimiterReverseRejection(boolean useUtf8) {
+    Pattern pattern = Pattern.compile("START[^\\n]*END");
+
+    String sameLine = "noise START some content END trailing";
+    assertThat(findMatches(pattern, sameLine, useUtf8)).containsExactly("START some content END");
+
+    // START on line 1, END on line 2 -> reverse driver must reject across newline
+    String acrossLines = "START line one\nline two with END";
+    assertThat(findMatches(pattern, acrossLines, useUtf8)).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void guardedGreedyGapChoosesSuffixBeforeFirstGuard(boolean useUtf8) {
+    Pattern pattern = Pattern.compile("AAA[^;]*BBB");
+
+    assertThat(findMatches(pattern, "AAABBB;BBB", useUtf8)).containsExactly("AAABBB");
+    assertThat(findMatches(pattern, "AAAxxBBB;BBB", useUtf8)).containsExactly("AAAxxBBB");
+    assertThat(findMatches(pattern, "AAA;BBB", useUtf8)).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void reverseGuardPruningRetainsUpstreamAnchorContainingGuard(boolean useUtf8) {
+    Pattern ascii = Pattern.compile("AAA;[^;]RAREBBBB");
+    Pattern nonAscii = Pattern.compile("é;[^;]RAREBBBBBBBB");
+
+    assertThat(findMatches(ascii, "xxAAA;xRAREBBBByy", useUtf8)).containsExactly("AAA;xRAREBBBB");
+    assertThat(findMatches(nonAscii, "é;xRAREBBBBBBBB", useUtf8))
+        .containsExactly("é;xRAREBBBBBBBB");
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void guardedGapWithFallibleContinuationUsesGeneralEngine(boolean useUtf8) {
+    Pattern greedy = Pattern.compile("AAA[^;]*BBB[^;]*CCC");
+    Pattern reluctant = Pattern.compile("AAA[^;]*?BBB[^:]*CCC");
+
+    assertThat(greedy.multiAnchor().isExecutableChain()).isFalse();
+    assertThat(reluctant.multiAnchor().isExecutableChain()).isFalse();
+    assertThat(findMatches(greedy, "AAABBBCCCBBB;CCC", useUtf8)).containsExactly("AAABBBCCC");
+    assertThat(findMatches(reluctant, "AAABBB:BBBCCC", useUtf8)).containsExactly("AAABBB:BBBCCC");
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void guardedBoundedTrailingGapEndsOnCodePointBoundary(boolean useUtf8) {
+    Pattern optional = Pattern.compile("AAA[^;]?");
+    Pattern bounded = Pattern.compile("AAA[^;]{0,2}");
+    Pattern interior = Pattern.compile("AAA[^;]?BBB");
+
+    assertThat(findMatches(optional, "xxAAA\ud83d\ude00zz", useUtf8))
+        .containsExactly("AAA\ud83d\ude00");
+    assertThat(findMatches(bounded, "xxAAA\ud83d\ude00\ud83d\ude03z", useUtf8))
+        .containsExactly("AAA\ud83d\ude00\ud83d\ude03");
+    assertThat(findMatches(interior, "xxAAA\ud83d\ude00BBBzz", useUtf8))
+        .containsExactly("AAA\ud83d\ude00BBB");
+    assertThat(findMatches(optional, "xxAAA;zz", useUtf8)).containsExactly("AAA");
+  }
+
+  @Test
+  void guardedGapAnchorsStartOnlyAtCodePointBoundaries() {
+    String text = "xxAAA\ud83d\ude00BBBzz";
+
+    for (String regex : new String[] {"AAA[^;]*\\uDE00BBB", "AAA[^;]?\\uDE00BBB"}) {
+      assertThat(java.util.regex.Pattern.compile(regex).matcher(text).find()).isFalse();
+      assertThat(Pattern.compile(regex).matcher(text).find()).as(regex).isFalse();
+    }
+
+    String laterValidSuffix = "AAA\ud83d\ude00BBB\ude00BBB";
+    String regex = "AAA[^;]*\\uDE00BBB";
+    java.util.regex.Matcher jdk = java.util.regex.Pattern.compile(regex).matcher(laterValidSuffix);
+    Matcher safeRe = Pattern.compile(regex).matcher(laterValidSuffix);
+    assertThat(jdk.find()).isTrue();
+    assertThat(safeRe.find()).isTrue();
+    assertThat(safeRe.group()).isEqualTo(jdk.group());
+
+    assertThat(Pattern.compile("AAA\\uD83D[^;]*").matcher("AAA\ud83d\ude00").find()).isFalse();
+    assertThat(Pattern.compile("AAA[^;]*BBB\\uD83D").matcher("AAABBB\ud83d\ude00").find())
+        .isFalse();
+
+    Utf8Matcher utf8 =
+        Pattern.compile(regex).matcher(Utf8Input.validated("AAA?BBB".getBytes(UTF_8)));
+    assertThat(utf8.find()).isFalse();
+  }
+
+  @Test
+  void unixLinesDotMatchesCarriageReturnAndStopsAtNewline() {
+    Pattern pattern = Pattern.compile("AAA.*BBB", Pattern.UNIX_LINES);
+
+    // Contains \r -> matches because \r is allowed under UNIX_LINES
+    String withCr = "AAAcontent\rwith_crBBB";
+    Matcher m1 = pattern.matcher(withCr);
+    assertThat(m1.find()).isTrue();
+    assertThat(m1.group(0)).isEqualTo(withCr);
+
+    // Contains \n -> rejected across newline boundary
+    String withNl = "AAAcontent\nnewlineBBB";
+    Matcher m2 = pattern.matcher(withNl);
+    assertThat(m2.find()).isFalse();
+
+    // UTF-8 input test
+    Utf8Matcher utf8m1 = pattern.matcher(Utf8Input.validated(withCr.getBytes(UTF_8)));
+    assertThat(utf8m1.find()).isTrue();
+    assertThat(utf8m1.end() - utf8m1.start()).isEqualTo(withCr.getBytes(UTF_8).length);
+  }
+
+  private static List<String> findMatches(Pattern pattern, String text, boolean useUtf8) {
+    List<String> matches = new ArrayList<>();
+    if (useUtf8) {
+      byte[] bytes = text.getBytes(UTF_8);
+      Utf8Matcher matcher = pattern.matcher(Utf8Input.validated(bytes));
+      while (matcher.find()) {
+        matches.add(new String(bytes, matcher.start(), matcher.end() - matcher.start(), UTF_8));
+      }
+    } else {
+      Matcher matcher = pattern.matcher(text);
+      while (matcher.find()) {
+        matches.add(matcher.group(0));
+      }
+    }
+    return matches;
   }
 }
