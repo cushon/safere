@@ -4558,7 +4558,7 @@ public final class Matcher implements MatchResult {
         int anchorOffset = 0;
         char anchorLow = 0;
         char anchorHigh = 0;
-        ClassHashChain classHashChain = null;
+        ClassHashChain classHashChain;
         PreparedMatchRunner runner = parentPattern.preparedMatchRunner(false);
         if (runner instanceof LiteralPreparedRunner literalRunner) {
           anchorOffset = literalRunner.anchorOffset();
