@@ -20,15 +20,39 @@ package org.safere;
  * class existed, the exact-case path — much the more common one — issued a bare {@code
  * text.indexOf(literal)}.
  *
- * <p>Verification work is bounded by {@link WorkLimit}. A literal whose rarest character turns out
- * to be common in this particular haystack falls back to {@link String#indexOf(String, int)} for
- * the remainder of the search, so a corpus-derived frequency model that is wrong about one input
- * costs a bounded amount rather than an unbounded one.
+ * <p>The trade is only profitable while the anchor is sparse. {@code indexOf(String)} is not a slow
+ * scan that verification improves on; it is a fused filter and verify that emits no false positives
+ * at all, so an anchor that occurs every few bytes loses to it badly. Two defences apply:
+ *
+ * <ul>
+ *   <li>A false candidate is rejected on the literal's last character before {@link
+ *       String#startsWith} is called at all, which is what makes a false positive cheap enough to
+ *       tolerate. The first character is left to {@code startsWith}, which compares it first.
+ *   <li>Candidates arriving closer together than {@link AcceleratorPolicy#minDensityStride} are
+ *       counted as strikes, and once the budget is spent the search reverts to {@code
+ *       indexOf(String)} — the behaviour that predates anchoring — for the rest of the scan.
+ * </ul>
+ *
+ * <p>The decision deliberately does not outlive a single call. Carrying it in an object shared
+ * across the calls of one search was measured at roughly four times the cost of the entire search
+ * on a candidate-dense input, without ever changing a decision, because the strike constants stop
+ * being compile-time constants and the reference threads a field into the DFA's innermost loop.
+ * Backing off across calls is already handled a layer up, by the quarantine in {@link Dfa} that
+ * wraps these calls; what was missing, and what this class supplies, is protection within one.
  */
 final class StringLiteralSearch {
 
   /** Sentinel {@code anchorOffset} meaning "search with {@link String#indexOf(String, int)}". */
   static final int NO_ANCHOR = -1;
+
+  /**
+   * Adaptive-defeat tuning, read into {@code static final} slots so that the scan loop below sees
+   * compile-time constants. Reading these through an object instead costs about four times the
+   * runtime of the whole search on a candidate-dense input, for no change in behaviour.
+   */
+  private static final int STRIKE_BUDGET = AcceleratorPolicy.LITERAL.strikeBudget();
+
+  private static final int MIN_DENSITY_STRIDE = AcceleratorPolicy.LITERAL.minDensityStride();
 
   /**
    * Chooses the offset within {@code literal} to anchor the scan on, or {@link #NO_ANCHOR} if this
@@ -44,6 +68,10 @@ final class StringLiteralSearch {
    *   <li>Literals whose rarest character is still common enough to be a poisonous anchor, where
    *       verification would dominate the scan.
    * </ul>
+   *
+   * <p>This is a prior, not a prediction: the rarest character of a literal is frequently not the
+   * rarest character of the haystack, and can even be the worst available choice. Runtime feedback
+   * in {@link #indexOf} is what bounds the cost of getting it wrong.
    */
   static int anchorOffset(String literal) {
     if (literal == null || literal.length() < 2) {
@@ -76,12 +104,14 @@ final class StringLiteralSearch {
     if (anchorOffset == NO_ANCHOR) {
       return indexOfDirect(text, literal, fromIndex);
     }
+    int pos = Math.max(0, fromIndex);
     int length = text.length();
     int literalLength = literal.length();
     int lastStart = length - literalLength;
-    int pos = Math.max(0, fromIndex);
-    long verificationWork = 0;
-    long workLimit = WorkLimit.forRemaining(length - pos);
+    char lastChar = literal.charAt(literalLength - 1);
+    int lastCharOffset = literalLength - 1;
+    int strikes = 0;
+    int lastCandidate = pos;
 
     while (pos <= lastStart) {
       int searchFrom = pos + anchorOffset;
@@ -99,13 +129,24 @@ final class StringLiteralSearch {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record(literalLength);
       }
-      if (text.startsWith(literal, candidate)) {
+      // Reject on the literal's last character before paying for startsWith. The anchor is by
+      // construction the rarest character of the literal, which is often not the most selective one
+      // for this particular haystack: 'val=200' anchors on '=' where 'v' would have rejected every
+      // false candidate outright. The literal's first character is deliberately not checked here,
+      // because startsWith compares it first anyway.
+      if (text.charAt(candidate + lastCharOffset) == lastChar
+          && text.startsWith(literal, candidate)) {
         return candidate;
       }
-      verificationWork += literalLength;
+      int stride = candidate - lastCandidate;
+      lastCandidate = candidate;
       pos = candidate + 1;
-      if (WorkLimit.isExhausted(verificationWork, workLimit)) {
-        return indexOfDirect(text, literal, pos);
+      if (stride < MIN_DENSITY_STRIDE) {
+        if (++strikes >= STRIKE_BUDGET) {
+          return indexOfDirect(text, literal, pos);
+        }
+      } else if (strikes > 0) {
+        strikes--;
       }
     }
     return -1;

@@ -53,9 +53,9 @@ final class StringLiteralSearchTest {
   }
 
   @Test
-  void agreesWithJdkWhenTheAnchorIsDenseEnoughToExhaustTheWorkBudget() {
+  void agreesWithJdkWhenTheAnchorIsDenseEnoughToExhaustTheStrikeBudget() {
     // The rarity model says 'q' is rare. This haystack says otherwise, which is exactly the case
-    // the WorkLimit fallback exists for: every position is a candidate and every one fails.
+    // adaptive defeat exists for: every position is a candidate and every one fails.
     String literal = "qx";
     assertThat(StringLiteralSearch.anchorOffset(literal))
         .isNotEqualTo(StringLiteralSearch.NO_ANCHOR);

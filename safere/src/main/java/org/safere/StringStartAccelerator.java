@@ -374,7 +374,7 @@ sealed interface StringStartAccelerator {
 
     @Override
     public AcceleratorPolicy policy() {
-      return new AcceleratorPolicy(16, 4, false, inner.policy().strategy());
+      return AcceleratorPolicy.LEADING_EXPANSION.withStrategy(inner.policy().strategy());
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
