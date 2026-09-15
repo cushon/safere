@@ -22,9 +22,10 @@ package org.safere;
  *
  * <p>The trade is only profitable while the anchor is sparse. {@code indexOf(String)} is not a slow
  * scan that verification improves on; it is a fused filter and verify that emits no false positives
- * at all, so an anchor that occurs every few bytes loses to it badly. Two defences apply:
+ * at all, so an anchor that occurs every few bytes loses to it badly. Three defences apply:
  *
  * <ul>
+ *   <li>Windows too short for the saving to cover a wrong guess are not anchored at all.
  *   <li>A false candidate is rejected on the literal's last character before {@link
  *       String#startsWith} is called at all, which is what makes a false positive cheap enough to
  *       tolerate. The first character is left to {@code startsWith}, which compares it first.
@@ -53,6 +54,23 @@ final class StringLiteralSearch {
   private static final int STRIKE_BUDGET = AcceleratorPolicy.LITERAL.strikeBudget();
 
   private static final int MIN_DENSITY_STRIDE = AcceleratorPolicy.LITERAL.minDensityStride();
+
+  /**
+   * Shortest remaining window worth anchoring, which is the shortest window over which the strike
+   * counter below can reach a sparse verdict at all: spending the whole budget at exactly the
+   * minimum stride covers {@code strikeBudget * minDensityStride} characters, so over anything
+   * shorter the density estimate has no power and the scan can only lose the gamble.
+   *
+   * <p>The same bound falls out of the cost model. Anchoring saves about 0.1 ns per character
+   * scanned and risks one wasted verification per strike, so it is worth attempting only once the
+   * window is long enough for the saving to cover the budget. Short windows are not a corner case:
+   * a {@code findAll} over a match-dense input issues one call per match, and those calls scan the
+   * gap between neighbouring matches rather than the whole input.
+   *
+   * <p>Package-private so that the differential tests can size their inputs past it; below it they
+   * would exercise {@link String#indexOf(String, int)} against itself.
+   */
+  static final int MIN_ANCHORED_WINDOW = STRIKE_BUDGET * MIN_DENSITY_STRIDE;
 
   /**
    * Chooses the offset within {@code literal} to anchor the scan on, or {@link #NO_ANCHOR} if this
@@ -97,15 +115,21 @@ final class StringLiteralSearch {
    * Returns the index of the first occurrence of {@code literal} at or after {@code fromIndex}, or
    * {@code -1}.
    *
+   * <p>The two bail-outs share one condition and one call site on purpose. This method sits close
+   * enough to the inlining size limit that a couple of bytecodes decide whether a caller inlines it
+   * and constant-folds the anchor out of its descriptor; splitting the scan into its own method, or
+   * giving each bail-out its own {@code return}, each cost about a third of the runtime on one
+   * caller or the other. See the notes in the B1 write-up before restructuring this.
+   *
    * @param anchorOffset an offset from {@link #anchorOffset}, or {@link #NO_ANCHOR}
    * @param anchor the character at {@code anchorOffset}, precomputed at compile time
    */
   static int indexOf(String text, String literal, int anchorOffset, char anchor, int fromIndex) {
-    if (anchorOffset == NO_ANCHOR) {
-      return indexOfDirect(text, literal, fromIndex);
-    }
     int pos = Math.max(0, fromIndex);
     int length = text.length();
+    if (anchorOffset == NO_ANCHOR || length - pos < MIN_ANCHORED_WINDOW) {
+      return indexOfDirect(text, literal, pos);
+    }
     int literalLength = literal.length();
     int lastStart = length - literalLength;
     char lastChar = literal.charAt(literalLength - 1);
@@ -117,7 +141,12 @@ final class StringLiteralSearch {
       int searchFrom = pos + anchorOffset;
       int hit = text.indexOf(anchor, searchFrom);
       if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record(hit < 0 ? length - searchFrom : hit - searchFrom + 1);
+        // The character at `hit` is inside the literal that the verification charge below already
+        // accounts for, so it is not charged here as well. Counting it twice would make the work
+        // recorded for a search depend on whether this method anchored or delegated, and the two
+        // have to agree: `indexOfDirect` charges `idx - fromIndex + literalLength`, counting every
+        // character it examines exactly once.
+        WorkCounter.record(hit < 0 ? length - searchFrom : hit - searchFrom);
       }
       if (hit < 0) {
         return -1;

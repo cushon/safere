@@ -17,17 +17,36 @@ import org.junit.jupiter.api.Test;
 @DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
 final class StringLiteralSearchTest {
 
+  /**
+   * Filler long enough to push the remaining window past {@link
+   * StringLiteralSearch#MIN_ANCHORED_WINDOW}, made of a character none of the literals here
+   * contains so that padding cannot introduce a match.
+   */
+  private static final String FILLER = "z".repeat(StringLiteralSearch.MIN_ANCHORED_WINDOW);
+
   private static int anchored(String text, String literal, int fromIndex) {
     int offset = StringLiteralSearch.anchorOffset(literal);
     return StringLiteralSearch.indexOf(
         text, literal, offset, StringLiteralSearch.anchorAt(literal, offset), fromIndex);
   }
 
+  private static void assertAgreesAt(String text, String literal, int from) {
+    assertThat(anchored(text, literal, from))
+        .as("literal=%s text=%s fromIndex=%s", literal, text, from)
+        .isEqualTo(text.indexOf(literal, from));
+  }
+
+  /**
+   * Runs the differential twice: once on {@code text} as given, and once on {@code text} followed
+   * by enough filler that every start index tested leaves a window long enough to anchor. Without
+   * the second pass the short-window guard would route these cases straight to the JDK and the
+   * anchored loop would go untested.
+   */
   private static void assertAgreesAtEveryStart(String text, String literal) {
+    String padded = text + FILLER;
     for (int from = 0; from <= text.length() + 1; from++) {
-      assertThat(anchored(text, literal, from))
-          .as("literal=%s text=%s fromIndex=%s", literal, text, from)
-          .isEqualTo(text.indexOf(literal, from));
+      assertAgreesAt(text, literal, from);
+      assertAgreesAt(padded, literal, from);
     }
   }
 
@@ -62,8 +81,23 @@ final class StringLiteralSearchTest {
     String dense = "q".repeat(5000);
     assertThat(anchored(dense, literal, 0)).isEqualTo(-1);
     assertThat(anchored(dense + "qx", literal, 0)).isEqualTo(dense.length());
-    // A match beyond the point where the budget is exhausted must still be found.
-    assertThat(anchored("q".repeat(200) + "qx" + "q".repeat(200), literal, 0)).isEqualTo(200);
+    // A match beyond the point where the budget is exhausted must still be found. The prefix has
+    // to clear MIN_ANCHORED_WINDOW, or the scan never anchors and the budget is never spent.
+    int prefix = 4 * StringLiteralSearch.MIN_ANCHORED_WINDOW;
+    assertThat(anchored("q".repeat(prefix) + "qx" + "q".repeat(200), literal, 0)).isEqualTo(prefix);
+  }
+
+  @Test
+  void agreesWithJdkOnWindowsTooShortToAnchor() {
+    // Below MIN_ANCHORED_WINDOW the search delegates rather than anchoring; it still has to be
+    // indistinguishable from the JDK, including when the window shrinks only because fromIndex has
+    // advanced into a long text.
+    String literal = "qx";
+    String text = "q".repeat(StringLiteralSearch.MIN_ANCHORED_WINDOW * 2) + "qx" + "q".repeat(50);
+    for (int from = text.length() - 1; from >= 0; from -= 7) {
+      assertAgreesAt(text, literal, from);
+    }
+    assertAgreesAt("q".repeat(StringLiteralSearch.MIN_ANCHORED_WINDOW - 1) + "qx", literal, 0);
   }
 
   @Test
