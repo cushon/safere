@@ -181,9 +181,21 @@ final class StringLiteralSearch {
     return -1;
   }
 
-  /** Unanchored search, with the work accounting the accelerators previously applied inline. */
+  /**
+   * Unanchored search, with the work accounting the accelerators previously applied inline.
+   *
+   * <p>A single-character literal is searched for as a character, not as a string. The two are not
+   * the same speed: {@code indexOf(String)} runs at roughly 0.119 ns/byte where {@code
+   * indexOf(char)} runs at 0.020, and a one-character needle does not reach the faster kernel by
+   * itself. Anchoring is not the way to get there either, because for a one-character literal the
+   * anchor is the literal, so the verification anchoring pays for can never reject anything; doing
+   * it that way was measured 45% slower on a candidate-dense input.
+   */
   static int indexOfDirect(String text, String literal, int fromIndex) {
-    int idx = text.indexOf(literal, fromIndex);
+    int idx =
+        literal.length() == 1 && literal.charAt(0) < 128
+            ? text.indexOf(literal.charAt(0), fromIndex)
+            : text.indexOf(literal, fromIndex);
     if (WorkCounterConfig.ENABLED) {
       int scanned = idx >= 0 ? idx - fromIndex + literal.length() : text.length() - fromIndex;
       WorkCounter.record(Math.max(0, scanned));

@@ -133,7 +133,8 @@ final class StringLiteralSearchTest {
   void declinesToAnchorWhereAnchoringCannotPayOff() {
     assertThat(StringLiteralSearch.anchorOffset(null)).isEqualTo(StringLiteralSearch.NO_ANCHOR);
     assertThat(StringLiteralSearch.anchorOffset("")).isEqualTo(StringLiteralSearch.NO_ANCHOR);
-    // The JDK already routes a single-character needle to its own character kernel.
+    // A single-character literal is its own anchor, so verification could never reject a
+    // candidate and would be pure overhead. indexOfDirect searches for it as a character instead.
     assertThat(StringLiteralSearch.anchorOffset("q")).isEqualTo(StringLiteralSearch.NO_ANCHOR);
     // No ASCII character to anchor on; the rarity model has nothing to say.
     assertThat(StringLiteralSearch.anchorOffset("日本")).isEqualTo(StringLiteralSearch.NO_ANCHOR);
@@ -153,5 +154,16 @@ final class StringLiteralSearchTest {
     assertAgreesAtEveryStart("hello world", "o");
     assertAgreesAtEveryStart("a b  c   d", "  ");
     assertAgreesAtEveryStart("日本語テキスト", "テキ");
+  }
+
+  @Test
+  void singleCharacterLiteralsAgreeWithJdk() {
+    // ASCII: taken by the character kernel in indexOfDirect.
+    assertAgreesAtEveryStart("a/b/c//d", "/");
+    assertAgreesAtEveryStart("no such character here", "@");
+    assertAgreesAtEveryStart("", "x");
+    // Non-ASCII: stays on the string kernel, since indexOf(int) would match by code point.
+    assertAgreesAtEveryStart("日本語テキスト", "語");
+    assertAgreesAtEveryStart("aaa", "\u00e9");
   }
 }
