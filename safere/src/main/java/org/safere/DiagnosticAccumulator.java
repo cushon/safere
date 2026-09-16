@@ -72,6 +72,10 @@ final class DiagnosticAccumulator {
     boundaryStrategy = strategy;
   }
 
+  MatchStrategy boundaryStrategy() {
+    return boundaryStrategy;
+  }
+
   void capture(MatchStrategy strategy) {
     if (captureStrategy == MatchStrategy.NONE) {
       captureStrategy = strategy;
