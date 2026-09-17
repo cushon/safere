@@ -57,20 +57,53 @@ final class StringLiteralSearch {
 
   private static final int MIN_DENSITY_STRIDE = AcceleratorPolicy.LITERAL.minDensityStride();
 
+  /**
+   * What one dense stride costs against {@link #STRIKE_BUDGET}.
+   *
+   * <p>The budget is a *net* count, and a net count alone answers the wrong question. An anchor
+   * that is mostly sparse and occasionally clumps should keep going, which is what the repayment
+   * below is for; an anchor that is uniformly dense has shown everything it is going to show within
+   * a handful of observations, and charging it one unit at a time makes it pay fifteen more before
+   * conceding. {@code (error:\[)[A-Z](\] code:500)} anchors on {@code ']'}, which recurs every 46
+   * characters in a log line, so it strikes on every iteration, spends the whole budget, and then
+   * scans the window again with {@link String#indexOf(String, int)} — a measured fixed cost of
+   * about 100 ns on every call. At the default budget of 16 this charge concedes after four such
+   * observations, while still leaving four sparse strides able to buy back one dense one.
+   *
+   * <p>Conceding that early is deliberate, because the two directions are not symmetric. A winning
+   * anchor never charges a strike at all — it returns from the verification without ever reaching
+   * the accounting — so no amount of budget buys a winner anything, while every unit of it is spent
+   * by a loser. Conceding early costs at most a few characters of a scan that was already fast;
+   * conceding late costs a verification storm.
+   *
+   * <p>Weighting the existing counter rather than adding a second one is not a stylistic choice. A
+   * separate consecutive counter needs its own local, its own increment, its own test and its own
+   * reset, which took {@code indexOf} from 201 bytecodes to 216 — and 219 is a size at which this
+   * method has already been measured to stop being inlined, costing more than the fix recovers.
+   * This is also why the charge is a literal rather than {@code STRIKE_BUDGET / 4}: the budget is
+   * read from {@link AcceleratorPolicy} and so is not a compile-time constant, and a derived charge
+   * compiles to a static read and an add where a literal one folds into the {@code iinc} that was
+   * already there.
+   */
+  private static final int STRIKE_CHARGE = 4;
+
   /** Keeps the anchored loop's per-candidate verification cost bounded by a constant. */
   private static final int MAX_ANCHORED_LITERAL_LENGTH = MIN_DENSITY_STRIDE * 2;
 
   /**
-   * Shortest remaining window worth anchoring, which is the shortest window over which the strike
-   * counter below can reach a sparse verdict at all: spending the whole budget at exactly the
-   * minimum stride covers {@code strikeBudget * minDensityStride} characters, so over anything
-   * shorter the density estimate has no power and the scan can only lose the gamble.
+   * Shortest remaining window worth anchoring.
    *
-   * <p>The same bound falls out of the cost model. Anchoring saves about 0.1 ns per character
-   * scanned and risks one wasted verification per strike, so it is worth attempting only once the
-   * window is long enough for the saving to cover the budget. Short windows are not a corner case:
-   * a {@code findAll} over a match-dense input issues one call per match, and those calls scan the
-   * gap between neighbouring matches rather than the whole input.
+   * <p>The bound comes from the cost model. Anchoring saves about 0.1 ns per character scanned and
+   * risks one wasted verification per strike, so it is worth attempting only once the window is
+   * long enough for the saving to cover the budget. Short windows are not a corner case: a {@code
+   * findAll} over a match-dense input issues one call per match, and those calls scan the gap
+   * between neighbouring matches rather than the whole input.
+   *
+   * <p>It is expressed as the span a full budget covers at exactly the minimum stride, which is
+   * conservative rather than exact: {@link #STRIKE_CHARGE} lets a uniformly dense anchor reach a
+   * verdict four strides in, well inside this window. Lowering it to match would newly anchor every
+   * window between the two, which is a much larger change than the strike rule and wants its own
+   * measurement.
    *
    * <p>Package-private so that the differential tests can size their inputs past it; below it they
    * would exercise {@link String#indexOf(String, int)} against itself.
@@ -177,7 +210,7 @@ final class StringLiteralSearch {
       lastCandidate = candidate;
       pos = candidate + 1;
       if (stride < MIN_DENSITY_STRIDE) {
-        if (++strikes >= STRIKE_BUDGET) {
+        if ((strikes += STRIKE_CHARGE) >= STRIKE_BUDGET) {
           return indexOfDirect(text, literal, pos);
         }
       } else if (strikes > 0) {

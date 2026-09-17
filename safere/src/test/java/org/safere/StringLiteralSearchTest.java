@@ -88,6 +88,41 @@ final class StringLiteralSearchTest {
   }
 
   @Test
+  void agreesWithJdkWhenTheAnchorRecursJustInsideTheDensityStride() {
+    // The shape the strike charge is calibrated on: an anchor the rarity model rates highly, which
+    // nevertheless recurs every 46 characters -- the stride measured for this literal on a log
+    // line, and inside MIN_DENSITY_STRIDE -- so every observation is a dense one and none of them
+    // verifies. How soon the scan concedes is not visible in the result, only in the benchmark;
+    // what is pinned here is that conceding still finds everything the JDK finds.
+    String literal = "error:[";
+    int offset = StringLiteralSearch.anchorOffset(literal);
+    assertThat(offset).isNotEqualTo(StringLiteralSearch.NO_ANCHOR);
+    String unit = StringLiteralSearch.anchorAt(literal, offset) + "y".repeat(45);
+    String noise = unit.repeat(64);
+    assertThat(noise.length()).isGreaterThan(StringLiteralSearch.MIN_ANCHORED_WINDOW);
+    assertThat(anchored(noise, literal, 0)).isEqualTo(-1);
+    assertThat(anchored(noise + literal, literal, 0)).isEqualTo(noise.length());
+    String surrounded = noise + literal + noise;
+    for (int from = 0; from < surrounded.length(); from += 137) {
+      assertAgreesAt(surrounded, literal, from);
+    }
+  }
+
+  @Test
+  void agreesWithJdkWhenTheAnchorClumpsAndThenThinsOut() {
+    // Repayment has to keep a mostly sparse anchor alive, so a handful of dense observations
+    // followed by a long sparse run must not be treated the same as a uniformly dense anchor.
+    String literal = "error:[";
+    char anchor = StringLiteralSearch.anchorAt(literal, StringLiteralSearch.anchorOffset(literal));
+    String text =
+        ((anchor + "y".repeat(9)).repeat(5) + (anchor + "y".repeat(400)).repeat(3)).repeat(4);
+    assertThat(text.length()).isGreaterThan(StringLiteralSearch.MIN_ANCHORED_WINDOW);
+    assertThat(anchored(text, literal, 0)).isEqualTo(-1);
+    assertAgreesAt(text + literal, literal, 0);
+    assertAgreesAt(text + literal + text, literal, 0);
+  }
+
+  @Test
   void agreesWithJdkOnWindowsTooShortToAnchor() {
     // Below MIN_ANCHORED_WINDOW the search delegates rather than anchoring; it still has to be
     // indistinguishable from the JDK, including when the window shrinks only because fromIndex has
