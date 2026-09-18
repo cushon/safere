@@ -1437,6 +1437,38 @@
       "shared": true
     },
     {
+      "id": "realWorldRegex.guardByteRecordNoise.match.{size}",
+      "axes": {
+        "size": [
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "other:item=123;field=abc;code=ok;detail=none;origin=upstream_service_node\n",
+        "suffix": "record:item_valid_target_payload_val=200\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "realWorldRegex.guardByteRecordNoise.noMatch.{size}",
+      "axes": {
+        "size": [
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "other:item=123;field=abc;code=ok;detail=none;origin=upstream_service_node\n",
+        "suffix": "other:item_valid_target_payload_val=200\n",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "realWorldRegex.competitiveFixedOffset.match.{size}",
       "axes": {
         "size": [
@@ -4815,6 +4847,34 @@
         ],
         "size": [
           1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.guardByteRecordNoise.{matchLabel}.{size}",
+      "operation": "find",
+      "patterns": [
+        "record:[^\r\n;]*val=200"
+      ],
+      "inputs": [
+        "realWorldRegex.guardByteRecordNoise.{matchLabel}.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "matchLabel": [
+          "match",
+          "noMatch"
+        ],
+        "size": [
           10000,
           100000
         ]
