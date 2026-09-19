@@ -557,6 +557,54 @@ class MultiAnchorCompilerTest {
     assertThat(p.rejectPlan()).isInstanceOf(MultiAnchorDescriptor.RejectPlan.None.class);
   }
 
+  @Test
+  void leadingExpansionWithDownstreamRequiredLiteralPreservesRequiredLiteral() {
+    Pattern p = Pattern.compile("\\s*foo.*RARE_KEYWORD");
+    assertThat(p.startPlan()).isInstanceOf(MultiAnchorDescriptor.StartPlan.LeadingExpansion.class);
+    MultiAnchorDescriptor.StartPlan.LeadingExpansion le =
+        (MultiAnchorDescriptor.StartPlan.LeadingExpansion) p.startPlan();
+    assertThat(((MultiAnchorDescriptor.StartPlan.Literal) le.innerPlan()).prefix())
+        .isEqualTo("foo");
+    assertThat(p.rejectPlan()).isInstanceOf(MultiAnchorDescriptor.RejectPlan.RequiredLiteral.class);
+    MultiAnchorDescriptor.RejectPlan.RequiredLiteral req =
+        (MultiAnchorDescriptor.RejectPlan.RequiredLiteral) p.rejectPlan();
+    assertThat(req.literal()).isEqualTo("RARE_KEYWORD");
+  }
+
+  @Test
+  void multiLiteralFallbackClassCompetesWithRequiredCharClass() {
+    // `.*\d+.*` has a mandatory `\d` (10 runes) and no start plan of its own.
+    Regexp ast = Parser.parse(".*\\d+.*", Pattern.toParseFlags(0));
+    String[] literals = {"apple", "banana"};
+
+    // A MultiLiteral with no fallback class behaves like any plan without a driving character
+    // class: the mandatory `\d` is scanned for.
+    StartPlan.MultiLiteral noFallback = new StartPlan.MultiLiteral(literals, null);
+    assertThat(MultiAnchorCompiler.extractRejectPlan(ast, 0, noFallback, false))
+        .isInstanceOf(RejectPlan.RequiredCharClass.class);
+
+    // With a fallback class narrower than `\d`, the MultiLiteral accelerator's own scan is the
+    // more selective of the two, so the redundant reject scan is dropped.
+    StartPlan.MultiLiteral narrowFallback =
+        new StartPlan.MultiLiteral(literals, charClassOf("a-c"));
+    assertThat(MultiAnchorCompiler.extractRejectPlan(ast, 0, narrowFallback, false))
+        .isInstanceOf(RejectPlan.None.class);
+
+    // With a fallback class wider than `\d`, the reject scan filters better and is kept.
+    StartPlan.MultiLiteral wideFallback = new StartPlan.MultiLiteral(literals, charClassOf("a-z"));
+    assertThat(MultiAnchorCompiler.extractRejectPlan(ast, 0, wideFallback, false))
+        .isInstanceOf(RejectPlan.RequiredCharClass.class);
+  }
+
+  /**
+   * Returns the {@link CharClassScanInfo} a leading {@code [ranges]} character class compiles to.
+   */
+  private static CharClassScanInfo charClassOf(String ranges) {
+    StartPlan plan = Pattern.compile("[" + ranges + "].*ZZQQ").startPlan();
+    assertThat(plan).isInstanceOf(StartPlan.CharClass.class);
+    return ((StartPlan.CharClass) plan).scanInfo();
+  }
+
   private static String deepHomogeneousGap(String atom, int depth) {
     return "foo" + "(?:".repeat(depth) + atom + (")?" + atom).repeat(depth) + "bar";
   }
