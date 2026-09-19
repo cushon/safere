@@ -183,6 +183,32 @@ final class StringLiteralSearchTest {
     assertThat(StringLiteralSearch.anchorAt("id:", 2)).isEqualTo(':');
   }
 
+  /**
+   * Literals whose rarest character is also their last one, searched over haystacks that carry
+   * false candidates — an anchor occurrence that is not part of a match.
+   *
+   * <p>Both halves matter, and the rest of the suite has neither. When the anchor is the last
+   * character, the candidate pre-check re-reads the byte the anchor scan just returned, so it
+   * always passes and every candidate runs a full verification. A haystack whose only anchor
+   * occurrences are real matches then never reaches that verification with anything to reject.
+   */
+  @Test
+  void agreesWithJdkWhereTheAnchorIsTheLiteralsLastCharacter() {
+    for (String literal : new String[] {"id:", "record:", "users/"}) {
+      assertThat(StringLiteralSearch.anchorOffset(literal)).isEqualTo(literal.length() - 1);
+    }
+    assertAgreesAtEveryStart("other:x id:7 more:y", "id:");
+    assertAgreesAtEveryStart("tag:a record:b tag:c", "record:");
+    assertAgreesAtEveryStart("/a/ users/ /b/", "users/");
+    // The anchor present without the rest of the literal, and the rest of the literal present
+    // without the anchor.
+    assertAgreesAtEveryStart("rrrr: record:", "record:");
+    assertAgreesAtEveryStart("recorx: record:", "record:");
+    // A match at the very start of the text, and one whose anchor is its last character.
+    assertAgreesAtEveryStart("record: trailing", "record:");
+    assertAgreesAtEveryStart("leading record:", "record:");
+  }
+
   @Test
   void declinedLiteralsStillAgreeWithJdk() {
     assertAgreesAtEveryStart("hello world", "o");
