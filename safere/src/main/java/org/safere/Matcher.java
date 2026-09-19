@@ -1723,16 +1723,38 @@ public final class Matcher implements MatchResult {
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
-          int idx = Utf8StartAccelerator.findNextCandidate(accelerator, utf8Scanner, searchFrom);
-          if (idx < 0) {
-            if (strategy != null) {
-              diagnosticBoundary(strategy);
+          if (accelerator instanceof Utf8StartAccelerator.LeadingExpansion le
+              && le.canVerifyAtInner()
+              && canUseForwardDfa()) {
+            int innerMatch = le.findInnerCandidate(utf8Scanner, searchFrom);
+            if (innerMatch < 0) {
+              if (strategy != null) {
+                diagnosticBoundary(strategy);
+              }
+              return applyFailedMatchResult();
             }
-            return applyFailedMatchResult();
+            diagnosticParticipation(MatchStrategy.DFA, StrategyRole.CANDIDATE_VERIFICATION);
+            Dfa.SearchResult fwdResult =
+                searchForwardDfa(dfa(false), utf8Scanner, innerMatch, false, false, true);
+            if (fwdResult != null && !fwdResult.matched()) {
+              diagnosticBoundary(MatchStrategy.DFA);
+              return applyFailedMatchResult();
+            }
+            effectiveStart = le.expandBackward(utf8Scanner, innerMatch, searchFrom);
+            literalPrefixCandidateStart = policy.isExactMatchCandidate();
+            startPositionPreselected = true;
+          } else {
+            int idx = Utf8StartAccelerator.findNextCandidate(accelerator, utf8Scanner, searchFrom);
+            if (idx < 0) {
+              if (strategy != null) {
+                diagnosticBoundary(strategy);
+              }
+              return applyFailedMatchResult();
+            }
+            effectiveStart = idx;
+            literalPrefixCandidateStart = policy.isExactMatchCandidate();
+            startPositionPreselected = true;
           }
-          effectiveStart = idx;
-          literalPrefixCandidateStart = policy.isExactMatchCandidate();
-          startPositionPreselected = true;
         }
       } else if (text != null) {
         StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
@@ -1742,18 +1764,41 @@ public final class Matcher implements MatchResult {
           if (strategy != null) {
             diagnosticParticipation(strategy, StrategyRole.START_ACCELERATION);
           }
-          int idx =
-              StringStartAccelerator.findNextCandidate(
-                  accelerator, text, searchFrom, prog.lineStartUnixLines());
-          if (idx < 0) {
-            if (strategy != null) {
-              diagnosticBoundary(strategy);
+          if (accelerator instanceof StringStartAccelerator.LeadingExpansion le
+              && le.canVerifyAtInner()
+              && canUseForwardDfa()) {
+            int innerMatch =
+                le.findInnerCandidate(text, searchFrom, prog.lineStartUnixLines());
+            if (innerMatch < 0) {
+              if (strategy != null) {
+                diagnosticBoundary(strategy);
+              }
+              return applyFailedMatchResult();
             }
-            return applyFailedMatchResult();
+            diagnosticParticipation(MatchStrategy.DFA, StrategyRole.CANDIDATE_VERIFICATION);
+            Dfa.SearchResult fwdResult =
+                searchForwardDfa(dfa(false), scanner, innerMatch, false, false, true);
+            if (fwdResult != null && !fwdResult.matched()) {
+              diagnosticBoundary(MatchStrategy.DFA);
+              return applyFailedMatchResult();
+            }
+            effectiveStart = le.expandBackward(text, innerMatch, searchFrom);
+            literalPrefixCandidateStart = policy.isExactMatchCandidate();
+            startPositionPreselected = true;
+          } else {
+            int idx =
+                StringStartAccelerator.findNextCandidate(
+                    accelerator, text, searchFrom, prog.lineStartUnixLines());
+            if (idx < 0) {
+              if (strategy != null) {
+                diagnosticBoundary(strategy);
+              }
+              return applyFailedMatchResult();
+            }
+            effectiveStart = idx;
+            literalPrefixCandidateStart = policy.isExactMatchCandidate();
+            startPositionPreselected = true;
           }
-          effectiveStart = idx;
-          literalPrefixCandidateStart = policy.isExactMatchCandidate();
-          startPositionPreselected = true;
         }
       }
     }
@@ -4623,14 +4668,31 @@ public final class Matcher implements MatchResult {
     if (options.startAcceleration() && text != null && !prog.anchorStart()) {
       StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
       if (accelerator != null) {
-        int idx =
-            StringStartAccelerator.findNextCandidate(
-                accelerator, text, fromIndex, prog.lineStartUnixLines());
-        if (idx < 0) {
-          return -1L;
+        if (accelerator instanceof StringStartAccelerator.LeadingExpansion le
+            && le.canVerifyAtInner()
+            && canUseForwardDfa()) {
+          int innerMatch =
+              le.findInnerCandidate(text, fromIndex, prog.lineStartUnixLines());
+          if (innerMatch < 0) {
+            return -1L;
+          }
+          Dfa.SearchResult fwdResult =
+              dfa(false).doSearch(scanner, innerMatch, false, false, true);
+          if (fwdResult != null && !fwdResult.matched()) {
+            return -1L;
+          }
+          effectiveStart = le.expandBackward(text, innerMatch, fromIndex);
+          startPositionPreselected = true;
+        } else {
+          int idx =
+              StringStartAccelerator.findNextCandidate(
+                  accelerator, text, fromIndex, prog.lineStartUnixLines());
+          if (idx < 0) {
+            return -1L;
+          }
+          effectiveStart = idx;
+          startPositionPreselected = true;
         }
-        effectiveStart = idx;
-        startPositionPreselected = true;
       }
     }
 

@@ -68,7 +68,12 @@ sealed interface Utf8StartAccelerator {
       case MultiAnchorDescriptor.StartPlan.LeadingExpansion le -> {
         Utf8StartAccelerator inner = create(le.innerPlan(), hasWordBoundary);
         yield inner != null
-            ? new LeadingExpansion(le.leadingClass(), le.minRepetition(), le.maxRepetition(), inner)
+            ? new LeadingExpansion(
+                le.leadingClass(),
+                le.minRepetition(),
+                le.maxRepetition(),
+                le.hasLeadingAssertions(),
+                inner)
             : null;
       }
       case MultiAnchorDescriptor.StartPlan.LineAnchor unusedLa -> null;
@@ -332,19 +337,61 @@ sealed interface Utf8StartAccelerator {
       CharClassScanInfo leadingClass,
       int minRepetition,
       int maxRepetition,
+      boolean hasLeadingAssertions,
       Utf8StartAccelerator inner)
       implements Utf8StartAccelerator {
+
+    public LeadingExpansion(
+        CharClassScanInfo leadingClass,
+        int minRepetition,
+        int maxRepetition,
+        Utf8StartAccelerator inner) {
+      this(leadingClass, minRepetition, maxRepetition, false, inner);
+    }
 
     @Override
     public AcceleratorPolicy policy() {
       return AcceleratorPolicy.LEADING_EXPANSION.withStrategy(inner.policy().strategy());
     }
 
+    boolean canVerifyAtInner() {
+      return minRepetition == 0 && !hasLeadingAssertions;
+    }
+
+    int findInnerCandidate(Utf8InputScanner scanner, int searchPos) {
+      return Utf8StartAccelerator.findNextCandidate(inner, scanner, searchPos);
+    }
+
+    int expandBackward(Utf8InputScanner scanner, int innerMatch, int fromIndex) {
+      int start = innerMatch;
+      int count = 0;
+      while (start > fromIndex) {
+        int cp = scanner.singleUnitCodePointBefore(start);
+        int prevPos;
+        if (cp >= 0) {
+          prevPos = start - 1;
+        } else {
+          long decoded = scanner.decodeBackward(start);
+          cp = InputScanner.codePoint(decoded);
+          prevPos = InputScanner.position(decoded);
+        }
+        if (!leadingClass.contains(cp)) {
+          break;
+        }
+        if (count + 1 > maxRepetition) {
+          break;
+        }
+        count++;
+        start = prevPos;
+      }
+      return start;
+    }
+
     int findCandidate(Utf8InputScanner scanner, int fromIndex) {
       int searchPos = Math.max(0, fromIndex);
       int textLen = scanner.length();
       while (searchPos < textLen) {
-        int innerMatch = Utf8StartAccelerator.findNextCandidate(inner, scanner, searchPos);
+        int innerMatch = findInnerCandidate(scanner, searchPos);
         if (innerMatch < 0) {
           return -1;
         }
