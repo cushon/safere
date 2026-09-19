@@ -574,17 +574,95 @@ class DfaTest {
       // Within the 2x backoff window (10,000 positions), the full cache refuses to flush again.
       assertThat(dfa.doSearch(dense, 1_000, false, false)).isNull();
 
-      // Once enough input has elapsed to clear the backoff window, the same Dfa instance flushes
-      // the stale states and completes a productive search.
+      // Moving to another input and starting far into it does not prove that the fallback scanned
+      // the skipped text. Repeated fallback attempts eventually allow a bounded reset retry.
       String productive = sourceShapedText(100_000, /* withTrailingMatch= */ true);
       Dfa.SearchResult ample =
           new Dfa(prog, 4_000_000, Dfa.buildSetup(prog), false)
               .doSearch(productive, 12_000, false, false);
       assertThat(ample).isNotNull();
-      Dfa.SearchResult recovered = dfa.doSearch(productive, 12_000, false, false);
+      assertThat(dfa.doSearch(productive, 12_000, false, false)).isNull();
+      Dfa.SearchResult recovered = null;
+      for (int attempt = 0; attempt < 1_000 && recovered == null; attempt++) {
+        recovered = dfa.doSearch(productive, 12_000, false, false);
+      }
       assertThat(recovered).isNotNull();
       assertThat(recovered.matched()).isEqualTo(ample.matched());
       assertThat(recovered.pos()).isEqualTo(ample.pos());
+    }
+
+    @Test
+    void fullCacheCanRecoverWhenNextSearchNeedsANewStartContext() {
+      String pattern = "(?m)(\\Aa|^b)";
+      Prog prog = Compiler.compile(Parser.parse(pattern, FLAGS));
+      Dfa dfa = new Dfa(prog, 1, Dfa.buildSetup(prog), false);
+      assertThat(dfa.doSearch("a", 0, false, false)).isNull();
+      String productive = " ".repeat(999) + "\n" + "z";
+      Dfa.SearchResult expected =
+          new Dfa(prog, 4_000_000, Dfa.buildSetup(prog), false)
+              .doSearch(productive, 1_000, true, false);
+      assertThat(expected).isNotNull();
+      Dfa.SearchResult actual = dfa.doSearch(productive, 1_000, true, false);
+      assertThat(actual).isNotNull();
+      assertThat(actual.matched()).isEqualTo(expected.matched());
+      assertThat(actual.pos()).isEqualTo(expected.pos());
+    }
+
+    @Test
+    void startingAtANonzeroOffsetDoesNotCreditTheSkippedPrefix()
+        throws ReflectiveOperationException {
+      Prog prog = Compiler.compile(Parser.parse("a", FLAGS));
+      Dfa dfa = new Dfa(prog, 100, Dfa.buildSetup(prog), false);
+      Dfa.SearchResult result = dfa.doSearch(" ".repeat(1_000) + "a", 1_000, true, false);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isTrue();
+
+      Field steps = Dfa.class.getDeclaredField("dfaStepsSinceReset");
+      steps.setAccessible(true);
+      assertThat(steps.getLong(dfa)).isLessThanOrEqualTo(1);
+    }
+
+    @Test
+    void completedNoMatchScanCountsTowardCacheProductivity() throws ReflectiveOperationException {
+      Prog prog = Compiler.compile(Parser.parse("[ab]*c", FLAGS));
+      Dfa dfa = new Dfa(prog, 10_000, Dfa.buildSetup(prog), false);
+      Dfa.SearchResult result = dfa.doSearch("a".repeat(1_000), 0, false, false);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isFalse();
+
+      Field steps = Dfa.class.getDeclaredField("dfaStepsSinceReset");
+      steps.setAccessible(true);
+      assertThat(steps.getLong(dfa)).isGreaterThanOrEqualTo(1_000);
+    }
+
+    @Test
+    void completedNonAsciiNoMatchScanCountsTowardCacheProductivity()
+        throws ReflectiveOperationException {
+      Prog prog = Compiler.compile(Parser.parse("abc", FLAGS));
+      Dfa dfa = new Dfa(prog, 10_000, Dfa.buildSetup(prog), false);
+      Dfa.SearchResult result = dfa.doSearch("é" + "x".repeat(1_000), 0, false, false);
+      assertThat(result).isNotNull();
+      assertThat(result.matched()).isFalse();
+
+      Field steps = Dfa.class.getDeclaredField("dfaStepsSinceReset");
+      steps.setAccessible(true);
+      assertThat(steps.getLong(dfa)).isGreaterThanOrEqualTo(1_001);
+    }
+
+    @Test
+    void bailoutBackoffDoesNotCountAnUnscannedStartGap() throws ReflectiveOperationException {
+      Prog prog = Compiler.compile(Parser.parse("a", FLAGS));
+      Dfa dfa = new Dfa(prog, 100, Dfa.buildSetup(prog), false);
+      assertThat(dfa.doSearch("a", 0, true, false)).isNotNull();
+
+      Field bailed = Dfa.class.getDeclaredField("lastSearchBailed");
+      bailed.setAccessible(true);
+      bailed.setBoolean(dfa, true);
+      assertThat(dfa.doSearch(" ".repeat(1_000) + "a", 1_000, true, false)).isNotNull();
+
+      Field progress = Dfa.class.getDeclaredField("backoffProgress");
+      progress.setAccessible(true);
+      assertThat(progress.getLong(dfa)).isLessThanOrEqualTo(66);
     }
 
     /**
