@@ -264,6 +264,19 @@ final class MultiAnchorCompiler {
         excludeStartLiterals.addAll(extractFixedPrefixLiterals(metadataAst));
         skipRequiredCharClass = true;
       }
+      case StartPlan.LeadingExpansion le -> {
+        switch (le.innerPlan()) {
+          case StartPlan.Literal lit -> {
+            excludeStartLiterals.add(lit.prefix());
+            skipRequiredCharClass = true;
+          }
+          case StartPlan.FixedOffset fo -> {
+            excludeStartLiterals.add(fo.fol().literal());
+            skipRequiredCharClass = true;
+          }
+          default -> {}
+        }
+      }
       case StartPlan.CharClass cc -> ccPrefix = cc.scanInfo();
       case null, default -> {}
     }
