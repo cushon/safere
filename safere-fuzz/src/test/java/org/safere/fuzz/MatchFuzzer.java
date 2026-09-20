@@ -318,6 +318,7 @@ public final class MatchFuzzer {
     String driver = distinctAsciiLiteral(data.consumeInt(8, 16));
     String regex;
     String input;
+    int minimumMatches = 0;
     switch (data.consumeInt(0, 11)) {
       case 0 -> {
         regex = "111[0-9]+" + driver;
@@ -366,10 +367,17 @@ public final class MatchFuzzer {
         int maximum = data.consumeInt(minimum + 1, 6);
         String lazy = data.consumeBoolean() ? "?" : "";
         regex = "(?s).{" + minimum + "," + maximum + "}" + lazy + "TARGET[^;]*" + driver;
+        String unit = data.pickValue(List.of("x", "é", "😀"));
+        String guaranteed = unit.repeat(Math.max(1, minimum)) + "TARGET" + driver;
         input =
-            data.pickValue(List.of("x", "é", "😀")).repeat(data.consumeInt(0, 7))
+            unit.repeat(data.consumeInt(0, 7))
                 + "TARGET"
-                + driver;
+                + driver
+                + ";"
+                + guaranteed
+                + ";"
+                + guaranteed;
+        minimumMatches = 2;
       }
       case 10 -> {
         // Inline scoped UNIX_LINES changes which characters a gap may span: CR, NEL and
@@ -380,7 +388,12 @@ public final class MatchFuzzer {
         input =
             "TARGET"
                 + data.pickValue(List.of("\r", "\n", "\r\n", "\u0085", "\u2028", "x"))
+                + driver
+                + ";TARGETx"
+                + driver
+                + ";TARGETx"
                 + driver;
+        minimumMatches = 2;
       }
       default -> {
         regex = "TARGET[^;]*?" + driver;
@@ -391,7 +404,13 @@ public final class MatchFuzzer {
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
     if (pattern != null) {
       FuzzSupport.MatcherPair matcher = pattern.matcher(input);
-      while (matcher.find()) {}
+      int matches = 0;
+      while (matcher.find()) {
+        matches++;
+      }
+      if (matches < minimumMatches) {
+        throw new AssertionError("Gap corpus did not exercise multiple finds: " + regex);
+      }
     }
   }
 
