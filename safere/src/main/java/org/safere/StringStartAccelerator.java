@@ -47,7 +47,12 @@ sealed interface StringStartAccelerator {
       case MultiAnchorDescriptor.StartPlan.LeadingExpansion le -> {
         StringStartAccelerator inner = create(le.innerPlan(), hasWordBoundary);
         yield inner != null
-            ? new LeadingExpansion(le.leadingClass(), le.minRepetition(), le.maxRepetition(), inner)
+            ? new LeadingExpansion(
+                le.leadingClass(),
+                le.minRepetition(),
+                le.maxRepetition(),
+                le.hasLeadingAssertions(),
+                inner)
             : null;
       }
       case MultiAnchorDescriptor.StartPlan.LineAnchor la ->
@@ -461,6 +466,7 @@ sealed interface StringStartAccelerator {
       CharClassScanInfo leadingClass,
       int minRepetition,
       int maxRepetition,
+      boolean hasLeadingAssertions,
       StringStartAccelerator inner)
       implements StringStartAccelerator {
 
@@ -469,12 +475,40 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.LEADING_EXPANSION.withStrategy(inner.policy().strategy());
     }
 
+    boolean canVerifyAtInner() {
+      return minRepetition == 0 && !hasLeadingAssertions;
+    }
+
+    int findInnerCandidate(String text, int searchPos, boolean unixLines) {
+      return StringStartAccelerator.findNextCandidate(inner, text, searchPos, unixLines);
+    }
+
+    int expandBackward(String text, int innerMatch, int fromIndex) {
+      int start = innerMatch;
+      int count = 0;
+      while (start > fromIndex) {
+        int cp = text.codePointBefore(start);
+        int cpStart = start - Character.charCount(cp);
+        if (cpStart < fromIndex) {
+          break;
+        }
+        if (!leadingClass.contains(cp)) {
+          break;
+        }
+        if (count + 1 > maxRepetition) {
+          break;
+        }
+        count++;
+        start = cpStart;
+      }
+      return start;
+    }
+
     int findCandidate(String text, int fromIndex, boolean unixLines) {
       int searchPos = Math.max(0, fromIndex);
       int textLen = text.length();
       while (searchPos < textLen) {
-        int innerMatch =
-            StringStartAccelerator.findNextCandidate(inner, text, searchPos, unixLines);
+        int innerMatch = findInnerCandidate(text, searchPos, unixLines);
         if (innerMatch < 0) {
           return -1;
         }

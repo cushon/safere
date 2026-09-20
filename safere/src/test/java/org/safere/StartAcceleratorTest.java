@@ -612,6 +612,148 @@ class StartAcceleratorTest {
     assertThatCode(() -> Pattern.compile(regex.toString())).doesNotThrowAnyException();
   }
 
+  @Test
+  void nullableLeadingExpansionVerifiesCandidateAtInnerMatch() {
+    Pattern pattern = Pattern.compile("(\\s*)# [Nn][Oo][Qq][Aa]");
+    MultiAnchorDescriptor.StartPlan plan = pattern.startPlan();
+    assertThat(plan).isInstanceOf(MultiAnchorDescriptor.StartPlan.LeadingExpansion.class);
+    MultiAnchorDescriptor.StartPlan.LeadingExpansion le =
+        (MultiAnchorDescriptor.StartPlan.LeadingExpansion) plan;
+    assertThat(le.minRepetition()).isEqualTo(0);
+    assertThat(le.hasLeadingAssertions()).isFalse();
+
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
+    StringStartAccelerator.LeadingExpansion strLe =
+        (StringStartAccelerator.LeadingExpansion) strAcc;
+    assertThat(strLe.canVerifyAtInner()).isTrue();
+
+    // Matching lines: verify correct leftmost start and capture groups
+    Matcher m1 = pattern.matcher("        # noqa: E501");
+    assertThat(m1.find()).isTrue();
+    assertThat(m1.start()).isEqualTo(0);
+    assertThat(m1.group(1)).isEqualTo("        ");
+
+    // Non-matching indented comment: rejected
+    Matcher m2 = pattern.matcher("        # This is a comment, not noqa");
+    assertThat(m2.find()).isFalse();
+
+    // Multiple candidates on same line: leftmost match found
+    Matcher m3 = pattern.matcher("    # foo    # noqa");
+    assertThat(m3.find()).isTrue();
+    assertThat(m3.start()).isEqualTo(9);
+    assertThat(m3.group(1)).isEqualTo("    ");
+
+    // UTF-8 matching
+    Utf8Matcher u1 = pattern.matcher(Utf8Input.validated("        # noqa: E501".getBytes(UTF_8)));
+    assertThat(u1.find()).isTrue();
+    assertThat(u1.start()).isEqualTo(0);
+    assertThat(u1.start(1)).isEqualTo(0);
+    assertThat(u1.end(1)).isEqualTo(8);
+
+    Utf8Matcher u2 =
+        pattern.matcher(Utf8Input.validated("        # This is a comment".getBytes(UTF_8)));
+    assertThat(u2.find()).isFalse();
+  }
+
+  @Test
+  void leadingExpansionWithLeadingBoundaryPreservesAssertions() {
+    Pattern pattern = Pattern.compile("\\b[a-z]*target");
+    MultiAnchorDescriptor.StartPlan plan = pattern.startPlan();
+    assertThat(plan).isInstanceOf(MultiAnchorDescriptor.StartPlan.LeadingExpansion.class);
+    MultiAnchorDescriptor.StartPlan.LeadingExpansion le =
+        (MultiAnchorDescriptor.StartPlan.LeadingExpansion) plan;
+    assertThat(le.minRepetition()).isEqualTo(0);
+    assertThat(le.hasLeadingAssertions()).isTrue();
+
+    StringStartAccelerator strAcc = pattern.stringStartAccelerator();
+    assertThat(strAcc).isInstanceOf(StringStartAccelerator.LeadingExpansion.class);
+    StringStartAccelerator.LeadingExpansion strLe =
+        (StringStartAccelerator.LeadingExpansion) strAcc;
+    assertThat(strLe.canVerifyAtInner()).isFalse();
+
+    Matcher m = pattern.matcher("prefix wordtarget suffix");
+    assertThat(m.find()).isTrue();
+    assertThat(m.start()).isEqualTo(7); // "wordtarget" starts at word boundary index 7
+  }
+
+  @Test
+  void leadingExpansionExpandsBackwardAcrossMultiByteCharacters() {
+    // `\s` is single-unit, so the other tests always take the singleUnitCodePointBefore fast
+    // path. U+00E0..U+00FF are two bytes each in UTF-8, which forces decodeBackward.
+    Pattern pattern = Pattern.compile("[\\u00e0-\\u00ff]*RARE");
+    assertThat(pattern.startPlan())
+        .isInstanceOf(MultiAnchorDescriptor.StartPlan.LeadingExpansion.class);
+    Utf8StartAccelerator u8Acc = pattern.utf8StartAccelerator();
+    assertThat(u8Acc).isInstanceOf(Utf8StartAccelerator.LeadingExpansion.class);
+    assertThat(((Utf8StartAccelerator.LeadingExpansion) u8Acc).canVerifyAtInner()).isTrue();
+
+    // Three two-byte characters precede the literal, so the match starts at byte 0 of 10.
+    Utf8Matcher m1 = pattern.matcher(Utf8Input.validated("\u00e0\u00e8\u00ecRARE".getBytes(UTF_8)));
+    assertThat(m1.find()).isTrue();
+    assertThat(m1.start()).isEqualTo(0);
+    assertThat(m1.end()).isEqualTo(10);
+
+    // Backward expansion stops at the ASCII 'x', which the leading class excludes.
+    Utf8Matcher m2 =
+        pattern.matcher(Utf8Input.validated("x\u00e0\u00e8\u00ecRARE".getBytes(UTF_8)));
+    assertThat(m2.find()).isTrue();
+    assertThat(m2.start()).isEqualTo(1);
+
+    // A rejected candidate must not swallow the rest of the input: the real match is later.
+    Utf8Matcher m3 =
+        pattern.matcher(Utf8Input.validated("\u00e0\u00e8\u00ecNOPE \u00e0RARE".getBytes(UTF_8)));
+    assertThat(m3.find()).isTrue();
+    assertThat(m3.start()).isEqualTo(11);
+    assertThat(m3.end()).isEqualTo(17);
+
+    Utf8Matcher m4 = pattern.matcher(Utf8Input.validated("\u00e0\u00e8\u00ecNOPE".getBytes(UTF_8)));
+    assertThat(m4.find()).isFalse();
+  }
+
+  @Test
+  void leadingExpansionWithNonNullableRepetitionKeepsTheScalarPath() {
+    Pattern pattern = Pattern.compile("\\s+# noqa");
+    MultiAnchorDescriptor.StartPlan plan = pattern.startPlan();
+    assertThat(plan).isInstanceOf(MultiAnchorDescriptor.StartPlan.LeadingExpansion.class);
+    MultiAnchorDescriptor.StartPlan.LeadingExpansion le =
+        (MultiAnchorDescriptor.StartPlan.LeadingExpansion) plan;
+    assertThat(le.minRepetition()).isEqualTo(1);
+    assertThat(le.hasLeadingAssertions()).isFalse();
+
+    // minRepetition > 0 breaks the zero-repetition step of the rejection argument, so the
+    // candidate must not be verified at the inner match even with no leading assertions.
+    assertThat(
+            ((StringStartAccelerator.LeadingExpansion) pattern.stringStartAccelerator())
+                .canVerifyAtInner())
+        .isFalse();
+    assertThat(
+            ((Utf8StartAccelerator.LeadingExpansion) pattern.utf8StartAccelerator())
+                .canVerifyAtInner())
+        .isFalse();
+
+    Matcher m1 = pattern.matcher("    # noqa");
+    assertThat(m1.find()).isTrue();
+    assertThat(m1.start()).isEqualTo(0);
+
+    // Verifying at the inner match would accept this; the mandatory whitespace is absent.
+    Matcher m2 = pattern.matcher("# noqa");
+    assertThat(m2.find()).isFalse();
+  }
+
+  @Test
+  void nullableLeadingExpansionVerifiesCandidateAtInnerMatchWhenSplitting() {
+    // Pattern.split reaches Matcher.findSplitPositions -> findNextMatchPacked, a third copy of
+    // the candidate-verification block that the find() tests never execute.
+    Pattern pattern = Pattern.compile("\\s*# noqa");
+
+    assertThat(pattern.split("alpha    # noqa beta")).containsExactly("alpha", " beta");
+
+    // The `# nope` candidate must be rejected at the inner match and left in the output.
+    assertThat(pattern.split("alpha    # nope beta   # noqa gamma"))
+        .containsExactly("alpha    # nope beta", " gamma");
+  }
+
   private static boolean isVectorApiAvailable() {
     try {
       Class.forName("jdk.incubator.vector.ByteVector");

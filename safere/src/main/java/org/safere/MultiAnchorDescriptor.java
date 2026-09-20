@@ -110,7 +110,11 @@ final class MultiAnchorDescriptor {
     }
 
     record LeadingExpansion(
-        CharClassScanInfo leadingClass, int minRepetition, int maxRepetition, StartPlan innerPlan)
+        CharClassScanInfo leadingClass,
+        int minRepetition,
+        int maxRepetition,
+        boolean hasLeadingAssertions,
+        StartPlan innerPlan)
         implements StartPlan {
       public LeadingExpansion {
         Objects.requireNonNull(leadingClass, "leadingClass");
