@@ -1149,6 +1149,22 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void unicodeCaseInsensitiveUtf8LiteralFilterIsLinearOnDenseFalseCandidates() {
+    Pattern pattern = Pattern.compile("(?iu)Шерлок Холмс");
+    Utf8Input shortInput = Utf8Input.validated("шЕРЛОК ХолмX ".repeat(500).getBytes(UTF_8));
+    Utf8Input longInput = Utf8Input.validated("шЕРЛОК ХолмX ".repeat(2_500).getBytes(UTF_8));
+
+    long shortWork =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(shortInput).find()).isFalse());
+    long longWork =
+        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(longInput).find()).isFalse());
+
+    assertThat(longWork)
+        .as("Unicode-folded UTF-8 literal filtering should scale linearly")
+        .isLessThan(shortWork * 6);
+  }
+
+  @Test
   void hybridCaseInsensitiveSearchIsImmuneToFalseAnchorStormsForStringInput() {
     Pattern pattern = Pattern.compile("(?i)keyword_to_find"); // anchor is 'k' / 'K'
     String text = "k_other_words_".repeat(20); // 280 chars with 20 'k' false anchors

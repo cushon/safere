@@ -6,6 +6,8 @@
 package org.safere;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import org.safere.Pattern.FixedOffsetLiteral;
 
 /**
@@ -34,7 +36,9 @@ sealed interface Utf8StartAccelerator {
       case MultiAnchorDescriptor.StartPlan.None unusedNone -> null;
       case MultiAnchorDescriptor.StartPlan.Literal lit ->
           lit.foldCase()
-              ? CaseInsensitiveLiteral.create(lit.prefix())
+              ? (Ascii.isAscii(lit.prefix())
+                  ? CaseInsensitiveLiteral.create(lit.prefix())
+                  : UnicodeCaseInsensitiveLiteral.create(lit.prefix()))
               : Literal.create(lit.prefix());
       case MultiAnchorDescriptor.StartPlan.CharClass cc ->
           hasWordBoundary || !cc.scanInfo().isSelective() ? null : new CharClass(cc.scanInfo());
@@ -94,6 +98,7 @@ sealed interface Utf8StartAccelerator {
     return switch (accelerator) {
       case Literal lit -> lit.findCandidate(scanner, pos);
       case CaseInsensitiveLiteral cil -> cil.findCandidate(scanner, pos);
+      case UnicodeCaseInsensitiveLiteral unicode -> unicode.findCandidate(scanner, pos);
       case FixedOffset fo -> fo.findCandidate(scanner, pos);
       case CharClass cc -> cc.findCandidate(scanner, pos);
       case Teddy t -> t.findCandidate(scanner, pos);
@@ -190,6 +195,184 @@ sealed interface Utf8StartAccelerator {
       }
       return scanner.indexOfIgnoreCase(
           prefix, failure, anchorOffset, anchorLow, anchorHigh, fromIndex);
+    }
+  }
+
+  /** A bounded byte filter for Unicode-folded literal prefixes on UTF-8 input. */
+  final class UnicodeCaseInsensitiveLiteral implements Utf8StartAccelerator {
+    private static final int MAX_FOLD_VARIANTS = 4;
+
+    private final List<int[]> prefixFoldVariants;
+    private final int anchorByteOffset;
+    private final List<EncodedFold> anchorVariants;
+
+    private UnicodeCaseInsensitiveLiteral(
+        List<int[]> prefixFoldVariants, int anchorByteOffset, List<EncodedFold> anchorVariants) {
+      this.prefixFoldVariants = prefixFoldVariants;
+      this.anchorByteOffset = anchorByteOffset;
+      this.anchorVariants = anchorVariants;
+    }
+
+    static Utf8StartAccelerator create(String prefix) {
+      int[] codePoints = prefix.codePoints().toArray();
+      int stablePrefixBytes = 0;
+      int bestRarity = -1;
+      int bestOffset = 0;
+      List<EncodedFold> bestVariants = null;
+      List<int[]> prefixFoldVariants = new ArrayList<>(codePoints.length);
+      boolean stablePrefixWidth = true;
+      for (int codePoint : codePoints) {
+        if (codePoint >= Character.MIN_SURROGATE && codePoint <= Character.MAX_SURROGATE) {
+          return null;
+        }
+        int[] foldVariants = foldVariants(codePoint);
+        if (foldVariants == null) {
+          return null;
+        }
+        prefixFoldVariants.add(foldVariants);
+        if (!stablePrefixWidth) {
+          continue;
+        }
+        List<EncodedFold> variants = encodedFoldVariants(foldVariants);
+        int rarity = 255;
+        int width = variants.getFirst().bytes.length;
+        boolean stableWidth = true;
+        for (EncodedFold variant : variants) {
+          int variantRarity = 0;
+          for (byte value : variant.bytes) {
+            variantRarity = Math.max(variantRarity, RarityOracle.exactByteRarity(value & 0xFF));
+          }
+          rarity = Math.min(rarity, variantRarity);
+          stableWidth &= variant.bytes.length == width;
+        }
+        if (rarity > bestRarity) {
+          bestRarity = rarity;
+          bestOffset = stablePrefixBytes;
+          bestVariants = variants;
+        }
+        // A later anchor has no fixed byte offset if an earlier fold changes UTF-8 width.
+        if (!stableWidth) {
+          stablePrefixWidth = false;
+        } else {
+          stablePrefixBytes += width;
+        }
+      }
+      return bestVariants == null
+          ? null
+          : new UnicodeCaseInsensitiveLiteral(prefixFoldVariants, bestOffset, bestVariants);
+    }
+
+    private static int[] foldVariants(int codePoint) {
+      CharClassBuilder builder = new CharClassBuilder();
+      UnicodeCaseFolding.addUnicodeFoldedRange(builder, codePoint, codePoint);
+      org.safere.CharClass closure = builder.build();
+      if (closure.numRunes() > MAX_FOLD_VARIANTS) {
+        return null;
+      }
+      int[] variants = new int[closure.numRunes()];
+      int count = 0;
+      for (int i = 0; i < closure.numRanges(); i++) {
+        for (int cp = closure.lo(i); cp <= closure.hi(i); cp++) {
+          variants[count++] = cp;
+        }
+      }
+      return variants;
+    }
+
+    private static List<EncodedFold> encodedFoldVariants(int[] foldVariants) {
+      List<EncodedFold> variants = new ArrayList<>();
+      for (int folded : foldVariants) {
+        byte[] bytes = new String(Character.toChars(folded)).getBytes(StandardCharsets.UTF_8);
+        variants.add(
+            new EncodedFold(bytes, Pattern.literalFailure(bytes), Pattern.literalShifts(bytes)));
+      }
+      return variants;
+    }
+
+    @Override
+    public AcceleratorPolicy policy() {
+      return AcceleratorPolicy.LITERAL;
+    }
+
+    int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+      int start = Math.max(0, fromIndex);
+      if (anchorByteOffset > scanner.length() - start) {
+        return -1;
+      }
+      int[] hits = new int[anchorVariants.size()];
+      for (int i = 0; i < hits.length; i++) {
+        EncodedFold variant = anchorVariants.get(i);
+        hits[i] =
+            scanner.indexOf(
+                variant.bytes, variant.failure, variant.shifts, start + anchorByteOffset);
+      }
+      long verificationWork = 0;
+      long workLimit = WorkLimit.forRemaining(scanner.length() - start);
+      while (true) {
+        int nextHit = Integer.MAX_VALUE;
+        for (int hit : hits) {
+          if (hit >= 0 && hit < nextHit) {
+            nextHit = hit;
+          }
+        }
+        if (nextHit == Integer.MAX_VALUE) {
+          return -1;
+        }
+        int candidate = nextHit - anchorByteOffset;
+        if (candidate >= start
+            && scanner.isCodePointBoundary(candidate)
+            && matchesPrefix(scanner, candidate)) {
+          return candidate;
+        }
+        verificationWork += prefixFoldVariants.size();
+        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+          return start;
+        }
+        for (int i = 0; i < hits.length; i++) {
+          if (hits[i] == nextHit) {
+            EncodedFold variant = anchorVariants.get(i);
+            hits[i] = scanner.indexOf(variant.bytes, variant.failure, variant.shifts, nextHit + 1);
+          }
+        }
+      }
+    }
+
+    private boolean matchesPrefix(Utf8InputScanner scanner, int candidate) {
+      int position = candidate;
+      for (int[] foldVariants : prefixFoldVariants) {
+        if (position >= scanner.length()) {
+          return false;
+        }
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        long decoded = scanner.decodeForward(position);
+        int actual = InputScanner.codePoint(decoded);
+        boolean equivalent = false;
+        for (int variant : foldVariants) {
+          if (actual == variant) {
+            equivalent = true;
+            break;
+          }
+        }
+        if (!equivalent) {
+          return false;
+        }
+        position = InputScanner.position(decoded);
+      }
+      return true;
+    }
+
+    private static final class EncodedFold {
+      private final byte[] bytes;
+      private final int[] failure;
+      private final int[] shifts;
+
+      private EncodedFold(byte[] bytes, int[] failure, int[] shifts) {
+        this.bytes = bytes;
+        this.failure = failure;
+        this.shifts = shifts;
+      }
     }
   }
 
