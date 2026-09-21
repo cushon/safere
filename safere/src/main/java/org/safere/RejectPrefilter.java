@@ -145,10 +145,33 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record CharClass(int[] ranges, long bitmap0, long bitmap1) implements RejectPrefilter {
+  record CharClass(int[] ranges, long bitmap0, long bitmap1, int singleAscii)
+      implements RejectPrefilter {
 
     static CharClass create(CharClassScanInfo scanInfo) {
-      return new CharClass(scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1());
+      return new CharClass(
+          scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1(), singleAscii(scanInfo));
+    }
+
+    /**
+     * Returns the sole member of a one-character ASCII class, or {@code -1} for every other class.
+     *
+     * <p>A one-character reject class is a character search, not a class scan. {@link
+     * InputScanner#indexOfAscii} reaches {@link String#indexOf(int, int)}, which is intrinsified,
+     * whereas {@link InputScanner#indexOfCodePointClass} walks {@code codePointAt} and {@code
+     * charCount} per character. {@link CharClassScanInfo.AsciiSmallSet} already records its
+     * enumerated members; this reads that back so the distinction survives construction.
+     *
+     * <p>Only one character qualifies. {@code indexOfAsciiPair} has no intrinsic behind it on the
+     * {@code String} path, so the two- and three-character members of {@code AsciiSmallSet} would
+     * trade one scalar loop for another.
+     */
+    private static int singleAscii(CharClassScanInfo scanInfo) {
+      return scanInfo instanceof CharClassScanInfo.AsciiSmallSet smallSet
+              && smallSet.chars() != null
+              && smallSet.chars().length == 1
+          ? smallSet.chars()[0]
+          : -1;
     }
 
     @Override
@@ -161,15 +184,18 @@ sealed interface RejectPrefilter
         return canReject(utf8Scanner, searchFrom, options);
       }
       if (scanner != null) {
-        return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
-            < 0;
+        return indexOf(scanner, searchFrom, scanner.length()) < 0;
       }
       if (text != null) {
-        return new StringInputScanner(text)
-                .indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, text.length())
-            < 0;
+        return indexOf(new StringInputScanner(text), searchFrom, text.length()) < 0;
       }
       return false;
+    }
+
+    private int indexOf(InputScanner scanner, int searchFrom, int limit) {
+      return singleAscii >= 0
+          ? scanner.indexOfAscii(singleAscii, searchFrom, limit)
+          : scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, limit);
     }
 
     @Override
