@@ -794,6 +794,18 @@ class StartAcceleratorTest {
   }
 
   @Test
+  void leadingExpansionWithUnicodeFoldedLiteralUsesScalarFallback() {
+    Pattern pattern = Pattern.compile("(?iu)[0-9]*Шерлок Холмс");
+    assertThat(pattern.startPlan())
+        .isInstanceOf(MultiAnchorDescriptor.StartPlan.LeadingExpansion.class);
+    assertThat(pattern.utf8StartAccelerator()).isNull();
+
+    Utf8Matcher matcher = pattern.matcher(Utf8Input.validated("12шЕРЛОК ХОЛМС".getBytes(UTF_8)));
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isZero();
+  }
+
+  @Test
   void leadingExpansionWithNonNullableRepetitionKeepsTheScalarPath() {
     Pattern pattern = Pattern.compile("\\s+# noqa");
     MultiAnchorDescriptor.StartPlan plan = pattern.startPlan();

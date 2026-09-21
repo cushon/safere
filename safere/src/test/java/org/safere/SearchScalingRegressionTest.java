@@ -1151,17 +1151,21 @@ class SearchScalingRegressionTest {
   @Test
   void unicodeCaseInsensitiveUtf8LiteralFilterIsLinearOnDenseFalseCandidates() {
     Pattern pattern = Pattern.compile("(?iu)Шерлок Холмс");
-    Utf8Input shortInput = Utf8Input.validated("шЕРЛОК ХолмX ".repeat(500).getBytes(UTF_8));
-    Utf8Input longInput = Utf8Input.validated("шЕРЛОК ХолмX ".repeat(2_500).getBytes(UTF_8));
+    for (String falseCandidate : new String[] {"шЕРЛОК ХолмX ", "ШЕРЛОК ХОЛМX "}) {
+      Utf8Input shortInput = Utf8Input.validated(falseCandidate.repeat(500).getBytes(UTF_8));
+      Utf8Input longInput = Utf8Input.validated(falseCandidate.repeat(2_500).getBytes(UTF_8));
 
-    long shortWork =
-        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(shortInput).find()).isFalse());
-    long longWork =
-        WorkCounter.countForTesting(() -> assertThat(pattern.matcher(longInput).find()).isFalse());
+      long shortWork =
+          WorkCounter.countForTesting(
+              () -> assertThat(pattern.matcher(shortInput).find()).isFalse());
+      long longWork =
+          WorkCounter.countForTesting(
+              () -> assertThat(pattern.matcher(longInput).find()).isFalse());
 
-    assertThat(longWork)
-        .as("Unicode-folded UTF-8 literal filtering should scale linearly")
-        .isLessThan(shortWork * 6);
+      assertThat(longWork)
+          .as("Unicode-folded UTF-8 filtering should scale linearly for %s", falseCandidate)
+          .isLessThan(shortWork * 6);
+    }
   }
 
   @Test

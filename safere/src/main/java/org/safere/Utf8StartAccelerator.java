@@ -71,6 +71,10 @@ sealed interface Utf8StartAccelerator {
       }
       case MultiAnchorDescriptor.StartPlan.LeadingExpansion le -> {
         Utf8StartAccelerator inner = create(le.innerPlan(), hasWordBoundary);
+        // This wrapper does not retain the folded filter's per-search scan cursor.
+        if (inner instanceof UnicodeCaseInsensitiveLiteral) {
+          yield null;
+        }
         yield inner != null
             ? new LeadingExpansion(
                 le.leadingClass(),
@@ -105,6 +109,17 @@ sealed interface Utf8StartAccelerator {
       case MultiLiteral ml -> ml.findCandidate(scanner, pos);
       case LeadingExpansion le -> le.findCandidate(scanner, pos);
     };
+  }
+
+  /** A search-local cursor for accelerators that scan multiple folded byte variants. */
+  interface SearchCursor {
+    int findCandidate(Utf8InputScanner scanner, int fromIndex);
+  }
+
+  static SearchCursor searchCursor(Utf8StartAccelerator accelerator) {
+    return accelerator instanceof UnicodeCaseInsensitiveLiteral unicode
+        ? unicode.new SearchCursorImpl()
+        : null;
   }
 
   /** Returns the tuning and diagnostic policy for this accelerator. */
@@ -295,45 +310,74 @@ sealed interface Utf8StartAccelerator {
     }
 
     int findCandidate(Utf8InputScanner scanner, int fromIndex) {
-      int start = Math.max(0, fromIndex);
-      if (anchorByteOffset > scanner.length() - start) {
-        return -1;
-      }
-      int[] hits = new int[anchorVariants.size()];
-      for (int i = 0; i < hits.length; i++) {
-        EncodedFold variant = anchorVariants.get(i);
-        hits[i] =
-            scanner.indexOf(
-                variant.bytes, variant.failure, variant.shifts, start + anchorByteOffset);
-      }
-      long verificationWork = 0;
-      long workLimit = WorkLimit.forRemaining(scanner.length() - start);
-      while (true) {
-        int nextHit = Integer.MAX_VALUE;
-        for (int hit : hits) {
-          if (hit >= 0 && hit < nextHit) {
-            nextHit = hit;
-          }
-        }
-        if (nextHit == Integer.MAX_VALUE) {
-          return -1;
-        }
-        int candidate = nextHit - anchorByteOffset;
-        if (candidate >= start
-            && scanner.isCodePointBoundary(candidate)
-            && matchesPrefix(scanner, candidate)) {
-          return candidate;
-        }
-        verificationWork += prefixFoldVariants.size();
-        if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+      return new SearchCursorImpl().findCandidate(scanner, fromIndex);
+    }
+
+    /** Caches each variant's next hit and the verification budget for one forward search. */
+    final class SearchCursorImpl implements SearchCursor {
+      private final int[] hits = new int[anchorVariants.size()];
+      private boolean initialized;
+      private boolean exhausted;
+      private long verificationWork;
+      private long workLimit;
+
+      @Override
+      public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
+        int start = Math.max(0, fromIndex);
+        if (exhausted) {
           return start;
         }
-        for (int i = 0; i < hits.length; i++) {
-          if (hits[i] == nextHit) {
-            EncodedFold variant = anchorVariants.get(i);
-            hits[i] = scanner.indexOf(variant.bytes, variant.failure, variant.shifts, nextHit + 1);
+        if (anchorByteOffset > scanner.length() - start) {
+          return -1;
+        }
+        int anchorStart = start + anchorByteOffset;
+        if (!initialized) {
+          workLimit = WorkLimit.forRemaining(scanner.length() - start);
+          for (int i = 0; i < hits.length; i++) {
+            hits[i] = findVariant(scanner, i, anchorStart);
+          }
+          initialized = true;
+        } else {
+          for (int i = 0; i < hits.length; i++) {
+            if (hits[i] >= 0 && hits[i] < anchorStart) {
+              hits[i] = findVariant(scanner, i, anchorStart);
+            }
           }
         }
+        while (true) {
+          int nextHit = Integer.MAX_VALUE;
+          for (int hit : hits) {
+            if (hit >= 0 && hit < nextHit) {
+              nextHit = hit;
+            }
+          }
+          if (nextHit == Integer.MAX_VALUE) {
+            return -1;
+          }
+          int candidate = nextHit - anchorByteOffset;
+          if (candidate >= start
+              && scanner.isCodePointBoundary(candidate)
+              && matchesPrefix(scanner, candidate)) {
+            return candidate;
+          }
+          verificationWork += prefixFoldVariants.size();
+          if (WorkLimit.isExhausted(verificationWork, workLimit)) {
+            // A search can call this cursor again at every subsequent byte. Keep the fallback
+            // sticky so neither variant scans nor candidate verification restart from scratch.
+            exhausted = true;
+            return start;
+          }
+          for (int i = 0; i < hits.length; i++) {
+            if (hits[i] == nextHit) {
+              hits[i] = findVariant(scanner, i, nextHit + 1);
+            }
+          }
+        }
+      }
+
+      private int findVariant(Utf8InputScanner scanner, int index, int fromIndex) {
+        EncodedFold variant = anchorVariants.get(index);
+        return scanner.indexOf(variant.bytes, variant.failure, variant.shifts, fromIndex);
       }
     }
 
