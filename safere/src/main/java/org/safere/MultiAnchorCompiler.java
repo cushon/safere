@@ -1152,7 +1152,7 @@ final class MultiAnchorCompiler {
     }
 
     return new MultiAnchorDescriptor.StartPlan.LeadingExpansion(
-        leadingClass, minRepetition, maxRepetition, inner);
+        leadingClass, minRepetition, maxRepetition, idx > 0, inner);
   }
 
   static PrefixResult extractPrefix(Regexp re) {
