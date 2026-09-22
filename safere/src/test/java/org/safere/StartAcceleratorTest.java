@@ -154,6 +154,21 @@ class StartAcceleratorTest {
   }
 
   @Test
+  void unicodeCaseInsensitiveUtf8LiteralFindsCandidatesAcrossScanWindows() {
+    Utf8StartAccelerator accelerator =
+        Utf8StartAccelerator.create(plan("Шx", true, null, null), false);
+    String first = "x".repeat(255);
+    String middle = "x".repeat(255);
+    Utf8InputScanner scanner = utf8Scanner(first + "шx" + middle + "Шx");
+    int second = (first + "шx" + middle).getBytes(UTF_8).length;
+
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, 0)).isEqualTo(255);
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, 256)).isEqualTo(second);
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, second + 1))
+        .isEqualTo(-1);
+  }
+
+  @Test
   void unicodeCaseInsensitiveUtf8LiteralPreservesFullFindSequence() {
     String[] patterns = {"(?iu)Шерлок Холмс", "(?iu)café", "(?iu)Ké", "(?iu)ϑϑ"};
     String[] inputs = {

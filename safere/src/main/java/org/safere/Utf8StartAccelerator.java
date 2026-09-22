@@ -216,6 +216,7 @@ sealed interface Utf8StartAccelerator {
   /** A bounded byte filter for Unicode-folded literal prefixes on UTF-8 input. */
   final class UnicodeCaseInsensitiveLiteral implements Utf8StartAccelerator {
     private static final int MAX_FOLD_VARIANTS = 4;
+    private static final int ANCHOR_SCAN_WINDOW = 256;
 
     private final List<int[]> prefixFoldVariants;
     private final int anchorByteOffset;
@@ -298,8 +299,7 @@ sealed interface Utf8StartAccelerator {
       List<EncodedFold> variants = new ArrayList<>();
       for (int folded : foldVariants) {
         byte[] bytes = new String(Character.toChars(folded)).getBytes(StandardCharsets.UTF_8);
-        variants.add(
-            new EncodedFold(bytes, Pattern.literalFailure(bytes), Pattern.literalShifts(bytes)));
+        variants.add(new EncodedFold(bytes, Pattern.literalFailure(bytes)));
       }
       return variants;
     }
@@ -313,13 +313,11 @@ sealed interface Utf8StartAccelerator {
       return new SearchCursorImpl().findCandidate(scanner, fromIndex);
     }
 
-    /** Caches each variant's next hit and the verification budget for one forward search. */
+    /** Keeps candidate verification work bounded across one forward search. */
     final class SearchCursorImpl implements SearchCursor {
-      private final int[] hits = new int[anchorVariants.size()];
-      private boolean initialized;
       private boolean exhausted;
       private long verificationWork;
-      private long workLimit;
+      private long workLimit = -1;
 
       @Override
       public int findCandidate(Utf8InputScanner scanner, int fromIndex) {
@@ -330,29 +328,28 @@ sealed interface Utf8StartAccelerator {
         if (anchorByteOffset > scanner.length() - start) {
           return -1;
         }
-        int anchorStart = start + anchorByteOffset;
-        if (!initialized) {
+        if (workLimit < 0) {
           workLimit = WorkLimit.forRemaining(scanner.length() - start);
-          for (int i = 0; i < hits.length; i++) {
-            hits[i] = findVariant(scanner, i, anchorStart);
-          }
-          initialized = true;
-        } else {
-          for (int i = 0; i < hits.length; i++) {
-            if (hits[i] >= 0 && hits[i] < anchorStart) {
-              hits[i] = findVariant(scanner, i, anchorStart);
-            }
-          }
         }
-        while (true) {
+        int searchFrom = start + anchorByteOffset;
+        while (searchFrom < scanner.length()) {
+          int windowEnd =
+              searchFrom + Math.min(ANCHOR_SCAN_WINDOW, scanner.length() - searchFrom) - 1;
           int nextHit = Integer.MAX_VALUE;
-          for (int hit : hits) {
-            if (hit >= 0 && hit < nextHit) {
+          for (EncodedFold variant : anchorVariants) {
+            int hit =
+                scanner.indexOfWithin(
+                    variant.bytes, variant.failure, searchFrom, Math.min(windowEnd, nextHit - 1));
+            if (hit >= 0) {
               nextHit = hit;
+              if (hit == searchFrom) {
+                break;
+              }
             }
           }
           if (nextHit == Integer.MAX_VALUE) {
-            return -1;
+            searchFrom = windowEnd + 1;
+            continue;
           }
           int candidate = nextHit - anchorByteOffset;
           if (candidate >= start
@@ -363,21 +360,13 @@ sealed interface Utf8StartAccelerator {
           verificationWork += prefixFoldVariants.size();
           if (WorkLimit.isExhausted(verificationWork, workLimit)) {
             // A search can call this cursor again at every subsequent byte. Keep the fallback
-            // sticky so neither variant scans nor candidate verification restart from scratch.
+            // sticky so candidate verification cannot restart from scratch.
             exhausted = true;
             return start;
           }
-          for (int i = 0; i < hits.length; i++) {
-            if (hits[i] == nextHit) {
-              hits[i] = findVariant(scanner, i, nextHit + 1);
-            }
-          }
+          searchFrom = nextHit + 1;
         }
-      }
-
-      private int findVariant(Utf8InputScanner scanner, int index, int fromIndex) {
-        EncodedFold variant = anchorVariants.get(index);
-        return scanner.indexOf(variant.bytes, variant.failure, variant.shifts, fromIndex);
+        return -1;
       }
     }
 
@@ -410,12 +399,10 @@ sealed interface Utf8StartAccelerator {
     private static final class EncodedFold {
       private final byte[] bytes;
       private final int[] failure;
-      private final int[] shifts;
 
-      private EncodedFold(byte[] bytes, int[] failure, int[] shifts) {
+      private EncodedFold(byte[] bytes, int[] failure) {
         this.bytes = bytes;
         this.failure = failure;
-        this.shifts = shifts;
       }
     }
   }

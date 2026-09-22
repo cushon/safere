@@ -1169,6 +1169,16 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void unicodeCaseInsensitiveUtf8LiteralFilterIsLinearAcrossSuccessfulFinds() {
+    Pattern pattern = Pattern.compile("(?iu)Шx[0-9]");
+    for (String match : new String[] {"Шx1 ", "шx1 "}) {
+      assertRepeatedFindWorkIsLinear(
+          size -> pattern.matcher(Utf8Input.validated(match.repeat(size).getBytes(UTF_8)))::find,
+          "Unicode-folded UTF-8 " + match);
+    }
+  }
+
+  @Test
   void hybridCaseInsensitiveSearchIsImmuneToFalseAnchorStormsForStringInput() {
     Pattern pattern = Pattern.compile("(?i)keyword_to_find"); // anchor is 'k' / 'K'
     String text = "k_other_words_".repeat(20); // 280 chars with 20 'k' false anchors

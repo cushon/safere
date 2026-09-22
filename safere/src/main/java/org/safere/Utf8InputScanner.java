@@ -545,7 +545,18 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     if (literal.length == 0) {
       return start <= maxStart ? start : -1;
     }
-    int limit = Math.min(length, maxStart + literal.length);
+    int lastStart = Math.min(length - literal.length, maxStart);
+    if (start > lastStart) {
+      return -1;
+    }
+    int limit = lastStart + literal.length;
+    if (!WorkCounterConfig.ENABLED
+        && limit - start >= ByteSwarScan.filterThreshold(literal.length)) {
+      int result = ByteSwarScan.indexOfFiltered(bytes, offset, limit, literal, start);
+      if (result >= -1) {
+        return result;
+      }
+    }
     return indexOfLinear(bytes, offset, limit, literal, failure, start);
   }
 
