@@ -2972,6 +2972,19 @@ public final class Matcher implements MatchResult {
           return text;
         }
       }
+    } else if (anchoredPrefixOrCharClassCannotMatch(searchFrom)) {
+      // A start-anchored pattern can only match at searchFrom, so a failed anchored prefix or
+      // character-class check decides the whole call. Without this arm such patterns get no
+      // whole-input rejection at all: the unanchored branch above is skipped for them, and they
+      // reach the replacement machinery only to allocate a template and a cursor and step the DFA
+      // once before failing. Mirrors the equivalent checks in matchesCore and doFindCore.
+      MatchStrategy strategy =
+          parentPattern.anchoredPrefix() != null
+              ? MatchStrategy.LITERAL
+              : MatchStrategy.CHARACTER_CLASS;
+      diagnosticParticipation(strategy, StrategyRole.REJECT_PREFILTER);
+      diagnosticBoundary(strategy);
+      return text;
     }
     LazyTemplate template = new LazyTemplate(replacement, groupCount());
     String literalResult = literalReplaceFastPath(template, limit);
