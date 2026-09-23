@@ -1626,9 +1626,17 @@ final class Dfa {
    * Fast-forwards the start position of unanchored search matching when returning to the start
    * state.
    */
-  private int fastForward(InputScanner text, int pos, int posDepThreshold, State startState) {
+  private int fastForward(
+      InputScanner text,
+      int pos,
+      int posDepThreshold,
+      State startState,
+      Utf8StartAccelerator.SearchCursor utf8Cursor) {
     if (text instanceof Utf8InputScanner utf8Scanner && utf8StartAccelerator != null) {
-      int idx = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, utf8Scanner, pos);
+      int idx =
+          utf8Cursor != null
+              ? utf8Cursor.findCandidate(utf8Scanner, pos)
+              : Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, utf8Scanner, pos);
       return idx >= 0 ? Math.min(idx, posDepThreshold - 1) : -1;
     }
     if (text instanceof StringInputScanner stringScanner && stringStartAccelerator != null) {
@@ -1725,6 +1733,10 @@ final class Dfa {
 
     AcceleratorPolicy activePolicy = startAccelerationPolicy(text, s);
     boolean canAccelerate = activePolicy != null && !anchored;
+    Utf8StartAccelerator.SearchCursor utf8Cursor =
+        canAccelerate && text instanceof Utf8InputScanner
+            ? Utf8StartAccelerator.searchCursor(utf8StartAccelerator)
+            : null;
     AcceleratorPolicy tuning = canAccelerate ? activePolicy : AcceleratorPolicy.DEFAULT;
     int minSkip = tuning.minProfitableSkip();
     int lossLimit = tuning.strikeBudget() * minSkip;
@@ -1754,7 +1766,7 @@ final class Dfa {
           && s.isStartState
           && (!startPositionPreselected || pos != startPos)
           && (textLen - pos >= minSkip)) {
-        int nextPos = fastForward(text, pos, posDepThreshold, s);
+        int nextPos = fastForward(text, pos, posDepThreshold, s, utf8Cursor);
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.recordStartScan(nextPos < 0 ? textLen - pos : nextPos - pos);
         }
@@ -1946,7 +1958,7 @@ final class Dfa {
           && s.isStartState
           && (!startPositionPreselected || pos != startPos)
           && (textLen - pos >= minSkip)) {
-        int nextPos = fastForward(text, pos, posDepThreshold, s);
+        int nextPos = fastForward(text, pos, posDepThreshold, s, utf8Cursor);
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.recordStartScan(nextPos < 0 ? textLen - pos : nextPos - pos);
         }

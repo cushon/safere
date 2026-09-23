@@ -5,11 +5,14 @@
 
 package org.safere.fuzz;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.util.List;
 import java.util.Locale;
 import org.safere.Pattern;
+import org.safere.Utf8Input;
 
 public final class MatchFuzzer {
   private static final int CI = Pattern.CASE_INSENSITIVE;
@@ -66,6 +69,7 @@ public final class MatchFuzzer {
     assertZeroWidthPossessiveCaptureRetentionJdk();
     assertDfaSandwichLeftmostStartCasesMatchJdk();
     assertMixedAsciiAndExactUnicodeCaseFoldingMatchesJdk(data);
+    assertUnicodeCaseFoldedUtf8LiteralMatchesJdk(data);
     assertScopedCaseFoldingMatchesJdk(data);
     assertMultiAnchorGapBoundsMatchJdk(data);
     assertLeadingClassAssertionsMatchJdk(data);
@@ -284,6 +288,25 @@ public final class MatchFuzzer {
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
     if (pattern != null) {
       pattern.matcher(input).find();
+    }
+  }
+
+  private static void assertUnicodeCaseFoldedUtf8LiteralMatchesJdk(FuzzedDataProvider data) {
+    String family = data.pickValue(List.of("Iiİı", "KkK", "Ssſ", "Σσς", "Шш"));
+    int[] members = family.codePoints().toArray();
+    int source = members[data.consumeInt(0, members.length - 1)];
+    int target = members[data.consumeInt(0, members.length - 1)];
+    String prefix = data.pickValue(List.of("é", "Ж", "α", "A"));
+    String suffix = data.pickValue(List.of("", "x", "終"));
+    String regex = prefix + new String(Character.toChars(source)) + suffix;
+    String input = "!" + prefix + new String(Character.toChars(target)) + suffix + "!";
+
+    boolean expected = java.util.regex.Pattern.compile(regex, CI_U).matcher(input).find();
+    boolean actual =
+        Pattern.compile(regex, CI_U).matcher(Utf8Input.validated(input.getBytes(UTF_8))).find();
+    if (actual != expected) {
+      throw new AssertionError(
+          "Unicode-folded UTF-8 find divergence for /" + regex + "/ on " + input);
     }
   }
 
