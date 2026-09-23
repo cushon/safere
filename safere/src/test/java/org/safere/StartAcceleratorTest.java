@@ -81,6 +81,27 @@ class StartAcceleratorTest {
   }
 
   @Test
+  void utf8LiteralPrefixFindsCandidatesAfterRepeatedFalsePrefixes() {
+    String asciiPrefix = "aaaaQaaaa";
+    Utf8StartAccelerator.Literal ascii =
+        (Utf8StartAccelerator.Literal)
+            Utf8StartAccelerator.create(plan(asciiPrefix, false, null, null), false);
+    assertThat(ascii.rareByteOffset()).isEqualTo(4);
+    Utf8InputScanner asciiScanner = utf8Scanner("aaaaYaaaa".repeat(100) + asciiPrefix + "1");
+    assertThat(Utf8StartAccelerator.findNextCandidate(ascii, asciiScanner, 0)).isEqualTo(900);
+    assertThat(Utf8StartAccelerator.findNextCandidate(ascii, asciiScanner, 901)).isEqualTo(-1);
+
+    String unicodePrefix = "aaaaШaaaa";
+    Utf8StartAccelerator.Literal unicode =
+        (Utf8StartAccelerator.Literal)
+            Utf8StartAccelerator.create(plan(unicodePrefix, false, null, null), false);
+    assertThat(unicode.rareByteOffset()).isGreaterThan(0);
+    Utf8InputScanner unicodeScanner = utf8Scanner("aaaaЮaaaa".repeat(100) + unicodePrefix + "1");
+    assertThat(Utf8StartAccelerator.findNextCandidate(unicode, unicodeScanner, 0))
+        .isEqualTo("aaaaЮaaaa".repeat(100).getBytes(UTF_8).length);
+  }
+
+  @Test
   void caseInsensitiveLiteralAcceleratesStringAndUtf8() {
     MultiAnchorDescriptor.StartPlan plan = plan("needle", true, null, null);
 
@@ -116,8 +137,7 @@ class StartAcceleratorTest {
     assertThat(Utf8StartAccelerator.findNextCandidate(singleUtf8, utf8Scanner("xxxa"), 0))
         .isEqualTo(3);
 
-    // Non-ASCII case-insensitive prefixes use UnicodeCaseInsensitiveLiteral for String,
-    // while Utf8StartAccelerator falls back (null) until UTF-8 Unicode acceleration lands.
+    // Non-ASCII case-insensitive prefixes use Unicode-aware accelerators for both inputs.
     MultiAnchorDescriptor.StartPlan nonAsciiDesc = plan("café", true, null, null);
     StringStartAccelerator unicodeStr = StringStartAccelerator.create(nonAsciiDesc, false);
     assertThat(unicodeStr).isInstanceOf(StringStartAccelerator.UnicodeCaseInsensitiveLiteral.class);
@@ -126,7 +146,104 @@ class StartAcceleratorTest {
     assertThat(StringStartAccelerator.findNextCandidate(unicodeStr, "prefix CAFÉ", 0, false))
         .isEqualTo(7);
 
-    assertThat(Utf8StartAccelerator.create(nonAsciiDesc, false)).isNull();
+    Utf8StartAccelerator unicodeUtf8 = Utf8StartAccelerator.create(nonAsciiDesc, false);
+    assertThat(unicodeUtf8).isInstanceOf(Utf8StartAccelerator.UnicodeCaseInsensitiveLiteral.class);
+    assertThat(
+            Utf8StartAccelerator.findNextCandidate(
+                unicodeUtf8, utf8Scanner("cafE CAFÉ caFé café"), 0))
+        .isEqualTo("cafE ".getBytes(UTF_8).length);
+  }
+
+  @Test
+  void unicodeCaseInsensitiveUtf8LiteralFindsOnlyFoldEquivalentPrefixCandidates() {
+    Utf8StartAccelerator accelerator =
+        Utf8StartAccelerator.create(plan("Шерлок Холмс", true, null, null), false);
+    assertThat(accelerator).isInstanceOf(Utf8StartAccelerator.UnicodeCaseInsensitiveLiteral.class);
+
+    String text = "Шерлок ХолмX шЕРЛОК хОЛМС ШЕРЛОК ХОЛМС";
+    Utf8InputScanner scanner = utf8Scanner(text);
+    int expected = "Шерлок ХолмX ".getBytes(UTF_8).length;
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, 0)).isEqualTo(expected);
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, expected + 1))
+        .isEqualTo(expected + "шЕРЛОК хОЛМС ".getBytes(UTF_8).length);
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, scanner.length()))
+        .isEqualTo(-1);
+  }
+
+  @Test
+  void unicodeCaseInsensitiveUtf8LiteralHandlesVariableWidthFoldBeforeLaterAnchor() {
+    Utf8StartAccelerator accelerator =
+        Utf8StartAccelerator.create(plan("Ké", true, null, null), false);
+    assertThat(accelerator).isInstanceOf(Utf8StartAccelerator.UnicodeCaseInsensitiveLiteral.class);
+    Utf8InputScanner scanner = utf8Scanner("x ké y KÉ z Ké");
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, 0)).isEqualTo(2);
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, 3))
+        .isEqualTo("x ké y ".getBytes(UTF_8).length);
+  }
+
+  @Test
+  void unicodeCaseInsensitiveUtf8LiteralFindsCandidatesAcrossScanWindows() {
+    Utf8StartAccelerator accelerator =
+        Utf8StartAccelerator.create(plan("Шx", true, null, null), false);
+    String first = "x".repeat(255);
+    String middle = "x".repeat(255);
+    Utf8InputScanner scanner = utf8Scanner(first + "шx" + middle + "Шx");
+    int second = (first + "шx" + middle).getBytes(UTF_8).length;
+
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, 0)).isEqualTo(255);
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, 256)).isEqualTo(second);
+    assertThat(Utf8StartAccelerator.findNextCandidate(accelerator, scanner, second + 1))
+        .isEqualTo(-1);
+  }
+
+  @Test
+  void unicodeCaseInsensitiveUtf8LiteralPreservesFullFindSequence() {
+    String[] patterns = {"(?iu)Шерлок Холмс", "(?iu)café", "(?iu)Ké", "(?iu)ϑϑ"};
+    String[] inputs = {
+      "шЕРЛОК хОЛМС Шерлок ХолмX ШЕРЛОК ХОЛМС", "CAFÉ cafe cAfÉ", "ké KÉ Ké", "ϑθ Θϑ ϑx"
+    };
+    EnginePathOptions noAcceleration = EnginePathOptions.builder().startAcceleration(false).build();
+    for (int i = 0; i < patterns.length; i++) {
+      Pattern accelerated = Pattern.compile(patterns[i]);
+      Pattern control = Pattern.compile(patterns[i], 0, noAcceleration);
+      if (i < 2) {
+        assertThat(accelerated.utf8StartAccelerator())
+            .as("UTF-8 accelerator for %s", patterns[i])
+            .isInstanceOf(Utf8StartAccelerator.UnicodeCaseInsensitiveLiteral.class);
+      }
+      Utf8Input input = Utf8Input.validated(inputs[i].getBytes(UTF_8));
+      Utf8Matcher actual = accelerated.matcher(input);
+      Utf8Matcher expected = control.matcher(input);
+      while (true) {
+        boolean found = expected.find();
+        assertThat(actual.find()).as("find for %s", patterns[i]).isEqualTo(found);
+        if (!found) {
+          break;
+        }
+        assertThat(actual.start()).as("start for %s", patterns[i]).isEqualTo(expected.start());
+        assertThat(actual.end()).as("end for %s", patterns[i]).isEqualTo(expected.end());
+      }
+    }
+  }
+
+  @Test
+  void unicodeCaseInsensitiveUtf8FindIncludesWholeCaseFamily() {
+    String[] literals = {"éİ", "éİ", "éİ", "éİ", "éı", "éı", "éı", "éı", "éK", "éS"};
+    String[] inputs = {"éİ", "éı", "éi", "éI", "éİ", "éı", "éi", "éI", "éK", "éſ"};
+    EnginePathOptions noAcceleration = EnginePathOptions.builder().startAcceleration(false).build();
+    for (int i = 0; i < literals.length; i++) {
+      String regex = "(?iu)" + literals[i];
+      assertThat(java.util.regex.Pattern.compile(regex).matcher(inputs[i]).find())
+          .as("JDK find for %s against %s", regex, inputs[i])
+          .isTrue();
+      Utf8Input utf8 = Utf8Input.validated(inputs[i].getBytes(UTF_8));
+      assertThat(Pattern.compile(regex, 0, noAcceleration).matcher(utf8).find())
+          .as("unaccelerated UTF-8 find for %s against %s", regex, inputs[i])
+          .isTrue();
+      assertThat(Pattern.compile(regex).matcher(utf8).find())
+          .as("accelerated UTF-8 find for %s against %s", regex, inputs[i])
+          .isTrue();
+    }
   }
 
   @Test
@@ -716,6 +833,18 @@ class StartAcceleratorTest {
 
     Utf8Matcher m4 = pattern.matcher(Utf8Input.validated("\u00e0\u00e8\u00ecNOPE".getBytes(UTF_8)));
     assertThat(m4.find()).isFalse();
+  }
+
+  @Test
+  void leadingExpansionWithUnicodeFoldedLiteralUsesScalarFallback() {
+    Pattern pattern = Pattern.compile("(?iu)[0-9]*Шерлок Холмс");
+    assertThat(pattern.startPlan())
+        .isInstanceOf(MultiAnchorDescriptor.StartPlan.LeadingExpansion.class);
+    assertThat(pattern.utf8StartAccelerator()).isNull();
+
+    Utf8Matcher matcher = pattern.matcher(Utf8Input.validated("12шЕРЛОК ХОЛМС".getBytes(UTF_8)));
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isZero();
   }
 
   @Test

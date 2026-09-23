@@ -2972,6 +2972,19 @@ public final class Matcher implements MatchResult {
           return text;
         }
       }
+    } else if (anchoredPrefixOrCharClassCannotMatch(searchFrom)) {
+      // A start-anchored pattern can only match at searchFrom, so a failed anchored prefix or
+      // character-class check decides the whole call. Without this arm such patterns get no
+      // whole-input rejection at all: the unanchored branch above is skipped for them, and they
+      // reach the replacement machinery only to allocate a template and a cursor and step the DFA
+      // once before failing. Mirrors the equivalent checks in matchesCore and doFindCore.
+      MatchStrategy strategy =
+          parentPattern.anchoredPrefix() != null
+              ? MatchStrategy.LITERAL
+              : MatchStrategy.CHARACTER_CLASS;
+      diagnosticParticipation(strategy, StrategyRole.REJECT_PREFILTER);
+      diagnosticBoundary(strategy);
+      return text;
     }
     LazyTemplate template = new LazyTemplate(replacement, groupCount());
     String literalResult = literalReplaceFastPath(template, limit);
@@ -4785,6 +4798,7 @@ public final class Matcher implements MatchResult {
     private final byte[] literalUtf8;
     private final int[] failure;
     private final int[] shifts;
+    private final int rareByteOffset;
     private final ClassHashChain classHashChain;
     private final int anchorOffset;
     private final char anchorLow;
@@ -4800,6 +4814,7 @@ public final class Matcher implements MatchResult {
         byte[] literalUtf8,
         int[] failure,
         int[] shifts,
+        int rareByteOffset,
         boolean isStartAnchored,
         PreparedMatchRunner fallback,
         ClassHashChain classHashChain) {
@@ -4808,6 +4823,7 @@ public final class Matcher implements MatchResult {
       this.literalUtf8 = literalUtf8;
       this.failure = failure;
       this.shifts = shifts;
+      this.rareByteOffset = rareByteOffset;
       this.classHashChain =
           classHashChain != null
               ? classHashChain
@@ -4880,7 +4896,11 @@ public final class Matcher implements MatchResult {
                 matcher.searchFrom);
         matchLength = matchLengthChars;
       } else if (matcher.activeScanner() instanceof Utf8InputScanner utf8Scanner) {
-        idx = utf8Scanner.indexOf(literalUtf8, failure, shifts, matcher.searchFrom);
+        idx =
+            rareByteOffset >= 0
+                ? utf8Scanner.indexOf(
+                    literalUtf8, failure, shifts, matcher.searchFrom, rareByteOffset)
+                : utf8Scanner.indexOf(literalUtf8, failure, shifts, matcher.searchFrom);
         matchLength = matchLengthBytes;
       } else if (matcher.text != null) {
         if (WorkCounterConfig.ENABLED) {

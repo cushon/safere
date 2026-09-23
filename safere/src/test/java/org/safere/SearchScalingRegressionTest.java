@@ -711,6 +711,24 @@ class SearchScalingRegressionTest {
   }
 
   @Test
+  void utf8RareByteLiteralPrefixFindWorkIsLinearAcrossFalseCandidates() {
+    Pattern pattern = Pattern.compile("aaaaQaaaa[0-9]+");
+    byte[] smaller = "aaaaQaaaaX".repeat(500).getBytes(UTF_8);
+    byte[] larger = "aaaaQaaaaX".repeat(2_000).getBytes(UTF_8);
+
+    long smallerWork =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(smaller)).find()).isFalse());
+    long largerWork =
+        WorkCounter.countForTesting(
+            () -> assertThat(pattern.matcher(Utf8Input.trusted(larger)).find()).isFalse());
+
+    assertThat(largerWork)
+        .as("UTF-8 literal-prefix search must scale with repeated false candidates")
+        .isLessThanOrEqualTo(smallerWork * 5);
+  }
+
+  @Test
   void preselectedUtf8DfaCandidateSkipsRedundantStartScan() {
     Pattern pattern = Pattern.compile("\\d{3}/\\d{3}/\\d{4}");
     byte[] bytes = ("123/456/7890" + "x".repeat(100)).getBytes(UTF_8);
@@ -1146,6 +1164,36 @@ class SearchScalingRegressionTest {
             "ClassHashChain must perform sublinear work on non-ASCII case-insensitive patterns"
                 + " for String input")
         .isLessThanOrEqualTo(text.length() / 15 + 10);
+  }
+
+  @Test
+  void unicodeCaseInsensitiveUtf8LiteralFilterIsLinearOnDenseFalseCandidates() {
+    Pattern pattern = Pattern.compile("(?iu)Шерлок Холмс");
+    for (String falseCandidate : new String[] {"шЕРЛОК ХолмX ", "ШЕРЛОК ХОЛМX "}) {
+      Utf8Input shortInput = Utf8Input.validated(falseCandidate.repeat(500).getBytes(UTF_8));
+      Utf8Input longInput = Utf8Input.validated(falseCandidate.repeat(2_500).getBytes(UTF_8));
+
+      long shortWork =
+          WorkCounter.countForTesting(
+              () -> assertThat(pattern.matcher(shortInput).find()).isFalse());
+      long longWork =
+          WorkCounter.countForTesting(
+              () -> assertThat(pattern.matcher(longInput).find()).isFalse());
+
+      assertThat(longWork)
+          .as("Unicode-folded UTF-8 filtering should scale linearly for %s", falseCandidate)
+          .isLessThan(shortWork * 6);
+    }
+  }
+
+  @Test
+  void unicodeCaseInsensitiveUtf8LiteralFilterIsLinearAcrossSuccessfulFinds() {
+    Pattern pattern = Pattern.compile("(?iu)Шx[0-9]");
+    for (String match : new String[] {"Шx1 ", "шx1 "}) {
+      assertRepeatedFindWorkIsLinear(
+          size -> pattern.matcher(Utf8Input.validated(match.repeat(size).getBytes(UTF_8)))::find,
+          "Unicode-folded UTF-8 " + match);
+    }
   }
 
   @Test
