@@ -358,11 +358,17 @@ sealed interface StringStartAccelerator {
 
   // The lookup table is immutable pattern metadata; array identity and value semantics are unused.
   @SuppressWarnings("ArrayRecordComponent")
-  record CharClass(CharClassScanInfo scanInfo, boolean[] asciiTable)
+  record CharClass(CharClassScanInfo scanInfo, boolean[] asciiTable, char[] smallChars)
       implements StringStartAccelerator {
 
     static CharClass create(CharClassScanInfo scanInfo) {
-      return new CharClass(scanInfo, buildAsciiTable(scanInfo));
+      char[] small = null;
+      if (scanInfo instanceof CharClassScanInfo.SmallSet ss
+          && ss.chars() != null
+          && ss.chars().length <= 2) {
+        small = ss.chars();
+      }
+      return new CharClass(scanInfo, buildAsciiTable(scanInfo), small);
     }
 
     @Override
@@ -371,7 +377,41 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
+      if (smallChars != null) {
+        return findCandidateSmall(text, fromIndex);
+      }
       return indexOfCharClass(text, asciiTable, scanInfo.ranges(), scanInfo.isAscii(), fromIndex);
+    }
+
+    private int findCandidateSmall(String text, int fromIndex) {
+      int pos = Math.max(0, fromIndex);
+      int length = text.length();
+      if (pos >= length) {
+        return -1;
+      }
+      if (smallChars.length == 1) {
+        int idx = text.indexOf(smallChars[0], pos);
+        if (WorkCounterConfig.ENABLED) {
+          int scanned = idx >= 0 ? idx - pos + 1 : length - pos;
+          WorkCounter.record(Math.max(0, scanned));
+        }
+        return idx;
+      }
+      int i1 = text.indexOf(smallChars[0], pos);
+      int i2 = text.indexOf(smallChars[1], pos);
+      int idx;
+      if (i1 < 0) {
+        idx = i2;
+      } else if (i2 < 0) {
+        idx = i1;
+      } else {
+        idx = Math.min(i1, i2);
+      }
+      if (WorkCounterConfig.ENABLED) {
+        int scanned = idx >= 0 ? idx - pos + 1 : length - pos;
+        WorkCounter.record(Math.max(0, scanned));
+      }
+      return idx;
     }
 
     private static int indexOfCharClass(

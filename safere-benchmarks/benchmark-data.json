@@ -709,6 +709,21 @@
       "shared": true
     },
     {
+      "id": "citationScrub.digitsNoBrackets.{size}",
+      "axes": {
+        "size": [
+          128,
+          2048
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "The release 2.4.1 delivered 99.8% precision across 1,024 eval sets. See section 12.3.4 for 2026 Q3 results. Latency was 15.8ms. ",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "utf8Matching.requiredClassNonmatch.text",
       "recipe": {
         "kind": "repeatToLength",
@@ -3793,6 +3808,46 @@
       },
       "arguments": {
         "replacement": ""
+      },
+      "requirements": []
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.citationScrubber.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        {
+          "java": " ?[\\[\uff3b](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]\uff3d]",
+          "alternates": {
+            "rust-regex": {
+              "pattern": " ?[\\[\uff3b](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]\uff3d]",
+              "reason": "Rust regex gives \\d Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": " ?[\\[\uff3b](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]\uff3d]",
+              "reason": ".NET gives \\d Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
+      ],
+      "inputs": [
+        "citationScrub.digitsNoBrackets.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "size": [
+          128,
+          2048
+        ]
       },
       "requirements": []
     },

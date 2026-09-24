@@ -43,11 +43,16 @@ sealed interface CharClassScanInfo {
     return true;
   }
 
+  /** Common interface for small character classes (<= 3 characters) with enumerable char array. */
+  sealed interface SmallSet permits AsciiSmallSet, UnicodeSmallSet {
+    char[] chars();
+  }
+
   /** Matches 1, 2, or 3 exact ASCII characters via single-instruction SIMD equality. */
   // Arrays are immutable, privately owned scanner metadata; array identity is never observed.
   @SuppressWarnings("ArrayRecordComponent")
   record AsciiSmallSet(char[] chars, int[] ranges, long bitmap0, long bitmap1)
-      implements CharClassScanInfo {
+      implements CharClassScanInfo, SmallSet {
     @Override
     public boolean contains(int cp) {
       if (cp < 64) {
@@ -62,6 +67,28 @@ sealed interface CharClassScanInfo {
     @Override
     public boolean isAscii() {
       return true;
+    }
+  }
+
+  /** Matches 1, 2, or 3 BMP characters where at least one is non-ASCII. */
+  // Arrays are immutable, privately owned scanner metadata; array identity is never observed.
+  @SuppressWarnings("ArrayRecordComponent")
+  record UnicodeSmallSet(char[] chars, int[] ranges, long bitmap0, long bitmap1)
+      implements CharClassScanInfo, SmallSet {
+    @Override
+    public boolean contains(int cp) {
+      if (cp < 64) {
+        return cp >= 0 && (bitmap0 & (1L << cp)) != 0;
+      }
+      if (cp < 128) {
+        return (bitmap1 & (1L << (cp - 64))) != 0;
+      }
+      return Matcher.binarySearchRanges(ranges, cp);
+    }
+
+    @Override
+    public boolean isAscii() {
+      return false;
     }
   }
 
@@ -206,6 +233,18 @@ sealed interface CharClassScanInfo {
         return new AsciiRanges(ranges, b0, b1);
       }
       return new AsciiBitmapClass(ranges, b0, b1);
+    }
+
+    int count = cc.numRunes();
+    if (count > 0 && count <= 3 && cc.hi(numRanges - 1) <= 0xFFFF) {
+      char[] chars = new char[count];
+      int idx = 0;
+      for (int i = 0; i < numRanges; i++) {
+        for (int cp = cc.lo(i); cp <= cc.hi(i); cp++) {
+          chars[idx++] = (char) cp;
+        }
+      }
+      return new UnicodeSmallSet(chars, ranges, b0, b1);
     }
 
     return new UnicodeGeneral(ranges, b0, b1);

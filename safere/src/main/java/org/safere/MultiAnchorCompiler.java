@@ -275,15 +275,9 @@ final class MultiAnchorCompiler {
         } else {
           CharClassScanInfo candidate = CharClassScanInfo.fromCharClass(reqClass);
           if (candidate != null && candidate.ranges() != null) {
-            int candidateRunes = 0;
-            for (int i = 0; i < candidate.ranges().length; i += 2) {
-              candidateRunes += (candidate.ranges()[i + 1] - candidate.ranges()[i] + 1);
-            }
-            int prefixRunes = 0;
-            for (int i = 0; i < ccPrefix.ranges().length; i += 2) {
-              prefixRunes += (ccPrefix.ranges()[i + 1] - ccPrefix.ranges()[i] + 1);
-            }
-            if (candidateRunes < prefixRunes) {
+            long candidateScore = RarityOracle.charClassFrequencyScore(reqClass);
+            long prefixScore = RarityOracle.charClassFrequencyScore(ccPrefix);
+            if (candidateScore < prefixScore) {
               requiredMatchClass = candidate;
             }
           }
@@ -343,7 +337,7 @@ final class MultiAnchorCompiler {
       case StartPlan.CharClass cc -> cc.scanInfo();
       case StartPlan.FixedOffset fo -> fo.leadingClass();
       case StartPlan.MultiLiteral ml -> ml.fallbackClass();
-      case StartPlan.LeadingExpansion le -> drivingCharClass(le.innerPlan());
+      case StartPlan.LeadingExpansion unusedLe -> null;
       case StartPlan.Literal unusedLit -> null;
       case StartPlan.LineAnchor unusedLa -> null;
       case StartPlan.None unusedNone -> null;
@@ -564,7 +558,9 @@ final class MultiAnchorCompiler {
       for (NodeAnalysis c : children) {
         CharClass childReqClass = c.reject().bestRequiredClass();
         if (childReqClass != null) {
-          if (bestReqClass == null || childReqClass.numRunes() < bestReqClass.numRunes()) {
+          if (bestReqClass == null
+              || RarityOracle.charClassFrequencyScore(childReqClass)
+                  < RarityOracle.charClassFrequencyScore(bestReqClass)) {
             bestReqClass = childReqClass;
           }
         }
@@ -636,7 +632,8 @@ final class MultiAnchorCompiler {
         CharClass candidateClass = child.reject().bestRequiredClass();
         if (candidateClass != null
             && (bestRequiredClass == null
-                || candidateClass.numRunes() < bestRequiredClass.numRunes())) {
+                || RarityOracle.charClassFrequencyScore(candidateClass)
+                    < RarityOracle.charClassFrequencyScore(bestRequiredClass))) {
           bestRequiredClass = candidateClass;
         }
         if (disjointRequiredLiterals == null && child.reject().disjointRequiredLiterals() != null) {
@@ -1172,6 +1169,10 @@ final class MultiAnchorCompiler {
     } else if (first.op == RegexpOp.REPEAT) {
       minRepetition = first.min;
       maxRepetition = first.max == -1 ? Integer.MAX_VALUE : first.max;
+      repeated = unwrapCaptures(first.sub());
+    } else if (first.op == RegexpOp.QUEST) {
+      minRepetition = 0;
+      maxRepetition = 1;
       repeated = unwrapCaptures(first.sub());
     } else {
       return null;

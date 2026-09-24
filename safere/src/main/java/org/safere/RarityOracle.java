@@ -343,5 +343,62 @@ final class RarityOracle {
         && characterRarity(s.charAt(0), caseFolded) <= POISONOUS_ANCHOR_MAX_RARITY;
   }
 
+  /**
+   * Computes an empirical frequency score for a character class (lower = rarer / more selective).
+   *
+   * <p>Each character's occurrence frequency is modeled as {@code 256 - exactByteRarity(c)}, so
+   * smaller and rarer character classes have lower scores and are preferred for whole-input
+   * rejection.
+   */
+  static long charClassFrequencyScore(CharClass cc) {
+    if (cc == null || cc.isEmpty()) {
+      return Long.MAX_VALUE;
+    }
+    long totalWeight = 0;
+    int numRanges = cc.numRanges();
+    for (int i = 0; i < numRanges; i++) {
+      int lo = cc.lo(i);
+      int hi = cc.hi(i);
+      if (lo < 128) {
+        int asciiEnd = Math.min(127, hi);
+        for (int ch = lo; ch <= asciiEnd; ch++) {
+          totalWeight += (256 - exactByteRarity(ch));
+        }
+        lo = 128;
+      }
+      if (lo <= hi) {
+        // Non-ASCII code points have rarity rank 255, so weight is (256 - 255) = 1 per code point.
+        totalWeight += (long) (hi - lo + 1);
+      }
+    }
+    return totalWeight;
+  }
+
+  static long charClassFrequencyScore(CharClassScanInfo scanInfo) {
+    if (scanInfo == null) {
+      return Long.MAX_VALUE;
+    }
+    int[] ranges = scanInfo.ranges();
+    if (ranges == null || ranges.length == 0) {
+      return Long.MAX_VALUE;
+    }
+    long totalWeight = 0;
+    for (int i = 0; i < ranges.length; i += 2) {
+      int lo = ranges[i];
+      int hi = ranges[i + 1];
+      if (lo < 128) {
+        int asciiEnd = Math.min(127, hi);
+        for (int ch = lo; ch <= asciiEnd; ch++) {
+          totalWeight += (256 - exactByteRarity(ch));
+        }
+        lo = 128;
+      }
+      if (lo <= hi) {
+        totalWeight += (long) (hi - lo + 1);
+      }
+    }
+    return totalWeight;
+  }
+
   private RarityOracle() {}
 }
