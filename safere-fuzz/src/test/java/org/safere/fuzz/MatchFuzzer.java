@@ -91,18 +91,18 @@ public final class MatchFuzzer {
       input = data.consumeString(2048);
     }
     FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
-    if (pattern == null) {
-      return;
+    if (pattern != null) {
+      FuzzSupport.MatcherPair matcher = pattern.matcher(input);
+      matcher.matches();
+      matcher.reset();
+      matcher.lookingAt();
+      matcher.reset();
+      matcher.find();
+      matcher.reset();
+      matcher.find(FuzzSupport.consumeIndex(data, input));
     }
-
-    FuzzSupport.MatcherPair matcher = pattern.matcher(input);
-    matcher.matches();
-    matcher.reset();
-    matcher.lookingAt();
-    matcher.reset();
-    matcher.find();
-    matcher.reset();
-    matcher.find(FuzzSupport.consumeIndex(data, input));
+    // Append new consumers so existing corpus inputs retain their original interpretation.
+    assertNullableFindInsideSurrogatePairMatchesJdk(data);
   }
 
   private static void assertAcceleratedRestartArrayGrowthMatchesJdk(FuzzedDataProvider data) {
@@ -123,6 +123,18 @@ public final class MatchFuzzer {
       for (int pass = 0; pass < 2; pass++) {
         pattern.matcher(input).find();
       }
+    }
+  }
+
+  private static void assertNullableFindInsideSurrogatePairMatchesJdk(FuzzedDataProvider data) {
+    String regex = data.pickValue(List.of(".|", "a|", ".?", "(?:.|)A?"));
+    int codePoint = data.pickValue(List.of(0x1F600, 0x2F802, 0x8D43F));
+    String prefix = data.consumeBoolean() ? "x" : "";
+    String suffix = data.pickValue(List.of("", "A", "AB"));
+    String input = prefix + new String(Character.toChars(codePoint)) + suffix;
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileCompatibleOrSkip(regex, 0);
+    if (pattern != null) {
+      pattern.matcher(input).find(prefix.length() + 1);
     }
   }
 
