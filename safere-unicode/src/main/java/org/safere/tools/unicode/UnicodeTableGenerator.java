@@ -7,6 +7,9 @@ package org.safere.tools.unicode;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,6 +27,7 @@ public final class UnicodeTableGenerator {
   private static final int MAX_CODE_POINT = Character.MAX_CODE_POINT;
   private static final String DEFAULT_OUTPUT =
       "safere/src/main/java/org/safere/UnicodeGeneratedTables.java";
+  private static final String JDK_REGEX_INTERNALS = "jdk.internal.util.regex";
 
   private static final String[] CATEGORY_ABBREVS = {
     "Cn", "Lu", "Ll", "Lt", "Lm", "Lo", "Mn", "Me", "Mc", "Nd", "Nl", "No", "Zs", "Zl", "Zp", "Cc",
@@ -72,7 +76,11 @@ public final class UnicodeTableGenerator {
     }
 
     return new GeneratedTables(
-        categories, buildScriptTables(), buildBlockTables(), buildBinaryPropertyTables());
+        categories,
+        buildScriptTables(),
+        buildBlockTables(),
+        buildBinaryPropertyTables(),
+        buildGraphemeTables());
   }
 
   private static int[][][] buildCategoryTables() {
@@ -161,6 +169,120 @@ public final class UnicodeTableGenerator {
     return tables;
   }
 
+  /**
+   * Builds the UAX #29 Grapheme_Cluster_Break and Indic_Conjunct_Break classes used by {@code \X}
+   * and {@code \b{g}}.
+   *
+   * <p>{@link Character} does not expose these properties, so read them from the JDK's own grapheme
+   * classifier. That keeps SafeRE's grapheme segmentation on the same Unicode version as the other
+   * generated tables, and in step with the generator JDK's {@code java.util.regex}. Requires {@code
+   * --add-opens java.base/jdk.internal.util.regex=ALL-UNNAMED}; see generate-unicode-tables.sh.
+   *
+   * <p>Unassigned code points are omitted because SafeRE classifies them itself (see
+   * INTENTIONAL_DIVERGENCES.md). Surrogates are omitted because SafeRE handles unpaired surrogates
+   * separately.
+   */
+  private static Map<String, int[][]> buildGraphemeTables() {
+    Class<?> grapheme = jdkRegexInternal("Grapheme");
+    Method getType = accessibleMethod(grapheme, "getType", int.class);
+    Class<?> indicConjunctBreak = jdkRegexInternal("IndicConjunctBreak");
+    Method isLinker = accessibleMethod(indicConjunctBreak, "isLinker", int.class);
+    Method isConsonant = accessibleMethod(indicConjunctBreak, "isConsonant", int.class);
+    Method isExtend = accessibleMethod(indicConjunctBreak, "isExtend", int.class);
+
+    int cr = intConstant(grapheme, "CR");
+    int lf = intConstant(grapheme, "LF");
+    int control = intConstant(grapheme, "CONTROL");
+    Map<String, Integer> graphemeTypes = new LinkedHashMap<>();
+    graphemeTypes.put("Extend", intConstant(grapheme, "EXTEND"));
+    graphemeTypes.put("Prepend", intConstant(grapheme, "PREPEND"));
+    graphemeTypes.put("SpacingMark", intConstant(grapheme, "SPACINGMARK"));
+    graphemeTypes.put("L", intConstant(grapheme, "L"));
+    graphemeTypes.put("V", intConstant(grapheme, "V"));
+    graphemeTypes.put("T", intConstant(grapheme, "T"));
+    graphemeTypes.put("LV", intConstant(grapheme, "LV"));
+    graphemeTypes.put("LVT", intConstant(grapheme, "LVT"));
+
+    Map<String, int[][]> tables = new LinkedHashMap<>();
+    tables.put(
+        "Control",
+        buildAssignedRanges(
+            cp -> {
+              int type = invokeInt(getType, cp);
+              return type == cr || type == lf || type == control;
+            }));
+    for (Map.Entry<String, Integer> entry : graphemeTypes.entrySet()) {
+      int expected = entry.getValue();
+      tables.put(entry.getKey(), buildAssignedRanges(cp -> invokeInt(getType, cp) == expected));
+    }
+    tables.put("InCB_Linker", buildAssignedRanges(cp -> invokeBoolean(isLinker, cp)));
+    tables.put("InCB_Consonant", buildAssignedRanges(cp -> invokeBoolean(isConsonant, cp)));
+    tables.put("InCB_Extend", buildAssignedRanges(cp -> invokeBoolean(isExtend, cp)));
+    return tables;
+  }
+
+  private static int[][] buildAssignedRanges(IntPredicate predicate) {
+    return buildRanges(
+        cp -> {
+          int type = Character.getType(cp);
+          return type != Character.UNASSIGNED && type != Character.SURROGATE && predicate.test(cp);
+        });
+  }
+
+  private static Class<?> jdkRegexInternal(String simpleName) {
+    try {
+      return Class.forName(JDK_REGEX_INTERNALS + "." + simpleName);
+    } catch (ClassNotFoundException e) {
+      throw new IllegalStateException(
+          "The generator JDK has no " + JDK_REGEX_INTERNALS + "." + simpleName, e);
+    }
+  }
+
+  private static Method accessibleMethod(Class<?> owner, String name, Class<?>... parameterTypes) {
+    try {
+      Method method = owner.getDeclaredMethod(name, parameterTypes);
+      method.setAccessible(true);
+      return method;
+    } catch (NoSuchMethodException | RuntimeException e) {
+      throw inaccessible(owner.getName() + "." + name, e);
+    }
+  }
+
+  private static int intConstant(Class<?> owner, String name) {
+    try {
+      Field field = owner.getDeclaredField(name);
+      field.setAccessible(true);
+      return field.getInt(null);
+    } catch (NoSuchFieldException | IllegalAccessException | RuntimeException e) {
+      throw inaccessible(owner.getName() + "." + name, e);
+    }
+  }
+
+  private static IllegalStateException inaccessible(String member, Exception cause) {
+    return new IllegalStateException(
+        "Cannot read "
+            + member
+            + "; run the generator via generate-unicode-tables.sh, which opens "
+            + JDK_REGEX_INTERNALS,
+        cause);
+  }
+
+  private static int invokeInt(Method method, int cp) {
+    return (Integer) invoke(method, cp);
+  }
+
+  private static boolean invokeBoolean(Method method, int cp) {
+    return (Boolean) invoke(method, cp);
+  }
+
+  private static Object invoke(Method method, int cp) {
+    try {
+      return method.invoke(null, cp);
+    } catch (IllegalAccessException | InvocationTargetException e) {
+      throw new IllegalStateException("Cannot invoke " + method, e);
+    }
+  }
+
   private static void writeJava(PrintWriter out, GeneratedTables tables) {
     String header =
         """
@@ -191,6 +313,9 @@ public final class UnicodeTableGenerator {
     writeInlineMap(out, "SCRIPTS", tables.scripts(), "script");
     writeInlineMap(out, "BLOCKS", tables.blocks(), "block");
     writeInlineMap(out, "BINARY_PROPERTIES", tables.binaryProperties(), "property");
+    out.println(
+        "  // Grapheme segmentation classes; internal only, not exposed as \\p{...} names.");
+    writeInlineMap(out, "GRAPHEME_PROPERTIES", tables.graphemeProperties(), "grapheme");
 
     String middle =
         """
@@ -209,6 +334,7 @@ public final class UnicodeTableGenerator {
     writeTableMethods(out, "category", tables.categories());
     writeTableMethods(out, "script", tables.scripts());
     writeTableMethods(out, "property", tables.binaryProperties());
+    writeTableMethods(out, "grapheme", tables.graphemeProperties());
 
     out.println("}");
   }
@@ -342,7 +468,8 @@ public final class UnicodeTableGenerator {
       Map<String, int[][]> categories,
       Map<String, int[][]> scripts,
       Map<String, int[][]> blocks,
-      Map<String, int[][]> binaryProperties) {}
+      Map<String, int[][]> binaryProperties,
+      Map<String, int[][]> graphemeProperties) {}
 
   private static final class RangeBuilder {
     private final List<int[]> ranges = new ArrayList<>();

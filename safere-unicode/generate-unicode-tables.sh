@@ -8,6 +8,9 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-mvn -pl safere-unicode compile exec:java \
-  -Dexec.mainClass=org.safere.tools.unicode.UnicodeTableGenerator
+# The grapheme tables are read from the JDK's internal java.util.regex grapheme
+# classifier, which exec:java reaches in-process.
+MAVEN_OPTS="${MAVEN_OPTS:-} --add-opens=java.base/jdk.internal.util.regex=ALL-UNNAMED" \
+  mvn -pl safere-unicode compile exec:java \
+    -Dexec.mainClass=org.safere.tools.unicode.UnicodeTableGenerator
 mvn -pl safere spotless:apply
