@@ -111,6 +111,7 @@ class GraphemeBreakConformanceTest {
       {"", "\n"},
     };
 
+    // Each input has at most four code points, so at most four clusters.
     int[] safereEnds = new int[8];
     int[] jdkEnds = new int[8];
     for (int cp = 0; cp <= Character.MAX_CODE_POINT; cp++) {

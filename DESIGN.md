@@ -29,8 +29,11 @@ that happens to run the library. This includes general categories
 (`\p{L}`, `\p{Lu}`, `\p{Nd}`), scripts, blocks, binary Unicode properties,
 Unicode case-folding support for `CASE_INSENSITIVE | UNICODE_CASE`, and
 grapheme-related data. These tables are generated from a maintainer-selected
-JDK's `Character` implementation and checked into the repository. For the
-initial generated-table workflow, the maintainer JDK is OpenJDK 26.0.1.
+JDK and checked into the repository. Most come from its `Character`
+implementation; the UAX #29 `Grapheme_Cluster_Break` and `Indic_Conjunct_Break`
+classes used by `\X` and `\b{g}` come from the JDK's internal
+`jdk.internal.util.regex` grapheme classifier, because `Character` does not
+expose them. The current maintainer JDK is OpenJDK 26.0.2.1 (Unicode 17.0).
 
 This makes behavior reproducible for a given SafeRE release. SafeRE may
 therefore be ahead of or behind the runtime JDK's Unicode version. Differences
@@ -42,7 +45,7 @@ JDK-defined `java*` properties remain tied to the runtime JDK. Patterns such as
 `\p{javaMirrored}` are specified by the JDK in terms of `Character` methods, so
 SafeRE evaluates them against the running JVM's `Character` implementation.
 
-The generator lives in `tools/unicode/`. Unicode-version upgrades are
+The generator lives in `safere-unicode/`. Unicode-version upgrades are
 intentional maintenance changes: run the generator with the selected JDK,
 review and commit the generated output, update the recorded Unicode version,
 and run focused Unicode compatibility tests.
