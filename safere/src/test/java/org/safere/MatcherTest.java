@@ -3753,5 +3753,63 @@ class MatcherTest {
       String[] parts4 = p4.split("1x2X3");
       assertThat(parts4).containsExactly("1", "2", "3");
     }
+
+    @Test
+    @DisplayName("citation scrubber pattern matches and replaces correctly across positions")
+    void citationScrubberPatternMatchesAndReplaces() {
+      String regex = " ?[\\[\uFF3B](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]\uFF3D]";
+      Pattern pattern = Pattern.compile(regex);
+      java.util.regex.Pattern jdkPattern = java.util.regex.Pattern.compile(regex);
+
+      String[] inputs = {
+        // Match at index 0 (no leading space)
+        "[1.2.3.4] suffix text",
+        "［1.2.3.4］ suffix text",
+        // Match at index 0 (with leading space)
+        " [1.2.3.4] suffix text",
+        " ［1.2.3.4］ suffix text",
+        // Match mid-string
+        "The cite [1.2.3.4] is here",
+        "The cite ［1.2.3.4］ is here",
+        "The cite [1.2.3.4, 5.6.7.8] is multiple",
+        "The cite ［1.2.3.4, 5.6.7.8］ is multiple",
+        // Match at end
+        "end citation [1.2.3.4]",
+        "end citation ［1.2.3.4］",
+        // Non-matching: brackets without digits or with wrong format
+        "[brackets without digits]",
+        "［fullwidth without digits］",
+        "[1.2] only one dot",
+        "［1.2］ only one dot",
+        // Non-matching: digits and dots without brackets
+        "1.2.3.4 version string without brackets",
+        "Key facts: launched on December 25, 2021, 1.5 million km",
+        // Non-matching: plain text
+        "plain text with no brackets or digits",
+        // Mixed matching and non-matching
+        "[1.2] but also [1.2.3.4] and ［5.6.7.8］ end"
+      };
+
+      for (String input : inputs) {
+        Matcher matcher = pattern.matcher(input);
+        java.util.regex.Matcher jdkMatcher = jdkPattern.matcher(input);
+
+        // Differential results against java.util.regex for replaceAll
+        assertThat(matcher.replaceAll(""))
+            .as("replaceAll for '%s'", input)
+            .isEqualTo(jdkMatcher.replaceAll(""));
+
+        // Differential find results
+        matcher.reset();
+        jdkMatcher.reset();
+        while (jdkMatcher.find()) {
+          assertThat(matcher.find()).as("find() for '%s'", input).isTrue();
+          assertThat(matcher.start()).as("start() for '%s'", input).isEqualTo(jdkMatcher.start());
+          assertThat(matcher.end()).as("end() for '%s'", input).isEqualTo(jdkMatcher.end());
+          assertThat(matcher.group()).as("group() for '%s'", input).isEqualTo(jdkMatcher.group());
+        }
+        assertThat(matcher.find()).as("no more matches for '%s'", input).isFalse();
+      }
+    }
   }
 }

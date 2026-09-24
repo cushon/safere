@@ -377,7 +377,15 @@ class StartAcceleratorTest {
   @Test
   void compiledPatternAcceleratorsInSync() {
     String[] testPatterns = {
-      "(?i)needle.*", "(?i)a.*", "(?i)HTTP://.*", "needle.*", "[a-z].*", "[0-9].*", "ab+c.*"
+      "(?i)needle.*",
+      "(?i)a.*",
+      "(?i)HTTP://.*",
+      "needle.*",
+      "[a-z].*",
+      "[0-9].*",
+      "ab+c.*",
+      " ?[\\[\uFF3B](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]\uFF3D]",
+      "[\\[\uFF3B].*"
     };
 
     String[] testInputs = {
@@ -388,7 +396,11 @@ class StartAcceleratorTest {
       "HTTP://EXAMPLE.COM",
       "http://example.com",
       "123 numbers",
-      "letters abc"
+      "letters abc",
+      "prefix [1.2.3.4] suffix",
+      "prefix ［1.2.3.4］ suffix",
+      " [1.2.3.4]",
+      "[1.2.3.4]"
     };
 
     for (String patStr : testPatterns) {

@@ -145,12 +145,16 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record CharClass(int[] ranges, long bitmap0, long bitmap1, int singleAscii)
+  record CharClass(int[] ranges, long bitmap0, long bitmap1, int singleAscii, char[] smallChars)
       implements RejectPrefilter {
 
     static CharClass create(CharClassScanInfo scanInfo) {
       return new CharClass(
-          scanInfo.ranges(), scanInfo.bitmap0(), scanInfo.bitmap1(), singleAscii(scanInfo));
+          scanInfo.ranges(),
+          scanInfo.bitmap0(),
+          scanInfo.bitmap1(),
+          singleAscii(scanInfo),
+          smallChars(scanInfo));
     }
 
     /**
@@ -161,10 +165,6 @@ sealed interface RejectPrefilter
      * whereas {@link InputScanner#indexOfCodePointClass} walks {@code codePointAt} and {@code
      * charCount} per character. {@link CharClassScanInfo.AsciiSmallSet} already records its
      * enumerated members; this reads that back so the distinction survives construction.
-     *
-     * <p>Only one character qualifies. {@code indexOfAsciiPair} has no intrinsic behind it on the
-     * {@code String} path, so the two- and three-character members of {@code AsciiSmallSet} would
-     * trade one scalar loop for another.
      */
     private static int singleAscii(CharClassScanInfo scanInfo) {
       return scanInfo instanceof CharClassScanInfo.AsciiSmallSet smallSet
@@ -172,6 +172,14 @@ sealed interface RejectPrefilter
               && smallSet.chars().length == 1
           ? smallSet.chars()[0]
           : -1;
+    }
+
+    private static char[] smallChars(CharClassScanInfo scanInfo) {
+      return scanInfo instanceof CharClassScanInfo.SmallSet smallSet
+              && smallSet.chars() != null
+              && smallSet.chars().length <= 2
+          ? smallSet.chars()
+          : null;
     }
 
     @Override
@@ -183,11 +191,20 @@ sealed interface RejectPrefilter
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         return canReject(utf8Scanner, searchFrom, options);
       }
+      if (text != null) {
+        if (smallChars != null) {
+          if (smallChars.length == 1) {
+            return text.indexOf(smallChars[0], searchFrom) < 0;
+          }
+          if (smallChars.length == 2) {
+            return text.indexOf(smallChars[0], searchFrom) < 0
+                && text.indexOf(smallChars[1], searchFrom) < 0;
+          }
+        }
+        return indexOf(new StringInputScanner(text), searchFrom, text.length()) < 0;
+      }
       if (scanner != null) {
         return indexOf(scanner, searchFrom, scanner.length()) < 0;
-      }
-      if (text != null) {
-        return indexOf(new StringInputScanner(text), searchFrom, text.length()) < 0;
       }
       return false;
     }
