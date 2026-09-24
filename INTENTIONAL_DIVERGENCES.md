@@ -255,6 +255,39 @@ case expansion with range syntax. The [case-equivalence audit](audits/unicode-ca
 records the complete observed differences over case-mapping participants,
 including the baseline and the rule after #866.
 
+## Grapheme Clusters after Unassigned Code Points
+
+Issue reference: [#925](https://github.com/eaftan/safere/issues/925).
+
+SafeRE uses Unicode grapheme-break properties when matching `\X`, including
+for unassigned code points. The
+[JDK 26 `Pattern` specification](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/regex/Pattern.html)
+defines `\X` as a Unicode extended grapheme cluster. Under
+[UAX #29's grapheme boundary rules](https://www.unicode.org/reports/tr29/#Grapheme_Cluster_Boundary_Rules),
+an unassigned code point with `Grapheme_Cluster_Break=Other` stays in the same
+cluster as a following `Extend` character under rule GB9. Being unassigned does
+not by itself make a code point a grapheme-breaking control; unassigned
+default-ignorable code points have separate property rules.
+
+For example:
+
+```java
+String input = "\ud9f5\udc3f\u07ef"; // U+8D43F followed by U+07EF
+var matcher = Pattern.compile("\\X").matcher(input);
+```
+
+U+8D43F is unassigned with grapheme-break property `Other`, and U+07EF
+(NKO COMBINING SHORT LOW TONE) has property `Extend`. Repeated `find()` calls
+therefore produce one SafeRE match at UTF-16 bounds `[0, 3)`. The OpenJDK
+behavior reported in #925 produces two matches, `[0, 2)` and `[2, 3)`.
+
+The reported OpenJDK implementation classifies unassigned code points other
+than its special case U+0378 as grapheme controls. This causes the control-break
+rule GB4 to take precedence over GB9. SafeRE intentionally preserves Unicode
+segmentation rather than copying that classification error. This is a
+specification-based divergence, not a limitation imposed by linear-time
+matching.
+
 ## Grapheme Cluster Composition
 
 Sweep names:
