@@ -266,8 +266,9 @@ defines `\X` as a Unicode extended grapheme cluster. Under
 [UAX #29's grapheme boundary rules](https://www.unicode.org/reports/tr29/#Grapheme_Cluster_Boundary_Rules),
 an unassigned code point with `Grapheme_Cluster_Break=Other` stays in the same
 cluster as a following `Extend` character under rule GB9. Being unassigned does
-not by itself make a code point a grapheme-breaking control; unassigned
-default-ignorable code points have separate property rules.
+not by itself make a code point a grapheme-breaking control. Unassigned
+default-ignorable code points have property `Control`, so GB4/GB5 require breaks
+around them; that behavior is not an intentional divergence.
 
 For example:
 
@@ -287,6 +288,12 @@ rule GB4 to take precedence over GB9. SafeRE intentionally preserves Unicode
 segmentation rather than copying that classification error. This is a
 specification-based divergence, not a limitation imposed by linear-time
 matching.
+
+`UnassignedGraphemeTest` covers BMP and supplementary unassigned code points
+followed by combining marks or ZWJ, repeated matches, and splitting. It also
+checks that actual grapheme controls, including an unassigned default-ignorable
+code point, still force a break. The intentional differences are disabled only
+in generated JDK crosscheck tests.
 
 ## Grapheme Cluster Composition
 

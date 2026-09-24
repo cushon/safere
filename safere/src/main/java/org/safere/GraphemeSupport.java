@@ -12,6 +12,17 @@ final class GraphemeSupport {
   private static final int[][] EXTENDED_PICTOGRAPHIC =
       UnicodeProperties.lookupBinaryProperty("Extended_Pictographic");
 
+  // Unassigned default-ignorable code points have Grapheme_Cluster_Break=Control, not Other.
+  // Unicode 17.0: https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakProperty.txt
+  private static final int[][] UNASSIGNED_GRAPHEME_CONTROLS = {
+    {0x2065, 0x2065},
+    {0xFFF0, 0xFFF8},
+    {0xE0000, 0xE0000},
+    {0xE0002, 0xE001F},
+    {0xE0080, 0xE00FF},
+    {0xE01F0, 0xE0FFF}
+  };
+
   private static final int VISIT_KEY_VARIANT_BITS = 5;
   private static final int LOW_SURROGATE_PAIR_VISIBLE = 1;
   private static final int EXTENDED_PICTOGRAPHIC_VISIBLE = 1 << 1;
@@ -579,9 +590,6 @@ final class GraphemeSupport {
     if (prevChar == '\r' && nextChar == '\n') {
       return false;
     }
-    if (isGraphemeControl(prevChar) || isGraphemeControl(nextChar)) {
-      return true;
-    }
     if (Character.isHighSurrogate(prevChar) && !Character.isLowSurrogate(nextChar)) {
       return true;
     }
@@ -591,6 +599,9 @@ final class GraphemeSupport {
     }
     int prev = text.codePointBefore(pos);
     int next = text.codePointAt(pos);
+    if (isGraphemeControl(prev) || isGraphemeControl(next)) {
+      return true;
+    }
     if (isGraphemePrepend(prev) && isUnpairedSurrogateAt(text, pos)) {
       return true;
     }
@@ -817,7 +828,8 @@ final class GraphemeSupport {
     int type = Character.getType(c);
     return type == Character.CONTROL
         || type == Character.LINE_SEPARATOR
-        || type == Character.PARAGRAPH_SEPARATOR;
+        || type == Character.PARAGRAPH_SEPARATOR
+        || containsCodePoint(UNASSIGNED_GRAPHEME_CONTROLS, c);
   }
 
   private static boolean isCombiningMark(int c) {
