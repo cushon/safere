@@ -24,7 +24,23 @@ public final class UnicodeTableGenerator {
   private static final int MAX_CODE_POINT = Character.MAX_CODE_POINT;
   private static final String DEFAULT_OUTPUT =
       "safere/src/main/java/org/safere/UnicodeGeneratedTables.java";
-  private static final Path GRAPHEME_DATA = Path.of("safere-unicode/data/17.0.0");
+  private static final Path DEFAULT_UNICODE_DATA =
+      Path.of("safere-unicode/data/" + GraphemeTableGenerator.DEFAULT_UNICODE_VERSION);
+  private static final String USAGE =
+      """
+      Usage: UnicodeTableGenerator [options] [output-file]
+
+      Options:
+        --unicode-data=DIR                 flat directory containing all of the files below
+                                           (default: %s)
+        --grapheme-break-property=FILE     GraphemeBreakProperty.txt
+        --derived-core-properties=FILE     DerivedCoreProperties.txt
+        --emoji-data=FILE                  emoji-data.txt
+        --unicode-license=FILE             Unicode license text (LICENSE.txt)
+        --unicode-version=VERSION          Unicode version the files must declare
+                                           (default: %s)
+      """
+          .formatted(DEFAULT_UNICODE_DATA, GraphemeTableGenerator.DEFAULT_UNICODE_VERSION);
 
   private static final String[] CATEGORY_ABBREVS = {
     "Cn", "Lu", "Ll", "Lt", "Lm", "Lo", "Mn", "Me", "Mc", "Nd", "Nl", "No", "Zs", "Zl", "Zp", "Cc",
@@ -46,12 +62,9 @@ public final class UnicodeTableGenerator {
   private UnicodeTableGenerator() {}
 
   public static void main(String[] args) throws IOException {
-    Path output = args.length >= 1 ? Path.of(args[0]) : Path.of(DEFAULT_OUTPUT);
-    if (args.length > 1) {
-      throw new IllegalArgumentException("Usage: UnicodeTableGenerator [output-file]");
-    }
-
-    GeneratedTables tables = buildTables();
+    Options options = Options.parse(args);
+    GeneratedTables tables = buildTables(options);
+    Path output = options.output().toAbsolutePath();
     Files.createDirectories(output.getParent());
     try (PrintWriter out =
         new PrintWriter(Files.newBufferedWriter(output, StandardCharsets.UTF_8))) {
@@ -59,8 +72,63 @@ public final class UnicodeTableGenerator {
     }
   }
 
-  private static GeneratedTables buildTables() throws IOException {
-    Map<String, int[][]> graphemeData = GraphemeTableGenerator.generate(GRAPHEME_DATA);
+  /** Command-line options; every Unicode input defaults to the checked-in copy. */
+  record Options(
+      Path output,
+      GraphemeTableGenerator.Sources sources,
+      Path unicodeLicense,
+      String unicodeVersion) {
+    static Options parse(String... args) {
+      Path output = null;
+      Path data = DEFAULT_UNICODE_DATA;
+      Path graphemeBreakProperty = null;
+      Path derivedCoreProperties = null;
+      Path emojiData = null;
+      Path unicodeLicense = null;
+      String unicodeVersion = GraphemeTableGenerator.DEFAULT_UNICODE_VERSION;
+      for (String arg : args) {
+        if (!arg.startsWith("--")) {
+          if (output != null) {
+            throw new IllegalArgumentException(USAGE);
+          }
+          output = Path.of(arg);
+          continue;
+        }
+        int equals = arg.indexOf('=');
+        if (equals < 0 || equals == arg.length() - 1) {
+          throw new IllegalArgumentException(USAGE);
+        }
+        String value = arg.substring(equals + 1);
+        switch (arg.substring(0, equals)) {
+          case "--unicode-data" -> data = Path.of(value);
+          case "--grapheme-break-property" -> graphemeBreakProperty = Path.of(value);
+          case "--derived-core-properties" -> derivedCoreProperties = Path.of(value);
+          case "--emoji-data" -> emojiData = Path.of(value);
+          case "--unicode-license" -> unicodeLicense = Path.of(value);
+          case "--unicode-version" -> unicodeVersion = value;
+          default -> throw new IllegalArgumentException(USAGE);
+        }
+      }
+      GraphemeTableGenerator.Sources defaults = GraphemeTableGenerator.Sources.inDirectory(data);
+      return new Options(
+          output != null ? output : Path.of(DEFAULT_OUTPUT),
+          new GraphemeTableGenerator.Sources(
+              graphemeBreakProperty != null
+                  ? graphemeBreakProperty
+                  : defaults.graphemeBreakProperty(),
+              derivedCoreProperties != null
+                  ? derivedCoreProperties
+                  : defaults.derivedCoreProperties(),
+              emojiData != null ? emojiData : defaults.emojiData()),
+          unicodeLicense != null ? unicodeLicense : data.resolve("LICENSE.txt"),
+          unicodeVersion);
+    }
+  }
+
+  private static GeneratedTables buildTables(Options options) throws IOException {
+    GraphemeTableGenerator.Result grapheme =
+        GraphemeTableGenerator.generate(options.sources(), options.unicodeVersion());
+    Map<String, int[][]> graphemeData = grapheme.tables();
     int[][][] categoryTables = buildCategoryTables();
     Map<String, int[][]> categories = new LinkedHashMap<>();
     for (int i = 0; i < CATEGORY_ABBREVS.length; i++) {
@@ -74,6 +142,8 @@ public final class UnicodeTableGenerator {
     }
 
     return new GeneratedTables(
+        grapheme.unicodeVersion(),
+        Files.readAllLines(options.unicodeLicense(), StandardCharsets.UTF_8),
         categories,
         buildScriptTables(),
         buildBlockTables(),
@@ -203,12 +273,12 @@ public final class UnicodeTableGenerator {
         /** Checked-in Unicode tables generated from public JDK APIs and pinned Unicode data. */
         final class UnicodeGeneratedTables {
           static final String GENERATOR_JAVA_VERSION = "%s";
+          static final String UNICODE_DATA_VERSION = "%s";
         """
-            .formatted(javaVersion());
+            .formatted(javaVersion(), tables.unicodeDataVersion());
     out.print(header);
     out.println("// Unicode data copyright and permission notice:");
-    for (String line :
-        Files.readAllLines(GRAPHEME_DATA.resolve("LICENSE.txt"), StandardCharsets.UTF_8)) {
+    for (String line : tables.unicodeLicense()) {
       out.println(line.isEmpty() ? "//" : "// " + line);
     }
     out.println();
@@ -371,6 +441,8 @@ public final class UnicodeTableGenerator {
   }
 
   private record GeneratedTables(
+      String unicodeDataVersion,
+      List<String> unicodeLicense,
       Map<String, int[][]> categories,
       Map<String, int[][]> scripts,
       Map<String, int[][]> blocks,
