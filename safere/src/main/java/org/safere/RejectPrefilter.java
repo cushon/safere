@@ -174,6 +174,10 @@ sealed interface RejectPrefilter
           : -1;
     }
 
+    /**
+     * Returns the one or two members of a small class, or {@code null}. Each member is searched
+     * with the intrinsified {@link String#indexOf(int, int)}; see {@link #rejectsSmall}.
+     */
     private static char[] smallChars(CharClassScanInfo scanInfo) {
       return scanInfo instanceof CharClassScanInfo.SmallSet smallSet
               && smallSet.chars() != null
@@ -191,22 +195,47 @@ sealed interface RejectPrefilter
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         return canReject(utf8Scanner, searchFrom, options);
       }
-      if (text != null) {
-        if (smallChars != null) {
-          if (smallChars.length == 1) {
-            return text.indexOf(smallChars[0], searchFrom) < 0;
-          }
-          if (smallChars.length == 2) {
-            return text.indexOf(smallChars[0], searchFrom) < 0
-                && text.indexOf(smallChars[1], searchFrom) < 0;
-          }
-        }
-        return indexOf(new StringInputScanner(text), searchFrom, text.length()) < 0;
+      if (smallChars != null && (scanner instanceof StringInputScanner || text != null)) {
+        return rejectsSmall(scanner, text, searchFrom);
       }
       if (scanner != null) {
         return indexOf(scanner, searchFrom, scanner.length()) < 0;
       }
+      if (text != null) {
+        return indexOf(new StringInputScanner(text), searchFrom, text.length()) < 0;
+      }
       return false;
+    }
+
+    /**
+     * Returns whether no member of {@link #smallChars} occurs at or after {@code searchFrom}.
+     *
+     * <p>A single member needs no memo: every match contains an occurrence of it, so the next
+     * {@code find()} starts past the occurrence this scan stopped at. With two members that holds
+     * only for the nearer one, and rescanning for the farther one on every call is quadratic, so
+     * later searches go through the scanner's memo. The first search, from the start of the input,
+     * has nothing to reuse; it is also the only search a one-shot {@code replaceAll} or {@code
+     * find} on non-matching input makes, so it skips the memo.
+     */
+    private boolean rejectsSmall(InputScanner scanner, String text, int searchFrom) {
+      if (searchFrom > 0 && smallChars.length == 2 && scanner instanceof StringInputScanner s) {
+        return s.memoizedIndexOf(smallChars[0], searchFrom) < 0
+            && s.memoizedIndexOf(smallChars[1], searchFrom) < 0;
+      }
+      if (scanner instanceof StringInputScanner s) {
+        for (char c : smallChars) {
+          if (s.indexOfChar(c, searchFrom) >= 0) {
+            return false;
+          }
+        }
+        return true;
+      }
+      for (char c : smallChars) {
+        if (text.indexOf(c, searchFrom) >= 0) {
+          return false;
+        }
+      }
+      return true;
     }
 
     private int indexOf(InputScanner scanner, int searchFrom, int limit) {

@@ -274,12 +274,14 @@ final class MultiAnchorCompiler {
           requiredMatchClass = CharClassScanInfo.fromCharClass(reqClass);
         } else {
           CharClassScanInfo candidate = CharClassScanInfo.fromCharClass(reqClass);
-          if (candidate != null && candidate.ranges() != null) {
-            long candidateScore = RarityOracle.charClassFrequencyScore(reqClass);
-            long prefixScore = RarityOracle.charClassFrequencyScore(ccPrefix);
-            if (candidateScore < prefixScore) {
-              requiredMatchClass = candidate;
-            }
+          if (candidate != null
+              && candidate.ranges() != null
+              && moreSelective(
+                  RarityOracle.charClassFrequencyScore(reqClass),
+                  reqClass.numRunes(),
+                  RarityOracle.charClassFrequencyScore(ccPrefix),
+                  runeCount(ccPrefix.ranges()))) {
+            requiredMatchClass = candidate;
           }
         }
       }
@@ -306,6 +308,33 @@ final class MultiAnchorCompiler {
   }
 
   /**
+   * Returns whether a class with the given frequency score and rune count is a better reject
+   * candidate than the incumbent: rarer by {@link RarityOracle#charClassFrequencyScore}, or equally
+   * rare with fewer runes.
+   */
+  private static boolean moreSelective(
+      long candidateScore, int candidateRunes, long incumbentScore, int incumbentRunes) {
+    return candidateScore < incumbentScore
+        || (candidateScore == incumbentScore && candidateRunes < incumbentRunes);
+  }
+
+  private static boolean moreSelective(CharClass candidate, CharClass incumbent) {
+    return moreSelective(
+        RarityOracle.charClassFrequencyScore(candidate),
+        candidate.numRunes(),
+        RarityOracle.charClassFrequencyScore(incumbent),
+        incumbent.numRunes());
+  }
+
+  private static int runeCount(int[] ranges) {
+    int runes = 0;
+    for (int i = 0; i < ranges.length; i += 2) {
+      runes += ranges[i + 1] - ranges[i] + 1;
+    }
+    return runes;
+  }
+
+  /**
    * Returns the literal the start accelerator will scan for, unwrapping a leading expansion, or
    * {@code null} if the start plan is not literal-driven.
    */
@@ -328,6 +357,15 @@ final class MultiAnchorCompiler {
    * Returns the character class the start accelerator will scan for, or {@code null} if the start
    * plan is not class-driven. A required class from reject analysis is only worth scanning for
    * separately if it is narrower than this one.
+   *
+   * <p>A leading expansion returns {@code null}, so its required class is always kept as a reject
+   * prefilter, even when it is the class the inner accelerator scans for. The prefilter fails the
+   * whole call on input without the class before any per-call setup, including once up front in
+   * {@code replaceAll}, whereas the leading-expansion accelerator only gets there through its own
+   * candidate loop. On {@code UnicodePrefixBenchmark.cjk.absent}, a CJK-range prefix followed by
+   * {@code \d+} measured 2.8x faster with the {@code [0-9]} prefilter than without it, and no
+   * benchmark trial was slower. When the input does contain a two-member small-set class, the
+   * scanner memo lets the accelerator reuse the prefilter's search.
    */
   private static CharClassScanInfo drivingCharClass(StartPlan plan) {
     if (plan == null) {
@@ -558,9 +596,7 @@ final class MultiAnchorCompiler {
       for (NodeAnalysis c : children) {
         CharClass childReqClass = c.reject().bestRequiredClass();
         if (childReqClass != null) {
-          if (bestReqClass == null
-              || RarityOracle.charClassFrequencyScore(childReqClass)
-                  < RarityOracle.charClassFrequencyScore(bestReqClass)) {
+          if (bestReqClass == null || moreSelective(childReqClass, bestReqClass)) {
             bestReqClass = childReqClass;
           }
         }
@@ -631,9 +667,7 @@ final class MultiAnchorCompiler {
         }
         CharClass candidateClass = child.reject().bestRequiredClass();
         if (candidateClass != null
-            && (bestRequiredClass == null
-                || RarityOracle.charClassFrequencyScore(candidateClass)
-                    < RarityOracle.charClassFrequencyScore(bestRequiredClass))) {
+            && (bestRequiredClass == null || moreSelective(candidateClass, bestRequiredClass))) {
           bestRequiredClass = candidateClass;
         }
         if (disjointRequiredLiterals == null && child.reject().disjointRequiredLiterals() != null) {

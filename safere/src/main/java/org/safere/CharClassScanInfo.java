@@ -43,7 +43,10 @@ sealed interface CharClassScanInfo {
     return true;
   }
 
-  /** Common interface for small character classes (<= 3 characters) with enumerable char array. */
+  /**
+   * Common interface for small character classes whose members can be searched for one {@code char}
+   * at a time: up to three ASCII characters, or up to two BMP characters otherwise.
+   */
   sealed interface SmallSet permits AsciiSmallSet, UnicodeSmallSet {
     char[] chars();
   }
@@ -70,7 +73,11 @@ sealed interface CharClassScanInfo {
     }
   }
 
-  /** Matches 1, 2, or 3 BMP characters where at least one is non-ASCII. */
+  /**
+   * Matches 1 or 2 non-surrogate BMP characters, at least one of them non-ASCII. The String paths
+   * search a small set one {@code String.indexOf} pass per member and do so for at most two
+   * members, so a larger set would only be misclassified.
+   */
   // Arrays are immutable, privately owned scanner metadata; array identity is never observed.
   @SuppressWarnings("ArrayRecordComponent")
   record UnicodeSmallSet(char[] chars, int[] ranges, long bitmap0, long bitmap1)
@@ -236,7 +243,7 @@ sealed interface CharClassScanInfo {
     }
 
     int count = cc.numRunes();
-    if (count > 0 && count <= 3 && cc.hi(numRanges - 1) <= 0xFFFF) {
+    if (count > 0 && count <= 2 && cc.hi(numRanges - 1) <= 0xFFFF && !overlapsSurrogates(cc)) {
       char[] chars = new char[count];
       int idx = 0;
       for (int i = 0; i < numRanges; i++) {
@@ -248,6 +255,20 @@ sealed interface CharClassScanInfo {
     }
 
     return new UnicodeGeneral(ranges, b0, b1);
+  }
+
+  /**
+   * Whether any member of {@code cc} is a surrogate code point. A lone surrogate in a class matches
+   * only an unpaired surrogate code unit, but a {@code char} search for it would also stop inside
+   * every valid pair, so such classes are not treated as small sets.
+   */
+  private static boolean overlapsSurrogates(CharClass cc) {
+    for (int i = 0; i < cc.numRanges(); i++) {
+      if (cc.lo(i) <= Character.MAX_SURROGATE && cc.hi(i) >= Character.MIN_SURROGATE) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static int[] buildRangesFromBitmaps(long b0, long b1) {
