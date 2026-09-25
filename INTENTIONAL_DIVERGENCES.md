@@ -38,6 +38,70 @@ SafeRE preserves a coherent overall match instead of reproducing that
 implementation behavior. The JDK inconsistency is tracked upstream as
 [JDK-8390449](https://bugs.openjdk.org/browse/JDK-8390449).
 
+## Match State after a Terminal Empty `find()`
+
+Issue reference: #931.
+
+When the last successful match is empty and ends at the region end, the next
+`find()` fails. SafeRE then reports `hasMatch() == false`, and its `group()`,
+`group(0)`, `start()`, `start(0)`, `end()`, and `end(0)` accessors throw
+`IllegalStateException`. The JDK instead retains inconsistent match state.
+An ordinary `while (matcher.find())` loop reaches this state, as does
+`replaceAll(String)` when it consumes a terminal empty match. The replacement
+text itself agrees with the JDK.
+
+For example, `Pattern.compile("x*").matcher("yxxy").replaceAll("-")`
+returns `"-y--y-"` in both implementations. Issue #931 reports the following
+state immediately afterward on JDK 26.0.2.1:
+
+| Accessor | SafeRE | JDK |
+| --- | --- | --- |
+| `hasMatch()` | `false` | `true` |
+| `start()` / `end()` | `IllegalStateException` | `4` / `4` |
+| `start(0)` / `end(0)` | `IllegalStateException` | `-1` / `-1` |
+| `group()` / `group(0)` | `IllegalStateException` | `null` / `null` |
+
+The JDK's terminal `find()` returns `false` after advancing past a zero-width
+match at the region end, but clears the group boundaries without invalidating
+the overall match. The trigger is a terminal empty match, not whether the
+pattern matches an empty input: `\b` on `"ab"` also reaches this path. Patterns
+such as `x*`, `x?`, `(x*)`, and the empty pattern are common examples. Patterns
+that only produce nonempty matches, such as `x+`, invalidate the match normally.
+`replaceFirst()` does not perform the terminal failed search and therefore does
+not exhibit this discrepancy.
+
+The inconsistent state also affects snapshots and append replacement. On
+OpenJDK 26.0.2, after exhausting `Pattern.compile("x*").matcher("yxxy")` with
+an ordinary `find()` loop:
+
+- `toMatchResult()` throws `StringIndexOutOfBoundsException` on the JDK.
+  SafeRE returns a snapshot with no valid match, whose match accessors throw
+  `IllegalStateException`.
+- With a builder or buffer initially containing `"A"`,
+  `appendReplacement(output, "[$0]")` succeeds on the JDK and produces
+  `"Ayxxy[]"`. SafeRE throws `IllegalStateException` and leaves `"A"` unchanged.
+
+The append example uses an ordinary find loop, which has not advanced the append
+position. It does not describe the output after `replaceAll()`.
+
+The [JDK 26 matcher specification](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/regex/Matcher.html#start(int))
+requires `start()` and `start(0)` to be equivalent, as it does `end()` and
+`end(0)`. It also requires these accessors and `group()` to throw after a
+failed match operation. Although `replaceAll()` does not spell out every
+detail of its residual state, the contradictory group-zero bounds violate
+those accessor contracts. SafeRE intentionally retains its coherent exhausted
+state rather than reproducing this JDK behavior. This is similar to the
+`usePattern()` inconsistency above, but no upstream fix for this terminal
+`find()` path is claimed here.
+
+`MatcherTest` pins the exhausted state, snapshot and append-replacement behavior,
+and the non-diverging consuming-pattern and `replaceFirst()` cases. Replacement
+fuzzing checks SafeRE's exhausted state
+after successful `replaceAll()` calls and excludes only the JDK state shape
+above from equivalence checks; replacement output remains compared. Find-sequence
+fuzzing applies the same exclusion to `hasMatch()` after terminal failed searches,
+including searches within a restricted region.
+
 ## Initial `find()` after a Failed Full Match
 
 Issue reference: #818.
