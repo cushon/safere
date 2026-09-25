@@ -116,7 +116,12 @@ class GraphemeBreakConformanceTest {
     int[] jdkEnds = new int[8];
     for (int cp = 0; cp <= Character.MAX_CODE_POINT; cp++) {
       int type = Character.getType(cp);
-      if (type == Character.UNASSIGNED || type == Character.SURROGATE) {
+      // Unicode 14 removed GCB=SpacingMark for these Ahom signs. The JDK still uses it.
+      // See INTENTIONAL_DIVERGENCES.md and the focused test below.
+      if (type == Character.UNASSIGNED
+          || type == Character.SURROGATE
+          || cp == 0x11720
+          || cp == 0x11721) {
         continue;
       }
       String mid = Character.toString(cp);
@@ -130,6 +135,21 @@ class GraphemeBreakConformanceTest {
               .isEqualTo(slice(jdkEnds, jdkCount));
         }
       }
+    }
+  }
+
+  @Test
+  void ahomVowelSignsUseUnicode17GraphemeBoundaries() {
+    for (int cp : new int[] {0x11720, 0x11721}) {
+      String sign = Character.toString(cp);
+      String text = "a" + sign;
+      Matcher matcher = SAFERE_GRAPHEME.matcher(text);
+      assertThat(matcher.find()).isTrue();
+      assertThat(matcher.group()).isEqualTo("a");
+      assertThat(matcher.find()).isTrue();
+      assertThat(matcher.group()).isEqualTo(sign);
+      assertThat(matcher.find()).isFalse();
+      assertThat(SAFERE_BOUNDARY.split(text)).containsExactly("a", sign);
     }
   }
 

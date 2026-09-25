@@ -7,9 +7,6 @@ package org.safere.tools.unicode;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,12 +19,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.IntPredicate;
 
-/** Generates checked-in Unicode tables from the JDK {@link Character} implementation. */
+/** Generates checked-in Unicode tables from public JDK APIs and pinned Unicode grapheme data. */
 public final class UnicodeTableGenerator {
   private static final int MAX_CODE_POINT = Character.MAX_CODE_POINT;
   private static final String DEFAULT_OUTPUT =
       "safere/src/main/java/org/safere/UnicodeGeneratedTables.java";
-  private static final String JDK_REGEX_INTERNALS = "jdk.internal.util.regex";
+  private static final Path GRAPHEME_DATA = Path.of("safere-unicode/data/17.0.0");
 
   private static final String[] CATEGORY_ABBREVS = {
     "Cn", "Lu", "Ll", "Lt", "Lm", "Lo", "Mn", "Me", "Mc", "Nd", "Nl", "No", "Zs", "Zl", "Zp", "Cc",
@@ -62,7 +59,8 @@ public final class UnicodeTableGenerator {
     }
   }
 
-  private static GeneratedTables buildTables() {
+  private static GeneratedTables buildTables() throws IOException {
+    Map<String, int[][]> graphemeData = GraphemeTableGenerator.generate(GRAPHEME_DATA);
     int[][][] categoryTables = buildCategoryTables();
     Map<String, int[][]> categories = new LinkedHashMap<>();
     for (int i = 0; i < CATEGORY_ABBREVS.length; i++) {
@@ -79,8 +77,8 @@ public final class UnicodeTableGenerator {
         categories,
         buildScriptTables(),
         buildBlockTables(),
-        buildBinaryPropertyTables(),
-        buildGraphemeTables());
+        buildBinaryPropertyTables(graphemeData),
+        buildGraphemeTables(graphemeData));
   }
 
   private static int[][][] buildCategoryTables() {
@@ -139,7 +137,7 @@ public final class UnicodeTableGenerator {
     return tables;
   }
 
-  private static Map<String, int[][]> buildBinaryPropertyTables() {
+  private static Map<String, int[][]> buildBinaryPropertyTables(Map<String, int[][]> graphemeData) {
     Map<String, IntPredicate> predicates = new LinkedHashMap<>();
     predicates.put("Alphabetic", Character::isAlphabetic);
     predicates.put("Ideographic", Character::isIdeographic);
@@ -160,130 +158,28 @@ public final class UnicodeTableGenerator {
     predicates.put("Emoji_Modifier", Character::isEmojiModifier);
     predicates.put("Emoji_Modifier_Base", Character::isEmojiModifierBase);
     predicates.put("Emoji_Component", Character::isEmojiComponent);
-    predicates.put("Extended_Pictographic", Character::isExtendedPictographic);
 
     Map<String, int[][]> tables = new LinkedHashMap<>();
     for (Map.Entry<String, IntPredicate> entry : predicates.entrySet()) {
       tables.put(entry.getKey(), buildRanges(entry.getValue()));
     }
+    tables.put("Extended_Pictographic", graphemeData.get("EXTENDED_PICTOGRAPHIC"));
     return tables;
   }
 
-  /**
-   * Builds the UAX #29 Grapheme_Cluster_Break and Indic_Conjunct_Break classes used by {@code \X}
-   * and {@code \b{g}}.
-   *
-   * <p>{@link Character} does not expose these properties, so read them from the JDK's own grapheme
-   * classifier. That keeps SafeRE's grapheme segmentation on the same Unicode version as the other
-   * generated tables, and in step with the generator JDK's {@code java.util.regex}. Requires {@code
-   * --add-opens java.base/jdk.internal.util.regex=ALL-UNNAMED}; see generate-unicode-tables.sh.
-   *
-   * <p>Unassigned code points are omitted because SafeRE classifies them itself (see
-   * INTENTIONAL_DIVERGENCES.md). Surrogates are omitted because SafeRE handles unpaired surrogates
-   * separately.
-   */
-  private static Map<String, int[][]> buildGraphemeTables() {
-    Class<?> grapheme = jdkRegexInternal("Grapheme");
-    Method getType = accessibleMethod(grapheme, "getType", int.class);
-    Class<?> indicConjunctBreak = jdkRegexInternal("IndicConjunctBreak");
-    Method isLinker = accessibleMethod(indicConjunctBreak, "isLinker", int.class);
-    Method isConsonant = accessibleMethod(indicConjunctBreak, "isConsonant", int.class);
-    Method isExtend = accessibleMethod(indicConjunctBreak, "isExtend", int.class);
-
-    int cr = intConstant(grapheme, "CR");
-    int lf = intConstant(grapheme, "LF");
-    int control = intConstant(grapheme, "CONTROL");
-    Map<String, Integer> graphemeTypes = new LinkedHashMap<>();
-    graphemeTypes.put("Extend", intConstant(grapheme, "EXTEND"));
-    graphemeTypes.put("Prepend", intConstant(grapheme, "PREPEND"));
-    graphemeTypes.put("SpacingMark", intConstant(grapheme, "SPACINGMARK"));
-    graphemeTypes.put("L", intConstant(grapheme, "L"));
-    graphemeTypes.put("V", intConstant(grapheme, "V"));
-    graphemeTypes.put("T", intConstant(grapheme, "T"));
-    graphemeTypes.put("LV", intConstant(grapheme, "LV"));
-    graphemeTypes.put("LVT", intConstant(grapheme, "LVT"));
-
+  private static Map<String, int[][]> buildGraphemeTables(Map<String, int[][]> data) {
     Map<String, int[][]> tables = new LinkedHashMap<>();
-    tables.put(
-        "Control",
-        buildAssignedRanges(
-            cp -> {
-              int type = invokeInt(getType, cp);
-              return type == cr || type == lf || type == control;
-            }));
-    for (Map.Entry<String, Integer> entry : graphemeTypes.entrySet()) {
-      int expected = entry.getValue();
-      tables.put(entry.getKey(), buildAssignedRanges(cp -> invokeInt(getType, cp) == expected));
+    for (String name :
+        List.of("Control", "Extend", "Prepend", "SpacingMark", "L", "V", "T", "LV", "LVT")) {
+      tables.put(name, data.get("GCB_" + name.toUpperCase(Locale.ROOT)));
     }
-    tables.put("InCB_Linker", buildAssignedRanges(cp -> invokeBoolean(isLinker, cp)));
-    tables.put("InCB_Consonant", buildAssignedRanges(cp -> invokeBoolean(isConsonant, cp)));
-    tables.put("InCB_Extend", buildAssignedRanges(cp -> invokeBoolean(isExtend, cp)));
+    for (String name : List.of("Linker", "Consonant", "Extend")) {
+      tables.put("InCB_" + name, data.get("INCB_" + name.toUpperCase(Locale.ROOT)));
+    }
     return tables;
   }
 
-  private static int[][] buildAssignedRanges(IntPredicate predicate) {
-    return buildRanges(
-        cp -> {
-          int type = Character.getType(cp);
-          return type != Character.UNASSIGNED && type != Character.SURROGATE && predicate.test(cp);
-        });
-  }
-
-  private static Class<?> jdkRegexInternal(String simpleName) {
-    try {
-      return Class.forName(JDK_REGEX_INTERNALS + "." + simpleName);
-    } catch (ClassNotFoundException e) {
-      throw new IllegalStateException(
-          "The generator JDK has no " + JDK_REGEX_INTERNALS + "." + simpleName, e);
-    }
-  }
-
-  private static Method accessibleMethod(Class<?> owner, String name, Class<?>... parameterTypes) {
-    try {
-      Method method = owner.getDeclaredMethod(name, parameterTypes);
-      method.setAccessible(true);
-      return method;
-    } catch (NoSuchMethodException | RuntimeException e) {
-      throw inaccessible(owner.getName() + "." + name, e);
-    }
-  }
-
-  private static int intConstant(Class<?> owner, String name) {
-    try {
-      Field field = owner.getDeclaredField(name);
-      field.setAccessible(true);
-      return field.getInt(null);
-    } catch (NoSuchFieldException | IllegalAccessException | RuntimeException e) {
-      throw inaccessible(owner.getName() + "." + name, e);
-    }
-  }
-
-  private static IllegalStateException inaccessible(String member, Exception cause) {
-    return new IllegalStateException(
-        "Cannot read "
-            + member
-            + "; run the generator via generate-unicode-tables.sh, which opens "
-            + JDK_REGEX_INTERNALS,
-        cause);
-  }
-
-  private static int invokeInt(Method method, int cp) {
-    return (Integer) invoke(method, cp);
-  }
-
-  private static boolean invokeBoolean(Method method, int cp) {
-    return (Boolean) invoke(method, cp);
-  }
-
-  private static Object invoke(Method method, int cp) {
-    try {
-      return method.invoke(null, cp);
-    } catch (IllegalAccessException | InvocationTargetException e) {
-      throw new IllegalStateException("Cannot invoke " + method, e);
-    }
-  }
-
-  private static void writeJava(PrintWriter out, GeneratedTables tables) {
+  private static void writeJava(PrintWriter out, GeneratedTables tables) throws IOException {
     String header =
         """
         // This file is part of a Java port of RE2 (https://github.com/google/re2).
@@ -301,11 +197,17 @@ public final class UnicodeTableGenerator {
         import java.util.LinkedHashMap;
         import java.util.Map;
 
-        /** Checked-in Unicode tables generated from a maintainer-selected JDK. */
+        /** Checked-in Unicode tables generated from public JDK APIs and pinned Unicode data. */
         final class UnicodeGeneratedTables {
           static final String GENERATOR_JAVA_VERSION = "%s";
         """
             .formatted(javaVersion());
+    out.println("// Unicode data copyright and permission notice:");
+    for (String line :
+        Files.readAllLines(GRAPHEME_DATA.resolve("LICENSE.txt"), StandardCharsets.UTF_8)) {
+      out.println(line.isEmpty() ? "//" : "// " + line);
+    }
+    out.println();
     out.println(header);
     out.println();
 
