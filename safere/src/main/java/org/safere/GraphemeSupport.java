@@ -13,19 +13,7 @@ final class GraphemeSupport {
   private static final int[][] EXTENDED_PICTOGRAPHIC =
       UnicodeProperties.lookupBinaryProperty("Extended_Pictographic");
 
-  // Unassigned default-ignorable code points have Grapheme_Cluster_Break=Control, not Other.
-  // Unicode 17.0: https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakProperty.txt
-  private static final int[][] UNASSIGNED_GRAPHEME_CONTROLS = {
-    {0x2065, 0x2065},
-    {0xFFF0, 0xFFF8},
-    {0xE0000, 0xE0000},
-    {0xE0002, 0xE001F},
-    {0xE0080, 0xE00FF},
-    {0xE01F0, 0xE0FFF}
-  };
-
-  // UAX #29 Grapheme_Cluster_Break and Indic_Conjunct_Break classes for assigned code points,
-  // generated from the maintainer-selected JDK's own grapheme classifier.
+  // UAX #29 properties generated directly from the pinned Unicode Character Database.
   private static final int[][] GCB_CONTROL = graphemeTable("Control");
   private static final int[][] GCB_EXTEND = graphemeTable("Extend");
   private static final int[][] GCB_PREPEND = graphemeTable("Prepend");
@@ -847,7 +835,7 @@ final class GraphemeSupport {
     if (c < 0x7F) {
       return c < 0x20;
     }
-    return containsCodePoint(GCB_CONTROL, c) || containsCodePoint(UNASSIGNED_GRAPHEME_CONTROLS, c);
+    return containsCodePoint(GCB_CONTROL, c);
   }
 
   private static boolean isGraphemePrepend(int c) {
