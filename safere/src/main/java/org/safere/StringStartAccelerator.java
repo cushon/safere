@@ -73,14 +73,29 @@ sealed interface StringStartAccelerator {
    */
   static int findNextCandidate(
       StringStartAccelerator accelerator, String text, int fromIndex, boolean unixLines) {
+    return findNextCandidate(accelerator, new StringInputScanner(text), fromIndex, unixLines);
+  }
+
+  /**
+   * Like {@link #findNextCandidate(StringStartAccelerator, String, int, boolean)}, but lets
+   * small-set character class searches reuse {@code scanner}'s memo of earlier searches. Callers
+   * that search the same text repeatedly must pass the same scanner each time, or those searches
+   * are quadratic; see {@link StringInputScanner#memoizedIndexOf}.
+   */
+  static int findNextCandidate(
+      StringStartAccelerator accelerator,
+      StringInputScanner scanner,
+      int fromIndex,
+      boolean unixLines) {
+    String text = scanner.text();
     return switch (accelerator) {
       case Literal lit -> lit.findCandidate(text, fromIndex, unixLines);
       case CaseInsensitiveLiteral cil -> cil.findCandidate(text, fromIndex, unixLines);
       case UnicodeCaseInsensitiveLiteral ucil -> ucil.findCandidate(text, fromIndex, unixLines);
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
-      case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
+      case CharClass cc -> cc.findCandidate(scanner, fromIndex);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
-      case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
+      case LeadingExpansion le -> le.findCandidate(scanner, fromIndex, unixLines);
     };
   }
 
@@ -376,42 +391,31 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.CHAR_CLASS;
     }
 
-    int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(StringInputScanner scanner, int fromIndex) {
       if (smallChars != null) {
-        return findCandidateSmall(text, fromIndex);
+        return findCandidateSmall(scanner, fromIndex);
       }
-      return indexOfCharClass(text, asciiTable, scanInfo.ranges(), scanInfo.isAscii(), fromIndex);
+      return indexOfCharClass(
+          scanner.text(), asciiTable, scanInfo.ranges(), scanInfo.isAscii(), fromIndex);
     }
 
-    private int findCandidateSmall(String text, int fromIndex) {
-      int pos = Math.max(0, fromIndex);
-      int length = text.length();
-      if (pos >= length) {
-        return -1;
-      }
+    /**
+     * Searches for the first of one or two chars with the {@code String.indexOf} intrinsic, one
+     * member at a time. A single member cannot be rescanned: each call resumes past the occurrence
+     * the previous call returned. With two, the farther member's occurrence would be rescanned on
+     * every call, so those searches go through the scanner's memo; see {@link
+     * StringInputScanner#memoizedIndexOf}.
+     */
+    private int findCandidateSmall(StringInputScanner scanner, int fromIndex) {
       if (smallChars.length == 1) {
-        int idx = text.indexOf(smallChars[0], pos);
-        if (WorkCounterConfig.ENABLED) {
-          int scanned = idx >= 0 ? idx - pos + 1 : length - pos;
-          WorkCounter.record(Math.max(0, scanned));
-        }
-        return idx;
+        return scanner.indexOfChar(smallChars[0], fromIndex);
       }
-      int i1 = text.indexOf(smallChars[0], pos);
-      int i2 = text.indexOf(smallChars[1], pos);
-      int idx;
-      if (i1 < 0) {
-        idx = i2;
-      } else if (i2 < 0) {
-        idx = i1;
-      } else {
-        idx = Math.min(i1, i2);
+      int first = scanner.memoizedIndexOf(smallChars[0], fromIndex);
+      int second = scanner.memoizedIndexOf(smallChars[1], fromIndex);
+      if (first < 0) {
+        return second;
       }
-      if (WorkCounterConfig.ENABLED) {
-        int scanned = idx >= 0 ? idx - pos + 1 : length - pos;
-        WorkCounter.record(Math.max(0, scanned));
-      }
-      return idx;
+      return second < 0 ? first : Math.min(first, second);
     }
 
     private static int indexOfCharClass(
@@ -553,8 +557,8 @@ sealed interface StringStartAccelerator {
       return minRepetition == 0 && !hasLeadingAssertions;
     }
 
-    int findInnerCandidate(String text, int searchPos, boolean unixLines) {
-      return StringStartAccelerator.findNextCandidate(inner, text, searchPos, unixLines);
+    int findInnerCandidate(StringInputScanner scanner, int searchPos, boolean unixLines) {
+      return StringStartAccelerator.findNextCandidate(inner, scanner, searchPos, unixLines);
     }
 
     int expandBackward(String text, int innerMatch, int fromIndex) {
@@ -578,11 +582,12 @@ sealed interface StringStartAccelerator {
       return start;
     }
 
-    int findCandidate(String text, int fromIndex, boolean unixLines) {
+    int findCandidate(StringInputScanner scanner, int fromIndex, boolean unixLines) {
+      String text = scanner.text();
       int searchPos = Math.max(0, fromIndex);
       int textLen = text.length();
       while (searchPos < textLen) {
-        int innerMatch = findInnerCandidate(text, searchPos, unixLines);
+        int innerMatch = findInnerCandidate(scanner, searchPos, unixLines);
         if (innerMatch < 0) {
           return -1;
         }

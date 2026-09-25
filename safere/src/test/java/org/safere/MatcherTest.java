@@ -3811,5 +3811,48 @@ class MatcherTest {
         assertThat(matcher.find()).as("no more matches for '%s'", input).isFalse();
       }
     }
+
+    @Test
+    @DisplayName("two-character leading class searches stay correct when a matcher is reused")
+    void smallSetSearchesStayCorrectAcrossMatcherReuse() {
+      String regex = "[a\uFF3B][0-9]";
+      Pattern pattern = Pattern.compile(regex);
+      java.util.regex.Pattern jdkPattern = java.util.regex.Pattern.compile(regex);
+      String first = "x1 \uFF3B2 y3 a4 \uFF3B5 z6";
+      String second = "a7 b8 a9";
+
+      Matcher matcher = pattern.matcher(first);
+      assertSameMatches(matcher, jdkPattern.matcher(first));
+      // After exhausting the input, the memo holds "no more occurrences"; a reset must search
+      // again.
+      matcher.reset();
+      assertSameMatches(matcher, jdkPattern.matcher(first));
+      matcher.reset(second);
+      assertSameMatches(matcher, jdkPattern.matcher(second));
+
+      // Searching backwards from where earlier searches left off.
+      matcher.reset(first);
+      assertThat(matcher.find(12)).isTrue();
+      assertThat(matcher.start()).isEqualTo(12);
+      assertThat(matcher.find(0)).isTrue();
+      assertThat(matcher.start()).isEqualTo(3);
+
+      matcher.reset(first).region(4, first.length());
+      java.util.regex.Matcher jdkRegion = jdkPattern.matcher(first).region(4, first.length());
+      assertSameMatches(matcher, jdkRegion);
+
+      // A different pattern queries different chars over the same text.
+      matcher.reset(first).usePattern(Pattern.compile("[y\uFF3B][0-9]"));
+      assertSameMatches(matcher, java.util.regex.Pattern.compile("[y\uFF3B][0-9]").matcher(first));
+    }
+
+    private static void assertSameMatches(Matcher matcher, java.util.regex.Matcher jdkMatcher) {
+      while (jdkMatcher.find()) {
+        assertThat(matcher.find()).isTrue();
+        assertThat(matcher.start()).isEqualTo(jdkMatcher.start());
+        assertThat(matcher.end()).isEqualTo(jdkMatcher.end());
+      }
+      assertThat(matcher.find()).isFalse();
+    }
   }
 }
