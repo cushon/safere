@@ -392,7 +392,7 @@ final class RarityOracle {
     }
     if (lo <= hi) {
       // Non-ASCII code points have rarity rank 255, so weight is (256 - 255) = 1 per code point.
-      weight += (long) (hi - lo + 1);
+      weight += hi - lo + 1;
     }
     return weight;
   }
