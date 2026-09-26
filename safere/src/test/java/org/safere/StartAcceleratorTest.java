@@ -446,7 +446,7 @@ class StartAcceleratorTest {
 
     for (char member : new char[] {'[', (char) 0xFF3B}) {
       for (int from : new int[] {0, 5}) {
-        for (int offset = 6; offset <= 10; offset++) {
+        for (int offset = 14; offset <= 18; offset++) {
           String text = "x".repeat(from + offset) + member + "x".repeat(12);
           assertThat(accelerator.findCandidate(new StringInputScanner(text), from))
               .as("member %s at %d from %d", member, from + offset, from)

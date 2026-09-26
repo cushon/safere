@@ -377,11 +377,11 @@ sealed interface StringStartAccelerator {
       implements StringStartAccelerator {
 
     /**
-     * Chars {@link #findCandidateSmall} probes before the per-member searches, chosen on {@code
-     * citationScrubberFullWidth} and {@code versionList.match}, where a member usually occurs
-     * within a few chars of the search start.
+     * Chars {@link #findCandidateSmall} probes before the per-member searches. At 8, candidates
+     * 11-15 chars apart ({@code citationScrubberFullWidthNoMatch}) always missed the probe and paid
+     * for the memoized searches instead, which cost 1.14x on aarch64; 16 brings that to parity.
      */
-    private static final int CANDIDATE_PROBE_CHARS = 8;
+    private static final int CANDIDATE_PROBE_CHARS = 16;
 
     static CharClass create(CharClassScanInfo scanInfo) {
       char[] small = null;
