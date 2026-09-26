@@ -159,7 +159,7 @@ sealed interface RejectPrefilter
      * citationScrubberFullWidth}, where the second member often occurs within a few chars of the
      * search start while the first is absent.
      */
-    private static final int REJECT_PROBE_CHARS = 16;
+    private static final int REJECT_PROBE_CHARS = Pr938Exp.REJECT_PROBE_CHARS;
 
     static CharClass create(CharClassScanInfo scanInfo) {
       char[] small = smallChars(scanInfo);
@@ -255,6 +255,9 @@ sealed interface RejectPrefilter
         return s.indexOfChar(c0, searchFrom) < 0;
       }
       char c1 = smallChars[1];
+      if (Pr938Exp.REJECT_ONLY_AT_START && searchFrom > 0) {
+        return false;
+      }
       int probe = s.probeEither(c0, c1, searchFrom, REJECT_PROBE_CHARS);
       if (probe >= 0) {
         return false;

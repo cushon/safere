@@ -39,7 +39,12 @@ sealed interface StringStartAccelerator {
                   : UnicodeCaseInsensitiveLiteral.create(lit.prefix()))
               : Literal.create(lit.prefix());
       case MultiAnchorDescriptor.StartPlan.CharClass cc ->
-          hasWordBoundary || !cc.scanInfo().isSelective() ? null : CharClass.create(cc.scanInfo());
+          hasWordBoundary
+                  || !cc.scanInfo().isSelective()
+                  || (Pr938Exp.NO_UNICODE_SMALL_SET_START
+                      && cc.scanInfo() instanceof CharClassScanInfo.UnicodeSmallSet)
+              ? null
+              : CharClass.create(cc.scanInfo());
       case MultiAnchorDescriptor.StartPlan.FixedOffset fo ->
           FixedOffset.create(fo.fol(), fo.leadingClass());
       case MultiAnchorDescriptor.StartPlan.MultiLiteral ml ->
@@ -381,7 +386,7 @@ sealed interface StringStartAccelerator {
      * citationScrubberFullWidth} and {@code versionList.match}, where a member usually occurs
      * within a few chars of the search start.
      */
-    private static final int CANDIDATE_PROBE_CHARS = 8;
+    private static final int CANDIDATE_PROBE_CHARS = Pr938Exp.CANDIDATE_PROBE_CHARS;
 
     static CharClass create(CharClassScanInfo scanInfo) {
       char[] small = null;
