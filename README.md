@@ -1,4 +1,4 @@
-# SafeRE
+<img src="assets/safere-logo-compact.png" alt="SafeRE logo" width="400">
 
 **Safe, correct, and fast regular expressions for Java.**
 
