@@ -101,10 +101,18 @@ and SQL-engine types out of the core public API.
 
 SafeRE bundles Unicode property and simple-fold tables with the library.
 General categories, scripts, blocks, and binary-property membership use these
-tables. The generator
-uses a maintainer-selected JDK's supported `Character` APIs and checks generated
-data into the repository. The [Unicode generator](../safere-unicode/README.md)
-describes regeneration; the generated source records its provenance.
+tables. General categories, scripts, blocks, and most binary properties are
+generated using a maintainer-selected JDK's supported `Character` APIs.
+Grapheme properties (`Grapheme_Cluster_Break`, `Indic_Conjunct_Break`, and
+`Extended_Pictographic`) come directly from
+[pinned Unicode 17.0.0 files](../safere-unicode/data/17.0.0/README.md), without
+consulting private JDK classifiers. Generated data is checked into the repository,
+and the generated source records its provenance.
+
+Unicode upgrades are intentional maintenance changes: update the pinned inputs,
+select a JDK with the same Unicode version for the remaining properties,
+regenerate and review the output, and run focused Unicode compatibility tests.
+The [Unicode generator guide](../safere-unicode/README.md) describes the workflow.
 
 Some Unicode behavior also uses the runtime JDK: `java*` properties, Unicode
 POSIX `Blank`/`Graph`/`Print`, and the Java case mappings incorporated into the

@@ -319,6 +319,62 @@ case expansion with range syntax. The [case-equivalence audit](audits/unicode-ca
 records the complete observed differences over case-mapping participants,
 including the baseline and the rule after #866.
 
+## Grapheme Clusters after Unassigned Code Points
+
+Issue reference: [#925](https://github.com/eaftan/safere/issues/925).
+
+SafeRE uses Unicode grapheme-break properties when matching `\X`, including
+for unassigned code points. The
+[JDK 26 `Pattern` specification](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/regex/Pattern.html)
+defines `\X` as a Unicode extended grapheme cluster. Under
+[UAX #29's grapheme boundary rules](https://www.unicode.org/reports/tr29/#Grapheme_Cluster_Boundary_Rules),
+an unassigned code point with `Grapheme_Cluster_Break=Other` stays in the same
+cluster as a following `Extend` character under rule GB9. Being unassigned does
+not by itself make a code point a grapheme-breaking control. Unassigned
+default-ignorable code points have property `Control`, so GB4/GB5 require breaks
+around them; that behavior is not an intentional divergence.
+
+For example:
+
+```java
+String input = "\ud9f5\udc3f\u07ef"; // U+8D43F followed by U+07EF
+var matcher = Pattern.compile("\\X").matcher(input);
+```
+
+U+8D43F is unassigned with grapheme-break property `Other`, and U+07EF
+(NKO COMBINING SHORT LOW TONE) has property `Extend`. Repeated `find()` calls
+therefore produce one SafeRE match at UTF-16 bounds `[0, 3)`. The OpenJDK
+behavior reported in #925 produces two matches, `[0, 2)` and `[2, 3)`.
+
+The reported OpenJDK implementation classifies unassigned code points other
+than its special case U+0378 as grapheme controls. This causes the control-break
+rule GB4 to take precedence over GB9. SafeRE intentionally preserves Unicode
+segmentation rather than copying that classification error. This is a
+specification-based divergence, not a limitation imposed by linear-time
+matching.
+
+`UnassignedGraphemeTest` covers BMP and supplementary unassigned code points
+followed by combining marks or ZWJ, repeated matches, and splitting. It also
+checks that actual grapheme controls, including an unassigned default-ignorable
+code point, still force a break. The intentional differences are disabled only
+in generated JDK crosscheck tests.
+
+## Ahom Vowel Signs and Grapheme Boundaries
+
+SafeRE pins its grapheme properties to Unicode 17.0. Unicode changed
+`Grapheme_Cluster_Break` for U+11720 and U+11721 (AHOM VOWEL SIGN A and AA)
+from `SpacingMark` to `Other` in Unicode 14. For example, `a` followed by
+either sign forms two `\X` clusters, while OpenJDK 26 forms one. The JDK's
+grapheme classifier still treats these signs as `SpacingMark`, despite its
+Unicode 17 support. SafeRE follows the [Unicode 17 grapheme property file](https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakProperty.txt)
+and the [Unicode committee's correction](https://www.unicode.org/L2/L2021/21126-utc168-properties-recs.pdf).
+
+This specification-based difference is independent of GB11 (tracked in #936).
+The upstream JDK report is tracked in [#940](https://github.com/eaftan/safere/issues/940).
+`GraphemeBreakConformanceTest` pins both Ahom signs and excludes only those two
+code points from its exhaustive JDK comparison. The segmentation code and its
+linear-time bound are unchanged.
+
 ## Grapheme Cluster Composition
 
 Sweep names:
