@@ -218,24 +218,33 @@ sealed interface RejectPrefilter
      * find} on non-matching input makes, so it skips the memo.
      */
     private boolean rejectsSmall(InputScanner scanner, String text, int searchFrom) {
-      if (searchFrom > 0 && smallChars.length == 2 && scanner instanceof StringInputScanner s) {
-        return s.memoizedIndexOf(smallChars[0], searchFrom) < 0
-            && s.memoizedIndexOf(smallChars[1], searchFrom) < 0;
+      char c0 = smallChars[0];
+      if (smallChars.length == 1) {
+        return scanner instanceof StringInputScanner s
+            ? s.indexOfChar(c0, searchFrom) < 0
+            : text.indexOf(c0, searchFrom) < 0;
       }
-      if (scanner instanceof StringInputScanner s) {
-        for (char c : smallChars) {
-          if (s.indexOfChar(c, searchFrom) >= 0) {
+      char c1 = smallChars[1];
+      boolean memoize = searchFrom > 0;
+      if (!WorkCounterConfig.ENABLED) {
+        String str = text != null ? text : ((StringInputScanner) scanner).text();
+        int from = Math.max(0, searchFrom);
+        int limit = Math.min(str.length(), from + 16);
+        for (int i = from; i < limit; i++) {
+          char ch = str.charAt(i);
+          if (ch == c0 || ch == c1) {
             return false;
           }
         }
-        return true;
+        searchFrom = limit;
       }
-      for (char c : smallChars) {
-        if (text.indexOf(c, searchFrom) >= 0) {
-          return false;
+      if (scanner instanceof StringInputScanner s) {
+        if (memoize) {
+          return s.memoizedIndexOf(c0, searchFrom) < 0 && s.memoizedIndexOf(c1, searchFrom) < 0;
         }
+        return s.indexOfChar(c0, searchFrom) < 0 && s.indexOfChar(c1, searchFrom) < 0;
       }
-      return true;
+      return text.indexOf(c0, searchFrom) < 0 && text.indexOf(c1, searchFrom) < 0;
     }
 
     private int indexOf(InputScanner scanner, int searchFrom, int limit) {
@@ -246,8 +255,17 @@ sealed interface RejectPrefilter
 
     @Override
     public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
-      if (!options.charClassMatchFastPaths()) {
+      if (!options.charClassMatchFastPaths()
+          || (searchFrom > 0 && ranges[ranges.length - 1] >= 0x80)) {
         return false;
+      }
+      if (!WorkCounterConfig.ENABLED
+          && smallChars != null
+          && smallChars.length == 2
+          && smallChars[0] < 0x80
+          && smallChars[1] >= 0x80) {
+        return scanner.indexOfAscii(smallChars[0], searchFrom, scanner.length()) < 0
+            && scanner.indexOfCodePointClass(ranges, 0L, 0L, searchFrom, scanner.length()) < 0;
       }
       return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
           < 0;

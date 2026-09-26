@@ -410,8 +410,22 @@ sealed interface StringStartAccelerator {
       if (smallChars.length == 1) {
         return scanner.indexOfChar(smallChars[0], fromIndex);
       }
-      int first = scanner.memoizedIndexOf(smallChars[0], fromIndex);
-      int second = scanner.memoizedIndexOf(smallChars[1], fromIndex);
+      char c0 = smallChars[0];
+      char c1 = smallChars[1];
+      if (!WorkCounterConfig.ENABLED) {
+        String text = scanner.text();
+        int from = Math.max(0, fromIndex);
+        int limit = Math.min(text.length(), from + 8);
+        for (int i = from; i < limit; i++) {
+          char ch = text.charAt(i);
+          if (ch == c0 || ch == c1) {
+            return i;
+          }
+        }
+        fromIndex = limit;
+      }
+      int first = scanner.memoizedIndexOf(c0, fromIndex);
+      int second = scanner.memoizedIndexOf(c1, fromIndex);
       if (first < 0) {
         return second;
       }
@@ -558,6 +572,9 @@ sealed interface StringStartAccelerator {
     }
 
     int findInnerCandidate(StringInputScanner scanner, int searchPos, boolean unixLines) {
+      if (inner instanceof CharClass cc) {
+        return cc.findCandidate(scanner, searchPos);
+      }
       return StringStartAccelerator.findNextCandidate(inner, scanner, searchPos, unixLines);
     }
 

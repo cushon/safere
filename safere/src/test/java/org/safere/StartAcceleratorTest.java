@@ -384,7 +384,6 @@ class StartAcceleratorTest {
       "[a-z].*",
       "[0-9].*",
       "ab+c.*",
-      " ?[\\[\uFF3B](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]\uFF3D]",
       "[\\[\uFF3B].*"
     };
 
@@ -428,6 +427,13 @@ class StartAcceleratorTest {
         }
       }
     }
+  }
+
+  @Test
+  void questLeadingExpansionBeforeNonAsciiCharClassAcceleratesStringOnly() {
+    Pattern pattern = Pattern.compile(" ?[\\[\uFF3B](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]\uFF3D]");
+    assertThat(pattern.stringStartAccelerator()).isNotNull();
+    assertThat(pattern.utf8StartAccelerator()).isNull();
   }
 
   @Test
