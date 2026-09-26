@@ -58,16 +58,25 @@ final class StringInputScanner implements InputScanner {
    * that repeats the search from increasing positions, as successive {@code find()} calls and DFA
    * restarts do, would rescan the whole remainder for a member that never occurs, which is
    * quadratic. Remembering each member's next occurrence means its scan only ever moves forward, so
-   * the total work per member per scanner is linear in the text.
+   * the total work per member per scanner is linear in the text (the {@code
+   * memoized-small-set-search} invariant in {@code design/SEMANTIC_INVARIANTS.md}).
    */
   int memoizedIndexOf(char c, int fromIndex) {
     int from = Math.max(0, fromIndex);
+    if (memoCount > 0 && memoChar0 == c && memoStillValid(from, memoFrom0, memoNext0)) {
+      return memoNext0;
+    }
+    if (memoCount > 1 && memoChar1 == c && memoStillValid(from, memoFrom1, memoNext1)) {
+      return memoNext1;
+    }
+    return updateMemoizedIndexOf(c, from);
+  }
+
+  private int updateMemoizedIndexOf(char c, int from) {
     if (memoCount == 0 || memoChar0 == c) {
       if (memoCount == 0) {
         memoCount = 1;
         memoChar0 = c;
-      } else if (memoStillValid(from, memoFrom0, memoNext0)) {
-        return memoNext0;
       }
       memoFrom0 = from;
       memoNext0 = indexOfChar(c, from);
@@ -77,8 +86,6 @@ final class StringInputScanner implements InputScanner {
       if (memoCount == 1) {
         memoCount = 2;
         memoChar1 = c;
-      } else if (memoStillValid(from, memoFrom1, memoNext1)) {
-        return memoNext1;
       }
       memoFrom1 = from;
       memoNext1 = indexOfChar(c, from);

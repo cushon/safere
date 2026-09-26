@@ -309,11 +309,15 @@ final class MultiAnchorCompiler {
 
   /**
    * Returns whether a class with the given frequency score and rune count is a better reject
-   * candidate than the incumbent: rarer by {@link RarityOracle#charClassFrequencyScore}, or equally
-   * rare with fewer runes.
+   * candidate than the incumbent: rarer by {@link RarityOracle#charClassFrequencyScore} when both
+   * classes have ASCII members, or with fewer runes when the scores tie or either class is purely
+   * non-ASCII.
    */
   private static boolean moreSelective(
       long candidateScore, int candidateRunes, long incumbentScore, int incumbentRunes) {
+    if (candidateScore == 0 || incumbentScore == 0) {
+      return candidateRunes < incumbentRunes;
+    }
     return candidateScore < incumbentScore
         || (candidateScore == incumbentScore && candidateRunes < incumbentRunes);
   }
@@ -375,7 +379,12 @@ final class MultiAnchorCompiler {
       case StartPlan.CharClass cc -> cc.scanInfo();
       case StartPlan.FixedOffset fo -> fo.leadingClass();
       case StartPlan.MultiLiteral ml -> ml.fallbackClass();
-      case StartPlan.LeadingExpansion unusedLe -> null;
+      case StartPlan.LeadingExpansion le ->
+          le.leadingClass().isAscii()
+                  && le.innerPlan() instanceof StartPlan.CharClass cc
+                  && !cc.scanInfo().isSelective()
+              ? cc.scanInfo()
+              : null;
       case StartPlan.Literal unusedLit -> null;
       case StartPlan.LineAnchor unusedLa -> null;
       case StartPlan.None unusedNone -> null;

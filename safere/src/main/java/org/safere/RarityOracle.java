@@ -344,23 +344,28 @@ final class RarityOracle {
   }
 
   /**
-   * Computes an empirical frequency score for a character class (lower = rarer / more selective).
+   * Computes an empirical frequency score for the ASCII members of a character class (lower = rarer
+   * / more selective), or {@code 0} if the class has no ASCII members.
    *
    * <p>Each ASCII character's occurrence frequency is modeled as {@code 256 - exactByteRarity(c)},
    * so smaller and rarer character classes have lower scores and are preferred for whole-input
-   * rejection. Every non-ASCII code point weighs 1, as rare as the rarest ASCII byte, because the
-   * byte table has no data beyond ASCII. A small class with a non-ASCII member therefore scores far
-   * below an ASCII digit or letter class, even on input where it occurs often. Callers break ties
-   * by rune count (see {@code MultiAnchorCompiler}).
+   * rejection. Non-ASCII code points are not scored because the byte-rarity table has no data
+   * beyond ASCII and non-ASCII frequency depends on document language: a mixed class such as {@code
+   * [\[\uFF3B]} is scored by its ASCII member {@code [}, while a purely non-ASCII class returns
+   * {@code 0} so callers fall back to rune count (see {@code MultiAnchorCompiler}).
    */
   static long charClassFrequencyScore(CharClass cc) {
     if (cc == null || cc.isEmpty()) {
-      return Long.MAX_VALUE;
+      return 0;
     }
     long totalWeight = 0;
     int numRanges = cc.numRanges();
     for (int i = 0; i < numRanges; i++) {
-      totalWeight += rangeFrequencyWeight(cc.lo(i), cc.hi(i));
+      int lo = cc.lo(i);
+      if (lo >= 128) {
+        break;
+      }
+      totalWeight += asciiRangeFrequencyWeight(lo, Math.min(127, cc.hi(i)));
     }
     return totalWeight;
   }
@@ -368,31 +373,27 @@ final class RarityOracle {
   /** Like {@link #charClassFrequencyScore(CharClass)}, for a compiled scan class. */
   static long charClassFrequencyScore(CharClassScanInfo scanInfo) {
     if (scanInfo == null) {
-      return Long.MAX_VALUE;
+      return 0;
     }
     int[] ranges = scanInfo.ranges();
     if (ranges == null || ranges.length == 0) {
-      return Long.MAX_VALUE;
+      return 0;
     }
     long totalWeight = 0;
     for (int i = 0; i < ranges.length; i += 2) {
-      totalWeight += rangeFrequencyWeight(ranges[i], ranges[i + 1]);
+      int lo = ranges[i];
+      if (lo >= 128) {
+        break;
+      }
+      totalWeight += asciiRangeFrequencyWeight(lo, Math.min(127, ranges[i + 1]));
     }
     return totalWeight;
   }
 
-  private static long rangeFrequencyWeight(int lo, int hi) {
+  private static long asciiRangeFrequencyWeight(int lo, int hi) {
     long weight = 0;
-    if (lo < 128) {
-      int asciiEnd = Math.min(127, hi);
-      for (int ch = lo; ch <= asciiEnd; ch++) {
-        weight += (256 - exactByteRarity(ch));
-      }
-      lo = 128;
-    }
-    if (lo <= hi) {
-      // Non-ASCII code points have rarity rank 255, so weight is (256 - 255) = 1 per code point.
-      weight += hi - lo + 1;
+    for (int ch = lo; ch <= hi; ch++) {
+      weight += (256 - exactByteRarity(ch));
     }
     return weight;
   }

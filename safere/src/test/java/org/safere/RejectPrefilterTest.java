@@ -416,4 +416,20 @@ class RejectPrefilterTest {
     assertThat(prefilter.canReject(null, "a % b", 0, options)).isFalse();
     assertThat(prefilter.canReject(null, "a + b", 0, options)).isTrue();
   }
+
+  @Test
+  void nonAsciiCharClassRejectsUtf8OnlyFromStart() {
+    CharClassScanInfo scanInfo =
+        CharClassScanInfo.fromCharClass(
+            new CharClassBuilder().addRune(']').addRune('\uFF3D').build());
+    RejectPrefilter prefilter =
+        RejectPrefilter.create(new MultiAnchorDescriptor.RejectPlan.RequiredCharClass(scanInfo));
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    assertThat(prefilter.canReject(utf8Scanner("no brackets here"), 0, options)).isTrue();
+    assertThat(prefilter.canReject(utf8Scanner("has \uFF3D here"), 0, options)).isFalse();
+    // Non-ASCII UTF-8 class scans have no memo and use scalar decoding, so they only run once from
+    // index 0.
+    assertThat(prefilter.canReject(utf8Scanner("] tail without brackets"), 2, options)).isFalse();
+  }
 }
