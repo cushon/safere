@@ -247,5 +247,18 @@ class RarityOracleTest {
     assertThat(
             RarityOracle.charClassFrequencyScore(CharClassScanInfo.fromCharClass(purelyNonAscii)))
         .isZero();
+
+    // Two non-ASCII members are ignored; a third, or a large range, makes the class unscorable.
+    CharClass twoNonAscii =
+        new CharClassBuilder().addRune('[').addRune(0xFF3B).addRune(0xFF3D).build();
+    CharClass threeNonAscii =
+        new CharClassBuilder().addRune('[').addRune(0xFF3B).addRune(0xFF3D).addRune(0x3010).build();
+    CharClass cjkRange = new CharClassBuilder().addRune('-').addRange(0x4E00, 0x9FFF).build();
+    assertThat(RarityOracle.charClassFrequencyScore(twoNonAscii))
+        .isEqualTo(RarityOracle.charClassFrequencyScore(asciiBracket));
+    assertThat(RarityOracle.charClassFrequencyScore(threeNonAscii)).isZero();
+    assertThat(RarityOracle.charClassFrequencyScore(cjkRange)).isZero();
+    assertThat(RarityOracle.charClassFrequencyScore(CharClassScanInfo.fromCharClass(cjkRange)))
+        .isZero();
   }
 }

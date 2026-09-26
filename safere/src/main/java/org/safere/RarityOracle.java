@@ -344,30 +344,36 @@ final class RarityOracle {
   }
 
   /**
+   * The most non-ASCII members a class may have and still be scored by its ASCII members, matching
+   * the {@link CharClassScanInfo.UnicodeSmallSet} cap.
+   */
+  private static final int MAX_UNSCORED_NON_ASCII_MEMBERS = 2;
+
+  /**
    * Computes an empirical frequency score for the ASCII members of a character class (lower = rarer
-   * / more selective), or {@code 0} if the class has no ASCII members.
+   * / more selective), or {@code 0} if the class cannot be scored.
    *
    * <p>Each ASCII character's occurrence frequency is modeled as {@code 256 - exactByteRarity(c)},
    * so smaller and rarer character classes have lower scores and are preferred for whole-input
    * rejection. Non-ASCII code points are not scored because the byte-rarity table has no data
-   * beyond ASCII and non-ASCII frequency depends on document language: a mixed class such as {@code
-   * [\[\uFF3B]} is scored by its ASCII member {@code [}, while a purely non-ASCII class returns
-   * {@code 0} so callers fall back to rune count (see {@code MultiAnchorCompiler}).
+   * beyond ASCII and non-ASCII frequency depends on document language. A class with at most {@value
+   * #MAX_UNSCORED_NON_ASCII_MEMBERS} non-ASCII members, such as {@code [\[\uFF3B]}, is scored by
+   * its ASCII members alone. A class with no ASCII members or with more non-ASCII members, such as
+   * {@code [\-\u4E00-\u9FFF]}, returns {@code 0} so callers fall back to rune count (see {@code
+   * MultiAnchorCompiler}); scoring the latter as {@code -} would claim it is rare on text in the
+   * language it covers.
    */
   static long charClassFrequencyScore(CharClass cc) {
     if (cc == null || cc.isEmpty()) {
       return 0;
     }
-    long totalWeight = 0;
     int numRanges = cc.numRanges();
+    int[] ranges = new int[numRanges * 2];
     for (int i = 0; i < numRanges; i++) {
-      int lo = cc.lo(i);
-      if (lo >= 128) {
-        break;
-      }
-      totalWeight += asciiRangeFrequencyWeight(lo, Math.min(127, cc.hi(i)));
+      ranges[2 * i] = cc.lo(i);
+      ranges[2 * i + 1] = cc.hi(i);
     }
-    return totalWeight;
+    return asciiMemberScore(ranges);
   }
 
   /** Like {@link #charClassFrequencyScore(CharClass)}, for a compiled scan class. */
@@ -379,13 +385,25 @@ final class RarityOracle {
     if (ranges == null || ranges.length == 0) {
       return 0;
     }
+    return asciiMemberScore(ranges);
+  }
+
+  /** Scores sorted {@code [lo, hi]} pairs; see {@link #charClassFrequencyScore(CharClass)}. */
+  private static long asciiMemberScore(int[] ranges) {
     long totalWeight = 0;
+    long nonAsciiMembers = 0;
     for (int i = 0; i < ranges.length; i += 2) {
       int lo = ranges[i];
-      if (lo >= 128) {
-        break;
+      int hi = ranges[i + 1];
+      if (lo < 128) {
+        totalWeight += asciiRangeFrequencyWeight(lo, Math.min(127, hi));
       }
-      totalWeight += asciiRangeFrequencyWeight(lo, Math.min(127, ranges[i + 1]));
+      if (hi >= 128) {
+        nonAsciiMembers += hi - Math.max(128, lo) + 1L;
+        if (nonAsciiMembers > MAX_UNSCORED_NON_ASCII_MEMBERS) {
+          return 0;
+        }
+      }
     }
     return totalWeight;
   }

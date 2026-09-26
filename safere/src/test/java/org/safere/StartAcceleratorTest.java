@@ -437,6 +437,39 @@ class StartAcceleratorTest {
   }
 
   @Test
+  void twoMemberSmallSetCandidateAcrossProbeWindowEdge() {
+    StringStartAccelerator.CharClass accelerator =
+        StringStartAccelerator.CharClass.create(
+            CharClassScanInfo.fromCharClass(
+                new CharClassBuilder().addRune('[').addRune(0xFF3B).build()));
+    assertThat(accelerator.smallChars()).isNotNull();
+
+    for (char member : new char[] {'[', (char) 0xFF3B}) {
+      for (int from : new int[] {0, 5}) {
+        for (int offset = 6; offset <= 10; offset++) {
+          String text = "x".repeat(from + offset) + member + "x".repeat(12);
+          assertThat(accelerator.findCandidate(new StringInputScanner(text), from))
+              .as("member %s at %d from %d", member, from + offset, from)
+              .isEqualTo(from + offset);
+        }
+      }
+    }
+
+    // One scanner across increasing positions: the nearer member wins at each step, whichever
+    // side of the probe window it falls on, and the memo never hides a closer occurrence.
+    String fullWidth = String.valueOf((char) 0xFF3B);
+    String text = "xxx" + fullWidth + "x".repeat(20) + "[" + "xxxx" + fullWidth;
+    StringInputScanner shared = new StringInputScanner(text);
+    int from = 0;
+    for (int expected : new int[] {3, 24, 29}) {
+      int candidate = accelerator.findCandidate(shared, from);
+      assertThat(candidate).as("from %d", from).isEqualTo(expected);
+      from = candidate + 1;
+    }
+    assertThat(accelerator.findCandidate(shared, from)).isEqualTo(-1);
+  }
+
+  @Test
   void compiledPatternPoliciesMatchExpectedAccelerators() {
     Pattern literalPat = Pattern.compile("abc");
     assertThat(literalPat.stringStartAccelerator()).isNotNull();

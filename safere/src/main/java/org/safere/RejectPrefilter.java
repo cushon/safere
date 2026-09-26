@@ -145,16 +145,42 @@ sealed interface RejectPrefilter
   }
 
   @SuppressWarnings("ArrayRecordComponent")
-  record CharClass(int[] ranges, long bitmap0, long bitmap1, int singleAscii, char[] smallChars)
+  record CharClass(
+      int[] ranges,
+      long bitmap0,
+      long bitmap1,
+      int singleAscii,
+      char[] smallChars,
+      int[] nonAsciiRanges)
       implements RejectPrefilter {
 
+    /**
+     * Chars {@link #rejectsSmall} probes before the per-member searches, chosen on {@code
+     * citationScrubberFullWidth}, where the second member often occurs within a few chars of the
+     * search start while the first is absent.
+     */
+    private static final int REJECT_PROBE_CHARS = 16;
+
     static CharClass create(CharClassScanInfo scanInfo) {
+      char[] small = smallChars(scanInfo);
       return new CharClass(
           scanInfo.ranges(),
           scanInfo.bitmap0(),
           scanInfo.bitmap1(),
           singleAscii(scanInfo),
-          smallChars(scanInfo));
+          small,
+          nonAsciiRangesOfMixedPair(small));
+    }
+
+    /**
+     * Returns the range of the non-ASCII member of a small set with one ASCII and one non-ASCII
+     * member, such as {@code [\]\uFF3D]}, or {@code null} for every other class. Members are
+     * sorted, so the ASCII one comes first.
+     */
+    private static int[] nonAsciiRangesOfMixedPair(char[] small) {
+      return small != null && small.length == 2 && small[0] < 0x80 && small[1] >= 0x80
+          ? new int[] {small[1], small[1]}
+          : null;
     }
 
     /**
@@ -215,36 +241,29 @@ sealed interface RejectPrefilter
      * only for the nearer one, and rescanning for the farther one on every call is quadratic, so
      * later searches go through the scanner's memo. The first search, from the start of the input,
      * has nothing to reuse; it is also the only search a one-shot {@code replaceAll} or {@code
-     * find} on non-matching input makes, so it skips the memo.
+     * find} on non-matching input makes, so it skips the memo. Both are preceded by a short {@link
+     * StringInputScanner#probeEither probe}, so a member near {@code searchFrom} is found without
+     * searching the whole text for the other.
      */
     private boolean rejectsSmall(InputScanner scanner, String text, int searchFrom) {
       char c0 = smallChars[0];
+      if (!(scanner instanceof StringInputScanner s)) {
+        return text.indexOf(c0, searchFrom) < 0
+            && (smallChars.length == 1 || text.indexOf(smallChars[1], searchFrom) < 0);
+      }
       if (smallChars.length == 1) {
-        return scanner instanceof StringInputScanner s
-            ? s.indexOfChar(c0, searchFrom) < 0
-            : text.indexOf(c0, searchFrom) < 0;
+        return s.indexOfChar(c0, searchFrom) < 0;
       }
       char c1 = smallChars[1];
-      boolean memoize = searchFrom > 0;
-      if (!WorkCounterConfig.ENABLED) {
-        String str = text != null ? text : ((StringInputScanner) scanner).text();
-        int from = Math.max(0, searchFrom);
-        int limit = Math.min(str.length(), from + 16);
-        for (int i = from; i < limit; i++) {
-          char ch = str.charAt(i);
-          if (ch == c0 || ch == c1) {
-            return false;
-          }
-        }
-        searchFrom = limit;
+      int probe = s.probeEither(c0, c1, searchFrom, REJECT_PROBE_CHARS);
+      if (probe >= 0) {
+        return false;
       }
-      if (scanner instanceof StringInputScanner s) {
-        if (memoize) {
-          return s.memoizedIndexOf(c0, searchFrom) < 0 && s.memoizedIndexOf(c1, searchFrom) < 0;
-        }
-        return s.indexOfChar(c0, searchFrom) < 0 && s.indexOfChar(c1, searchFrom) < 0;
+      int rest = ~probe;
+      if (searchFrom > 0) {
+        return s.memoizedIndexOf(c0, rest) < 0 && s.memoizedIndexOf(c1, rest) < 0;
       }
-      return text.indexOf(c0, searchFrom) < 0 && text.indexOf(c1, searchFrom) < 0;
+      return s.indexOfChar(c0, rest) < 0 && s.indexOfChar(c1, rest) < 0;
     }
 
     private int indexOf(InputScanner scanner, int searchFrom, int limit) {
@@ -253,19 +272,27 @@ sealed interface RejectPrefilter
           : scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, limit);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>A class with a non-ASCII member is only checked from the start of the input. The UTF-8
+     * scanner has no memo, so repeating the check from every {@code find()} position would rescan
+     * the rest of the input each time.
+     *
+     * <p>A mixed pair such as {@code [\]\uFF3D]} is checked as two searches: the ASCII member with
+     * {@link Utf8InputScanner#indexOfAscii}, and the non-ASCII member with {@link
+     * Utf8InputScanner#indexOfNonAsciiClass}, which skips ASCII bytes eight at a time. The general
+     * {@link Utf8InputScanner#indexOfCodePointClass} would decode every code point instead.
+     */
     @Override
     public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
       if (!options.charClassMatchFastPaths()
           || (searchFrom > 0 && ranges[ranges.length - 1] >= 0x80)) {
         return false;
       }
-      if (!WorkCounterConfig.ENABLED
-          && smallChars != null
-          && smallChars.length == 2
-          && smallChars[0] < 0x80
-          && smallChars[1] >= 0x80) {
+      if (nonAsciiRanges != null) {
         return scanner.indexOfAscii(smallChars[0], searchFrom, scanner.length()) < 0
-            && scanner.indexOfCodePointClass(ranges, 0L, 0L, searchFrom, scanner.length()) < 0;
+            && scanner.indexOfNonAsciiClass(nonAsciiRanges, searchFrom, scanner.length()) < 0;
       }
       return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
           < 0;

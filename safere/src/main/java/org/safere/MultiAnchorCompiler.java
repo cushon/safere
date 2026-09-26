@@ -310,8 +310,9 @@ final class MultiAnchorCompiler {
   /**
    * Returns whether a class with the given frequency score and rune count is a better reject
    * candidate than the incumbent: rarer by {@link RarityOracle#charClassFrequencyScore} when both
-   * classes have ASCII members, or with fewer runes when the scores tie or either class is purely
-   * non-ASCII.
+   * classes can be scored, or with fewer runes when the scores tie or either class scores {@code 0}
+   * (no ASCII members, or too many non-ASCII members to ignore). An empty class also scores {@code
+   * 0} and has no runes, so it wins, which is harmless: it rejects every input, as it should.
    */
   private static boolean moreSelective(
       long candidateScore, int candidateRunes, long incumbentScore, int incumbentRunes) {
@@ -360,16 +361,8 @@ final class MultiAnchorCompiler {
   /**
    * Returns the character class the start accelerator will scan for, or {@code null} if the start
    * plan is not class-driven. A required class from reject analysis is only worth scanning for
-   * separately if it is narrower than this one.
-   *
-   * <p>A leading expansion returns {@code null}, so its required class is always kept as a reject
-   * prefilter, even when it is the class the inner accelerator scans for. The prefilter fails the
-   * whole call on input without the class before any per-call setup, including once up front in
-   * {@code replaceAll}, whereas the leading-expansion accelerator only gets there through its own
-   * candidate loop. On {@code UnicodePrefixBenchmark.cjk.absent}, a CJK-range prefix followed by
-   * {@code \d+} measured 2.8x faster with the {@code [0-9]} prefilter than without it, and no
-   * benchmark trial was slower. When the input does contain a two-member small-set class, the
-   * scanner memo lets the accelerator reuse the prefilter's search.
+   * separately if it is narrower than this one. See {@link #leadingExpansionDrivingClass} for
+   * leading expansions.
    */
   private static CharClassScanInfo drivingCharClass(StartPlan plan) {
     if (plan == null) {
@@ -379,16 +372,40 @@ final class MultiAnchorCompiler {
       case StartPlan.CharClass cc -> cc.scanInfo();
       case StartPlan.FixedOffset fo -> fo.leadingClass();
       case StartPlan.MultiLiteral ml -> ml.fallbackClass();
-      case StartPlan.LeadingExpansion le ->
-          le.leadingClass().isAscii()
-                  && le.innerPlan() instanceof StartPlan.CharClass cc
-                  && !cc.scanInfo().isSelective()
-              ? cc.scanInfo()
-              : null;
+      case StartPlan.LeadingExpansion le -> leadingExpansionDrivingClass(le);
       case StartPlan.Literal unusedLit -> null;
       case StartPlan.LineAnchor unusedLa -> null;
       case StartPlan.None unusedNone -> null;
     };
+  }
+
+  /**
+   * Returns the driving class of a leading expansion for reject-plan selection.
+   *
+   * <p>Usually {@code null}, so the expansion's required class is kept as a reject prefilter even
+   * when it is the class the inner accelerator scans for. The prefilter fails the whole call on
+   * input without the class before any per-call setup, including once up front in {@code
+   * replaceAll}, whereas the leading-expansion accelerator only gets there through its own
+   * candidate loop. On {@code UnicodePrefixBenchmark.cjk.absent}, {@code [\u4E00-\u9FFF]+\d+}
+   * measured 2.8x faster with the {@code [0-9]} prefilter than without it. When the input does
+   * contain a two-member small-set class, the scanner memo lets the accelerator reuse the
+   * prefilter's search.
+   *
+   * <p>The exception is an ASCII leading class in front of a non-selective inner class, such as
+   * {@code \d} in {@code [A-Za-z]+\d+}. Such a class occurs in almost any input, so the prefilter
+   * rarely rejects, and the accelerator already scans for it with an ASCII kernel; keeping the
+   * prefilter made {@code MatcherApiBenchmark.resetAndFind@safere-utf8} 1.09x slower on aarch64.
+   * Returning the inner class lets {@code extractRejectPlan} drop a required class that is no
+   * narrower. A non-ASCII leading class keeps the prefilter, because there the prefilter's ASCII
+   * scan is what makes non-matching input cheap.
+   */
+  private static CharClassScanInfo leadingExpansionDrivingClass(StartPlan.LeadingExpansion le) {
+    if (le.leadingClass().isAscii()
+        && le.innerPlan() instanceof StartPlan.CharClass inner
+        && !inner.scanInfo().isSelective()) {
+      return inner.scanInfo();
+    }
+    return null;
   }
 
   /** Returns whether the start plan scans for a literal at the match start. */

@@ -50,6 +50,35 @@ final class StringInputScanner implements InputScanner {
   }
 
   /**
+   * Scans at most {@code window} chars from {@code fromIndex} for {@code c0} or {@code c1}. Returns
+   * the index of the first one found, or {@code ~end} if neither occurs before {@code end}, the
+   * position where the probe stopped. Charges the work counter for the span scanned.
+   *
+   * <p>Callers run this before the per-member {@code indexOf} searches for a two-member set. When
+   * one member is close and the other is absent, the probe answers without searching the rest of
+   * the text for the absent member. The window is a small constant, so it adds constant work per
+   * call and does not affect linearity.
+   */
+  int probeEither(char c0, char c1, int fromIndex, int window) {
+    int from = Math.max(0, fromIndex);
+    int length = text.length();
+    int end = from < length - window ? from + window : Math.max(from, length);
+    for (int i = from; i < end; i++) {
+      char ch = text.charAt(i);
+      if (ch == c0 || ch == c1) {
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(i + 1 - from);
+        }
+        return i;
+      }
+    }
+    if (WorkCounterConfig.ENABLED) {
+      WorkCounter.record(end - from);
+    }
+    return ~end;
+  }
+
+  /**
    * Returns {@code text.indexOf(c, fromIndex)}, reusing an earlier answer for {@code c} when it
    * still applies.
    *
