@@ -18,6 +18,37 @@ public final class SplitFuzzer {
   private static final List<Integer> LARGE_POSITIVE_LIMITS =
       List.of(Integer.MAX_VALUE, Integer.MAX_VALUE / 2 + 1);
 
+  private record CodePointRange(int first, int last) {}
+
+  private static final List<CodePointRange> UNASSIGNED_GRAPHEME_CONTROLS =
+      List.of(
+          new CodePointRange(0x2065, 0x2065),
+          new CodePointRange(0xFFF0, 0xFFF8),
+          new CodePointRange(0xE0000, 0xE0000),
+          new CodePointRange(0xE0002, 0xE001F),
+          new CodePointRange(0xE0080, 0xE00FF),
+          new CodePointRange(0xE01F0, 0xE0FFF));
+
+  @FuzzTest(maxDuration = "30s")
+  void unassignedControlSplits(FuzzedDataProvider data) {
+    // Exercise GB4/GB5 around unassigned default-ignorable controls, including supplementary ones.
+    // Ordinary unassigned Other code points intentionally differ from the JDK; see #925.
+    CodePointRange range = data.pickValue(UNASSIGNED_GRAPHEME_CONTROLS);
+    String control = new String(Character.toChars(data.consumeInt(range.first(), range.last())));
+    String prefix = data.pickValue(List.of("", "a", "\u0600"));
+    String suffix = data.pickValue(List.of("\u07EF", "\u0301", "\u200D"));
+    String input =
+        (prefix + control + suffix.repeat(data.consumeInt(1, 4))).repeat(data.consumeInt(1, 4));
+    String regex = data.pickValue(List.of("\\X", "(\\X)", "\\b{g}"));
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, 0);
+    if (pattern == null) {
+      return;
+    }
+    int limit = data.consumeInt(-1, 8);
+    pattern.split(input, limit);
+    pattern.splitWithDelimiters(input, limit);
+  }
+
   // Exercise cache reuse where a delimiter is also a member of the preceding repeated class.
   @FuzzTest(maxDuration = "30s")
   void repeatedClassSplits(FuzzedDataProvider data) {
