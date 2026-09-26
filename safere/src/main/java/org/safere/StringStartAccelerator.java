@@ -376,6 +376,13 @@ sealed interface StringStartAccelerator {
   record CharClass(CharClassScanInfo scanInfo, boolean[] asciiTable, char[] smallChars)
       implements StringStartAccelerator {
 
+    /**
+     * Chars {@link #findCandidateSmall} probes before the per-member searches, chosen on {@code
+     * citationScrubberFullWidth} and {@code versionList.match}, where a member usually occurs
+     * within a few chars of the search start.
+     */
+    private static final int CANDIDATE_PROBE_CHARS = 8;
+
     static CharClass create(CharClassScanInfo scanInfo) {
       char[] small = null;
       if (scanInfo instanceof CharClassScanInfo.SmallSet ss
@@ -402,8 +409,9 @@ sealed interface StringStartAccelerator {
     /**
      * Searches for the first of one or two chars with the {@code String.indexOf} intrinsic, one
      * member at a time. A single member cannot be rescanned: each call resumes past the occurrence
-     * the previous call returned. With two, the farther member's occurrence would be rescanned on
-     * every call, so those searches go through the scanner's memo; see {@link
+     * the previous call returned. With two, a short {@link StringInputScanner#probeEither probe}
+     * finds a nearby member first, and the farther member's occurrence would otherwise be rescanned
+     * on every call, so the per-member searches go through the scanner's memo; see {@link
      * StringInputScanner#memoizedIndexOf}.
      */
     private int findCandidateSmall(StringInputScanner scanner, int fromIndex) {
@@ -412,20 +420,13 @@ sealed interface StringStartAccelerator {
       }
       char c0 = smallChars[0];
       char c1 = smallChars[1];
-      if (!WorkCounterConfig.ENABLED) {
-        String text = scanner.text();
-        int from = Math.max(0, fromIndex);
-        int limit = Math.min(text.length(), from + 8);
-        for (int i = from; i < limit; i++) {
-          char ch = text.charAt(i);
-          if (ch == c0 || ch == c1) {
-            return i;
-          }
-        }
-        fromIndex = limit;
+      int probe = scanner.probeEither(c0, c1, fromIndex, CANDIDATE_PROBE_CHARS);
+      if (probe >= 0) {
+        return probe;
       }
-      int first = scanner.memoizedIndexOf(c0, fromIndex);
-      int second = scanner.memoizedIndexOf(c1, fromIndex);
+      int rest = ~probe;
+      int first = scanner.memoizedIndexOf(c0, rest);
+      int second = scanner.memoizedIndexOf(c1, rest);
       if (first < 0) {
         return second;
       }

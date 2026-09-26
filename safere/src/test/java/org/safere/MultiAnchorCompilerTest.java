@@ -621,6 +621,14 @@ class MultiAnchorCompilerTest {
     RejectPlan.RequiredCharClass singleNonAsciiReject =
         (RejectPlan.RequiredCharClass) singleNonAsciiVsDigits.rejectPlan();
     assertThat(singleNonAsciiReject.scanInfo().ranges()).containsExactly(0xFF3B, 0xFF3B);
+
+    // A mixed class with a large non-ASCII range is not scored by its ASCII member, so it does not
+    // claim to be rarer than a digit on text in the language it covers.
+    Pattern digitsThenCjk = Pattern.compile("\\d+[\\-\u4E00-\u9FFF]+");
+    assertThat(digitsThenCjk.rejectPlan()).isInstanceOf(RejectPlan.RequiredCharClass.class);
+    RejectPlan.RequiredCharClass digitsReject =
+        (RejectPlan.RequiredCharClass) digitsThenCjk.rejectPlan();
+    assertThat(digitsReject.scanInfo().ranges()).containsExactly('0', '9');
   }
 
   /**
