@@ -1,4 +1,4 @@
-# SafeRE
+<img src="assets/safere-logo-compact.png" alt="SafeRE logo" width="400">
 
 A linear-time regular expression matching library for Java.
 
