@@ -969,6 +969,8 @@ final class FuzzSupport {
     return hasLookaround(regex)
         || hasBackreference(regex)
         || hasPossessiveQuantifier(regex)
+        || hasAtomicGroup(regex)
+        || hasPreviousMatchAnchor(regex, safeReException)
         || isOverCompilerBudget(safeReException)
         || isIntentionalCharacterClassIntersectionForTesting(safeReException);
   }
@@ -1010,6 +1012,17 @@ final class FuzzSupport {
 
   private static boolean isPossessiveQuantifierPrefix(char c) {
     return c == '?' || c == '*' || c == '+' || c == '}';
+  }
+
+  private static boolean hasAtomicGroup(String regex) {
+    return regex.contains("(?>");
+  }
+
+  private static boolean hasPreviousMatchAnchor(
+      String regex, PatternSyntaxException safeReException) {
+    return regex.contains("\\G")
+        || Objects.equals(
+            safeReException.getDescription(), "\\G (end of previous match) is not supported");
   }
 
   static int consumeIndex(FuzzedDataProvider data, String input) {
