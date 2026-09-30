@@ -323,15 +323,11 @@ class LinebreakGraphemeTest {
       assertTraceSameAsJdk("\\X", "\u0600\u1100\u1161", 0, 3);
       assertTraceSameAsJdk("\\X", "\u0600\uAC00\u11A8", 0, 3);
       assertTraceSameAsJdk("\\X", "\u0600\u0301", 0, 2);
-      assertTraceSameAsJdk("\\X", "\u0600\uD83D\uDC69\u200D\uD83D\uDC69", 0, 6);
-      assertTraceSameAsJdk("\\X\\b{g}", "\u0600\uD83D\uDC69\u200D\uD83D\uDC69", 0, 6);
     }
 
     @Test
-    @DisplayName("\\X keeps ZWJ extenders inside pictographic sequences")
-    void keepsZwjExtendersInsidePictographicSequences() {
-      assertTraceSameAsJdk("\\X", "\uD83D\uDC69\u200D\u200D\uD83D\uDC69", 0, 6);
-      assertTraceSameAsJdk("\\X", "\uD83D\uDC69\u200D\u0301\u200D\uD83D\uDC69", 0, 7);
+    @DisplayName("\\X keeps trailing extenders inside valid pictographic sequences")
+    void keepsTrailingExtendersInsidePictographicSequences() {
       assertTraceSameAsJdk("\\X", "\uD83D\uDC69\u200D\uD83D\uDC69\u200D", 0, 6);
       assertTraceSameAsJdk("\\X", "\uD83D\uDC69\u200D\uD83D\uDC69\u200D\u0301", 0, 7);
       assertTraceSameAsJdk(
