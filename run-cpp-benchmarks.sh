@@ -10,6 +10,8 @@
 #   ./run-cpp-benchmarks.sh --engine pcre2-jit RegexBenchmark
 #
 # Prerequisites: CMake >= 3.15, C++17 compiler.
+# Set SAFERE_CPP_UPDATES_DISCONNECTED=OFF once after changing a dependency tag
+# to fetch revisions that are not yet available in the existing build directory.
 
 set -euo pipefail
 
@@ -41,7 +43,10 @@ echo "=== Materializing shared benchmark inputs ==="
 
 echo "=== Building native C++ regex benchmarks ==="
 mkdir -p "$BUILD_DIR"
-cmake -S "$CPP_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -Wno-dev 2>&1 | tail -3
+# Reuse already fetched revisions without checking the network for updates.
+# Missing dependencies are still downloaded on a fresh build.
+cmake -S "$CPP_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release \
+  -DFETCHCONTENT_UPDATES_DISCONNECTED="${SAFERE_CPP_UPDATES_DISCONNECTED:-ON}" -Wno-dev 2>&1 | tail -3
 cmake --build "$BUILD_DIR" -j8 2>&1 | tail -3
 
 if [ "$ENGINE" = "all" ] || [ "$ENGINE" = "re2" ]; then
