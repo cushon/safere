@@ -186,6 +186,10 @@ final class FuzzSupport {
 
     void split(CharSequence input) {
       String inputText = input.toString();
+      if (hasUnassignedGraphemeDivergence(regex, input)) {
+        safeRePattern.split(input);
+        return;
+      }
       JdkOracleResult<String[]> jdk =
           runJdkOracle("split", () -> jdkPattern.split(interruptible(input)));
       if (!jdk.available()) {
@@ -196,6 +200,10 @@ final class FuzzSupport {
 
     void split(CharSequence input, int limit) {
       String inputText = input.toString();
+      if (hasUnassignedGraphemeDivergence(regex, input)) {
+        safeRePattern.split(input, limit);
+        return;
+      }
       JdkOracleResult<String[]> jdk =
           runJdkOracle("split(" + limit + ")", () -> jdkPattern.split(interruptible(input), limit));
       if (!jdk.available()) {
@@ -207,6 +215,10 @@ final class FuzzSupport {
 
     void splitWithDelimiters(CharSequence input) {
       String inputText = input.toString();
+      if (hasUnassignedGraphemeDivergence(regex, input)) {
+        safeRePattern.splitWithDelimiters(input);
+        return;
+      }
       JdkOracleResult<String[]> jdk =
           runJdkOracle(
               "splitWithDelimiters", () -> jdkPattern.splitWithDelimiters(interruptible(input), 0));
@@ -219,6 +231,10 @@ final class FuzzSupport {
 
     void splitWithDelimiters(CharSequence input, int limit) {
       String inputText = input.toString();
+      if (hasUnassignedGraphemeDivergence(regex, input)) {
+        safeRePattern.splitWithDelimiters(input, limit);
+        return;
+      }
       JdkOracleResult<String[]> jdk =
           runJdkOracle(
               "splitWithDelimiters(" + limit + ")",
@@ -275,6 +291,9 @@ final class FuzzSupport {
       this.jdkMatcher = jdkMatcher;
       this.quantifiedGroups =
           org.safere.FuzzCaptureStructure.quantifiedGroups(safeReMatcher.pattern());
+      if (hasUnassignedGraphemeDivergence(regex, input)) {
+        this.jdkOracleAvailable = false;
+      }
     }
 
     boolean matches() {
@@ -327,6 +346,11 @@ final class FuzzSupport {
     MatcherPair reset(CharSequence input) {
       this.input = input.toString();
       this.lastReplacement = null;
+      // Never re-enable the oracle: JDK configuration calls skipped while it was unavailable would
+      // leave the two matchers out of sync.
+      if (hasUnassignedGraphemeDivergence(regex, input)) {
+        this.jdkOracleAvailable = false;
+      }
       safeReMatcher.reset(input);
       runJdkOracle("reset(input)", null, () -> jdkMatcher.reset(interruptible(input)));
       return this;
@@ -1023,6 +1047,59 @@ final class FuzzSupport {
     return regex.contains("\\G")
         || Objects.equals(
             safeReException.getDescription(), "\\G (end of previous match) is not supported");
+  }
+
+  private static final java.util.regex.Pattern JDK_GRAPHEME_BOUNDARY =
+      java.util.regex.Pattern.compile("\\b{g}");
+
+  /**
+   * Returns whether JDK grapheme segmentation is expected to diverge from SafeRE because of the
+   * JDK's handling of unassigned code points (#925, b/564599082, b/568211495).
+   *
+   * <p>OpenJDK's {@code jdk.internal.util.regex.Grapheme.getType} classifies unassigned code points
+   * other than U+0378 as {@code Control}, so it breaks around them under GB4/GB5. UAX #29 gives
+   * unassigned code points that are not default-ignorable {@code Grapheme_Cluster_Break=Other}, so
+   * they join a following {@code Extend}, {@code ZWJ}, or {@code SpacingMark} (GB9, GB9a) and a
+   * preceding {@code Prepend} (GB9b), as SafeRE does.
+   *
+   * <p>Rather than duplicating the Unicode property tables here, this compares SafeRE's boundaries
+   * with the JDK's {@code \b{g}} boundaries directly, and waives only when they differ and every
+   * difference is adjacent to a code point that the JDK considers unassigned. Other grapheme
+   * divergences, such as GB11 (#936) or Ahom (#940), are not waived by this check.
+   *
+   * <p>The pattern check is a conservative substring test; false positives only cost one boundary
+   * comparison.
+   */
+  static boolean hasUnassignedGraphemeDivergence(String regex, CharSequence input) {
+    if (!regex.contains("\\X") && !regex.contains("\\b{g}")) {
+      return false;
+    }
+    String text = input.toString();
+    BitSet jdkBoundaries = new BitSet(text.length() + 1);
+    java.util.regex.Matcher jdk = JDK_GRAPHEME_BOUNDARY.matcher(text);
+    while (jdk.find()) {
+      jdkBoundaries.set(jdk.start());
+    }
+    boolean differs = false;
+    for (int pos = 1; pos < text.length(); pos++) {
+      if (Character.isHighSurrogate(text.charAt(pos - 1))
+          && Character.isLowSurrogate(text.charAt(pos))) {
+        continue;
+      }
+      if (org.safere.FuzzGraphemeBoundaries.isBoundary(text, pos) == jdkBoundaries.get(pos)) {
+        continue;
+      }
+      if (!isJdkUnassignedGraphemeControl(Character.codePointBefore(text, pos))
+          && !isJdkUnassignedGraphemeControl(Character.codePointAt(text, pos))) {
+        return false;
+      }
+      differs = true;
+    }
+    return differs;
+  }
+
+  private static boolean isJdkUnassignedGraphemeControl(int codePoint) {
+    return codePoint != 0x0378 && Character.getType(codePoint) == Character.UNASSIGNED;
   }
 
   static int consumeIndex(FuzzedDataProvider data, String input) {
