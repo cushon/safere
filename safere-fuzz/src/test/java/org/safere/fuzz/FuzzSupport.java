@@ -186,7 +186,7 @@ final class FuzzSupport {
 
     void split(CharSequence input) {
       String inputText = input.toString();
-      if (hasUnassignedGraphemeDivergence(regex, input)) {
+      if (hasUnassignedGraphemeDivergence(safeRePattern, input)) {
         safeRePattern.split(input);
         return;
       }
@@ -200,7 +200,7 @@ final class FuzzSupport {
 
     void split(CharSequence input, int limit) {
       String inputText = input.toString();
-      if (hasUnassignedGraphemeDivergence(regex, input)) {
+      if (hasUnassignedGraphemeDivergence(safeRePattern, input)) {
         safeRePattern.split(input, limit);
         return;
       }
@@ -215,7 +215,7 @@ final class FuzzSupport {
 
     void splitWithDelimiters(CharSequence input) {
       String inputText = input.toString();
-      if (hasUnassignedGraphemeDivergence(regex, input)) {
+      if (hasUnassignedGraphemeDivergence(safeRePattern, input)) {
         safeRePattern.splitWithDelimiters(input);
         return;
       }
@@ -231,7 +231,7 @@ final class FuzzSupport {
 
     void splitWithDelimiters(CharSequence input, int limit) {
       String inputText = input.toString();
-      if (hasUnassignedGraphemeDivergence(regex, input)) {
+      if (hasUnassignedGraphemeDivergence(safeRePattern, input)) {
         safeRePattern.splitWithDelimiters(input, limit);
         return;
       }
@@ -291,7 +291,7 @@ final class FuzzSupport {
       this.jdkMatcher = jdkMatcher;
       this.quantifiedGroups =
           org.safere.FuzzCaptureStructure.quantifiedGroups(safeReMatcher.pattern());
-      if (hasUnassignedGraphemeDivergence(regex, input)) {
+      if (hasUnassignedGraphemeDivergence(safeReMatcher.pattern(), input)) {
         this.jdkOracleAvailable = false;
       }
     }
@@ -348,7 +348,7 @@ final class FuzzSupport {
       this.lastReplacement = null;
       // Never re-enable the oracle: JDK configuration calls skipped while it was unavailable would
       // leave the two matchers out of sync.
-      if (hasUnassignedGraphemeDivergence(regex, input)) {
+      if (hasUnassignedGraphemeDivergence(safeReMatcher.pattern(), input)) {
         this.jdkOracleAvailable = false;
       }
       safeReMatcher.reset(input);
@@ -1067,11 +1067,11 @@ final class FuzzSupport {
    * difference is adjacent to a code point that the JDK considers unassigned. Other grapheme
    * divergences, such as GB11 (#936) or Ahom (#940), are not waived by this check.
    *
-   * <p>The pattern check is a conservative substring test; false positives only cost one boundary
-   * comparison.
+   * <p>Eligibility comes from the compiled program, so literal, quoted, escaped, and commented
+   * spellings do not disable comparisons. SafeRE boundary probes share one per-input context.
    */
-  static boolean hasUnassignedGraphemeDivergence(String regex, CharSequence input) {
-    if (!regex.contains("\\X") && !regex.contains("\\b{g}")) {
+  static boolean hasUnassignedGraphemeDivergence(org.safere.Pattern pattern, CharSequence input) {
+    if (!org.safere.FuzzGraphemeBoundaries.hasGraphemeSemantics(pattern)) {
       return false;
     }
     String text = input.toString();
@@ -1080,13 +1080,14 @@ final class FuzzSupport {
     while (jdk.find()) {
       jdkBoundaries.set(jdk.start());
     }
+    BitSet safeReBoundaries = org.safere.FuzzGraphemeBoundaries.boundaries(text);
     boolean differs = false;
     for (int pos = 1; pos < text.length(); pos++) {
       if (Character.isHighSurrogate(text.charAt(pos - 1))
           && Character.isLowSurrogate(text.charAt(pos))) {
         continue;
       }
-      if (org.safere.FuzzGraphemeBoundaries.isBoundary(text, pos) == jdkBoundaries.get(pos)) {
+      if (safeReBoundaries.get(pos) == jdkBoundaries.get(pos)) {
         continue;
       }
       if (!isJdkUnassignedGraphemeControl(Character.codePointBefore(text, pos))
