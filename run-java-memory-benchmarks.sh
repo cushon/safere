@@ -36,6 +36,8 @@ SMOKE_OPTS="-f 0 -wi 1 -w 1 -i 1 -r 1"
 # Parse mode flag.
 MODE="publish"
 DECLARED=false
+SCAN_PROVIDER="default"
+PROVIDER_SELECTED=false
 if [ "${1:-}" = "--quick" ]; then
   MODE="quick"
   shift
@@ -50,6 +52,15 @@ CROSS_ENGINE_PREFIXES=()
 CROSS_ENGINE_SCALING_PREFIXES=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --provider)
+      if [ "$#" -lt 2 ] || [[ ! "$2" =~ ^(default|vector)$ ]]; then
+        echo "ERROR: --provider requires default or vector" >&2
+        exit 2
+      fi
+      SCAN_PROVIDER="$2"
+      PROVIDER_SELECTED=true
+      shift 2
+      ;;
     --declared)
       DECLARED=true
       shift
@@ -74,6 +85,34 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Normalize attached JMH parameter forms so selection and rejection use one syntax.
+# Keep profiler options intact; -prof=gc is not a parameter override.
+NORMALIZED_JMH_ARGS=()
+for argument in ${JMH_EXTRA_ARGS[@]+"${JMH_EXTRA_ARGS[@]}"}; do
+  case "$argument" in
+    -prof*) NORMALIZED_JMH_ARGS+=("$argument") ;;
+    -p=*|-p?*=*)
+      parameter_override="${argument#-p}"
+      NORMALIZED_JMH_ARGS+=(-p "${parameter_override#=}")
+      ;;
+    *) NORMALIZED_JMH_ARGS+=("$argument") ;;
+  esac
+done
+JMH_EXTRA_ARGS=(${NORMALIZED_JMH_ARGS[@]+"${NORMALIZED_JMH_ARGS[@]}"})
+
+# Declared trials are already partitioned by provider. JMH combines repeated
+# parameter values, so an override could put a default trial in a Vector JVM.
+if [ "$DECLARED" = true ]; then
+  for argument in ${JMH_EXTRA_ARGS[@]+"${JMH_EXTRA_ARGS[@]}"}; do
+    case "$argument" in
+      -p|-p=*)
+        echo "ERROR: --declared cannot be combined with JMH -p overrides; use a focused run without --declared" >&2
+        exit 2
+        ;;
+    esac
+  done
+fi
+
 if [ "$MODE" = "smoke" ]; then
   JMH_OPTS="$SMOKE_OPTS"
   echo "=== Smoke-test mode (CI only) ==="
@@ -92,14 +131,23 @@ mvn install -DskipTests -q -f "$SCRIPT_DIR/pom.xml"
 echo "=== Materializing shared benchmark inputs ==="
 "$SCRIPT_DIR/materialize-benchmark-inputs.sh" --no-build
 
-# JVM args for FFM native access, native library path, and the resolved corpus.
-JVM_ARGS="--enable-native-access=ALL-UNNAMED -Dre2shim.library.path=$RE2_SHIM_DIR -Dsafere.benchmark.corpus=$BENCHMARK_CORPUS"
+# Keep provider selection identical in launcher and measurement forks.
+BASE_JVM_ARGS="--enable-native-access=ALL-UNNAMED -Dre2shim.library.path=$RE2_SHIM_DIR -Dsafere.benchmark.corpus=$BENCHMARK_CORPUS"
+select_scan_provider() {
+  local provider="$1"
+  JVM_ARGS="$BASE_JVM_ARGS -Dsafere.benchmark.scanProvider=$provider"
+  if [ "$provider" = "vector" ]; then
+    JVM_ARGS="$JVM_ARGS --add-modules=jdk.incubator.vector -Dorg.safere.experimental.vectorScanProvider=vector"
+  fi
+  java $JVM_ARGS -cp "$BENCHMARK_JAR" org.safere.benchmark.BenchmarkProviderCheck
+}
+select_scan_provider "$SCAN_PROVIDER"
 GENERATED_JMH_ARGUMENT_FILE="$(mktemp "${TMPDIR:-/tmp}/safere-memory-jmh-args.XXXXXX")"
 trap 'rm -f -- "$GENERATED_JMH_ARGUMENT_FILE"' EXIT
 
 # Output/profiler options do not change workload selection; explicit parameters do.
 has_parameter_override=false
-for argument in "${JMH_EXTRA_ARGS[@]}"; do
+for argument in ${JMH_EXTRA_ARGS[@]+"${JMH_EXTRA_ARGS[@]}"}; do
   if [ "$argument" = "-p" ]; then
     has_parameter_override=true
   fi
@@ -114,12 +162,15 @@ if [ ${#BENCHMARKS[@]} -eq 0 ] && [ "$has_parameter_override" = false ] \
 fi
 
 if [ "$DECLARED" = true ]; then
-  COLLECTION_QUERY=(allocation-runners)
+  COLLECTION_QUERY=(allocation-execution-runners)
   if [ "$MODE" = "smoke" ]; then
     COLLECTION_QUERY+=(--smoke)
   fi
   matched_runner=false
-  while IFS=$'\t' read -r profile benchmark parameter trial_ids; do
+  while IFS=$'\t' read -r profile benchmark parameter trial_ids provider; do
+    if [ "$PROVIDER_SELECTED" = true ] && [ "$provider" != "$SCAN_PROVIDER" ]; then
+      continue
+    fi
     if [ ${#BENCHMARKS[@]} -gt 0 ]; then
       matches_filter=false
       for filter in "${BENCHMARKS[@]}"; do
@@ -133,12 +184,16 @@ if [ "$DECLARED" = true ]; then
       fi
     fi
     matched_runner=true
+    select_scan_provider "$provider"
     echo "=== Running declared allocation trials for $benchmark ==="
+    DECLARED_ARGUMENT_QUERY=(declared-runner-arguments allocation-runners "$benchmark" "$BENCHMARK_JAR")
+    if [ "$MODE" = "smoke" ]; then
+      DECLARED_ARGUMENT_QUERY+=(--smoke)
+    fi
     java $JVM_ARGS \
       -cp "$BENCHMARK_JAR" \
       org.safere.benchmark.BenchmarkCollectionPlan \
-      declared-runner-arguments allocation-runners "$benchmark" "$BENCHMARK_JAR" \
-      "${COLLECTION_QUERY[@]:1}" \
+      "${DECLARED_ARGUMENT_QUERY[@]}" \
       > "$GENERATED_JMH_ARGUMENT_FILE"
     RUNNER_COMMAND=(java \
       $JVM_ARGS \
@@ -147,12 +202,12 @@ if [ "$DECLARED" = true ]; then
       -prof gc \
       $JMH_OPTS)
     if [ ${#JMH_EXTRA_ARGS[@]} -gt 0 ]; then
-      RUNNER_COMMAND+=("${JMH_EXTRA_ARGS[@]}")
+      RUNNER_COMMAND+=(${JMH_EXTRA_ARGS[@]+"${JMH_EXTRA_ARGS[@]}"})
     fi
     RUNNER_COMMAND+=("^${benchmark//./\\.}$")
     "${RUNNER_COMMAND[@]}"
   done < <(
-    java $JVM_ARGS \
+    java $BASE_JVM_ARGS \
       -cp "$BENCHMARK_JAR" \
       org.safere.benchmark.BenchmarkCollectionPlan \
       "${COLLECTION_QUERY[@]}"
@@ -225,6 +280,6 @@ for bench in "${BENCHMARKS[@]}"; do
     -jvmArgs "$JVM_ARGS" \
     -prof gc \
     $JMH_OPTS \
-    "${JMH_EXTRA_ARGS[@]}" \
+    ${JMH_EXTRA_ARGS[@]+"${JMH_EXTRA_ARGS[@]}"} \
     "$bench"
 done
