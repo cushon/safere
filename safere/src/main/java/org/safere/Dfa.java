@@ -285,7 +285,10 @@ final class Dfa {
   /** Whether a search has established {@link #progressAnchor}. */
   private boolean hasProgressAnchor;
 
-  /** Whether the most recent search on this DFA exited because {@link #resetCache} refused. */
+  /**
+   * Whether the most recent search on this DFA returned null because the state budget was
+   * exhausted. Every null search result sets this; see {@link #lastSearchBailed()}.
+   */
   private boolean lastSearchBailed;
 
   /**
@@ -867,10 +870,14 @@ final class Dfa {
    */
   private State startStateOrReset(InputScanner text, int pos, boolean anchored, boolean reverse) {
     State s = startState(text, pos, anchored, reverse);
-    if (s == null && resetCache(pos)) {
-      s = startState(text, pos, anchored, reverse);
+    if (s != null) {
+      return s;
     }
-    return s;
+    if (!resetCache(pos)) {
+      return null;
+    }
+    s = startState(text, pos, anchored, reverse);
+    return s == null ? budgetExhaustedAfterReset() : s;
   }
 
   /**
@@ -928,6 +935,30 @@ final class Dfa {
   }
 
   /**
+   * Records that a freshly reset cache still could not hold the states the search needs, and
+   * returns null so the caller abandons the DFA. This only happens with budgets of a few states; it
+   * is still budget exhaustion, so it must set {@link #lastSearchBailed} like a refused reset.
+   */
+  private State budgetExhaustedAfterReset() {
+    lastSearchBailed = true;
+    return null;
+  }
+
+  /**
+   * Returns whether the most recent search on this DFA returned null because the state budget was
+   * exhausted: the cache was full and {@link #resetCache} refused to clear it, or the freshly
+   * cleared cache still could not hold the states the search needed.
+   *
+   * <p>Every null result from {@link #doSearch}, {@link #doSearchReverse}, and {@link
+   * #doSearchMany} sets this, which is what lets callers report a null result as {@link
+   * StrategyReason#DFA_BUDGET_EXCEEDED}. A new way for a search to return null for any other reason
+   * must not set it, and needs its own {@link StrategyReason}.
+   */
+  boolean lastSearchBailed() {
+    return lastSearchBailed;
+  }
+
+  /**
    * Re-creates {@code s} in a freshly reset cache. The result is a distinct object with a different
    * id, so callers must adopt it in place of {@code s}.
    */
@@ -958,7 +989,8 @@ final class Dfa {
       return null;
     }
     State recreated = recreateAfterReset(s);
-    return recreated == null ? null : computeNext(recreated, cp, text, nextPos);
+    State next = recreated == null ? null : computeNext(recreated, cp, text, nextPos);
+    return next == null ? budgetExhaustedAfterReset() : next;
   }
 
   /**
@@ -975,11 +1007,11 @@ final class Dfa {
       }
       s = recreateAfterReset(s);
       if (s == null) {
-        return null;
+        return budgetExhaustedAfterReset();
       }
       ns = computeNext(s, cp, text, nextPos);
       if (ns == null) {
-        return null;
+        return budgetExhaustedAfterReset();
       }
     }
     addTransition(s, cls, ns);
@@ -2478,11 +2510,13 @@ final class Dfa {
             }
             s = recreateAfterReset(s);
             if (s == null) {
+              budgetExhaustedAfterReset();
               return completeSearch(null, pos); // budget exceeded
             }
             sId = s.id * numClasses;
             ns = computeNext(s, ch, text, effectiveNextPos);
             if (ns == null) {
+              budgetExhaustedAfterReset();
               return completeSearch(null, pos); // budget exceeded
             }
           }

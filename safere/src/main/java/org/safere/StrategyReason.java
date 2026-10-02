@@ -12,6 +12,13 @@ public enum StrategyReason {
   CAPTURES_REQUIRED,
   AUTHORITATIVE_BOUNDS_REQUIRED,
   EXACT_NULLABLE_LOOP_SEMANTICS_REQUIRED,
+  /**
+   * The lazy DFA exhausted its state cache, so the operation fell back to a slower engine. This
+   * happens when the cache fills and the DFA declines to clear it, or when it clears the cache but
+   * the fresh cache still cannot hold the states the search needs. The DFA clears and rebuilds a
+   * full cache while doing so is productive; it declines only when recent cache generations covered
+   * too little input per cached state.
+   */
   DFA_BUDGET_EXCEEDED,
   WORK_BUDGET_EXCEEDED,
   OPTIMIZED_PATH_DISABLED
