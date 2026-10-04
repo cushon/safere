@@ -11,6 +11,40 @@ final class StringInputScanner implements InputScanner {
   private static final int SMALL_SET_SEARCH_WINDOW = 4096;
 
   private final String text;
+  // Bound sampling to a short prefix; frequent candidates favor direct DFA execution.
+  private static final int DENSITY_SAMPLE_LIMIT = 256;
+  private static final int DENSE_CANDIDATE_COUNT = 4;
+
+  private CharClassScanInfo densityClass;
+  private boolean denseCandidates;
+
+  /**
+   * Samples a bounded prefix to choose between acceleration and plain DFA search. This caches only
+   * a performance decision, never candidate positions or matching state.
+   */
+  boolean hasDenseCandidates(CharClassScanInfo scanInfo) {
+    if (!scanInfo.equals(densityClass)) {
+      densityClass = scanInfo;
+      denseCandidates = sampleCandidateDensity(scanInfo);
+    }
+    return denseCandidates;
+  }
+
+  private boolean sampleCandidateDensity(CharClassScanInfo scanInfo) {
+    int limit = Math.min(text.length(), DENSITY_SAMPLE_LIMIT);
+    int candidates = 0;
+    for (int position = 0; position < limit; ) {
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record();
+      }
+      int cp = text.codePointAt(position);
+      if (scanInfo.contains(cp) && ++candidates >= DENSE_CANDIDATE_COUNT) {
+        return true;
+      }
+      position += Character.charCount(cp);
+    }
+    return false;
+  }
 
   StringInputScanner(String text) {
     this.text = text;

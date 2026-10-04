@@ -7,6 +7,8 @@ package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -107,6 +109,104 @@ class SmallAsciiClassWorkTest {
           }
         }
       }
+    }
+  }
+
+  @Test
+  void utf8MixedRejectStopsNearEitherMember() {
+    RejectPrefilter filter = RejectPrefilter.CharClass.create(unicodeSmallSet("]\uFF3D"));
+    for (String member : new String[] {"]", "\uFF3D"}) {
+      for (int length : new int[] {8_192, 65_536}) {
+        byte[] bytes =
+            ("中".repeat(32) + member + "中".repeat(length)).getBytes(StandardCharsets.UTF_8);
+        long work =
+            WorkCounter.countForTesting(
+                () ->
+                    assertThat(
+                            filter.canReject(
+                                new Utf8InputScanner(bytes), 0, EnginePathOptions.allEnabled()))
+                        .isFalse());
+        assertThat(work).isLessThanOrEqualTo(512);
+      }
+    }
+  }
+
+  @Test
+  void denseCandidateDecisionIsBoundedAndReused() {
+    CharClassScanInfo info = unicodeSmallSet("[\uFF3B");
+    StringInputScanner dense = new StringInputScanner(("中".repeat(12) + "\uFF3B").repeat(1_000));
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              for (int i = 0; i < 1_000; i++) {
+                assertThat(dense.hasDenseCandidates(info)).isTrue();
+              }
+            });
+    assertThat(work).isLessThanOrEqualTo(256);
+    StringInputScanner sparse = new StringInputScanner("中".repeat(1_000) + "\uFF3B");
+    assertThat(sparse.hasDenseCandidates(info)).isFalse();
+    assertThat(dense.hasDenseCandidates(unicodeSmallSet("【】"))).isFalse();
+  }
+
+  @Test
+  void absentMixedUtf8RejectHasLinearWork() {
+    RejectPrefilter filter = RejectPrefilter.CharClass.create(unicodeSmallSet("]\uFF3D"));
+    for (int length : new int[] {512, 8_192, 65_536}) {
+      byte[] bytes = "中😀a".repeat(length).getBytes(StandardCharsets.UTF_8);
+      long work =
+          WorkCounter.countForTesting(
+              () ->
+                  assertThat(
+                          filter.canReject(
+                              new Utf8InputScanner(bytes), 0, EnginePathOptions.allEnabled()))
+                      .isTrue());
+      assertThat(work).isBetween(1L, 3L * bytes.length);
+    }
+  }
+
+  @Test
+  void utf8DensityDecisionIsBoundedAndReused() {
+    CharClassScanInfo info = unicodeSmallSet("[\uFF3B");
+    Utf8InputScanner scanner =
+        new Utf8InputScanner("中\uFF3B".repeat(10_000).getBytes(StandardCharsets.UTF_8));
+    long work =
+        WorkCounter.countForTesting(
+            () -> {
+              for (int i = 0; i < 1_000; i++) {
+                assertThat(scanner.hasDenseCandidates(info)).isTrue();
+              }
+            });
+    assertThat(work).isBetween(1L, 259L);
+  }
+
+  @Test
+  void sharedUtf8DensityQueriesKeepEachClassWithItsVerdict() {
+    CharClassScanInfo present = unicodeSmallSet("[\uFF3B");
+    CharClassScanInfo absent = unicodeSmallSet("]\uFF3D");
+    Utf8InputScanner scanner =
+        new Utf8InputScanner("中\uFF3B".repeat(1_000).getBytes(StandardCharsets.UTF_8));
+    IntStream.range(0, 10_000)
+        .parallel()
+        .forEach(
+            i -> {
+              boolean dense = (i & 1) == 0;
+              assertThat(scanner.hasDenseCandidates(dense ? present : absent)).isEqualTo(dense);
+            });
+  }
+
+  @Test
+  void absentMixedUtf8RejectScansAsciiInputOnce() {
+    RejectPrefilter filter = RejectPrefilter.CharClass.create(unicodeSmallSet("]\uFF3D"));
+    for (int length : new int[] {80, 2048, 100_000}) {
+      byte[] bytes = "a".repeat(length).getBytes(StandardCharsets.UTF_8);
+      long work =
+          WorkCounter.countForTesting(
+              () ->
+                  assertThat(
+                          filter.canReject(
+                              new Utf8InputScanner(bytes), 0, EnginePathOptions.allEnabled()))
+                      .isTrue());
+      assertThat(work).isEqualTo(bytes.length);
     }
   }
 

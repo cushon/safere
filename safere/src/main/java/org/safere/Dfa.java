@@ -1092,6 +1092,15 @@ final class Dfa {
   }
 
   private AcceleratorPolicy startAccelerationPolicy(InputScanner text, State startState) {
+    if (stringStartAccelerator != null
+        && !StringStartAccelerator.shouldAccelerate(stringStartAccelerator, text)) {
+      return null;
+    }
+    if (utf8StartAccelerator != null
+        && text instanceof Utf8InputScanner utf8Scanner
+        && !Utf8StartAccelerator.shouldAccelerate(utf8StartAccelerator, utf8Scanner)) {
+      return null;
+    }
     AcceleratorPolicy policy =
         switch (text) {
           case Utf8InputScanner unusedUtf8 ->

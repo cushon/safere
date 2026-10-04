@@ -71,13 +71,14 @@ sealed interface Utf8StartAccelerator {
       }
       case MultiAnchorDescriptor.StartPlan.LeadingExpansion le -> {
         Utf8StartAccelerator inner = create(le.innerPlan(), hasWordBoundary);
-        // This wrapper does not retain the folded filter's per-search scan cursor, and an optional
-        // single-character leading class before a non-ASCII inner class is faster in the UTF-8
-        // byte DFA than running an un-memoized scalar UTF-8 code-point scan plus inner DFA check.
+        // This wrapper does not retain the folded filter's per-search scan cursor. Optional
+        // non-ASCII classes use plain DFA search unless a small-set density check can choose
+        // between sparse candidate scanning and dense DFA execution.
         if (inner instanceof UnicodeCaseInsensitiveLiteral
             || (le.maxRepetition() == 1
                 && inner instanceof CharClass cc
-                && !cc.scanInfo().isAscii())) {
+                && !cc.scanInfo().isAscii()
+                && !(cc.scanInfo() instanceof CharClassScanInfo.UnicodeSmallSet))) {
           yield null;
         }
         yield inner != null
@@ -114,6 +115,14 @@ sealed interface Utf8StartAccelerator {
       case MultiLiteral ml -> ml.findCandidate(scanner, pos);
       case LeadingExpansion le -> le.findCandidate(scanner, pos);
     };
+  }
+
+  /** Returns whether candidate scanning is worthwhile for this input. */
+  static boolean shouldAccelerate(Utf8StartAccelerator accelerator, Utf8InputScanner scanner) {
+    return !(accelerator instanceof LeadingExpansion le
+        && le.inner() instanceof CharClass cc
+        && cc.scanInfo() instanceof CharClassScanInfo.UnicodeSmallSet
+        && scanner.hasDenseCandidates(cc.scanInfo()));
   }
 
   /** A search-local cursor for accelerators that scan multiple folded byte variants. */
