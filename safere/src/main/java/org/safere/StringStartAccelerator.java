@@ -84,6 +84,15 @@ sealed interface StringStartAccelerator {
     };
   }
 
+  /** Returns whether candidate scanning is worthwhile for this input. */
+  static boolean shouldAccelerate(StringStartAccelerator accelerator, InputScanner scanner) {
+    return !(accelerator instanceof LeadingExpansion le
+        && le.inner() instanceof CharClass cc
+        && cc.scanInfo() instanceof CharClassScanInfo.UnicodeSmallSet
+        && scanner instanceof StringInputScanner stringScanner
+        && stringScanner.hasDenseCandidates(cc.scanInfo()));
+  }
+
   /** Returns the tuning and diagnostic policy for this accelerator. */
   default AcceleratorPolicy policy() {
     return AcceleratorPolicy.DEFAULT;

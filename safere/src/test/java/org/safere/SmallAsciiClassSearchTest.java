@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -103,5 +104,45 @@ class SmallAsciiClassSearchTest {
     }
     assertThat(actual.find()).isFalse();
     assertThat(actual.region(0, byteLength - 4).find()).isFalse();
+  }
+
+  @Test
+  void leadingExpansionPreservesMatchesAcrossDensityChangesAndReset() {
+    String regex = "(?: |中)?[\\[\uFF3B]([0-9]+)[\\]\uFF3D]";
+    Pattern pattern = Pattern.compile(regex);
+    java.util.regex.Pattern expectedPattern = java.util.regex.Pattern.compile(regex);
+    Matcher actual = pattern.matcher("");
+    String dense = "中\uFF3B12\uFF3D 😀[34] ".repeat(40);
+    String sparse = "😀中".repeat(400) + " \uFF3B56\uFF3D";
+    for (String text : new String[] {dense, sparse, dense + sparse, sparse + dense, dense}) {
+      actual.reset(text);
+      java.util.regex.Matcher expected = expectedPattern.matcher(text);
+      while (expected.find()) {
+        assertThat(actual.find()).isTrue();
+        assertThat(actual.start()).isEqualTo(expected.start());
+        assertThat(actual.end()).isEqualTo(expected.end());
+        assertThat(actual.group(1)).isEqualTo(expected.group(1));
+      }
+      assertThat(actual.find()).isFalse();
+      expected.reset();
+      Utf8Matcher utf8 = pattern.matcher(Utf8Input.validated(text.getBytes(UTF_8)));
+      while (expected.find()) {
+        assertThat(utf8.find()).isTrue();
+        assertThat(utf8.start())
+            .isEqualTo(text.substring(0, expected.start()).getBytes(UTF_8).length);
+        assertThat(utf8.end()).isEqualTo(text.substring(0, expected.end()).getBytes(UTF_8).length);
+      }
+      assertThat(utf8.find()).isFalse();
+      assertThat(actual.reset().replaceAll("<$1>"))
+          .isEqualTo(expectedPattern.matcher(text).replaceAll("<$1>"));
+      actual.region(1, text.length() - 1);
+      expected.region(1, text.length() - 1);
+      while (expected.find()) {
+        assertThat(actual.find()).isTrue();
+        assertThat(actual.start()).isEqualTo(expected.start());
+        assertThat(actual.end()).isEqualTo(expected.end());
+      }
+      assertThat(actual.find()).isFalse();
+    }
   }
 }

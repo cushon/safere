@@ -430,10 +430,28 @@ class StartAcceleratorTest {
   }
 
   @Test
-  void questLeadingExpansionBeforeNonAsciiCharClassAcceleratesStringOnly() {
+  void questLeadingExpansionChoosesAccelerationByInputDensity() {
     Pattern pattern = Pattern.compile(" ?[\\[\uFF3B](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]\uFF3D]");
+    String sparse = "中".repeat(1_000) + "\uFF3B1.2.3\uFF3D";
+    String dense = "\uFF3B1.2.3\uFF3D".repeat(100);
     assertThat(pattern.stringStartAccelerator()).isNotNull();
-    assertThat(pattern.utf8StartAccelerator()).isNull();
+    assertThat(pattern.utf8StartAccelerator()).isNotNull();
+    assertThat(
+            StringStartAccelerator.shouldAccelerate(
+                pattern.stringStartAccelerator(), new StringInputScanner(sparse)))
+        .isTrue();
+    assertThat(
+            StringStartAccelerator.shouldAccelerate(
+                pattern.stringStartAccelerator(), new StringInputScanner(dense)))
+        .isFalse();
+    assertThat(
+            Utf8StartAccelerator.shouldAccelerate(
+                pattern.utf8StartAccelerator(), utf8Scanner(sparse)))
+        .isTrue();
+    assertThat(
+            Utf8StartAccelerator.shouldAccelerate(
+                pattern.utf8StartAccelerator(), utf8Scanner(dense)))
+        .isFalse();
   }
 
   @Test

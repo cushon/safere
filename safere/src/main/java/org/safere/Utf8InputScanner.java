@@ -21,6 +21,44 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
 
   private static final VarHandle LONG_VIEW = byteArrayViewVarHandle(long[].class, nativeOrder());
 
+  // Bound sampling to a short prefix; frequent candidates favor direct DFA execution.
+  private static final int DENSITY_SAMPLE_LIMIT = 256;
+  private static final int DENSE_CANDIDATE_COUNT = 4;
+
+  // Utf8Input shares this scanner between matchers. Publish the key and verdict together; stale
+  // entries only cause bounded resampling, and final record fields remain safe to read.
+  private DensityDecision densityDecision;
+
+  private record DensityDecision(CharClassScanInfo scanInfo, boolean dense) {}
+
+  /** Caches a bounded density decision, never candidate positions or matching state. */
+  boolean hasDenseCandidates(CharClassScanInfo scanInfo) {
+    DensityDecision decision = densityDecision;
+    if (decision == null || !scanInfo.equals(decision.scanInfo())) {
+      decision = new DensityDecision(scanInfo, sampleCandidateDensity(scanInfo));
+      densityDecision = decision;
+    }
+    return decision.dense();
+  }
+
+  private boolean sampleCandidateDensity(CharClassScanInfo scanInfo) {
+    int limit = Math.min(length, DENSITY_SAMPLE_LIMIT);
+    int candidates = 0;
+    for (int position = 0; position < limit; ) {
+      long decoded = decodeForward(position);
+      int next = InputScanner.position(decoded);
+      if (WorkCounterConfig.ENABLED) {
+        WorkCounter.record(next - position);
+      }
+      if (scanInfo.contains(InputScanner.codePoint(decoded))
+          && ++candidates >= DENSE_CANDIDATE_COUNT) {
+        return true;
+      }
+      position = next;
+    }
+    return false;
+  }
+
   Utf8InputScanner(byte[] bytes) {
     this(bytes, 0, bytes.length);
   }

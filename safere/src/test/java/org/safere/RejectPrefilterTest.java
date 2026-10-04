@@ -314,6 +314,33 @@ class RejectPrefilterTest {
     assertThat(unixPrefilter.canReject(utf8Scanner("item123\u0085"), 0, options)).isTrue();
   }
 
+  @Test
+  void mixedUtf8RejectSearchCoversWindowEdgesAndSubviewLimits() {
+    CharClassBuilder builder = new CharClassBuilder();
+    builder.addRune(']');
+    builder.addRune('\uFF3D');
+    RejectPrefilter filter =
+        RejectPrefilter.CharClass.create(CharClassScanInfo.fromCharClass(builder.build()));
+    for (int edge : new int[] {80, 240, 560, 1200, 2480, 5040, 9136}) {
+      for (int delta = -4; delta <= 4; delta++) {
+        for (String member : new String[] {"]", "\uFF3D"}) {
+          String text = "a".repeat(edge + delta) + member + "😀中";
+          byte[] storage = ("\uFF3D" + text + "]").getBytes(UTF_8);
+          Utf8InputScanner scanner = new Utf8InputScanner(storage, 3, text.getBytes(UTF_8).length);
+          assertThat(filter.canReject(scanner, 0, EnginePathOptions.allEnabled())).isFalse();
+          assertThat(filter.canReject(scanner, 1, EnginePathOptions.allEnabled())).isFalse();
+          // Both members outside the subview must be ignored.
+          assertThat(
+                  filter.canReject(
+                      new Utf8InputScanner(storage, 3, edge + delta),
+                      0,
+                      EnginePathOptions.allEnabled()))
+              .isTrue();
+        }
+      }
+    }
+  }
+
   private static Utf8InputScanner utf8Scanner(String text) {
     byte[] bytes = text.getBytes(UTF_8);
     return new Utf8InputScanner(bytes, 0, bytes.length);

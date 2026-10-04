@@ -288,10 +288,14 @@ sealed interface RejectPrefilter
      * scanner has no memo, so repeating the check from every {@code find()} position would rescan
      * the rest of the input each time.
      *
-     * <p>A mixed pair such as {@code [\]\uFF3D]} is checked as two searches: the ASCII member with
-     * {@link Utf8InputScanner#indexOfAscii}, and the non-ASCII member with {@link
-     * Utf8InputScanner#indexOfNonAsciiClass}, which skips ASCII bytes eight at a time. The general
-     * {@link Utf8InputScanner#indexOfCodePointClass} would decode every code point instead.
+     * <p>A mixed pair such as {@code [\]\uFF3D]} uses {@link
+     * Utf8InputScanner#indexOfAsciiOrNonAscii} to discard all-ASCII windows in one pass. Windows
+     * containing non-ASCII bytes search for the ASCII member with {@link
+     * Utf8InputScanner#indexOfAscii} and the non-ASCII member with {@link
+     * Utf8InputScanner#indexOfNonAsciiClass}, which skips ASCII bytes eight at a time. Growing,
+     * bounded windows let either member stop the filter near the start without a whole-input scan
+     * for the other member. The general {@link Utf8InputScanner#indexOfCodePointClass} would decode
+     * every code point instead.
      */
     @Override
     public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
@@ -300,11 +304,33 @@ sealed interface RejectPrefilter
         return false;
       }
       if (nonAsciiRanges != null) {
-        return scanner.indexOfAscii(smallChars[0], searchFrom, scanner.length()) < 0
-            && scanner.indexOfNonAsciiClass(nonAsciiRanges, searchFrom, scanner.length()) < 0;
+        return rejectsMixedUtf8(scanner);
       }
       return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
           < 0;
+    }
+
+    private boolean rejectsMixedUtf8(Utf8InputScanner scanner) {
+      int position = 0;
+      int window = FIRST_FIND_NEAR_WINDOW;
+      while (position < scanner.length()) {
+        int end = position + Math.min(window, scanner.length() - position);
+        // Overlap three bytes so windows need not end at UTF-8 code point boundaries.
+        // A conservative extra candidate can only disable rejection, never reject a match.
+        int nonAsciiStart = Math.max(0, position - 3);
+        int candidate = scanner.indexOfAsciiOrNonAscii(smallChars[0], position, end);
+        // An all-ASCII window without the ASCII member cannot contain either member. Avoid a
+        // second pass through it; decode only windows that contain non-ASCII bytes.
+        if (candidate >= 0
+            && (scanner.asciiAt(candidate) == smallChars[0]
+                || scanner.indexOfAscii(smallChars[0], candidate + 1, end) >= 0
+                || scanner.indexOfNonAsciiClass(nonAsciiRanges, nonAsciiStart, end) >= 0)) {
+          return false;
+        }
+        position = end;
+        window = Math.min(window * 2, 4096);
+      }
+      return true;
     }
 
     @Override
