@@ -21,10 +21,13 @@ a stated bound. A cache key must include every context bit affecting its result;
 cache collisions or exhausted budgets must never change semantics.
 
 An accelerator or prefilter that searches a small character set with one
-`String.indexOf` per member must memoize each member's result on
-`StringInputScanner` (`memoizedIndexOf`) and reuse it across finds and rejected
-candidates. Otherwise an absent or late member is rescanned to the end of the
-input at every match or candidate of another member, making search quadratic.
+`String.indexOf` per member must use `StringInputScanner.indexOfSmallSet`, which
+bounds each member's search to a window that grows geometrically from a short
+first window. Unbounded per-member searches rescan an absent or late member to
+the end of the input at every match or candidate of another member, making
+search quadratic. The one exception is a check that runs only from the start of
+the input, such as the small-set reject prefilter, because it makes at most one
+pass per member per search sequence.
 
 ## Captures survive compilation
 

@@ -439,7 +439,7 @@ class RejectPrefilterTest {
   }
 
   @Test
-  void twoMemberSmallSetRejectsAcrossProbeWindowEdge() {
+  void twoMemberSmallSetRejectsOnlyFromInputStart() {
     CharClassScanInfo scanInfo =
         CharClassScanInfo.fromCharClass(
             new CharClassBuilder().addRune(']').addRune('\uFF3D').build());
@@ -447,31 +447,35 @@ class RejectPrefilterTest {
         RejectPrefilter.create(new MultiAnchorDescriptor.RejectPlan.RequiredCharClass(scanInfo));
     EnginePathOptions options = EnginePathOptions.allEnabled();
 
+    // From the start of the input, each member is found on either side of the near-window edge
+    // and at the end of the input.
     for (char member : new char[] {']', '\uFF3D'}) {
-      for (int searchFrom : new int[] {0, 3}) {
-        for (int offset = 14; offset <= 18; offset++) {
-          String text = "x".repeat(searchFrom + offset) + member + "x".repeat(20);
-          assertThat(prefilter.canReject(new StringInputScanner(text), text, searchFrom, options))
-              .as("member %s at %d from %d", member, searchFrom + offset, searchFrom)
-              .isFalse();
-          assertThat(
-                  prefilter.canReject(
-                      new StringInputScanner(text), text, searchFrom + offset + 1, options))
-              .as("member %s at %d from %d", member, searchFrom + offset, searchFrom + offset + 1)
-              .isTrue();
-        }
+      for (int index : new int[] {0, 14, 78, 79, 80, 81, 200}) {
+        String text = "x".repeat(index) + member + "x".repeat(20);
+        assertThat(prefilter.canReject(new StringInputScanner(text), text, 0, options))
+            .as("member %s at %d", member, index)
+            .isFalse();
       }
+      String atEnd = "x".repeat(300) + member;
+      assertThat(prefilter.canReject(new StringInputScanner(atEnd), atEnd, 0, options))
+          .as("member %s at end", member)
+          .isFalse();
+    }
+    for (int length : new int[] {0, 1, 79, 80, 81, 300}) {
+      String text = "x".repeat(length);
+      assertThat(prefilter.canReject(new StringInputScanner(text), text, 0, options))
+          .as("no member, length %d", length)
+          .isTrue();
     }
 
-    // One scanner across increasing positions, as a find() loop does: the probe and the memo must
-    // agree about the only member, at index 40.
+    // Later find() positions are left to the start accelerator and DFA, even when no member
+    // remains.
     String text = "x".repeat(40) + "]" + "x".repeat(40);
     StringInputScanner shared = new StringInputScanner(text);
-    for (int searchFrom = 1; searchFrom <= 40; searchFrom++) {
+    for (int searchFrom = 1; searchFrom <= text.length(); searchFrom++) {
       assertThat(prefilter.canReject(shared, text, searchFrom, options))
           .as("from %d", searchFrom)
           .isFalse();
     }
-    assertThat(prefilter.canReject(shared, text, 41, options)).isTrue();
   }
 }

@@ -154,13 +154,6 @@ sealed interface RejectPrefilter
       int[] nonAsciiRanges)
       implements RejectPrefilter {
 
-    /**
-     * Chars {@link #rejectsSmall} probes before the per-member searches, chosen on {@code
-     * citationScrubberFullWidth}, where the second member often occurs within a few chars of the
-     * search start while the first is absent.
-     */
-    private static final int REJECT_PROBE_CHARS = 16;
-
     static CharClass create(CharClassScanInfo scanInfo) {
       char[] small = smallChars(scanInfo);
       return new CharClass(
@@ -201,13 +194,14 @@ sealed interface RejectPrefilter
     }
 
     /**
-     * Returns the one or two members of a small class, or {@code null}. Each member is searched
-     * with the intrinsified {@link String#indexOf(int, int)}; see {@link #rejectsSmall}.
+     * Returns the members of a two-member small class, or {@code null}. On the {@code String} path
+     * they are searched with {@link #rejectsSmall}. A single ASCII member is already one {@code
+     * String.indexOf} through {@link #singleAscii}, and routing it through the windowed search
+     * instead cost 9% on {@code bracketCitation.match}. A three-member set would cost three
+     * intrinsic passes over a gap, which has not been measured against the class scan.
      */
     private static char[] smallChars(CharClassScanInfo scanInfo) {
-      return scanInfo instanceof CharClassScanInfo.SmallSet smallSet
-              && smallSet.chars() != null
-              && smallSet.chars().length <= 2
+      return scanInfo instanceof CharClassScanInfo.SmallSet smallSet && smallSet.chars().length == 2
           ? smallSet.chars()
           : null;
     }
@@ -221,8 +215,11 @@ sealed interface RejectPrefilter
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         return canReject(utf8Scanner, searchFrom, options);
       }
-      if (smallChars != null && (scanner instanceof StringInputScanner || text != null)) {
-        return rejectsSmall(scanner, text, searchFrom);
+      if (smallChars != null) {
+        String haystack = scanner instanceof StringInputScanner s ? s.text() : text;
+        if (haystack != null) {
+          return rejectsSmall(haystack, searchFrom);
+        }
       }
       if (scanner != null) {
         return indexOf(scanner, searchFrom, scanner.length()) < 0;
@@ -234,36 +231,48 @@ sealed interface RejectPrefilter
     }
 
     /**
-     * Returns whether no member of {@link #smallChars} occurs at or after {@code searchFrom}.
-     *
-     * <p>A single member needs no memo: every match contains an occurrence of it, so the next
-     * {@code find()} starts past the occurrence this scan stopped at. With two members that holds
-     * only for the nearer one, and rescanning for the farther one on every call is quadratic, so
-     * later searches go through the scanner's memo. The first search, from the start of the input,
-     * has nothing to reuse; it is also the only search a one-shot {@code replaceAll} or {@code
-     * find} on non-matching input makes, so it skips the memo. Both are preceded by a short {@link
-     * StringInputScanner#probeEither probe}, so a member near {@code searchFrom} is found without
-     * searching the whole text for the other.
+     * Chars the first {@code find()} searches for every member before searching the rest of the
+     * input one member at a time, so a member near the start is found without first scanning the
+     * whole input for one that is absent.
      */
-    private boolean rejectsSmall(InputScanner scanner, String text, int searchFrom) {
-      char c0 = smallChars[0];
-      if (!(scanner instanceof StringInputScanner s)) {
-        return text.indexOf(c0, searchFrom) < 0
-            && (smallChars.length == 1 || text.indexOf(smallChars[1], searchFrom) < 0);
-      }
-      if (smallChars.length == 1) {
-        return s.indexOfChar(c0, searchFrom) < 0;
-      }
-      char c1 = smallChars[1];
-      int probe = s.probeEither(c0, c1, searchFrom, REJECT_PROBE_CHARS);
-      if (probe >= 0) {
+    private static final int FIRST_FIND_NEAR_WINDOW = 80;
+
+    /**
+     * Returns whether no member of {@link #smallChars} occurs in the input, checked only from the
+     * start of the input.
+     *
+     * <p>The check covers a short window for every member, then searches each member over the rest
+     * of the input. That costs at most one pass per member per search sequence, and on input with
+     * no member it rejects in as few intrinsic calls as possible. Later {@code find()} calls do not
+     * reject: the start accelerator and DFA already bound the work for the rest of the input, and
+     * re-searching an absent member from every {@code find()} position cost 2x on input with sparse
+     * matches, even through bounded windows.
+     */
+    private boolean rejectsSmall(String haystack, int searchFrom) {
+      if (searchFrom > 0) {
         return false;
       }
-      int rest = ~probe;
-      if (searchFrom > 0) {
-        return s.memoizedIndexOf(c0, rest) < 0 && s.memoizedIndexOf(c1, rest) < 0;
+      int length = haystack.length();
+      int nearEnd = Math.min(length, FIRST_FIND_NEAR_WINDOW);
+      for (char member : smallChars) {
+        int index = haystack.indexOf(member, 0, nearEnd);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(index >= 0 ? index + 1 : nearEnd);
+        }
+        if (index >= 0) {
+          return false;
+        }
       }
-      return s.indexOfChar(c0, rest) < 0 && s.indexOfChar(c1, rest) < 0;
+      for (char member : smallChars) {
+        int index = haystack.indexOf(member, nearEnd);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record(index >= 0 ? index - nearEnd + 1 : length - nearEnd);
+        }
+        if (index >= 0) {
+          return false;
+        }
+      }
+      return true;
     }
 
     private int indexOf(InputScanner scanner, int searchFrom, int limit) {

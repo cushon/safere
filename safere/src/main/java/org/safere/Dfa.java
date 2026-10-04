@@ -1673,7 +1673,7 @@ final class Dfa {
     }
     if (text instanceof StringInputScanner stringScanner && stringStartAccelerator != null) {
       return StringStartAccelerator.findNextCandidate(
-          stringStartAccelerator, stringScanner, pos, prog.lineStartUnixLines());
+          stringStartAccelerator, stringScanner.text(), pos, prog.lineStartUnixLines());
     }
     return fastForwardStartState(text, pos, posDepThreshold, startState);
   }

@@ -754,6 +754,22 @@
       "shared": true
     },
     {
+      "id": "citationScrub.sparseFullWidthCitations.{size}",
+      "axes": {
+        "size": [
+          65536
+        ]
+      },
+      "recipe": {
+        "kind": "periodicAlternationToLength",
+        "hitUnit": "\u8fd9\u662f\u4e00\u4e2a\u6d4b\u8bd5\u53e5\u5b50\uff0c\u53c2\u89c1\u9644\u5f55\u3002\uff3b1.2.3\uff3d",
+        "missUnit": "\u8fd9\u662f\u4e00\u4e2a\u6d4b\u8bd5\u53e5\u5b50\uff0c\u53c2\u89c1\u9644\u5f55\u3002",
+        "hitInterval": 64,
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "utf8Matching.requiredClassNonmatch.text",
       "recipe": {
         "kind": "repeatToLength",
@@ -4489,6 +4505,45 @@
       "axes": {
         "size": [
           2048,
+          65536
+        ]
+      },
+      "requirements": []
+    },
+    {
+      "id": "RealWorldRegexBenchmark.runBenchmark.citationScrubberSparseFullWidth.{size}",
+      "operation": "replaceAll",
+      "patterns": [
+        {
+          "java": " ?[\\[\uff3b](?:(?:\\d+\\.){2,}\\d+(?:, )?)+[\\]\uff3d]",
+          "alternates": {
+            "rust-regex": {
+              "pattern": " ?[\\[\uff3b](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]\uff3d]",
+              "reason": "Rust regex gives \\d Unicode semantics"
+            },
+            "dotnet": {
+              "pattern": " ?[\\[\uff3b](?:(?:[0-9]+\\.){2,}[0-9]+(?:, )?)+[\\]\uff3d]",
+              "reason": ".NET gives \\d Unicode semantics while Java defaults to ASCII"
+            }
+          }
+        }
+      ],
+      "inputs": [
+        "citationScrub.sparseFullWidthCitations.{size}"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": ""
+      },
+      "axes": {
+        "size": [
           65536
         ]
       },

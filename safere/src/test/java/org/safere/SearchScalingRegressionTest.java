@@ -112,11 +112,10 @@ class SearchScalingRegressionTest {
   }
 
   /**
-   * Like the tests above, but with candidates spaced farther apart than the start accelerator's
-   * short probe ({@code StringStartAccelerator.CharClass.CANDIDATE_PROBE_CHARS}), so the probe
-   * never finds the next candidate and every search falls through to the per-member searches.
-   * Without the memo on {@code StringInputScanner}, each of those rescans the rest of the input for
-   * a member that is absent or occurs only at the end.
+   * Like the tests above, but with candidates spaced farther apart than the scalar prologue of
+   * {@code StringInputScanner.indexOfSmallSet}, so every search falls through to the per-member
+   * searches. Unless those are window-bounded, each rescans the rest of the input for a member that
+   * is absent or occurs only at the end.
    */
   @Test
   void smallSetWorkIsLinearWhenCandidatesAreBeyondTheProbe() {

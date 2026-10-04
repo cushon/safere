@@ -73,29 +73,14 @@ sealed interface StringStartAccelerator {
    */
   static int findNextCandidate(
       StringStartAccelerator accelerator, String text, int fromIndex, boolean unixLines) {
-    return findNextCandidate(accelerator, new StringInputScanner(text), fromIndex, unixLines);
-  }
-
-  /**
-   * Like {@link #findNextCandidate(StringStartAccelerator, String, int, boolean)}, but lets
-   * small-set character class searches reuse {@code scanner}'s memo of earlier searches. Callers
-   * that search the same text repeatedly must pass the same scanner each time, or those searches
-   * are quadratic; see {@link StringInputScanner#memoizedIndexOf}.
-   */
-  static int findNextCandidate(
-      StringStartAccelerator accelerator,
-      StringInputScanner scanner,
-      int fromIndex,
-      boolean unixLines) {
-    String text = scanner.text();
     return switch (accelerator) {
       case Literal lit -> lit.findCandidate(text, fromIndex, unixLines);
       case CaseInsensitiveLiteral cil -> cil.findCandidate(text, fromIndex, unixLines);
       case UnicodeCaseInsensitiveLiteral ucil -> ucil.findCandidate(text, fromIndex, unixLines);
       case FixedOffset fo -> fo.findCandidate(text, fromIndex, unixLines);
-      case CharClass cc -> cc.findCandidate(scanner, fromIndex);
+      case CharClass cc -> cc.findCandidate(text, fromIndex, unixLines);
       case LineAnchor la -> la.findCandidate(text, fromIndex, unixLines);
-      case LeadingExpansion le -> le.findCandidate(scanner, fromIndex, unixLines);
+      case LeadingExpansion le -> le.findCandidate(text, fromIndex, unixLines);
     };
   }
 
@@ -373,24 +358,11 @@ sealed interface StringStartAccelerator {
 
   // The lookup table is immutable pattern metadata; array identity and value semantics are unused.
   @SuppressWarnings("ArrayRecordComponent")
-  record CharClass(CharClassScanInfo scanInfo, boolean[] asciiTable, char[] smallChars)
+  record CharClass(CharClassScanInfo scanInfo, boolean[] asciiTable)
       implements StringStartAccelerator {
 
-    /**
-     * Chars {@link #findCandidateSmall} probes before the per-member searches. At 8, candidates
-     * 11-15 chars apart ({@code citationScrubberFullWidthNoMatch}) always missed the probe and paid
-     * for the memoized searches instead, which cost 1.14x on aarch64; 16 brings that to parity.
-     */
-    private static final int CANDIDATE_PROBE_CHARS = 16;
-
     static CharClass create(CharClassScanInfo scanInfo) {
-      char[] small = null;
-      if (scanInfo instanceof CharClassScanInfo.SmallSet ss
-          && ss.chars() != null
-          && ss.chars().length <= 2) {
-        small = ss.chars();
-      }
-      return new CharClass(scanInfo, buildAsciiTable(scanInfo), small);
+      return new CharClass(scanInfo, buildAsciiTable(scanInfo));
     }
 
     @Override
@@ -398,39 +370,13 @@ sealed interface StringStartAccelerator {
       return AcceleratorPolicy.CHAR_CLASS;
     }
 
-    int findCandidate(StringInputScanner scanner, int fromIndex) {
-      if (smallChars != null) {
-        return findCandidateSmall(scanner, fromIndex);
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
+      // Three members cost three intrinsic passes over a gap, which has not been measured against
+      // the table scan below, so only one- and two-member sets take the per-member search.
+      if (scanInfo instanceof CharClassScanInfo.SmallSet smallSet && smallSet.chars().length <= 2) {
+        return StringInputScanner.indexOfSmallSet(text, smallSet.chars(), fromIndex);
       }
-      return indexOfCharClass(
-          scanner.text(), asciiTable, scanInfo.ranges(), scanInfo.isAscii(), fromIndex);
-    }
-
-    /**
-     * Searches for the first of one or two chars with the {@code String.indexOf} intrinsic, one
-     * member at a time. A single member cannot be rescanned: each call resumes past the occurrence
-     * the previous call returned. With two, a short {@link StringInputScanner#probeEither probe}
-     * finds a nearby member first, and the farther member's occurrence would otherwise be rescanned
-     * on every call, so the per-member searches go through the scanner's memo; see {@link
-     * StringInputScanner#memoizedIndexOf}.
-     */
-    private int findCandidateSmall(StringInputScanner scanner, int fromIndex) {
-      if (smallChars.length == 1) {
-        return scanner.indexOfChar(smallChars[0], fromIndex);
-      }
-      char c0 = smallChars[0];
-      char c1 = smallChars[1];
-      int probe = scanner.probeEither(c0, c1, fromIndex, CANDIDATE_PROBE_CHARS);
-      if (probe >= 0) {
-        return probe;
-      }
-      int rest = ~probe;
-      int first = scanner.memoizedIndexOf(c0, rest);
-      int second = scanner.memoizedIndexOf(c1, rest);
-      if (first < 0) {
-        return second;
-      }
-      return second < 0 ? first : Math.min(first, second);
+      return indexOfCharClass(text, asciiTable, scanInfo.ranges(), scanInfo.isAscii(), fromIndex);
     }
 
     private static int indexOfCharClass(
@@ -572,11 +518,8 @@ sealed interface StringStartAccelerator {
       return minRepetition == 0 && !hasLeadingAssertions;
     }
 
-    int findInnerCandidate(StringInputScanner scanner, int searchPos, boolean unixLines) {
-      if (inner instanceof CharClass cc) {
-        return cc.findCandidate(scanner, searchPos);
-      }
-      return StringStartAccelerator.findNextCandidate(inner, scanner, searchPos, unixLines);
+    int findInnerCandidate(String text, int searchPos, boolean unixLines) {
+      return StringStartAccelerator.findNextCandidate(inner, text, searchPos, unixLines);
     }
 
     int expandBackward(String text, int innerMatch, int fromIndex) {
@@ -600,12 +543,11 @@ sealed interface StringStartAccelerator {
       return start;
     }
 
-    int findCandidate(StringInputScanner scanner, int fromIndex, boolean unixLines) {
-      String text = scanner.text();
+    int findCandidate(String text, int fromIndex, boolean unixLines) {
       int searchPos = Math.max(0, fromIndex);
       int textLen = text.length();
       while (searchPos < textLen) {
-        int innerMatch = findInnerCandidate(scanner, searchPos, unixLines);
+        int innerMatch = findInnerCandidate(text, searchPos, unixLines);
         if (innerMatch < 0) {
           return -1;
         }
