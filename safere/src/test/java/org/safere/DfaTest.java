@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import org.junit.jupiter.api.DisplayName;
@@ -663,6 +664,94 @@ class DfaTest {
       Field progress = Dfa.class.getDeclaredField("backoffProgress");
       progress.setAccessible(true);
       assertThat(progress.getLong(dfa)).isLessThanOrEqualTo(66);
+    }
+
+    /**
+     * With a one-state budget the cache can be productive enough to earn a reset and still be too
+     * small to continue afterwards. That is budget exhaustion too, so it must be reported the same
+     * way as a refused reset.
+     */
+    @Test
+    void failureAfterAGrantedResetIsReportedAsBudgetExhaustion()
+        throws ReflectiveOperationException {
+      Prog prog = Compiler.compile(Parser.parse("a", FLAGS));
+      Dfa dfa = new Dfa(prog, 1, Dfa.buildSetup(prog), false);
+      assertThat(dfa.doSearch(" ".repeat(20) + "a", 0, false, false)).isNull();
+
+      // A granted reset zeroes the productivity counter; a refused one leaves the scan credited.
+      Field steps = Dfa.class.getDeclaredField("dfaStepsSinceReset");
+      steps.setAccessible(true);
+      assertThat(steps.getLong(dfa)).isZero();
+      assertThat(dfa.lastSearchBailed()).isTrue();
+    }
+
+    /**
+     * Callers report every null DFA result as {@link StrategyReason#DFA_BUDGET_EXCEEDED}. This pins
+     * the contract that makes that accurate: a search returns null exactly when it sets {@link
+     * Dfa#lastSearchBailed()}. A new null exit for some other reason fails here and needs its own
+     * reason instead.
+     */
+    @Test
+    void everyNullResultIsBudgetExhaustion() {
+      List<String> regexes =
+          List.of("a", "[ab]*c", "(?m)^b|\\Aa", "\\bfoo\\b", "x[a-z]{3,8}y", "(a|b)*abb", "é+[^a]");
+      List<String> texts =
+          List.of(
+              "",
+              "a",
+              " ".repeat(20) + "a",
+              "abababababc",
+              "foo bar foo",
+              "xabcdy xqqqqqqqqqqy",
+              "abbabbaabb".repeat(10),
+              "ééé b\n b",
+              sourceShapedText(2_000, /* withTrailingMatch= */ true));
+      int nullResults = 0;
+      int nonNullResults = 0;
+      for (String regex : regexes) {
+        Prog prog = Compiler.compile(Parser.parse(regex, FLAGS));
+        Prog reverseProg = Pattern.compile(regex).flatReverseDfaProg();
+        for (int budget : new int[] {1, 2, 3, 4, 8, 64}) {
+          // Reuse each DFA across searches so a flag left over from an earlier search is caught.
+          Dfa first = new Dfa(prog, budget, Dfa.buildSetup(prog), false);
+          Dfa longest = new Dfa(prog, budget, Dfa.buildSetup(prog), true);
+          Dfa reverse =
+              reverseProg == null
+                  ? null
+                  : new Dfa(reverseProg, budget, Dfa.buildSetup(reverseProg), true);
+          for (String text : texts) {
+            for (boolean anchored : new boolean[] {false, true}) {
+              String where = regex + " budget=" + budget + " anchored=" + anchored;
+              List<Object> results = new ArrayList<>();
+              results.add(first.doSearch(text, 0, anchored, false));
+              assertBailFlagMatches(first, results.getLast(), "doSearch " + where);
+              results.add(longest.doSearch(text, 0, anchored, true));
+              assertBailFlagMatches(longest, results.getLast(), "doSearch longest " + where);
+              results.add(longest.doSearchMany(text, anchored));
+              assertBailFlagMatches(longest, results.getLast(), "doSearchMany " + where);
+              if (reverse != null) {
+                results.add(
+                    reverse.doSearchReverse(
+                        new StringInputScanner(text), text.length(), 0, anchored, true));
+                assertBailFlagMatches(reverse, results.getLast(), "doSearchReverse " + where);
+              }
+              for (Object result : results) {
+                if (result == null) {
+                  nullResults++;
+                } else {
+                  nonNullResults++;
+                }
+              }
+            }
+          }
+        }
+      }
+      assertThat(nullResults).isPositive();
+      assertThat(nonNullResults).isPositive();
+    }
+
+    private static void assertBailFlagMatches(Dfa dfa, Object result, String description) {
+      assertThat(dfa.lastSearchBailed()).as(description).isEqualTo(result == null);
     }
 
     /**

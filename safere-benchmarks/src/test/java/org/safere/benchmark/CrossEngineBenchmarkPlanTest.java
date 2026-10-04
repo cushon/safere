@@ -118,6 +118,112 @@ class CrossEngineBenchmarkPlanTest {
   }
 
   @Test
+  void utf8TrialPreparationRejectsTheWrongProviderBeforeMeasurement() {
+    String property = "org.safere.experimental.vectorScanProvider";
+    String previous = System.getProperty(property);
+    try {
+      System.clearProperty(property);
+      assertThatThrownBy(
+              () ->
+                  CrossEngineTrialRunner.prepare(
+                      "RegexBenchmark.emailFind@safere-utf8-vector",
+                      CrossEngineWorkload.TimingGroup.NANOSECONDS))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("requires -D" + property + "=vector");
+      assertThatThrownBy(
+              () ->
+                  SpecializedTrialRunner.prepare(
+                      "Utf8MatchingBenchmark.captureBounds.numbered@safere-utf8-vector"))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("requires -D" + property + "=vector");
+      System.setProperty(property, "vector");
+      assertThatThrownBy(
+              () ->
+                  CrossEngineTrialRunner.prepare(
+                      "RegexBenchmark.emailFind@safere-utf8",
+                      CrossEngineWorkload.TimingGroup.NANOSECONDS))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("requires default provider selection");
+    } finally {
+      if (previous == null) {
+        System.clearProperty(property);
+      } else {
+        System.setProperty(property, previous);
+      }
+    }
+  }
+
+  @Test
+  void vectorUtf8PreservesWorkloadsExclusionsAndProviderMetadata() {
+    BenchmarkCollectionPlan plan = BenchmarkCollectionPlan.load();
+    List<BenchmarkCollectionPlan.CollectionTrial> defaults =
+        plan.reportPlan().trials().stream()
+            .filter(trial -> trial.executionVariant().equals("safere-utf8"))
+            .toList();
+    List<BenchmarkCollectionPlan.CollectionTrial> vector =
+        plan.reportPlan().trials().stream()
+            .filter(trial -> trial.executionVariant().equals("safere-utf8-vector"))
+            .toList();
+    assertThat(vector)
+        .isNotEmpty()
+        .allSatisfy(trial -> assertThat(trial.requestedScanProvider()).isEqualTo("vector"));
+    assertThat(vector)
+        .extracting(BenchmarkCollectionPlan.CollectionTrial::workloadId)
+        .containsExactlyElementsOf(
+            defaults.stream().map(BenchmarkCollectionPlan.CollectionTrial::workloadId).toList());
+    assertThat(vector)
+        .extracting(BenchmarkCollectionPlan.CollectionTrial::measurement)
+        .containsExactlyElementsOf(
+            defaults.stream().map(BenchmarkCollectionPlan.CollectionTrial::measurement).toList());
+    assertThat(
+            plan.reportPlan().exclusions().stream()
+                .filter(row -> row.executionVariant().equals("safere-utf8-vector"))
+                .map(row -> row.workloadId() + ":" + row.kind() + ":" + row.reason()))
+        .containsExactlyElementsOf(
+            plan.reportPlan().exclusions().stream()
+                .filter(row -> row.executionVariant().equals("safere-utf8"))
+                .map(row -> row.workloadId() + ":" + row.kind() + ":" + row.reason())
+                .toList());
+  }
+
+  @Test
+  void executionGroupsIsolateProvidersAndPreserveFullAndSmokeMembership() {
+    BenchmarkCollectionPlan plan = BenchmarkCollectionPlan.load();
+    for (boolean smoke : List.of(false, true)) {
+      List<BenchmarkCollectionPlan.Runner> groups = plan.executionRunners(false, smoke);
+      assertThat(groups)
+          .allSatisfy(
+              group -> {
+                String provider =
+                    RegexEngineVariant.fromId(
+                            group
+                                .trialIds()
+                                .getFirst()
+                                .substring(group.trialIds().getFirst().lastIndexOf('@') + 1))
+                        .scanProvider();
+                assertThat(group.trialIds())
+                    .allMatch(id -> BenchmarkCollectionPlan.matchesScanProvider(id, provider));
+              });
+      assertThat(groups.stream().flatMap(group -> group.trialIds().stream()))
+          .containsExactlyInAnyOrderElementsOf(
+              plan.reportPlan(smoke).trials().stream()
+                  .map(BenchmarkCollectionPlan.CollectionTrial::id)
+                  .toList());
+    }
+    assertThat(plan.forScanProvider("vector").runners())
+        .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
+        .isNotEmpty()
+        .allMatch(id -> id.endsWith("@safere-utf8-vector"));
+    assertThat(plan.forScanProvider("default").allocationRunners())
+        .flatExtracting(BenchmarkCollectionPlan.Runner::trialIds)
+        .noneMatch(id -> id.endsWith("@safere-utf8-vector"));
+    assertThat(
+            plan.executionRunners(true, false).stream().flatMap(group -> group.trialIds().stream()))
+        .containsExactlyInAnyOrderElementsOf(
+            plan.allocationRunners().stream().flatMap(group -> group.trialIds().stream()).toList());
+  }
+
+  @Test
   void longRecitationListsExcludeOnlyJdkTrialsThatOverflowItsStack() {
     List<MaterializedExecutionPlan.Entry> exclusions =
         CrossEngineBenchmarkPlan.load().exclusions().stream()
@@ -626,13 +732,13 @@ class CrossEngineBenchmarkPlanTest {
             .findFirst()
             .orElseThrow();
 
-    assertThat(plan.declaredLauncherArguments(benchmark, jar, false, false))
+    assertThat(plan.declaredLauncherArguments(benchmark, jar, false, false, null))
         .containsExactly(
             "-jar",
             "\"/tmp/benchmark jar.jar\"",
             "-p",
             "\"crossEngineTrial=" + String.join(",", timing.trialIds()) + "\"");
-    assertThat(plan.declaredLauncherArguments(benchmark, jar, true, false))
+    assertThat(plan.declaredLauncherArguments(benchmark, jar, true, false, null))
         .containsExactly(
             "-jar",
             "\"/tmp/benchmark jar.jar\"",
@@ -643,15 +749,93 @@ class CrossEngineBenchmarkPlanTest {
         allocation.trialIds().stream()
             .filter(trialId -> trialId.startsWith(firstWorkload + "@"))
             .toList();
-    assertThat(plan.declaredLauncherArguments(benchmark, jar, true, true))
+    assertThat(plan.declaredLauncherArguments(benchmark, jar, true, true, null))
         .containsExactly(
             "-jar",
             "\"/tmp/benchmark jar.jar\"",
             "-p",
             "\"crossEngineTrial=" + String.join(",", smokeTrials) + "\"");
-    assertThatThrownBy(() -> plan.declaredLauncherArguments("missing", jar, false, false))
+    assertThatThrownBy(() -> plan.declaredLauncherArguments("missing", jar, false, false, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("Unknown declared benchmark runner: missing");
+  }
+
+  @Test
+  void declaredArgumentFilesPreserveProviderGroupsAndSmokeSelection() {
+    BenchmarkCollectionPlan plan = BenchmarkCollectionPlan.load();
+    String jar = "/tmp/benchmark \"quoted\" \\ jar.jar";
+    for (boolean allocation : List.of(false, true)) {
+      for (boolean smoke : List.of(false, true)) {
+        for (BenchmarkCollectionPlan.Runner runner : plan.executionRunners(allocation, smoke)) {
+          String provider =
+              RegexEngineVariant.fromId(
+                      runner
+                          .trialIds()
+                          .getFirst()
+                          .substring(runner.trialIds().getFirst().lastIndexOf('@') + 1))
+                  .scanProvider();
+          assertThat(
+                  plan.declaredLauncherArguments(
+                      runner.benchmark(), jar, allocation, smoke, provider))
+              .containsExactly(
+                  "-jar",
+                  BenchmarkCollectionPlan.argumentFileToken(jar),
+                  "-p",
+                  BenchmarkCollectionPlan.argumentFileToken(
+                      runner.parameter() + "=" + String.join(",", runner.trialIds())));
+        }
+      }
+    }
+  }
+
+  @Test
+  @ResourceLock(Resources.SYSTEM_OUT)
+  @ResourceLock(Resources.SYSTEM_PROPERTIES)
+  void declaredArgumentFileCommandFiltersProvidersAfterSmokeSelection() {
+    BenchmarkCollectionPlan plan = BenchmarkCollectionPlan.load();
+    String property = "safere.benchmark.scanProvider";
+    String previous = System.getProperty(property);
+    PrintStream original = System.out;
+    try {
+      for (BenchmarkCollectionPlan.Runner runner : plan.executionRunners(false, true)) {
+        String provider =
+            RegexEngineVariant.fromId(
+                    runner
+                        .trialIds()
+                        .getFirst()
+                        .substring(runner.trialIds().getFirst().lastIndexOf('@') + 1))
+                .scanProvider();
+        System.setProperty(property, provider);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (PrintStream capture = new PrintStream(output, true, StandardCharsets.UTF_8)) {
+          System.setOut(capture);
+          BenchmarkCollectionPlan.main(
+              new String[] {
+                "declared-runner-arguments",
+                "runners",
+                runner.benchmark(),
+                "/tmp/benchmark jar.jar",
+                "--smoke"
+              });
+        } finally {
+          System.setOut(original);
+        }
+        assertThat(output.toString(StandardCharsets.UTF_8).lines().toList())
+            .containsExactly(
+                "-jar",
+                "\"/tmp/benchmark jar.jar\"",
+                "-p",
+                BenchmarkCollectionPlan.argumentFileToken(
+                    runner.parameter() + "=" + String.join(",", runner.trialIds())));
+      }
+    } finally {
+      System.setOut(original);
+      if (previous == null) {
+        System.clearProperty(property);
+      } else {
+        System.setProperty(property, previous);
+      }
+    }
   }
 
   @Test
