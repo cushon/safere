@@ -151,7 +151,7 @@ sealed interface RejectPrefilter
       long bitmap1,
       int singleAscii,
       char[] smallChars,
-      int[] nonAsciiRanges)
+      byte[] nonAsciiUtf8)
       implements RejectPrefilter {
 
     static CharClass create(CharClassScanInfo scanInfo) {
@@ -162,17 +162,17 @@ sealed interface RejectPrefilter
           scanInfo.bitmap1(),
           singleAscii(scanInfo),
           small,
-          nonAsciiRangesOfMixedPair(small));
+          nonAsciiUtf8OfMixedPair(small));
     }
 
     /**
-     * Returns the range of the non-ASCII member of a small set with one ASCII and one non-ASCII
-     * member, such as {@code [\]\uFF3D]}, or {@code null} for every other class. Members are
-     * sorted, so the ASCII one comes first.
+     * Returns the UTF-8 encoding of the non-ASCII member of a small set with one ASCII and one
+     * non-ASCII member, such as {@code [\]\uFF3D]}, or {@code null} for every other class. Members
+     * are sorted, so the ASCII one comes first. Small-set members are never surrogates.
      */
-    private static int[] nonAsciiRangesOfMixedPair(char[] small) {
+    private static byte[] nonAsciiUtf8OfMixedPair(char[] small) {
       return small != null && small.length == 2 && small[0] < 0x80 && small[1] >= 0x80
-          ? new int[] {small[1], small[1]}
+          ? String.valueOf(small[1]).getBytes(StandardCharsets.UTF_8)
           : null;
     }
 
@@ -289,9 +289,10 @@ sealed interface RejectPrefilter
      * the rest of the input each time.
      *
      * <p>A mixed pair such as {@code [\]\uFF3D]} is checked as two searches: the ASCII member with
-     * {@link Utf8InputScanner#indexOfAscii}, and the non-ASCII member with {@link
-     * Utf8InputScanner#indexOfNonAsciiClass}, which skips ASCII bytes eight at a time. The general
-     * {@link Utf8InputScanner#indexOfCodePointClass} would decode every code point instead.
+     * {@link Utf8InputScanner#indexOfAscii}, and the non-ASCII member as a byte sequence with
+     * {@link Utf8InputScanner#indexOfUtf8Sequence}. Both use the byte search kernel. Decoding code
+     * points instead, as {@link Utf8InputScanner#indexOfCodePointClass} does, costs several
+     * nanoseconds per character on text with no ASCII to skip, such as CJK.
      */
     @Override
     public boolean canReject(Utf8InputScanner scanner, int searchFrom, EnginePathOptions options) {
@@ -299,9 +300,9 @@ sealed interface RejectPrefilter
           || (searchFrom > 0 && ranges[ranges.length - 1] >= 0x80)) {
         return false;
       }
-      if (nonAsciiRanges != null) {
+      if (nonAsciiUtf8 != null) {
         return scanner.indexOfAscii(smallChars[0], searchFrom, scanner.length()) < 0
-            && scanner.indexOfNonAsciiClass(nonAsciiRanges, searchFrom, scanner.length()) < 0;
+            && scanner.indexOfUtf8Sequence(nonAsciiUtf8, searchFrom, scanner.length()) < 0;
       }
       return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
           < 0;
