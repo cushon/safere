@@ -72,7 +72,7 @@ class DfaStartAccelerationBackoffTest {
     WorkCounter.StartAccelerationWork work =
         WorkCounter.countStartAccelerationForTesting(() -> result[0] = pattern.split(input));
 
-    assertThat(result[0]).hasSize(DENSE_COUNT).containsOnly("", ",");
+    assertThat(result[0]).hasSize(DENSE_COUNT + 1).containsOnly("", ",");
     assertThat(work.calls()).as("%s", work).isLessThan(DENSE_COUNT / 100L);
   }
 

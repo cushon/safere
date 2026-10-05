@@ -284,15 +284,30 @@ public final class Matcher implements MatchResult {
     return result;
   }
 
-  /** Returns whether {@link #startBackoff} allows a start-accelerator call at {@code pos}. */
-  private boolean startAccelerationAllowed(int pos) {
-    return pos >= AdaptiveBackoff.resumePos(startBackoff);
+  /**
+   * Returns whether {@link #startBackoff} allows a matcher-level start-accelerator call at {@code
+   * pos}.
+   *
+   * <p>An accelerator whose candidates are exact match starts is always allowed: even when it skips
+   * nothing, its candidate spares the reverse DFA pass that would otherwise find the match start,
+   * and the skip distance does not measure that saving.
+   */
+  private boolean startAccelerationAllowed(int pos, AcceleratorPolicy policy) {
+    return policy.isExactMatchCandidate() || pos >= AdaptiveBackoff.resumePos(startBackoff);
   }
 
-  /** Charges a matcher-level start-accelerator call from {@code pos} to {@link #startBackoff}. */
+  /**
+   * Charges a matcher-level start-accelerator call from {@code pos} to {@link #startBackoff},
+   * unless its candidates are exact match starts (see {@link #startAccelerationAllowed}).
+   */
   private void chargeStartAcceleration(
       int pos, int candidate, int textLen, AcceleratorPolicy policy) {
-    startBackoff = AdaptiveBackoff.recordSkip(startBackoff, pos, candidate, textLen, policy);
+    if (WorkCounterConfig.ENABLED) {
+      WorkCounter.recordStartScan(candidate - pos);
+    }
+    if (!policy.isExactMatchCandidate()) {
+      startBackoff = AdaptiveBackoff.recordSkip(startBackoff, pos, candidate, textLen, policy);
+    }
   }
 
   private Dfa.SearchResult searchReverseDfa(
@@ -1753,12 +1768,10 @@ public final class Matcher implements MatchResult {
     int effectiveStart = searchFrom;
     boolean literalPrefixCandidateStart = false;
     boolean startPositionPreselected = false;
-    if (options.startAcceleration()
-        && !prog.anchorStart()
-        && startAccelerationAllowed(searchFrom)) {
+    if (options.startAcceleration() && !prog.anchorStart()) {
       if (scanner instanceof Utf8InputScanner utf8Scanner) {
         Utf8StartAccelerator accelerator = parentPattern.utf8StartAccelerator();
-        if (accelerator != null) {
+        if (accelerator != null && startAccelerationAllowed(searchFrom, accelerator.policy())) {
           AcceleratorPolicy policy = accelerator.policy();
           MatchStrategy strategy = policy.strategy();
           if (strategy != null) {
@@ -1801,7 +1814,7 @@ public final class Matcher implements MatchResult {
         }
       } else if (text != null) {
         StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
-        if (accelerator != null) {
+        if (accelerator != null && startAccelerationAllowed(searchFrom, accelerator.policy())) {
           AcceleratorPolicy policy = accelerator.policy();
           MatchStrategy strategy = policy.strategy();
           if (strategy != null) {
@@ -4778,12 +4791,9 @@ public final class Matcher implements MatchResult {
 
     int effectiveStart = fromIndex;
     boolean startPositionPreselected = false;
-    if (options.startAcceleration()
-        && text != null
-        && !prog.anchorStart()
-        && startAccelerationAllowed(fromIndex)) {
+    if (options.startAcceleration() && text != null && !prog.anchorStart()) {
       StringStartAccelerator accelerator = parentPattern.stringStartAccelerator();
-      if (accelerator != null) {
+      if (accelerator != null && startAccelerationAllowed(fromIndex, accelerator.policy())) {
         if (accelerator instanceof StringStartAccelerator.LeadingExpansion le
             && le.canVerifyAtInner()
             && canUseForwardDfa()) {

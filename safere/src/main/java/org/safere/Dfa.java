@@ -1825,7 +1825,12 @@ final class Dfa {
     // AdaptiveBackoff), so a sequence of find() calls pays the loss limit once rather than once per
     // search. It is read here once and written back once when the search completes.
     long backoff = startBackoff;
-    int accelerationResumePos = AdaptiveBackoff.resumePos(backoff);
+    // The first position at which the loops below may call the accelerator, or MAX_VALUE when
+    // they never may. Folding canAccelerate in keeps the per-step test to one comparison.
+    int accelerationResumePos =
+        canAccelerate ? AdaptiveBackoff.resumePos(backoff) : Integer.MAX_VALUE;
+    // A preselected start position is never re-scanned; -1 when there is none.
+    int preselectedPos = startPositionPreselected ? startPos : -1;
 
     int[] transitions = this.transitions;
     State[] offsetToState = this.offsetToState;
@@ -1833,10 +1838,9 @@ final class Dfa {
     int[] asciiClassMap = this.asciiClassMap;
     // Fast path: loop through ASCII characters (characters < 128)
     while (pos < textLen) {
-      if (canAccelerate
-          && pos >= accelerationResumePos
+      if (pos >= accelerationResumePos
           && s.isStartState
-          && (!startPositionPreselected || pos != startPos)
+          && pos != preselectedPos
           && (textLen - pos >= minSkip)) {
         int nextPos = fastForward(text, pos, posDepThreshold, s, utf8Cursor);
         if (WorkCounterConfig.ENABLED) {
@@ -1898,8 +1902,7 @@ final class Dfa {
           }
         }
       }
-      boolean breakOnAcceleratedState =
-          (canAccelerate && pos >= accelerationResumePos) || hasStateAccelerators;
+      boolean breakOnAcceleratedState = pos >= accelerationResumePos || hasStateAccelerators;
       boolean hitAcceleratedState = false;
       int limit =
           hasPositionDependentTransitions ? Math.min(textLen, posDepThreshold - 1) : textLen;
@@ -2018,11 +2021,11 @@ final class Dfa {
 
     // General loop handles non-ASCII, position-dependent checks, and trailing end-of-text
     // sentinel
+    generalLoop:
     while (pos <= textLen) {
-      if (canAccelerate
-          && pos >= accelerationResumePos
+      if (pos >= accelerationResumePos
           && s.isStartState
-          && (!startPositionPreselected || pos != startPos)
+          && pos != preselectedPos
           && (textLen - pos >= minSkip)) {
         int nextPos = fastForward(text, pos, posDepThreshold, s, utf8Cursor);
         if (WorkCounterConfig.ENABLED) {
@@ -2046,7 +2049,7 @@ final class Dfa {
         if (nextPos > pos) {
           pos = nextPos;
           if (pos > textLen) {
-            break;
+            break generalLoop;
           }
           s = startStateOrReset(text, pos, anchored, false);
           if (s == null) {
@@ -2066,105 +2069,109 @@ final class Dfa {
           }
         }
       }
-      if (s.accelerator != null && (textLen - pos >= 16) && (!s.isStartState || anchored)) {
-        int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, textLen);
-        if (nextPos == -1) {
-          pos = textLen;
-        } else if (nextPos > pos) {
-          pos = nextPos;
-          if (pos > textLen) {
-            break;
+      // Step the DFA until it may call the start accelerator again. Making that test the exit of
+      // this inner loop keeps the accelerator path out of the hot per-character loop.
+      do {
+        if (s.accelerator != null && (textLen - pos >= 16) && (!s.isStartState || anchored)) {
+          int nextPos = StateAccelerator.findNextEscape(s.accelerator, text, pos, textLen);
+          if (nextPos == -1) {
+            pos = textLen;
+          } else if (nextPos > pos) {
+            pos = nextPos;
+            if (pos > textLen) {
+              break generalLoop;
+            }
           }
         }
-      }
-      if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record();
-      }
-      int cp;
-      int nextPos;
-      int cls;
-      if (pos < textLen) {
-        int singleUnitCodePoint = text.singleUnitCodePointAt(pos);
-        if (singleUnitCodePoint >= 0) {
-          cp = singleUnitCodePoint;
-          nextPos = pos + 1;
-          cls =
-              singleUnitCodePoint < asciiClassMap.length
-                  ? asciiClassMap[singleUnitCodePoint]
-                  : classOf(singleUnitCodePoint);
+        if (WorkCounterConfig.ENABLED) {
+          WorkCounter.record();
+        }
+        int cp;
+        int nextPos;
+        int cls;
+        if (pos < textLen) {
+          int singleUnitCodePoint = text.singleUnitCodePointAt(pos);
+          if (singleUnitCodePoint >= 0) {
+            cp = singleUnitCodePoint;
+            nextPos = pos + 1;
+            cls =
+                singleUnitCodePoint < asciiClassMap.length
+                    ? asciiClassMap[singleUnitCodePoint]
+                    : classOf(singleUnitCodePoint);
+          } else {
+            long decoded = text.decodeForward(pos);
+            cp = InputScanner.codePoint(decoded);
+            nextPos = InputScanner.position(decoded);
+            cls = classOf(cp);
+          }
         } else {
-          long decoded = text.decodeForward(pos);
-          cp = InputScanner.codePoint(decoded);
-          nextPos = InputScanner.position(decoded);
-          cls = classOf(cp);
+          cp = -1;
+          nextPos = textLen + 1;
+          cls = numClasses - 1;
         }
-      } else {
-        cp = -1;
-        nextPos = textLen + 1;
-        cls = numClasses - 1;
-      }
 
-      // Compute the next state, using the transition cache when safe.
-      // Transitions where the destination position has text-length-dependent emptyFlags
-      // (END_TEXT, DOLLAR_END) must bypass the cache to preserve the invariant that
-      // cached transitions are position-independent. The end-of-text sentinel (cp < 0)
-      // is always safe to cache because it always means "at text end".
-      int effectiveNextPos = Math.min(nextPos, textLen);
-      State ns;
-      if (transitionDependsOnPosition(cp, effectiveNextPos, posDepThreshold)) {
-        ns = computeNextOrReset(s, cp, text, effectiveNextPos, pos);
-        if (ns == null) {
-          return completeForwardSearch(null, pos, backoff); // budget exceeded
-        }
-      } else {
-        ns = s.next[cls];
-        if (ns == null) {
-          ns = transitionOrReset(s, cls, cp, text, effectiveNextPos, pos);
+        // Compute the next state, using the transition cache when safe.
+        // Transitions where the destination position has text-length-dependent emptyFlags
+        // (END_TEXT, DOLLAR_END) must bypass the cache to preserve the invariant that
+        // cached transitions are position-independent. The end-of-text sentinel (cp < 0)
+        // is always safe to cache because it always means "at text end".
+        int effectiveNextPos = Math.min(nextPos, textLen);
+        State ns;
+        if (transitionDependsOnPosition(cp, effectiveNextPos, posDepThreshold)) {
+          ns = computeNextOrReset(s, cp, text, effectiveNextPos, pos);
           if (ns == null) {
             return completeForwardSearch(null, pos, backoff); // budget exceeded
           }
-        }
-      }
-
-      s = ns;
-
-      if (s == deadState) {
-        break;
-      }
-
-      if (s.isMatch()) {
-        // FLAG_MATCH_BEFORE indicates a deferred assertion (\b, multiline $) fired before
-        // consuming the current character and reached MATCH. Try the before-consume position
-        // first (it's at an earlier position, preserving leftmost-first semantics).
-        if ((s.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE) {
-          int endPos = pos;
-          if (isRequiredEndMatch(endPos, needEndMatch, textLen, trailingTermStart)) {
-            matched = true;
-            matchEnd = endPos;
-            if (!longest && canStopAtFirstMatch(s, text, endPos, needEndMatch)) {
-              return completeForwardSearch(new SearchResult(true, matchEnd), pos, backoff);
+        } else {
+          ns = s.next[cls];
+          if (ns == null) {
+            ns = transitionOrReset(s, cls, cp, text, effectiveNextPos, pos);
+            if (ns == null) {
+              return completeForwardSearch(null, pos, backoff); // budget exceeded
             }
           }
         }
-        // Try the after-consume position: either no before-consume match exists, or it was
-        // rejected (e.g., needEndMatch but pos != textLen) and an after-consume match also
-        // exists (FLAG_MATCH_AFTER_DEFERRED).
-        if ((s.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) != FLAG_MATCH_BEFORE) {
-          int endPos = Math.min(nextPos, textLen);
-          if (isRequiredEndMatch(endPos, needEndMatch, textLen, trailingTermStart)) {
-            matched = true;
-            matchEnd = endPos;
-            if (!longest && canStopAtFirstMatch(s, text, endPos, needEndMatch)) {
-              return completeForwardSearch(new SearchResult(true, matchEnd), pos, backoff);
+
+        s = ns;
+
+        if (s == deadState) {
+          break generalLoop;
+        }
+
+        if (s.isMatch()) {
+          // FLAG_MATCH_BEFORE indicates a deferred assertion (\b, multiline $) fired before
+          // consuming the current character and reached MATCH. Try the before-consume position
+          // first (it's at an earlier position, preserving leftmost-first semantics).
+          if ((s.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE) {
+            int endPos = pos;
+            if (isRequiredEndMatch(endPos, needEndMatch, textLen, trailingTermStart)) {
+              matched = true;
+              matchEnd = endPos;
+              if (!longest && canStopAtFirstMatch(s, text, endPos, needEndMatch)) {
+                return completeForwardSearch(new SearchResult(true, matchEnd), pos, backoff);
+              }
+            }
+          }
+          // Try the after-consume position: either no before-consume match exists, or it was
+          // rejected (e.g., needEndMatch but pos != textLen) and an after-consume match also
+          // exists (FLAG_MATCH_AFTER_DEFERRED).
+          if ((s.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) != FLAG_MATCH_BEFORE) {
+            int endPos = Math.min(nextPos, textLen);
+            if (isRequiredEndMatch(endPos, needEndMatch, textLen, trailingTermStart)) {
+              matched = true;
+              matchEnd = endPos;
+              if (!longest && canStopAtFirstMatch(s, text, endPos, needEndMatch)) {
+                return completeForwardSearch(new SearchResult(true, matchEnd), pos, backoff);
+              }
             }
           }
         }
-      }
 
-      if (pos >= textLen) {
-        break;
-      }
-      pos = nextPos;
+        if (pos >= textLen) {
+          break generalLoop;
+        }
+        pos = nextPos;
+      } while (pos < accelerationResumePos || !s.isStartState);
     }
 
     return completeForwardSearch(new SearchResult(matched, matchEnd), pos, backoff);
