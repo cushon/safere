@@ -387,9 +387,7 @@ final class MultiAnchorCompiler {
    * input without the class before any per-call setup, including once up front in {@code
    * replaceAll}, whereas the leading-expansion accelerator only gets there through its own
    * candidate loop. On {@code UnicodePrefixBenchmark.cjk.absent}, {@code [\u4E00-\u9FFF]+\d+}
-   * measured 2.8x faster with the {@code [0-9]} prefilter than without it. When the input does
-   * contain a two-member small-set class, the scanner memo lets the accelerator reuse the
-   * prefilter's search.
+   * measured 2.8x faster with the {@code [0-9]} prefilter than without it.
    *
    * <p>The exception is an ASCII leading class in front of a non-selective inner class, such as
    * {@code \d} in {@code [A-Za-z]+\d+}. Such a class occurs in almost any input, so the prefilter
