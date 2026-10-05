@@ -103,7 +103,7 @@ record AcceleratorPolicy(
    * Policy for leading-expansion wrappers, which delegate the actual scan to an inner accelerator
    * and carry that accelerator's diagnostic strategy.
    */
-  static final AcceleratorPolicy LEADING_EXPANSION = of(16, false, null);
+  static final AcceleratorPolicy LEADING_EXPANSION = of(24, false, null);
 
   /** Default fallback policy for generic or composite accelerators. */
   static final AcceleratorPolicy DEFAULT = of(32, false, null);
