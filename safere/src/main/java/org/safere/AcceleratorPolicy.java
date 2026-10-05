@@ -102,8 +102,18 @@ record AcceleratorPolicy(
   /**
    * Policy for leading-expansion wrappers, which delegate the actual scan to an inner accelerator
    * and carry that accelerator's diagnostic strategy.
+   *
+   * <p>A call costs more than its inner scan: the wrapper expands the optional leading class
+   * backward from each inner candidate, and the DFA restarts there. On dense citations such as
+   * {@code citationScrubberFullWidth} ({@code ?[\[\uFF3B]...} over text where every {@code \uFF3B}
+   * starts a match), skips alternate between about 4 and 29 characters. At a break-even of 16 the
+   * long skips repay the short ones, so the accelerator never quarantined there, and on aarch64 it
+   * cost {@code FullWidth.2048} 1.26x and {@code FullWidth.65536} 1.15x of {@code main} (String).
+   * At 32 those read 1.09x and 1.01x, x86 is neutral, and sparse citations and short inputs still
+   * accelerate. The cost is {@code citationScrubberFullWidthNoMatch.2048} about 7% slower on both
+   * ISAs, still faster than {@code main}.
    */
-  static final AcceleratorPolicy LEADING_EXPANSION = of(16, false, null);
+  static final AcceleratorPolicy LEADING_EXPANSION = of(32, false, null);
 
   /** Default fallback policy for generic or composite accelerators. */
   static final AcceleratorPolicy DEFAULT = of(32, false, null);
