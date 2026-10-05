@@ -18,17 +18,25 @@ import org.junit.jupiter.params.provider.ValueSource;
 /**
  * Start-acceleration backoff carried across the searches of a {@code find()} sequence.
  *
- * <p>The accelerator for {@code x[0-9]+y} finds the next {@code x}. On input where every {@code x}
- * starts a match right where the previous match ended, every call skips nothing, so the accelerator
- * only adds overhead.
+ * <p>The accelerator for {@code [xz][0-9]+y} finds the next {@code x} or {@code z}. On input where
+ * every {@code x} starts a match right where the previous match ended, every call skips nothing, so
+ * the accelerator only adds overhead. A character class does not identify exact match starts, so
+ * the matcher-level accelerator calls are charged too.
  */
 @DisabledForCrosscheck("WorkCounter and acceleration policies are SafeRE implementation details")
 @Tag("work-counter")
 class DfaStartAccelerationBackoffTest {
-  private static final String REGEX = "x[0-9]+y";
+  private static final String REGEX = "[xz][0-9]+y";
   private static final String DENSE_UNIT = "x1y";
   private static final int DENSE_COUNT = 30_000;
-  private static final AcceleratorPolicy POLICY = AcceleratorPolicy.LITERAL;
+  private static final AcceleratorPolicy POLICY = AcceleratorPolicy.CHAR_CLASS;
+
+  @Test
+  void patternUsesACharacterClassAccelerator() {
+    Pattern pattern = Pattern.compile(REGEX);
+    assertThat(pattern.stringStartAccelerator().policy()).isEqualTo(POLICY);
+    assertThat(pattern.utf8StartAccelerator().policy()).isEqualTo(POLICY);
+  }
 
   @ParameterizedTest
   @ValueSource(booleans = {false, true})
@@ -51,7 +59,7 @@ class DfaStartAccelerationBackoffTest {
   void defeatStaysLinearAcrossReplaceAllSearches() {
     // A character-class accelerator has no literal prefix, so replaceAll searches with the DFA's
     // own start acceleration on every match.
-    Pattern pattern = Pattern.compile("[xz][0-9]+y");
+    Pattern pattern = Pattern.compile(REGEX);
     String input = DENSE_UNIT.repeat(DENSE_COUNT);
     String[] result = new String[1];
 

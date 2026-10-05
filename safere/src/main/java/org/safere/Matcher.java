@@ -398,14 +398,15 @@ public final class Matcher implements MatchResult {
 
   /**
    * Start-acceleration backoff state carried across the searches of one sequence of {@code find()}
-   * calls; see {@link AdaptiveBackoff}. Each forward DFA search reads it once on entry and writes it
-   * once on exit, and the matcher-level accelerator calls in {@code doFindCore} and {@code
+   * calls; see {@link AdaptiveBackoff}. Each forward DFA search reads it once on entry and writes
+   * it once on exit, and the matcher-level accelerator calls in {@code doFindCore} and {@code
    * findNextMatchPacked} are charged to it too, so a sequence of {@code find()} calls over input
    * that defeats the accelerator pays the loss limit once rather than once per call. Cleared on
-   * reset, region and pattern changes. The state only decides whether to call the accelerator, so
-   * a stale value can cost time but never changes a result.
+   * reset, region and pattern changes. The state only decides whether to call the accelerator, so a
+   * stale value can cost time but never changes a result.
    */
   private long startBackoff;
+
   private String graphemeContextText;
   private GraphemeSupport.Context graphemeContext;
 
@@ -4827,7 +4828,12 @@ public final class Matcher implements MatchResult {
     if (canUseForwardDfa()) {
       fwdResult =
           forwardDfaSearch(
-              dfa(false), scanner, effectiveStart, prog.anchorStart(), false, startPositionPreselected);
+              dfa(false),
+              scanner,
+              effectiveStart,
+              prog.anchorStart(),
+              false,
+              startPositionPreselected);
       if (fwdResult != null && !fwdResult.matched()) {
         return -1L;
       }

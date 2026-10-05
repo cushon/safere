@@ -44,8 +44,7 @@ record AcceleratorPolicy(
     // shortfall, in the packed AdaptiveBackoff state.
     if (minProfitableSkip < 0
         || strikeBudget < 0
-        || (long) strikeBudget * minProfitableSkip + minProfitableSkip
-            > AdaptiveBackoff.MAX_DEFICIT
+        || (long) strikeBudget * minProfitableSkip + minProfitableSkip > AdaptiveBackoff.MAX_DEFICIT
         || initialQuarantineWindow <= 0
         || maxQuarantineWindow < initialQuarantineWindow) {
       throw new IllegalArgumentException("invalid accelerator policy");
