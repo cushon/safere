@@ -631,6 +631,20 @@ class MultiAnchorCompilerTest {
     assertThat(digitsReject.scanInfo().ranges()).containsExactly('0', '9');
   }
 
+  @Test
+  void optionalCharBeforeCommonClassKeepsRejectPrefilter() {
+    // No start accelerator scans for a class this common, so a leading expansion would only drop
+    // the reject that makes input without the class cheap.
+    for (String regex : List.of("-?\\d+", "[+-]?\\d+", "#?[0-9A-Fa-f]{6}")) {
+      Pattern pattern = Pattern.compile(regex);
+      assertThat(pattern.startPlan()).as(regex).isNotInstanceOf(StartPlan.LeadingExpansion.class);
+      assertThat(pattern.rejectPlan()).as(regex).isNotEqualTo(RejectPlan.None.INSTANCE);
+    }
+    // A selective inner class still gets the expansion.
+    assertThat(Pattern.compile(" ?[\\[\uFF3B]\\d+").startPlan())
+        .isInstanceOf(StartPlan.LeadingExpansion.class);
+  }
+
   /**
    * Returns the {@link CharClassScanInfo} a leading {@code [ranges]} character class compiles to.
    */

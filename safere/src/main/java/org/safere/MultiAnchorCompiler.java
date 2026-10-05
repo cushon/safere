@@ -1276,6 +1276,15 @@ final class MultiAnchorCompiler {
         || inner instanceof MultiAnchorDescriptor.StartPlan.LeadingExpansion) {
       return null;
     }
+    // An optional leading character in front of a class too common to scan for, such as `-?\d+`,
+    // gets no start accelerator, and the expansion would only make extractRejectPlan drop the
+    // inner class's reject prefilter. Leave such patterns with no start plan, as before `?` was
+    // supported, so they keep the reject.
+    if (first.op == RegexpOp.QUEST
+        && inner instanceof MultiAnchorDescriptor.StartPlan.CharClass cc
+        && !cc.scanInfo().isSelective()) {
+      return null;
+    }
 
     return new MultiAnchorDescriptor.StartPlan.LeadingExpansion(
         leadingClass, minRepetition, maxRepetition, idx > 0, inner);
