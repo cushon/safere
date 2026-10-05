@@ -433,6 +433,20 @@ class RejectPrefilterTest {
         .isFalse();
     assertThat(prefilter.canReject(utf8Scanner("\u00e9\u4E00\uFF3B no closing"), 0, options))
         .isTrue();
+    // Each member on either side of the first non-ASCII byte, including inputs long enough to
+    // reach the word-at-a-time scans.
+    for (int prefix : new int[] {0, 7, 8, 9, 300}) {
+      String ascii = "x".repeat(prefix);
+      assertThat(prefilter.canReject(utf8Scanner(ascii), 0, options)).isTrue();
+      assertThat(prefilter.canReject(utf8Scanner(ascii + "]"), 0, options)).isFalse();
+      assertThat(prefilter.canReject(utf8Scanner(ascii + "\u4E00" + ascii), 0, options)).isTrue();
+      assertThat(prefilter.canReject(utf8Scanner(ascii + "]\u4E00"), 0, options)).isFalse();
+      assertThat(prefilter.canReject(utf8Scanner(ascii + "\u4E00" + ascii + "]"), 0, options))
+          .isFalse();
+      assertThat(prefilter.canReject(utf8Scanner(ascii + "\uFF3D" + ascii), 0, options)).isFalse();
+      assertThat(prefilter.canReject(utf8Scanner(ascii + "\u4E00" + ascii + "\uFF3D"), 0, options))
+          .isFalse();
+    }
     // Non-ASCII UTF-8 class scans have no memo and use scalar decoding, so they only run once from
     // index 0.
     assertThat(prefilter.canReject(utf8Scanner("] tail without brackets"), 2, options)).isFalse();

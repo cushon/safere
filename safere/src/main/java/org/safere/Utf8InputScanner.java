@@ -450,21 +450,46 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
   }
 
   /**
-   * Returns the position of the first code point in {@code [start, limit)} that lies in {@code
-   * nonAsciiRanges}, or {@code -1}. Every range must be at or above {@code 0x80}; ASCII bytes are
-   * skipped without decoding, eight at a time.
+   * Returns the position of the first occurrence of {@code sequence}, the UTF-8 encoding of one
+   * non-ASCII code point, starting in {@code [start, limit)}, or {@code -1}.
+   *
+   * <p>This searches for the sequence's last byte with the byte search kernel and then compares the
+   * bytes before it, so it never decodes. In valid UTF-8 a match is at a code point boundary,
+   * because the sequence starts with a lead byte. The last byte is a continuation byte, which
+   * varies more than lead bytes do in text from one script, so fewer hits fail the comparison.
    */
-  int indexOfNonAsciiClass(int[] nonAsciiRanges, int start, int limit) {
+  int indexOfUtf8Sequence(byte[] sequence, int start, int limit) {
     int position = Math.max(0, start);
     int scanLen = Math.min(length, limit);
-    if (position >= scanLen) {
-      return -1;
+    int tail = sequence.length - 1;
+    byte last = sequence[tail];
+    int from = position + tail;
+    int result = -1;
+    while (from < scanLen) {
+      int hit = scanByte(scanLen, last, from);
+      if (hit < 0 || hit >= scanLen) {
+        break;
+      }
+      int candidate = hit - tail;
+      if (precedingBytesMatch(sequence, candidate, tail)) {
+        result = candidate;
+        break;
+      }
+      from = hit + 1;
     }
-    int result = indexOfNonAsciiCodePointClass(nonAsciiRanges, position, scanLen);
-    if (WorkCounterConfig.ENABLED) {
-      WorkCounter.record((result >= 0 ? result + 1 : scanLen) - position);
+    if (WorkCounterConfig.ENABLED && position < scanLen) {
+      WorkCounter.record((result >= 0 ? result + sequence.length : scanLen) - position);
     }
     return result;
+  }
+
+  private boolean precedingBytesMatch(byte[] sequence, int candidate, int count) {
+    for (int i = 0; i < count; i++) {
+      if (bytes[offset + candidate + i] != sequence[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private int indexOfNonAsciiCodePointClass(int[] ranges, int start, int scanLen) {
