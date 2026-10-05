@@ -292,6 +292,13 @@ final class Dfa {
   private boolean lastSearchBailed;
 
   /**
+   * Start-acceleration backoff state (see {@link AdaptiveBackoff}) at the end of the most recent
+   * forward search. Written once per search, never read inside a search; see {@link
+   * #startBackoff()}.
+   */
+  private long lastStartBackoff;
+
+  /**
    * Whether the current cache generation has already been penalized for exhausting its state budget
    * before covering {@link #MIN_PROGRESS_PER_CACHED_STATE} positions per state, so repeated hits on
    * the same full cache do not increment {@link #unproductiveResets} more than once per generation.
@@ -863,6 +870,12 @@ final class Dfa {
   private <T> T completeSearch(T result, int pos) {
     recordSearchProgress(pos);
     return result;
+  }
+
+  /** Completes a forward search, publishing its final start-acceleration backoff state. */
+  private SearchResult completeForwardSearch(SearchResult result, int pos, long startBackoff) {
+    lastStartBackoff = startBackoff;
+    return completeSearch(result, pos);
   }
 
   /**
@@ -1651,7 +1664,33 @@ final class Dfa {
       boolean anchored,
       boolean longest,
       boolean startPositionPreselected) {
-    return doSearchInternal(text, startPos, anchored, longest, startPositionPreselected);
+    return doSearchInternal(
+        text, startPos, anchored, longest, startPositionPreselected, AdaptiveBackoff.NEUTRAL);
+  }
+
+  /**
+   * Like {@link #doSearch(InputScanner, int, boolean, boolean, boolean)}, but starts from the
+   * start-acceleration backoff state {@code startBackoff} left by an earlier search of the same
+   * input. The updated state is available from {@link #startBackoff()} when this returns.
+   */
+  SearchResult doSearch(
+      InputScanner text,
+      int startPos,
+      boolean anchored,
+      boolean longest,
+      boolean startPositionPreselected,
+      long startBackoff) {
+    return doSearchInternal(
+        text, startPos, anchored, longest, startPositionPreselected, startBackoff);
+  }
+
+  /**
+   * Returns the start-acceleration backoff state at the end of the most recent forward search.
+   *
+   * <p>Searches that cannot use start acceleration return their initial state unchanged.
+   */
+  long startBackoff() {
+    return lastStartBackoff;
   }
 
   /**
@@ -1712,7 +1751,7 @@ final class Dfa {
    *     exceeded its state budget
    */
   SearchResult doSearch(InputScanner text, int startPos, boolean anchored, boolean longest) {
-    return doSearchInternal(text, startPos, anchored, longest, false);
+    return doSearchInternal(text, startPos, anchored, longest, false, AdaptiveBackoff.NEUTRAL);
   }
 
   private SearchResult doSearchInternal(
@@ -1720,7 +1759,8 @@ final class Dfa {
       int startPos,
       boolean anchored,
       boolean longest,
-      boolean startPositionPreselected) {
+      boolean startPositionPreselected,
+      long startBackoff) {
     graphemeContext = GraphemeSupport.Context.create(text, hasGraphemeSemantics);
     beginSearch(startPos);
     int pos = startPos;
@@ -1743,7 +1783,7 @@ final class Dfa {
 
     State s = startStateOrReset(text, startPos, anchored, false);
     if (s == null) {
-      return completeSearch(null, pos);
+      return completeForwardSearch(null, pos, startBackoff);
     }
 
     boolean matched = false;
@@ -1754,13 +1794,13 @@ final class Dfa {
         matched = true;
         matchEnd = startPos;
         if (!longest && canStopAtFirstMatch(s, text, startPos, needEndMatch)) {
-          return completeSearch(new SearchResult(true, startPos), pos);
+          return completeForwardSearch(new SearchResult(true, startPos), pos, startBackoff);
         }
       }
     }
 
     if (s == deadState) {
-      return completeSearch(new SearchResult(matched, matchEnd), pos);
+      return completeForwardSearch(new SearchResult(matched, matchEnd), pos, startBackoff);
     }
 
     AcceleratorPolicy activePolicy = startAccelerationPolicy(text, s);
@@ -1781,11 +1821,11 @@ final class Dfa {
     // skips in excess of the estimated call cost can repay the deficit and reset quarantine.
     // One strike's allowance is one call's cost: a break-even call cannot erase another call's
     // loss. The deficit stays bounded by the allowance, regardless of the size of the input.
-    // Backoff is local to this search. A later find may use a different input or region, and
-    // relearning starts with a bounded allowance rather than carrying density from that search.
-    int skippedWorkDeficit = 0;
-    int accelerationResumePos = startPos;
-    int quarantineWindow = initialQuarantineWindow;
+    // The caller may carry the backoff state across searches of the same input (see
+    // AdaptiveBackoff), so a sequence of find() calls pays the loss limit once rather than once per
+    // search. It is read here once and written back once when the search completes.
+    long backoff = startBackoff;
+    int accelerationResumePos = AdaptiveBackoff.resumePos(backoff);
 
     int[] transitions = this.transitions;
     State[] offsetToState = this.offsetToState;
@@ -1804,25 +1844,19 @@ final class Dfa {
         }
         if (nextPos == -1) {
           pos = textLen;
-          return completeSearch(new SearchResult(matched, matchEnd), pos);
+          return completeForwardSearch(new SearchResult(matched, matchEnd), pos, backoff);
         }
-        int skipped = nextPos - pos;
-        if (skipped < minSkip) {
-          skippedWorkDeficit += minSkip - skipped;
-          if (skippedWorkDeficit >= lossLimit) {
-            if (WorkCounterConfig.ENABLED) {
-              WorkCounter.recordStartQuarantine(quarantineWindow);
-            }
-            accelerationResumePos = nextPos + Math.min(quarantineWindow, textLen - nextPos);
-            quarantineWindow = Math.min(quarantineWindow << 1, maxQuarantineWindow);
-            skippedWorkDeficit = lossLimit >>> 1;
-          }
-        } else if (skippedWorkDeficit > 0) {
-          skippedWorkDeficit = Math.max(0, skippedWorkDeficit + minSkip - skipped);
-          if (skippedWorkDeficit == 0) {
-            quarantineWindow = initialQuarantineWindow;
-          }
-        }
+        backoff =
+            AdaptiveBackoff.recordSkip(
+                backoff,
+                nextPos - pos,
+                nextPos,
+                textLen,
+                minSkip,
+                lossLimit,
+                initialQuarantineWindow,
+                maxQuarantineWindow);
+        accelerationResumePos = AdaptiveBackoff.resumePos(backoff);
         if (nextPos > pos) {
           pos = nextPos;
           if (pos >= textLen) {
@@ -1830,7 +1864,7 @@ final class Dfa {
           }
           s = startStateOrReset(text, pos, anchored, false);
           if (s == null) {
-            return completeSearch(null, pos);
+            return completeForwardSearch(null, pos, backoff);
           }
           // Creating a start state, or resetting the cache, can grow or replace the contents of
           // the flat arrays, just like computeNext below.
@@ -1842,12 +1876,12 @@ final class Dfa {
               matched = true;
               matchEnd = pos;
               if (!longest && canStopAtFirstMatch(s, text, pos, needEndMatch)) {
-                return completeSearch(new SearchResult(true, pos), pos);
+                return completeForwardSearch(new SearchResult(true, pos), pos, backoff);
               }
             }
           }
           if (s == deadState) {
-            return completeSearch(new SearchResult(matched, matchEnd), pos);
+            return completeForwardSearch(new SearchResult(matched, matchEnd), pos, backoff);
           }
         }
       }
@@ -1889,7 +1923,7 @@ final class Dfa {
                   (ns.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
               int endPos = useBefore ? pos : pos + 1;
               if (!longest && ns.isHighestPriorityMatch) {
-                return completeSearch(new SearchResult(true, endPos), pos);
+                return completeForwardSearch(new SearchResult(true, endPos), pos, backoff);
               }
               matched = true;
               matchEnd = endPos;
@@ -1923,7 +1957,7 @@ final class Dfa {
                   (ns.flags & (FLAG_MATCH_BEFORE | FLAG_MATCH_AFTER_DEFERRED)) == FLAG_MATCH_BEFORE;
               int endPos = useBefore ? pos : pos + 1;
               if (!longest && ns.isHighestPriorityMatch) {
-                return completeSearch(new SearchResult(true, endPos), pos);
+                return completeForwardSearch(new SearchResult(true, endPos), pos, backoff);
               }
               matched = true;
               matchEnd = endPos;
@@ -1955,7 +1989,7 @@ final class Dfa {
         int effectiveNextPos = pos + 1;
         ns = transitionOrReset(s, cls, ch, text, effectiveNextPos, pos);
         if (ns == null) {
-          return completeSearch(null, pos); // budget exceeded
+          return completeForwardSearch(null, pos, backoff); // budget exceeded
         }
         // computeNext can grow the flat arrays and a cache reset replaces their contents. Either
         // way s is no longer usable, but the loop reloads sId from ns on the next iteration.
@@ -1975,7 +2009,7 @@ final class Dfa {
           matched = true;
           matchEnd = endPos;
           if (!longest && canStopAtFirstMatch(s, text, endPos, needEndMatch)) {
-            return completeSearch(new SearchResult(true, matchEnd), pos);
+            return completeForwardSearch(new SearchResult(true, matchEnd), pos, backoff);
           }
         }
       }
@@ -1996,25 +2030,19 @@ final class Dfa {
         }
         if (nextPos == -1) {
           pos = textLen;
-          return completeSearch(new SearchResult(matched, matchEnd), pos);
+          return completeForwardSearch(new SearchResult(matched, matchEnd), pos, backoff);
         }
-        int skipped = nextPos - pos;
-        if (skipped < minSkip) {
-          skippedWorkDeficit += minSkip - skipped;
-          if (skippedWorkDeficit >= lossLimit) {
-            if (WorkCounterConfig.ENABLED) {
-              WorkCounter.recordStartQuarantine(quarantineWindow);
-            }
-            accelerationResumePos = nextPos + Math.min(quarantineWindow, textLen - nextPos);
-            quarantineWindow = Math.min(quarantineWindow << 1, maxQuarantineWindow);
-            skippedWorkDeficit = lossLimit >>> 1;
-          }
-        } else if (skippedWorkDeficit > 0) {
-          skippedWorkDeficit = Math.max(0, skippedWorkDeficit + minSkip - skipped);
-          if (skippedWorkDeficit == 0) {
-            quarantineWindow = initialQuarantineWindow;
-          }
-        }
+        backoff =
+            AdaptiveBackoff.recordSkip(
+                backoff,
+                nextPos - pos,
+                nextPos,
+                textLen,
+                minSkip,
+                lossLimit,
+                initialQuarantineWindow,
+                maxQuarantineWindow);
+        accelerationResumePos = AdaptiveBackoff.resumePos(backoff);
         if (nextPos > pos) {
           pos = nextPos;
           if (pos > textLen) {
@@ -2022,19 +2050,19 @@ final class Dfa {
           }
           s = startStateOrReset(text, pos, anchored, false);
           if (s == null) {
-            return completeSearch(null, pos);
+            return completeForwardSearch(null, pos, backoff);
           }
           if (s.isMatch()) {
             if (isRequiredEndMatch(pos, needEndMatch, textLen, trailingTermStart)) {
               matched = true;
               matchEnd = pos;
               if (!longest && canStopAtFirstMatch(s, text, pos, needEndMatch)) {
-                return completeSearch(new SearchResult(true, pos), pos);
+                return completeForwardSearch(new SearchResult(true, pos), pos, backoff);
               }
             }
           }
           if (s == deadState) {
-            return completeSearch(new SearchResult(matched, matchEnd), pos);
+            return completeForwardSearch(new SearchResult(matched, matchEnd), pos, backoff);
           }
         }
       }
@@ -2086,14 +2114,14 @@ final class Dfa {
       if (transitionDependsOnPosition(cp, effectiveNextPos, posDepThreshold)) {
         ns = computeNextOrReset(s, cp, text, effectiveNextPos, pos);
         if (ns == null) {
-          return completeSearch(null, pos); // budget exceeded
+          return completeForwardSearch(null, pos, backoff); // budget exceeded
         }
       } else {
         ns = s.next[cls];
         if (ns == null) {
           ns = transitionOrReset(s, cls, cp, text, effectiveNextPos, pos);
           if (ns == null) {
-            return completeSearch(null, pos); // budget exceeded
+            return completeForwardSearch(null, pos, backoff); // budget exceeded
           }
         }
       }
@@ -2114,7 +2142,7 @@ final class Dfa {
             matched = true;
             matchEnd = endPos;
             if (!longest && canStopAtFirstMatch(s, text, endPos, needEndMatch)) {
-              return completeSearch(new SearchResult(true, matchEnd), pos);
+              return completeForwardSearch(new SearchResult(true, matchEnd), pos, backoff);
             }
           }
         }
@@ -2127,7 +2155,7 @@ final class Dfa {
             matched = true;
             matchEnd = endPos;
             if (!longest && canStopAtFirstMatch(s, text, endPos, needEndMatch)) {
-              return completeSearch(new SearchResult(true, matchEnd), pos);
+              return completeForwardSearch(new SearchResult(true, matchEnd), pos, backoff);
             }
           }
         }
@@ -2139,7 +2167,7 @@ final class Dfa {
       pos = nextPos;
     }
 
-    return completeSearch(new SearchResult(matched, matchEnd), pos);
+    return completeForwardSearch(new SearchResult(matched, matchEnd), pos, backoff);
   }
 
   // ---------------------------------------------------------------------------

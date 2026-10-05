@@ -39,6 +39,19 @@ record AcceleratorPolicy(
   // TODO: Conduct systematic empirical micro-benchmarking across diverse CPU architectures (x86
   // AVX-512/AVX2, ARM Neon) to precisely tune minimum profitable skip thresholds.
 
+  AcceleratorPolicy {
+    // DFA start acceleration keeps its deficit, which stays below the loss limit plus one call's
+    // shortfall, in the packed AdaptiveBackoff state.
+    if (minProfitableSkip < 0
+        || strikeBudget < 0
+        || (long) strikeBudget * minProfitableSkip + minProfitableSkip
+            > AdaptiveBackoff.MAX_DEFICIT
+        || initialQuarantineWindow <= 0
+        || maxQuarantineWindow < initialQuarantineWindow) {
+      throw new IllegalArgumentException("invalid accelerator policy");
+    }
+  }
+
   /**
    * Candidate strikes tolerated before quarantining an accelerator.
    *
