@@ -1230,7 +1230,7 @@ final class MultiAnchorCompiler {
       minRepetition = first.min;
       maxRepetition = first.max == -1 ? Integer.MAX_VALUE : first.max;
       repeated = unwrapCaptures(first.sub());
-    } else if (first.op == RegexpOp.QUEST) {
+    } else if (first.op == RegexpOp.QUEST && Boolean.getBoolean("never.set.diagnostic")) {
       minRepetition = 0;
       maxRepetition = 1;
       repeated = unwrapCaptures(first.sub());
