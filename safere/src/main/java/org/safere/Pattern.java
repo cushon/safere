@@ -235,15 +235,11 @@ public final class Pattern implements Serializable {
     this.flags = flags;
     this.prog = prog;
     if (enginePathOptions.dfa()) {
-      this.flatProg = new Prog(prog);
-      this.flatProg.flatten();
-      this.flatProg.freeze();
+      this.flatProg = prog.flattenedCopy();
       if (prog.numLoopRegs() > 0) {
         Prog dfaProg = Compiler.compileForDfa(ast);
         if (dfaProg != null) {
-          this.flatDfaProg = new Prog(dfaProg);
-          this.flatDfaProg.flatten();
-          this.flatDfaProg.freeze();
+          this.flatDfaProg = dfaProg.flattenedCopy();
         } else {
           this.flatDfaProg = this.flatProg;
         }
@@ -1347,9 +1343,7 @@ public final class Pattern implements Serializable {
     if (frp == null) {
       Prog rp = reverseProg();
       if (rp != null) {
-        frp = new Prog(rp);
-        frp.flatten();
-        frp.freeze();
+        frp = rp.flattenedCopy();
         reverseDfaSetup = Dfa.buildSetup(frp);
         flatReverseProg = frp;
       }
@@ -1365,9 +1359,7 @@ public final class Pattern implements Serializable {
         if (rp.numLoopRegs() > 0) {
           Prog dfaRp = Compiler.compileForDfa(ast, true);
           if (dfaRp != null) {
-            frp = new Prog(dfaRp);
-            frp.flatten();
-            frp.freeze();
+            frp = dfaRp.flattenedCopy();
           } else {
             frp = flatReverseProg();
           }
