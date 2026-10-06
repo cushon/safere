@@ -27,7 +27,8 @@ public final class GraphemeTableGenerator {
       Pattern.compile("# GraphemeBreakProperty-(\\d+\\.\\d+\\.\\d+)\\.txt");
   private static final Pattern DERIVED_CORE_PROPERTIES_HEADER =
       Pattern.compile("# DerivedCoreProperties-(\\d+\\.\\d+\\.\\d+)\\.txt");
-  private static final Pattern EMOJI_DATA_HEADER = Pattern.compile("# Version: (\\d+\\.\\d+)");
+  private static final Pattern EMOJI_DATA_HEADER =
+      Pattern.compile("# Version: (\\d+\\.\\d+(?:\\.\\d+)?)");
 
   private static final List<String> TABLE_NAMES =
       List.of(
@@ -79,7 +80,7 @@ public final class GraphemeTableGenerator {
    * Parses {@code sources} and returns the grapheme tables.
    *
    * @param expectedVersion the Unicode version (for example {@code 17.0.0}) that every file must
-   *     declare in its header
+   *     declare in its header, or {@code null} to accept any version as long as the files agree
    * @throws IllegalArgumentException if a file declares a different Unicode version, the files
    *     disagree with each other, or the data is malformed
    */
@@ -101,7 +102,8 @@ public final class GraphemeTableGenerator {
             DERIVED_CORE_PROPERTIES_HEADER,
             tables);
     String emojiVersion = read(sources.emojiData(), Kind.EMOJI_DATA, EMOJI_DATA_HEADER, tables);
-    if (!derivedVersion.equals(version) || !version.startsWith(emojiVersion + ".")) {
+    if (!derivedVersion.equals(version)
+        || !(version.equals(emojiVersion) || version.startsWith(emojiVersion + "."))) {
       throw new IllegalArgumentException(
           "Unicode data files disagree on version: %s declares %s, %s declares %s, %s declares %s"
               .formatted(
@@ -112,7 +114,7 @@ public final class GraphemeTableGenerator {
                   sources.emojiData(),
                   emojiVersion));
     }
-    if (!version.equals(expectedVersion)) {
+    if (expectedVersion != null && !version.equals(expectedVersion)) {
       throw new IllegalArgumentException(
           "Wrong Unicode version: expected %s but data files declare %s"
               .formatted(expectedVersion, version));

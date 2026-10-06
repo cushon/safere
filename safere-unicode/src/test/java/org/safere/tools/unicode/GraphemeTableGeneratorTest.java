@@ -108,6 +108,26 @@ class GraphemeTableGeneratorTest {
         GraphemeTableGenerator.generate(
             GraphemeTableGenerator.Sources.inDirectory(temporary), "18.0.0");
     assertThat(result.unicodeVersion()).isEqualTo("18.0.0");
+    assertThat(
+            GraphemeTableGenerator.generate(
+                    GraphemeTableGenerator.Sources.inDirectory(temporary), null)
+                .unicodeVersion())
+        .isEqualTo("18.0.0");
+  }
+
+  @Test
+  void acceptsThreeComponentEmojiDataVersionHeader() throws IOException {
+    prepareData();
+    for (String name : List.of("GraphemeBreakProperty.txt", "DerivedCoreProperties.txt")) {
+      Path file = temporary.resolve(name);
+      Files.writeString(file, Files.readString(file).replace("17.0.0", "18.0.0"));
+    }
+    Path emoji = temporary.resolve("emoji-data.txt");
+    Files.writeString(emoji, Files.readString(emoji).replace("17.0", "18.0.0"));
+    GraphemeTableGenerator.Result result =
+        GraphemeTableGenerator.generate(
+            GraphemeTableGenerator.Sources.inDirectory(temporary), "18.0.0");
+    assertThat(result.unicodeVersion()).isEqualTo("18.0.0");
   }
 
   @Test

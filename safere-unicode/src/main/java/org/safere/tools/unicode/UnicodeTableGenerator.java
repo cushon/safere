@@ -85,7 +85,8 @@ public final class UnicodeTableGenerator {
       Path derivedCoreProperties = null;
       Path emojiData = null;
       Path unicodeLicense = null;
-      String unicodeVersion = GraphemeTableGenerator.DEFAULT_UNICODE_VERSION;
+      String unicodeVersion = null;
+      boolean customSources = false;
       for (String arg : args) {
         if (!arg.startsWith("--")) {
           if (output != null) {
@@ -100,14 +101,29 @@ public final class UnicodeTableGenerator {
         }
         String value = arg.substring(equals + 1);
         switch (arg.substring(0, equals)) {
-          case "--unicode-data" -> data = Path.of(value);
-          case "--grapheme-break-property" -> graphemeBreakProperty = Path.of(value);
-          case "--derived-core-properties" -> derivedCoreProperties = Path.of(value);
-          case "--emoji-data" -> emojiData = Path.of(value);
+          case "--unicode-data" -> {
+            data = Path.of(value);
+            customSources = true;
+          }
+          case "--grapheme-break-property" -> {
+            graphemeBreakProperty = Path.of(value);
+            customSources = true;
+          }
+          case "--derived-core-properties" -> {
+            derivedCoreProperties = Path.of(value);
+            customSources = true;
+          }
+          case "--emoji-data" -> {
+            emojiData = Path.of(value);
+            customSources = true;
+          }
           case "--unicode-license" -> unicodeLicense = Path.of(value);
           case "--unicode-version" -> unicodeVersion = value;
           default -> throw new IllegalArgumentException(USAGE);
         }
+      }
+      if (unicodeVersion == null && !customSources) {
+        unicodeVersion = GraphemeTableGenerator.DEFAULT_UNICODE_VERSION;
       }
       GraphemeTableGenerator.Sources defaults = GraphemeTableGenerator.Sources.inDirectory(data);
       return new Options(

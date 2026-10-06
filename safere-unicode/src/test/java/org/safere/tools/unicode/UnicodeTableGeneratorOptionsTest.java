@@ -51,6 +51,7 @@ class UnicodeTableGeneratorOptionsTest {
                 Path.of("ucd/emoji/emoji-data.txt")));
     assertThat(options.unicodeLicense()).isEqualTo(Path.of("LICENSE"));
     assertThat(options.unicodeVersion()).isEqualTo("18.0.0");
+    assertThat(UnicodeTableGenerator.Options.parse("--unicode-data=ucd").unicodeVersion()).isNull();
   }
 
   @Test
