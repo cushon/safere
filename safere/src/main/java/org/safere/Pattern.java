@@ -304,7 +304,8 @@ public final class Pattern implements Serializable {
     this.defaultPreparedMatchRunner = createPreparedRunner(false);
     this.regionPreparedMatchRunner = createPreparedRunner(true);
 
-    // Eagerly compute analysis and setup to avoid latency spikes on first use.
+    // Eagerly prepare the artifacts that find() and group() may need, to avoid latency spikes on
+    // first use. Artifacts that only specific operations can use are built on first use instead.
     if (shouldEagerlyBuildOnePass()) {
       onePassAnalysis();
     }
@@ -1017,7 +1018,7 @@ public final class Pattern implements Serializable {
       return new Matcher.ShiftDfaPreparedRunner(matchDescriptor.shiftDfa());
     }
 
-    if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
+    if (enginePathOptions.onePass() && mayOnePassPrimary()) {
       return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
 
@@ -1047,7 +1048,7 @@ public final class Pattern implements Serializable {
       return new Matcher.ShiftDfaPreparedRunner(matchDescriptor.shiftDfa());
     }
 
-    if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
+    if (enginePathOptions.onePass() && mayOnePassPrimary()) {
       return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
 
@@ -1209,7 +1210,24 @@ public final class Pattern implements Serializable {
    * {@link #canOnePassPrimary()} restricted to patterns anchored at the start.
    */
   boolean canOnePassFind() {
-    return onePassAnalysis().canFind();
+    return prog.anchorStart() && onePassAnalysis().canFind();
+  }
+
+  /**
+   * Returns whether {@link #canOnePassPrimary()} might be true, using only properties known without
+   * building OnePass. Prepared runners are chosen with this so that choosing one does not build
+   * OnePass; the runner checks {@link #canOnePassPrimary()} before using it.
+   */
+  private boolean mayOnePassPrimary() {
+    return !astAnalysis.hasLazy()
+        && prog.numCaptures() <= OnePass.MAX_CAPTURE_GROUPS
+        && !astAnalysis.hasNullableAlt()
+        && !prog.hasGraphemeSemantics();
+  }
+
+  /** Returns whether the OnePass analysis has been computed. For tests. */
+  boolean onePassAnalyzed() {
+    return onePassAnalysis != null;
   }
 
   /**
@@ -1249,8 +1267,16 @@ public final class Pattern implements Serializable {
     return !prog.anchorStart() && !matchDescriptor.hasFindFastPath();
   }
 
+  /**
+   * Returns whether to build OnePass in the constructor. OnePass is built eagerly when {@code
+   * find()} can use it: directly for start-anchored patterns, and for capture extraction in {@code
+   * group()} when the pattern has capturing groups. For other patterns only {@code matches()} and
+   * {@code lookingAt()} can use it, so it is built on first use.
+   */
   private boolean shouldEagerlyBuildOnePass() {
-    return !astAnalysis.hasLazy() && !matchDescriptor.hasFindFastPath();
+    return !astAnalysis.hasLazy()
+        && !matchDescriptor.hasFindFastPath()
+        && (prog.anchorStart() || numGroups() > 0);
   }
 
   /**
