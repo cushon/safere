@@ -147,6 +147,13 @@
   },
   "inputs": [
     {
+      "id": "compile.firstFind.boundedRepeatGap",
+      "recipe": {
+        "kind": "literal",
+        "text": "noise before the Total tail"
+      }
+    },
+    {
       "id": "crossEngine.RegexBenchmark.literalMatch.input",
       "recipe": {
         "kind": "literal",
@@ -7539,6 +7546,58 @@
       ],
       "inputs": [
         "fanout.ascii.102400"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "CompileBenchmark.compileBoundedRepeatGap",
+      "operation": "compile",
+      "patterns": [
+        "[\\s\\S]{0,100}Total"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "javaStringWithTimedUtf8Conversion"
+      ],
+      "inputRepresentationReason": "Compilation has no subject input; omit the SafeRE UTF-8 variant to avoid duplicating the same compiler.",
+      "resultConsumption": "compiledObject",
+      "measurement": {
+        "mode": "compileOnly",
+        "timingUnit": "microseconds"
+      }
+    },
+    {
+      "id": "CompileBenchmark.compileBoundedRepeatGroup",
+      "operation": "compile",
+      "patterns": [
+        "(?:[A-Z][a-z]+\\s*){5,60}"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "javaStringWithTimedUtf8Conversion"
+      ],
+      "inputRepresentationReason": "Compilation has no subject input; omit the SafeRE UTF-8 variant to avoid duplicating the same compiler.",
+      "resultConsumption": "compiledObject",
+      "measurement": {
+        "mode": "compileOnly",
+        "timingUnit": "microseconds"
+      }
+    },
+    {
+      "id": "CompileBenchmark.compileAndFindBoundedRepeatGap",
+      "operation": "compileAndFind",
+      "patterns": [
+        "[\\s\\S]{0,100}Total"
+      ],
+      "inputs": [
+        "compile.firstFind.boundedRepeatGap"
       ],
       "resultConsumption": "boolean",
       "measurement": {
