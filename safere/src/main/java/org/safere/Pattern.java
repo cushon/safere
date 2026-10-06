@@ -301,14 +301,13 @@ public final class Pattern implements Serializable {
             ? LiteralAlternation.compile(
                 ast, rejectPrefilter instanceof RejectPrefilter.DisjointLiterals)
             : null;
-    this.defaultPreparedMatchRunner = createPreparedRunner(false);
-    this.regionPreparedMatchRunner = createPreparedRunner(true);
-
     // Eagerly prepare the artifacts that find() and group() may need, to avoid latency spikes on
     // first use. Artifacts that only specific operations can use are built on first use instead.
     if (shouldEagerlyBuildOnePass()) {
       onePassAnalysis();
     }
+    this.defaultPreparedMatchRunner = createPreparedRunner(false);
+    this.regionPreparedMatchRunner = createPreparedRunner(true);
     forwardDfaSetup();
     if (canUseReverseDfa()) {
       flatReverseDfaProg();
@@ -1214,11 +1213,15 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns whether {@link #canOnePassPrimary()} might be true, using only properties known without
-   * building OnePass. Prepared runners are chosen with this so that choosing one does not build
-   * OnePass; the runner checks {@link #canOnePassPrimary()} before using it.
+   * Returns whether {@link #canOnePassPrimary()} might be true. If OnePass has not been built, this
+   * uses only properties known without building it, so that choosing a prepared runner does not
+   * build OnePass; the runner checks {@link #canOnePassPrimary()} before using it.
    */
   private boolean mayOnePassPrimary() {
+    OnePassAnalysis analysis = onePassAnalysis;
+    if (analysis != null) {
+      return analysis.canPrimary();
+    }
     return !astAnalysis.hasLazy()
         && prog.numCaptures() <= OnePass.MAX_CAPTURE_GROUPS
         && !astAnalysis.hasNullableAlt()
