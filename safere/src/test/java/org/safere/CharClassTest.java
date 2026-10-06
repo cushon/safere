@@ -189,6 +189,63 @@ class CharClassTest {
   }
 
   @Test
+  void randomizedOperationsInAnyOrderMatchBitSetReferenceModel() {
+    int domainSize = 2048;
+    Random random = new Random(0x5AFE_291L);
+
+    for (int trial = 0; trial < 200; trial++) {
+      CharClassBuilder builder = new CharClassBuilder();
+      BitSet expected = new BitSet(domainSize);
+
+      for (int step = 0; step < 60; step++) {
+        int a = random.nextInt(domainSize);
+        int b = random.nextInt(domainSize);
+        int lo = Math.min(a, b);
+        int hi = Math.min(Math.max(a, b), lo + random.nextInt(64));
+        switch (random.nextInt(8)) {
+          case 0, 1, 2 -> {
+            builder.addRange(lo, hi);
+            expected.set(lo, hi + 1);
+          }
+          case 3 -> {
+            builder.removeRange(lo, hi);
+            expected.clear(lo, hi + 1);
+          }
+          case 4 -> {
+            int r = random.nextInt(domainSize);
+            assertThat(builder.contains(r)).isEqualTo(expected.get(r));
+            assertThat(builder.numRunes()).isEqualTo(expected.cardinality());
+          }
+          case 5 -> {
+            CharClassBuilder other = new CharClassBuilder();
+            BitSet otherExpected = new BitSet(domainSize);
+            for (int i = 0; i < 8; i++) {
+              int olo = random.nextInt(domainSize);
+              int ohi = Math.min(domainSize - 1, olo + random.nextInt(256));
+              other.addRange(olo, ohi);
+              otherExpected.set(olo, ohi + 1);
+            }
+            builder.intersect(other);
+            expected.and(otherExpected);
+          }
+          case 6 -> {
+            CharClassBuilder other = new CharClassBuilder().addRange(hi, hi).addRange(lo, lo);
+            builder.addCharClass(other);
+            expected.set(lo);
+            expected.set(hi);
+          }
+          default -> {
+            // Negate twice so the domain stays within the reference model's range.
+            builder.negate().negate();
+          }
+        }
+      }
+
+      assertMatchesReferenceModel(builder.build(), expected, domainSize);
+    }
+  }
+
+  @Test
   void singleRune() {
     CharClass cc = new CharClassBuilder().addRune('X').build();
     assertThat(cc.numRanges()).isEqualTo(1);
