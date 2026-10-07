@@ -20,6 +20,42 @@ import org.junit.jupiter.api.Test;
 class SearchScalingRegressionTest {
 
   @Test
+  void endAnchoredLeadingExpansionNoMatchWorkIsIndependentOfInputLength() {
+    // A leading expansion (\\s*) gives these patterns a start accelerator. A failing search must
+    // still be decided by the reverse-first search from the end of the input, not by a forward scan
+    // from the first candidate.
+    for (String regex : new String[] {"(?i)\\s*(foo|fax)$", "\\s*(foo|fax)\\z"}) {
+      Pattern pattern = Pattern.compile(regex);
+      IntFunction<String> text = size -> "fine food offer ".repeat(size / 16) + "end";
+      long smallerString =
+          WorkCounter.countForTesting(
+              () -> assertThat(pattern.matcher(text.apply(2_000)).find()).isFalse());
+      long largerString =
+          WorkCounter.countForTesting(
+              () -> assertThat(pattern.matcher(text.apply(64_000)).find()).isFalse());
+      long smallerUtf8 =
+          WorkCounter.countForTesting(
+              () ->
+                  assertThat(
+                          pattern
+                              .matcher(Utf8Input.trusted(text.apply(2_000).getBytes(UTF_8)))
+                              .find())
+                      .isFalse());
+      long largerUtf8 =
+          WorkCounter.countForTesting(
+              () ->
+                  assertThat(
+                          pattern
+                              .matcher(Utf8Input.trusted(text.apply(64_000).getBytes(UTF_8)))
+                              .find())
+                      .isFalse());
+
+      assertThat(largerString).as("%s String", regex).isLessThan(smallerString * 2 + 64);
+      assertThat(largerUtf8).as("%s UTF-8", regex).isLessThan(smallerUtf8 * 2 + 64);
+    }
+  }
+
+  @Test
   void guardedGapRetriesReuseDelimiterScanWork() {
     Pattern pattern = Pattern.compile("AAAA[^;]*RAREBBB");
 
