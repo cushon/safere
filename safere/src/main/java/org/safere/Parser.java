@@ -1288,6 +1288,17 @@ final class Parser {
       // PARSE_NOTHING: fall through
     }
 
+    // JDK Pattern reads \v as U+000B instead of vertical whitespace when the next character is '-'
+    // (after empty \Q\E quotes are removed), an undocumented compatibility rule. SafeRE rejects
+    // that spelling instead of silently matching something different (see
+    // INTENTIONAL_DIVERGENCES.md).
+    if (startsVerticalTabRangeStart()) {
+      throw new IntentionalDivergenceSyntaxException(
+          "\\v before '-' in a character class is not supported; use \\x0B for U+000B",
+          pattern,
+          pos);
+    }
+
     // Look for Perl character class symbols.
     {
       int saved = pos;
@@ -1386,7 +1397,29 @@ final class Parser {
       System.arraycopy(literals, 1, trailing, 0, trailing.length);
       return new RangeEndpoint(literals[0], trailing);
     }
+    // JDK Pattern reads a \v range end as U+000B; SafeRE rejects it, as it does a \v range start.
+    if (startsVerticalTabEscapeAt(pos)) {
+      throw new IntentionalDivergenceSyntaxException(
+          "\\v cannot end a character class range; use \\x0B for U+000B", pattern, pos);
+    }
     return new RangeEndpoint(parseCCCharacter(), new int[0]);
+  }
+
+  private boolean startsVerticalTabRangeStart() {
+    if (!startsVerticalTabEscapeAt(pos)) {
+      return false;
+    }
+    int next = pos + 2;
+    while (startsEmptyQuotedLiteralAt(next)) {
+      next += 4;
+    }
+    return next < pattern.length() && pattern.charAt(next) == '-';
+  }
+
+  private boolean startsVerticalTabEscapeAt(int index) {
+    return index + 1 < pattern.length()
+        && pattern.charAt(index) == '\\'
+        && pattern.charAt(index + 1) == 'v';
   }
 
   private void skipClassRangeEndpointTrivia() {
