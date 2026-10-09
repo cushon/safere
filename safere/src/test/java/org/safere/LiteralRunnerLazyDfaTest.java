@@ -14,7 +14,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Patterns whose default {@code find()} runner is a literal runner build the forward DFA on first
@@ -129,6 +133,54 @@ class LiteralRunnerLazyDfaTest {
         }
       }
     } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  private static Stream<Arguments> sharedArtifacts() {
+    return Stream.of("hello", "apple|banana|cherry", "needle".repeat(256))
+        .flatMap(
+            regex ->
+                Stream.of("program", "DFA program", "setup")
+                    .map(artifact -> Arguments.of(regex, artifact)));
+  }
+
+  @ParameterizedTest
+  @MethodSource("sharedArtifacts")
+  void concurrentFirstUseSharesPreparedArtifact(String regex, String artifact) throws Exception {
+    Pattern pattern = Pattern.compile(regex);
+    assertThat(pattern.preparedMatchRunner(false))
+        .isInstanceOfAny(
+            Matcher.LiteralPreparedRunner.class, Matcher.LiteralAlternationPreparedRunner.class);
+    int threads = 32;
+    ExecutorService executor = Executors.newFixedThreadPool(threads);
+    CountDownLatch ready = new CountDownLatch(threads);
+    CountDownLatch start = new CountDownLatch(1);
+    try {
+      List<Future<Object>> results = new ArrayList<>();
+      for (int i = 0; i < threads; i++) {
+        results.add(
+            executor.submit(
+                () -> {
+                  ready.countDown();
+                  start.await();
+                  return switch (artifact) {
+                    case "program" -> pattern.flatProg();
+                    case "DFA program" -> pattern.flatDfaProg();
+                    case "setup" -> pattern.forwardDfaSetup();
+                    default -> throw new AssertionError(artifact);
+                  };
+                }));
+      }
+      ready.await();
+      start.countDown();
+      Object shared = results.getFirst().get();
+      assertThat(shared).isNotNull();
+      for (Future<Object> result : results) {
+        assertThat(result.get()).as(artifact).isSameAs(shared);
+      }
+    } finally {
+      start.countDown();
       executor.shutdownNow();
     }
   }

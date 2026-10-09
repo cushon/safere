@@ -249,11 +249,6 @@ public final class Pattern implements Serializable {
       this.flatProg = flatten(prog);
       Prog dfaProg = Compiler.compileForDfa(ast);
       this.flatDfaProg = dfaProg != null ? flatten(dfaProg) : this.flatProg;
-      this.forwardDfaSupported = supportsForwardDfa(this.flatDfaProg);
-    } else {
-      // Without loop registers the DFA program is the flattened program, which keeps the
-      // source program's grapheme and loop-register properties.
-      this.forwardDfaSupported = enginePathOptions.dfa() && supportsForwardDfa(prog);
     }
 
     this.ast = ast;
@@ -315,6 +310,11 @@ public final class Pattern implements Serializable {
         || defaultPreparedMatchRunner instanceof Matcher.LiteralAlternationPreparedRunner)) {
       forwardDfaSetup();
     }
+    // Flattening removes unreachable instructions, so eager paths must inspect their actual
+    // prepared program. Only literal runners defer this work; their source has no grapheme or
+    // loop-register instructions, and therefore already establishes support.
+    Prog forwardProgram = flatDfaProg != null ? flatDfaProg : flatProg != null ? flatProg : prog;
+    this.forwardDfaSupported = enginePathOptions.dfa() && supportsForwardDfa(forwardProgram);
     if (canUseReverseDfa()) {
       flatReverseDfaProg();
     }
@@ -1105,8 +1105,13 @@ public final class Pattern implements Serializable {
   Prog flatProg() {
     Prog p = flatProg;
     if (p == null && enginePathOptions.dfa()) {
-      p = flatten(prog);
-      flatProg = p;
+      synchronized (this) {
+        p = flatProg;
+        if (p == null) {
+          p = flatten(prog);
+          flatProg = p;
+        }
+      }
     }
     return p;
   }
@@ -1417,9 +1422,14 @@ public final class Pattern implements Serializable {
   Dfa.Setup forwardDfaSetup() {
     Dfa.Setup setup = forwardDfaSetup;
     if (setup == null) {
-      Prog flat = flatProg();
-      setup = Dfa.buildSetup(flat != null ? flat : prog);
-      forwardDfaSetup = setup;
+      synchronized (this) {
+        setup = forwardDfaSetup;
+        if (setup == null) {
+          Prog flat = flatProg();
+          setup = Dfa.buildSetup(flat != null ? flat : prog);
+          forwardDfaSetup = setup;
+        }
+      }
     }
     return setup;
   }
