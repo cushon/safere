@@ -1153,37 +1153,40 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns the lazily computed OnePass analysis results. Thread-safe via volatile: benign data
-   * race at worst computes twice, but the result is the same since all inputs are immutable.
+   * Returns the lazily computed OnePass analysis results. The volatile fast path serves initialized
+   * readers; the synchronized slow path prepares the analysis once under concurrent first use.
    */
   private OnePassAnalysis onePassAnalysis() {
     OnePassAnalysis analysis = onePassAnalysis;
     if (analysis == null) {
-      // Lazy quantifiers are excluded because OnePass returns leftmost-longest capture group
-      // boundaries, which differs from leftmost-first semantics for lazy groups. When hasLazy is
-      // true, neither canPrimary nor canSubmatch can use OnePass, so we can skip building OnePass.
-      if (astAnalysis.hasLazy() || prog.numCaptures() > OnePass.MAX_CAPTURE_GROUPS) {
-        analysis = OnePassAnalysis.DISABLED;
-      } else {
-        OnePass op = OnePass.build(prog);
-        // OnePass can be used as the primary matching engine (bypassing DFA entirely) when the
-        // pattern is non-nullable and has no lazy quantifiers. Nullable patterns (e.g., a*|c.)
-        // must be excluded because OnePass returns leftmost-longest semantics, which disagrees
-        // with JDK's leftmost-first (biased) semantics for nullable alternations.
-        boolean canPrimary =
-            op != null
-                && op.search("", false, 0) == null
-                && !astAnalysis.hasNullableAlt()
-                && !prog.hasGraphemeSemantics();
-        // canFind is canPrimary restricted to anchored patterns (legacy flag).
-        boolean canFind = canPrimary && prog.anchorStart();
-        // OnePass can be used for the sandwich submatch extraction step (anchored, endMatch=true)
-        // when captures need to be extracted from a known match range. Nullable patterns are safe
-        // here because match bounds are already known.
-        boolean canSubmatch = op != null;
-        analysis = new OnePassAnalysis(op, canPrimary, canFind, canSubmatch);
+      synchronized (this) {
+        analysis = onePassAnalysis;
+        if (analysis == null) {
+          // Skip OnePass for lazy quantifiers: its longest capture boundaries differ from their
+          // leftmost-first semantics. It also has a fixed limit on capture registers.
+          if (astAnalysis.hasLazy() || prog.numCaptures() > OnePass.MAX_CAPTURE_GROUPS) {
+            analysis = OnePassAnalysis.DISABLED;
+          } else {
+            OnePass op = OnePass.build(prog);
+            // OnePass can be used as the primary matching engine (bypassing DFA entirely) when the
+            // pattern is non-nullable and has no lazy quantifiers. Nullable patterns (e.g., a*|c.)
+            // must be excluded because OnePass returns leftmost-longest semantics, which disagrees
+            // with JDK's leftmost-first (biased) semantics for nullable alternations.
+            boolean canPrimary =
+                op != null
+                    && op.search("", false, 0) == null
+                    && !astAnalysis.hasNullableAlt()
+                    && !prog.hasGraphemeSemantics();
+            // canFind is canPrimary restricted to anchored patterns (legacy flag).
+            boolean canFind = canPrimary && prog.anchorStart();
+            // Submatch extraction is anchored to known bounds (endMatch=true); nullable patterns
+            // are safe because those bounds are already known.
+            boolean canSubmatch = op != null;
+            analysis = new OnePassAnalysis(op, canPrimary, canFind, canSubmatch);
+          }
+          onePassAnalysis = analysis;
+        }
       }
-      onePassAnalysis = analysis;
     }
     return analysis;
   }

@@ -10,6 +10,10 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -51,6 +55,42 @@ class PatternInternalTest {
   @ValueSource(strings = {"^[a-z]+@[a-z]+\\.com", "([a-z]+)@([a-z]+)\\.com"})
   void onePassIsBuiltEagerlyWhenFindCanUseIt(String regex) {
     assertThat(Pattern.compile(regex).onePassAnalyzed()).isTrue();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "\\d{4}-\\d{2}-\\d{2}, 2026-10-08",
+    "\\p{L}+\\s+\\p{Lu}\\p{Ll}*, john Smith",
+    "apple|banana|cherry, banana"
+  })
+  void concurrentFirstUseSharesOnePass(String regex, String input) throws Exception {
+    Pattern pattern = Pattern.compile(regex);
+    assertThat(pattern.onePassAnalyzed()).isFalse();
+
+    int workers = 32;
+    CyclicBarrier start = new CyclicBarrier(workers);
+    var futures = new ArrayList<Future<OnePass>>();
+    try (var executor = Executors.newFixedThreadPool(workers)) {
+      for (int worker = 0; worker < workers; worker++) {
+        futures.add(
+            executor.submit(
+                () -> {
+                  start.await();
+                  OnePass onePass = pattern.onePass();
+                  assertThat(pattern.matcher(input).matches()).isTrue();
+                  assertThat(pattern.matcher(input + " tail").lookingAt()).isTrue();
+                  assertThat(pattern.matcher(Utf8Input.trusted(input.getBytes(UTF_8))).matches())
+                      .isTrue();
+                  return onePass;
+                }));
+      }
+      OnePass shared = futures.getFirst().get();
+      assertThat(shared).isNotNull();
+      for (Future<OnePass> future : futures) {
+        assertThat(future.get()).isSameAs(shared);
+      }
+      assertThat(pattern.onePass()).isSameAs(shared);
+    }
   }
 
   @Test
