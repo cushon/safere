@@ -5,6 +5,7 @@
 
 package org.safere.tools.unicode;
 
+import com.ibm.icu.lang.CharacterProperties;
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UCharacter.GraphemeClusterBreak;
 import com.ibm.icu.lang.UCharacter.IndicConjunctBreak;
@@ -126,7 +127,8 @@ public final class UnicodeTableGenerator {
 
   private static String unicodeDataVersion() {
     VersionInfo version = UCharacter.getUnicodeVersion();
-    return "%d.%d.%d".formatted(version.getMajor(), version.getMinor(), version.getMilli());
+    return String.format(
+        Locale.ROOT, "%d.%d.%d", version.getMajor(), version.getMinor(), version.getMilli());
   }
 
   private static int[][][] buildCategoryTables() {
@@ -213,7 +215,7 @@ public final class UnicodeTableGenerator {
     }
     tables.put(
         "Extended_Pictographic",
-        toRanges(new UnicodeSet().applyIntPropertyValue(UProperty.EXTENDED_PICTOGRAPHIC, 1)));
+        toRanges(CharacterProperties.getBinaryPropertySet(UProperty.EXTENDED_PICTOGRAPHIC)));
     return tables;
   }
 
@@ -250,23 +252,23 @@ public final class UnicodeTableGenerator {
         new UnicodeSet().applyIntPropertyValue(UProperty.GRAPHEME_CLUSTER_BREAK, value));
   }
 
+  // ICU's IndicConjunctBreak constants are declared in property-value order, and ICU's
+  // PropNumbersTest checks that each ordinal equals the corresponding UProperty value.
+  @SuppressWarnings("EnumOrdinal")
   private static int[][] indicConjunctBreakRanges(IndicConjunctBreak value) {
-    int enumValue = UCharacter.getPropertyValueEnum(UProperty.INDIC_CONJUNCT_BREAK, value.name());
     return toRanges(
-        new UnicodeSet().applyIntPropertyValue(UProperty.INDIC_CONJUNCT_BREAK, enumValue));
+        new UnicodeSet().applyIntPropertyValue(UProperty.INDIC_CONJUNCT_BREAK, value.ordinal()));
   }
 
   private static int[][] toRanges(UnicodeSet set) {
-    int count = set.getRangeCount();
-    if (count == 0) {
+    if (set.isEmpty()) {
       throw new IllegalStateException("Empty UnicodeSet for property");
     }
-    int[][] ranges = new int[count][2];
-    for (int i = 0; i < count; i++) {
-      ranges[i][0] = set.getRangeStart(i);
-      ranges[i][1] = set.getRangeEnd(i);
+    List<int[]> ranges = new ArrayList<>();
+    for (UnicodeSet.EntryRange range : set.ranges()) {
+      ranges.add(new int[] {range.codepoint, range.codepointEnd});
     }
-    return ranges;
+    return ranges.toArray(int[][]::new);
   }
 
   private static void writeJava(PrintWriter out, GeneratedTables tables) throws IOException {
