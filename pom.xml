@@ -60,7 +60,9 @@
     <error-prone.checks>-XepDisableWarningsInGeneratedCode -XepExcludedPaths:.*/generated-sources/.* -Xep:FieldCanBeFinal:ERROR -Xep:MethodCanBeStatic:ERROR -Xep:YodaCondition:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:UnusedNestedClass:ERROR -Xep:UnusedTypeParameter:ERROR -Xep:UnnecessaryDefaultInEnumSwitch:ERROR -Xep:StringSplitter:OFF -Xep:ExposedPrivateType:OFF -Xep:ImmutableEnumChecker:OFF -Xep:JdkObsolete:OFF -Xep:ThreadPriorityCheck:OFF</error-prone.checks>
     <!-- Checks for production code only (src/main), not tests. DefaultLocale keeps output such as
          the generated Unicode tables independent of the JVM's default locale. -->
-    <error-prone.production-checks>-Xep:DefaultLocale:ERROR</error-prone.production-checks>
+    <error-prone.production-checks>-Xep:DefaultLocale:ERROR -Xep:NonFinalStaticField:ERROR -Xep:EqualsBrokenForNull:ERROR -Xep:ComparisonContractViolated:ERROR -Xep:UnnecessaryBoxedVariable:ERROR -Xep:UnnecessaryBoxedAssignment:ERROR -Xep:UnusedException:ERROR -Xep:SuppressWarningsWithoutExplanation:ERROR</error-prone.production-checks>
+    <!-- Extra production checks for the published library only; tools may print and exit. -->
+    <error-prone.library-checks></error-prone.library-checks>
     <error-prone.extra-checks></error-prone.extra-checks>
     <google-java-format.version>1.35.0</google-java-format.version>
     <pmd.version>7.28.0</pmd.version>
@@ -98,7 +100,7 @@
             <id>default-compile</id>
             <configuration>
               <compilerArgs combine.children="append">
-                <arg>-Xplugin:ErrorProne ${error-prone.checks} ${error-prone.production-checks} ${error-prone.extra-checks}</arg>
+                <arg>-Xplugin:ErrorProne ${error-prone.checks} ${error-prone.production-checks} ${error-prone.library-checks} ${error-prone.extra-checks}</arg>
               </compilerArgs>
             </configuration>
           </execution>
