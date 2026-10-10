@@ -1667,6 +1667,20 @@ public final class Matcher implements MatchResult {
   }
 
   /**
+   * Returns whether {@link #doFindCore} runs the reverse-first search for an end-anchored pattern,
+   * which decides from the end of the input whether any match exists. A leading-expansion start
+   * accelerator must not verify its first candidate with a forward DFA scan in that case: the scan
+   * reads the rest of the input to reach a decision the reverse search makes in time proportional
+   * to the suffix.
+   */
+  private boolean reverseFirstApplies(Prog prog, InputScanner scanner, boolean regionActive) {
+    return !regionActive
+        && prog.anchorEnd()
+        && scanner.length() >= MIN_REVERSE_FIRST_LEN
+        && canUseReverseDfa();
+  }
+
+  /**
    * Core find logic. When {@code regionActive} is true, the DFA sandwich with deferred captures is
    * disabled because resolveCaptures() would run on the full text with different empty-width
    * assertion semantics than the substring the DFA saw.
@@ -1732,7 +1746,8 @@ public final class Matcher implements MatchResult {
           }
           if (accelerator instanceof Utf8StartAccelerator.LeadingExpansion le
               && le.canVerifyAtInner()
-              && canUseForwardDfa()) {
+              && canUseForwardDfa()
+              && !reverseFirstApplies(prog, scanner, regionActive)) {
             int innerMatch = le.findInnerCandidate(utf8Scanner, searchFrom);
             if (innerMatch < 0) {
               if (strategy != null) {
@@ -1773,7 +1788,8 @@ public final class Matcher implements MatchResult {
           }
           if (accelerator instanceof StringStartAccelerator.LeadingExpansion le
               && le.canVerifyAtInner()
-              && canUseForwardDfa()) {
+              && canUseForwardDfa()
+              && !reverseFirstApplies(prog, scanner, regionActive)) {
             int innerMatch = le.findInnerCandidate(text, searchFrom, prog.lineStartUnixLines());
             if (innerMatch < 0) {
               if (strategy != null) {
@@ -1862,10 +1878,7 @@ public final class Matcher implements MatchResult {
     //
     // A null result from the reverse DFA means the DFA budget was exceeded — in that case we
     // must fall through to the normal forward DFA path rather than returning false.
-    if (!regionActive
-        && prog.anchorEnd()
-        && scanner.length() >= MIN_REVERSE_FIRST_LEN
-        && canUseReverseDfa()) {
+    if (reverseFirstApplies(prog, scanner, regionActive)) {
       Dfa revDfa = reverseDfa();
       if (revDfa != null) {
         diagnosticParticipation(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);

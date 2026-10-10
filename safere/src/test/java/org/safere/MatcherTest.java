@@ -14,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.regex.MatchResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -2973,6 +2974,35 @@ class MatcherTest {
       Matcher m = p.matcher(text);
       assertThat(m.find()).isTrue();
       assertThat(m.group()).isEqualTo("xyz");
+    }
+
+    @Test
+    @DisplayName("end-anchored pattern with a leading expansion matches like the JDK")
+    void endAnchoredLeadingExpansionAgreesWithJdk() {
+      String prose = "fine food offer ".repeat(200);
+      for (String regex :
+          List.of("(?i)\\s*(foo|fax)$", "\\s*(foo|fax)\\z", "(?i)_?(foo|fax)$", "\\s+foo$")) {
+        for (String text :
+            List.of(
+                prose,
+                prose + "foo",
+                prose + "  FOO",
+                prose + "fax\n",
+                prose + "_fax",
+                prose + "foo bar",
+                "foo" + prose)) {
+          java.util.regex.Matcher expected = java.util.regex.Pattern.compile(regex).matcher(text);
+          Matcher actual = Pattern.compile(regex).matcher(text);
+          boolean found = expected.find();
+          assertThat(actual.find())
+              .as("%s on ...%s", regex, text.substring(text.length() - 8))
+              .isEqualTo(found);
+          if (found) {
+            assertThat(actual.start()).isEqualTo(expected.start());
+            assertThat(actual.end()).isEqualTo(expected.end());
+          }
+        }
+      }
     }
   }
 
