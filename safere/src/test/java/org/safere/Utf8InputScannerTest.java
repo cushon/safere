@@ -804,9 +804,40 @@ class Utf8InputScannerTest {
     assertThat(whole.indexOfUtf8Sequence(sequence, 1, 8)).isEqualTo(5);
   }
 
+  @Test
+  void indexOfMixedPairFindsEarliestAsciiOrEncodedSequence() {
+    byte[] sequence = "\uFF3D".getBytes(UTF_8);
+
+    assertThat(utf8MixedPairIndex("]", ']', sequence, 0)).isEqualTo(0);
+    assertThat(utf8MixedPairIndex("\uFF3D", ']', sequence, 0)).isEqualTo(0);
+    assertThat(utf8MixedPairIndex("\u4E00]\uFF3D", ']', sequence, 0)).isEqualTo(3);
+    assertThat(utf8MixedPairIndex("\u4E00\uFF3D]", ']', sequence, 0)).isEqualTo(3);
+    assertThat(utf8MixedPairIndex("\u4E00\uFF3D]", ']', sequence, 4)).isEqualTo(6);
+    assertThat(utf8MixedPairIndex("no closing bracket \uFF3B", ']', sequence, 0)).isEqualTo(-1);
+    // U+00BD (C2 BD) and U+FF7D (EF BD BD) share the trailing byte 0xBD with U+FF3D (EF BC BD).
+    assertThat(utf8MixedPairIndex("\u00BD\uFF7D\u00BD", ']', sequence, 0)).isEqualTo(-1);
+    assertThat(utf8MixedPairIndex("\u00BD\uFF7D\uFF3D", ']', sequence, 0)).isEqualTo(5);
+    assertThat(utf8MixedPairIndex("\u00BD\uFF7D]", ']', sequence, 0)).isEqualTo(5);
+
+    // Slice bounds: a sequence starting before start or ending past limit is ignored.
+    byte[] bytes = "\uFF3Dab\uFF3Dcd]".getBytes(UTF_8);
+    Utf8InputScanner straddlesStart = new Utf8InputScanner(bytes, 1, bytes.length - 1);
+    assertThat(straddlesStart.indexOfMixedPair(']', sequence, 0, straddlesStart.length()))
+        .isEqualTo(4);
+    Utf8InputScanner whole = new Utf8InputScanner(bytes, 0, bytes.length);
+    assertThat(whole.indexOfMixedPair(']', sequence, 1, 7)).isEqualTo(-1);
+    assertThat(whole.indexOfMixedPair(']', sequence, 1, 8)).isEqualTo(5);
+  }
+
   private static int utf8SequenceIndex(String text, byte[] sequence, int start) {
     byte[] bytes = text.getBytes(UTF_8);
     return new Utf8InputScanner(bytes, 0, bytes.length)
         .indexOfUtf8Sequence(sequence, start, bytes.length);
+  }
+
+  private static int utf8MixedPairIndex(String text, int ascii, byte[] sequence, int start) {
+    byte[] bytes = text.getBytes(UTF_8);
+    return new Utf8InputScanner(bytes, 0, bytes.length)
+        .indexOfMixedPair(ascii, sequence, start, bytes.length);
   }
 }

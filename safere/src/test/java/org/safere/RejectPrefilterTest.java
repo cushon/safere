@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 @DisabledForCrosscheck("implementation test uses package-private SafeRE internals")
@@ -450,6 +451,24 @@ class RejectPrefilterTest {
     // Non-ASCII UTF-8 class scans have no memo and use scalar decoding, so they only run once from
     // index 0.
     assertThat(prefilter.canReject(utf8Scanner("] tail without brackets"), 2, options)).isFalse();
+  }
+
+  @Test
+  @Tag("work-counter")
+  void mixedPairUtf8RejectStopsAtEarlyNonAsciiMember() {
+    CharClassScanInfo scanInfo =
+        CharClassScanInfo.fromCharClass(
+            new CharClassBuilder().addRune(']').addRune('\uFF3D').build());
+    RejectPrefilter prefilter =
+        RejectPrefilter.create(new MultiAnchorDescriptor.RejectPlan.RequiredCharClass(scanInfo));
+    EnginePathOptions options = EnginePathOptions.allEnabled();
+
+    // When the non-ASCII member appears near the start of a long non-ASCII input that lacks the
+    // ASCII member, the single-pass mixed-pair scan stops at that early member instead of scanning
+    // the entire input for the absent ASCII member first.
+    Utf8InputScanner earlyFullWidth = utf8Scanner("\u4E00\uFF3D" + "\u4E00".repeat(10_000));
+    long work = WorkCounter.countForTesting(() -> prefilter.canReject(earlyFullWidth, 0, options));
+    assertThat(work).isLessThan(64L);
   }
 
   @Test

@@ -313,8 +313,7 @@ sealed interface RejectPrefilter
         if (scanner.asciiAt(first) == ascii) {
           return false;
         }
-        return scanner.indexOfAscii(ascii, first, length) < 0
-            && scanner.indexOfUtf8Sequence(nonAsciiUtf8, first, length) < 0;
+        return scanner.indexOfMixedPair(ascii, nonAsciiUtf8, first, length) < 0;
       }
       return scanner.indexOfCodePointClass(ranges, bitmap0, bitmap1, searchFrom, scanner.length())
           < 0;

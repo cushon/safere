@@ -483,6 +483,42 @@ final class Utf8InputScanner extends ByteSwarScan implements InputScanner {
     return result;
   }
 
+  int indexOfMixedPair(int ascii, byte[] sequence, int start, int limit) {
+    int position = Math.max(0, start);
+    int scanLen = Math.min(length, limit);
+    if (position >= scanLen) {
+      return -1;
+    }
+    int tail = sequence.length - 1;
+    byte asciiByte = (byte) ascii;
+    byte last = sequence[tail];
+    int from = position;
+    int result = -1;
+    int matchEnd = scanLen;
+    while (from < scanLen) {
+      int hit = scanBytePair(scanLen, asciiByte, last, from);
+      if (hit < 0 || hit >= scanLen) {
+        break;
+      }
+      if (bytes[offset + hit] == asciiByte) {
+        result = hit;
+        matchEnd = hit + 1;
+        break;
+      }
+      int candidate = hit - tail;
+      if (candidate >= position && precedingBytesMatch(sequence, candidate, tail)) {
+        result = candidate;
+        matchEnd = hit + 1;
+        break;
+      }
+      from = hit + 1;
+    }
+    if (WorkCounterConfig.ENABLED) {
+      WorkCounter.record(matchEnd - position);
+    }
+    return result;
+  }
+
   private boolean precedingBytesMatch(byte[] sequence, int candidate, int count) {
     for (int i = 0; i < count; i++) {
       if (bytes[offset + candidate + i] != sequence[i]) {
