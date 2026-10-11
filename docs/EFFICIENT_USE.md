@@ -1,4 +1,4 @@
-# Performance
+# Using SafeRE efficiently
 
 SafeRE's matching time is linear in the input for a compiled pattern, so the
 JDK advice about avoiding catastrophic backtracking does not apply. What still
@@ -11,12 +11,15 @@ do, and which operation is called. For how SafeRE executes a match, see
 
 `Pattern.compile` does more work in SafeRE than in `java.util.regex`. It
 analyzes the pattern and prepares automata and search accelerators so that
-later matches are fast, and that work is repeated every time a pattern is
-compiled. A compiled `Pattern` is immutable and can be shared between threads;
-a `Matcher` cannot.
+later matches are fast. Most of that work happens when the pattern is compiled;
+the rest happens the first time an operation needs it, and is then shared by
+every thread that uses the pattern. All of it is repeated every time a pattern
+is compiled. A compiled `Pattern` is immutable and can be shared between
+threads; a `Matcher` cannot.
 
 For a fixed regex, store the pattern in a `static final` field, so it is
-compiled once, when the class is initialized:
+compiled once, when the class is initialized. This is the example *Effective
+Java* (3rd edition) uses in Item 6, "Avoid creating unnecessary objects":
 
 ```java
 private static final Pattern EMAIL =
@@ -115,9 +118,9 @@ Prefer the clearest form.
 
 ## Measuring
 
-Measure on warmed code. The first calls run in the JVM interpreter, and
-first-use costs inside SafeRE, such as building per-thread matching state, are
-paid once per thread. For microbenchmarks, use [JMH](https://github.com/openjdk/jmh)
+Measure on warmed code. The first calls run in the JVM interpreter, and SafeRE
+has first-use costs of its own: some automata are built the first time a
+pattern needs them, and per-thread matching state is built once per thread. For microbenchmarks, use [JMH](https://github.com/openjdk/jmh)
 and a fixed heap size (`-Xms` equal to `-Xmx`), so heap growth does not show up
 as matching time.
 

@@ -55,4 +55,4 @@ include the trace when reporting an unexpected difference.
 SafeRE does more work than `java.util.regex` when compiling a pattern, so that
 matching is fast and linear in the input. Code that compiles a pattern for
 every match, including calls to the static `Pattern.matches`, should reuse
-compiled patterns instead. See [performance](PERFORMANCE.md).
+compiled patterns instead. See [Using SafeRE efficiently](EFFICIENT_USE.md).
