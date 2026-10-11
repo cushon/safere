@@ -246,9 +246,9 @@ public final class Pattern implements Serializable {
     this.flags = flags;
     this.prog = prog;
     if (enginePathOptions.dfa() && prog.numLoopRegs() > 0) {
-      this.flatProg = flatten(prog);
+      this.flatProg = prog.flattenedCopy();
       Prog dfaProg = Compiler.compileForDfa(ast);
-      this.flatDfaProg = dfaProg != null ? flatten(dfaProg) : this.flatProg;
+      this.flatDfaProg = dfaProg != null ? dfaProg.flattenedCopy() : this.flatProg;
     }
 
     this.ast = ast;
@@ -1108,7 +1108,7 @@ public final class Pattern implements Serializable {
       synchronized (this) {
         p = flatProg;
         if (p == null) {
-          p = flatten(prog);
+          p = prog.flattenedCopy();
           flatProg = p;
         }
       }
@@ -1133,13 +1133,6 @@ public final class Pattern implements Serializable {
 
   private static boolean supportsForwardDfa(Prog p) {
     return p != null && !p.hasGraphemeSemantics() && p.numLoopRegs() == 0;
-  }
-
-  private static Prog flatten(Prog source) {
-    Prog flat = new Prog(source);
-    flat.flatten();
-    flat.freeze();
-    return flat;
   }
 
   Dfa forwardFirstMatchDfa() {
@@ -1385,9 +1378,7 @@ public final class Pattern implements Serializable {
     if (frp == null) {
       Prog rp = reverseProg();
       if (rp != null) {
-        frp = new Prog(rp);
-        frp.flatten();
-        frp.freeze();
+        frp = rp.flattenedCopy();
         reverseDfaSetup = Dfa.buildSetup(frp);
         flatReverseProg = frp;
       }
@@ -1403,9 +1394,7 @@ public final class Pattern implements Serializable {
         if (rp.numLoopRegs() > 0) {
           Prog dfaRp = Compiler.compileForDfa(ast, true);
           if (dfaRp != null) {
-            frp = new Prog(dfaRp);
-            frp.flatten();
-            frp.freeze();
+            frp = dfaRp.flattenedCopy();
           } else {
             frp = flatReverseProg();
           }
