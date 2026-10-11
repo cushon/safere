@@ -1150,9 +1150,7 @@ public final class Matcher implements MatchResult {
     InputScanner scanner = activeScanner();
     boolean preferCaptureEngine = shouldPreferCaptureEngine(prog, scanner);
     // Medium path: use DFA to check if a full match exists.
-    if (!preferCaptureEngine
-        && enginePathOptions().dfa()
-        && dfaSupportsProgram(parentPattern.flatDfaProg())) {
+    if (!preferCaptureEngine && enginePathOptions().dfa() && parentPattern.forwardDfaSupported()) {
       diagnosticParticipation(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
       Dfa.SearchResult dfaResult = searchForwardDfa(dfa(true), scanner, true, true);
       if (dfaResult != null && !dfaResult.matched()) {
@@ -1302,9 +1300,7 @@ public final class Matcher implements MatchResult {
     InputScanner scanner = activeScanner();
     boolean preferCaptureEngine = shouldPreferCaptureEngine(prog, scanner);
     // Medium path: use DFA to check if an anchored match exists.
-    if (!preferCaptureEngine
-        && enginePathOptions().dfa()
-        && dfaSupportsProgram(parentPattern.flatDfaProg())) {
+    if (!preferCaptureEngine && enginePathOptions().dfa() && parentPattern.forwardDfaSupported()) {
       diagnosticParticipation(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
       Dfa.SearchResult dfaResult = searchForwardDfa(dfa(false), scanner, true, false);
       if (dfaResult != null && !dfaResult.matched()) {
@@ -1439,7 +1435,7 @@ public final class Matcher implements MatchResult {
   }
 
   private boolean canUseForwardDfa() {
-    return enginePathOptions().dfa() && dfaSupportsProgram(parentPattern.flatDfaProg());
+    return enginePathOptions().dfa() && parentPattern.forwardDfaSupported();
   }
 
   private boolean canUseReverseDfa() {
@@ -2018,7 +2014,7 @@ public final class Matcher implements MatchResult {
     // Fast path: use cached DFA to check if a match exists in the remaining text.
     // Use longest=false for a quick existence check — this returns the earliest match end.
     Dfa.SearchResult fwdResult;
-    if (!options.dfa() || !dfaSupportsProgram(parentPattern.flatDfaProg())) {
+    if (!options.dfa() || !parentPattern.forwardDfaSupported()) {
       fwdResult = null;
     } else {
       diagnosticParticipation(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);

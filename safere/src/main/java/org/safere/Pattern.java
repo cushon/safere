@@ -110,8 +110,19 @@ public final class Pattern implements Serializable {
   private final String pattern;
   private final int flags;
   private final transient Prog prog;
-  private final transient Prog flatProg;
-  private final transient Prog flatDfaProg;
+
+  /**
+   * Flattened copies of {@link #prog} for the DFA. Built in the constructor unless the default
+   * {@code find()} runner never uses the forward DFA; then built on first use. Patterns with loop
+   * registers always build them eagerly, since that requires a separate compilation.
+   */
+  private transient volatile Prog flatProg;
+
+  private transient volatile Prog flatDfaProg;
+
+  /** Whether the forward DFA supports {@link #flatDfaProg()}, known without building it. */
+  private final transient boolean forwardDfaSupported;
+
   private final transient Regexp ast;
   private final transient AstAnalysis astAnalysis;
   private final transient String prefix;
@@ -234,21 +245,10 @@ public final class Pattern implements Serializable {
     this.pattern = pattern;
     this.flags = flags;
     this.prog = prog;
-    if (enginePathOptions.dfa()) {
+    if (enginePathOptions.dfa() && prog.numLoopRegs() > 0) {
       this.flatProg = prog.flattenedCopy();
-      if (prog.numLoopRegs() > 0) {
-        Prog dfaProg = Compiler.compileForDfa(ast);
-        if (dfaProg != null) {
-          this.flatDfaProg = dfaProg.flattenedCopy();
-        } else {
-          this.flatDfaProg = this.flatProg;
-        }
-      } else {
-        this.flatDfaProg = this.flatProg;
-      }
-    } else {
-      this.flatProg = null;
-      this.flatDfaProg = null;
+      Prog dfaProg = Compiler.compileForDfa(ast);
+      this.flatDfaProg = dfaProg != null ? dfaProg.flattenedCopy() : this.flatProg;
     }
 
     this.ast = ast;
@@ -304,7 +304,17 @@ public final class Pattern implements Serializable {
     }
     this.defaultPreparedMatchRunner = createPreparedRunner(false);
     this.regionPreparedMatchRunner = createPreparedRunner(true);
-    forwardDfaSetup();
+    // Literal runners answer String find() without the forward DFA, so its program and setup
+    // are built on first use by another operation.
+    if (!(defaultPreparedMatchRunner instanceof Matcher.LiteralPreparedRunner
+        || defaultPreparedMatchRunner instanceof Matcher.LiteralAlternationPreparedRunner)) {
+      forwardDfaSetup();
+    }
+    // Flattening removes unreachable instructions, so eager paths must inspect their actual
+    // prepared program. Only literal runners defer this work; their source has no grapheme or
+    // loop-register instructions, and therefore already establishes support.
+    Prog forwardProgram = flatDfaProg != null ? flatDfaProg : flatProg != null ? flatProg : prog;
+    this.forwardDfaSupported = enginePathOptions.dfa() && supportsForwardDfa(forwardProgram);
     if (canUseReverseDfa()) {
       flatReverseDfaProg();
     }
@@ -1093,11 +1103,36 @@ public final class Pattern implements Serializable {
    * from warm DFA transitions.
    */
   Prog flatProg() {
-    return flatProg;
+    Prog p = flatProg;
+    if (p == null && enginePathOptions.dfa()) {
+      synchronized (this) {
+        p = flatProg;
+        if (p == null) {
+          p = prog.flattenedCopy();
+          flatProg = p;
+        }
+      }
+    }
+    return p;
   }
 
   Prog flatDfaProg() {
-    return flatDfaProg;
+    Prog p = flatDfaProg;
+    if (p == null && enginePathOptions.dfa()) {
+      // Only reached without loop registers, where the DFA program is the flattened program.
+      p = flatProg();
+      flatDfaProg = p;
+    }
+    return p;
+  }
+
+  /** Returns whether DFA paths implement every instruction in {@link #flatDfaProg()}. */
+  boolean forwardDfaSupported() {
+    return forwardDfaSupported;
+  }
+
+  private static boolean supportsForwardDfa(Prog p) {
+    return p != null && !p.hasGraphemeSemantics() && p.numLoopRegs() == 0;
   }
 
   Dfa forwardFirstMatchDfa() {
@@ -1105,7 +1140,7 @@ public final class Pattern implements Serializable {
     if (dfa == null) {
       dfa =
           new Dfa(
-              flatDfaProg,
+              flatDfaProg(),
               MAX_DFA_STATES,
               forwardDfaSetup(),
               false,
@@ -1121,7 +1156,7 @@ public final class Pattern implements Serializable {
     if (dfa == null) {
       dfa =
           new Dfa(
-              flatDfaProg,
+              flatDfaProg(),
               MAX_DFA_STATES,
               forwardDfaSetup(),
               true,
@@ -1408,8 +1443,14 @@ public final class Pattern implements Serializable {
   Dfa.Setup forwardDfaSetup() {
     Dfa.Setup setup = forwardDfaSetup;
     if (setup == null) {
-      setup = Dfa.buildSetup(flatProg != null ? flatProg : prog);
-      forwardDfaSetup = setup;
+      synchronized (this) {
+        setup = forwardDfaSetup;
+        if (setup == null) {
+          Prog flat = flatProg();
+          setup = Dfa.buildSetup(flat != null ? flat : prog);
+          forwardDfaSetup = setup;
+        }
+      }
     }
     return setup;
   }
@@ -1581,7 +1622,7 @@ public final class Pattern implements Serializable {
     if (canOnePassSubmatch()) {
       capabilities.add(PatternCapability.ONE_PASS_CAPTURE_EXTRACTION);
     }
-    if (flatDfaProg != null && !prog.hasGraphemeSemantics()) {
+    if (enginePathOptions.dfa() && !prog.hasGraphemeSemantics()) {
       if (prog.numLoopRegs() == 0) {
         capabilities.add(PatternCapability.DFA_BOUNDARY_SEARCH);
       } else {

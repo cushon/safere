@@ -769,4 +769,26 @@ class PatternInternalTest {
 
     assertThat(requiredLiteral(pattern)).isEqualTo(spaces);
   }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "(?:[a&&b]\\X)|a+",
+        "(?:[a&&b]\\b{g})|a+",
+        "a+|(?:[a&&b]\\X)",
+        "a+|(?:[a&&b]\\b{g})"
+      })
+  void forwardDfaSupportsProgramsAfterUnreachableGraphemeInstructionsAreRemoved(String regex) {
+    Pattern pattern = Pattern.compile(regex);
+    assertThat(pattern.prog().hasGraphemeSemantics()).isTrue();
+    assertThat(pattern.flatDfaProg().hasGraphemeSemantics()).isFalse();
+    assertThat(pattern.forwardDfaSupported()).isTrue();
+    assertThat(pattern.matcher("a".repeat(5_000)).matches()).isTrue();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"\\X|a+", "\\b{g}a+", "a+\\X"})
+  void forwardDfaRejectsLiveGraphemeInstructions(String regex) {
+    assertThat(Pattern.compile(regex).forwardDfaSupported()).isFalse();
+  }
 }
