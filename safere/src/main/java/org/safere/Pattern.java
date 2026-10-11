@@ -297,13 +297,13 @@ public final class Pattern implements Serializable {
             ? LiteralAlternation.compile(
                 ast, rejectPrefilter instanceof RejectPrefilter.DisjointLiterals)
             : null;
-    this.defaultPreparedMatchRunner = createPreparedRunner(false);
-    this.regionPreparedMatchRunner = createPreparedRunner(true);
-
-    // Eagerly compute analysis and setup to avoid latency spikes on first use.
+    // Eagerly prepare the artifacts that find() and group() may need, to avoid latency spikes on
+    // first use. Artifacts that only specific operations can use are built on first use instead.
     if (shouldEagerlyBuildOnePass()) {
       onePassAnalysis();
     }
+    this.defaultPreparedMatchRunner = createPreparedRunner(false);
+    this.regionPreparedMatchRunner = createPreparedRunner(true);
     forwardDfaSetup();
     if (canUseReverseDfa()) {
       flatReverseDfaProg();
@@ -1013,7 +1013,7 @@ public final class Pattern implements Serializable {
       return new Matcher.ShiftDfaPreparedRunner(matchDescriptor.shiftDfa());
     }
 
-    if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
+    if (enginePathOptions.onePass() && mayOnePassPrimary()) {
       return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
 
@@ -1043,7 +1043,7 @@ public final class Pattern implements Serializable {
       return new Matcher.ShiftDfaPreparedRunner(matchDescriptor.shiftDfa());
     }
 
-    if (enginePathOptions.onePass() && (canOnePassFind() || canOnePassPrimary())) {
+    if (enginePathOptions.onePass() && mayOnePassPrimary()) {
       return new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures());
     }
 
@@ -1149,37 +1149,40 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns the lazily computed OnePass analysis results. Thread-safe via volatile: benign data
-   * race at worst computes twice, but the result is the same since all inputs are immutable.
+   * Returns the lazily computed OnePass analysis results. The volatile fast path serves initialized
+   * readers; the synchronized slow path prepares the analysis once under concurrent first use.
    */
   private OnePassAnalysis onePassAnalysis() {
     OnePassAnalysis analysis = onePassAnalysis;
     if (analysis == null) {
-      // Lazy quantifiers are excluded because OnePass returns leftmost-longest capture group
-      // boundaries, which differs from leftmost-first semantics for lazy groups. When hasLazy is
-      // true, neither canPrimary nor canSubmatch can use OnePass, so we can skip building OnePass.
-      if (astAnalysis.hasLazy() || prog.numCaptures() > OnePass.MAX_CAPTURE_GROUPS) {
-        analysis = OnePassAnalysis.DISABLED;
-      } else {
-        OnePass op = OnePass.build(prog);
-        // OnePass can be used as the primary matching engine (bypassing DFA entirely) when the
-        // pattern is non-nullable and has no lazy quantifiers. Nullable patterns (e.g., a*|c.)
-        // must be excluded because OnePass returns leftmost-longest semantics, which disagrees
-        // with JDK's leftmost-first (biased) semantics for nullable alternations.
-        boolean canPrimary =
-            op != null
-                && op.search("", false, 0) == null
-                && !astAnalysis.hasNullableAlt()
-                && !prog.hasGraphemeSemantics();
-        // canFind is canPrimary restricted to anchored patterns (legacy flag).
-        boolean canFind = canPrimary && prog.anchorStart();
-        // OnePass can be used for the sandwich submatch extraction step (anchored, endMatch=true)
-        // when captures need to be extracted from a known match range. Nullable patterns are safe
-        // here because match bounds are already known.
-        boolean canSubmatch = op != null;
-        analysis = new OnePassAnalysis(op, canPrimary, canFind, canSubmatch);
+      synchronized (this) {
+        analysis = onePassAnalysis;
+        if (analysis == null) {
+          // Skip OnePass for lazy quantifiers: its longest capture boundaries differ from their
+          // leftmost-first semantics. It also has a fixed limit on capture registers.
+          if (astAnalysis.hasLazy() || prog.numCaptures() > OnePass.MAX_CAPTURE_GROUPS) {
+            analysis = OnePassAnalysis.DISABLED;
+          } else {
+            OnePass op = OnePass.build(prog);
+            // OnePass can be used as the primary matching engine (bypassing DFA entirely) when the
+            // pattern is non-nullable and has no lazy quantifiers. Nullable patterns (e.g., a*|c.)
+            // must be excluded because OnePass returns leftmost-longest semantics, which disagrees
+            // with JDK's leftmost-first (biased) semantics for nullable alternations.
+            boolean canPrimary =
+                op != null
+                    && op.search("", false, 0) == null
+                    && !astAnalysis.hasNullableAlt()
+                    && !prog.hasGraphemeSemantics();
+            // canFind is canPrimary restricted to anchored patterns (legacy flag).
+            boolean canFind = canPrimary && prog.anchorStart();
+            // Submatch extraction is anchored to known bounds (endMatch=true); nullable patterns
+            // are safe because those bounds are already known.
+            boolean canSubmatch = op != null;
+            analysis = new OnePassAnalysis(op, canPrimary, canFind, canSubmatch);
+          }
+          onePassAnalysis = analysis;
+        }
       }
-      onePassAnalysis = analysis;
     }
     return analysis;
   }
@@ -1205,7 +1208,28 @@ public final class Pattern implements Serializable {
    * {@link #canOnePassPrimary()} restricted to patterns anchored at the start.
    */
   boolean canOnePassFind() {
-    return onePassAnalysis().canFind();
+    return prog.anchorStart() && onePassAnalysis().canFind();
+  }
+
+  /**
+   * Returns whether {@link #canOnePassPrimary()} might be true. If OnePass has not been built, this
+   * uses only properties known without building it, so that choosing a prepared runner does not
+   * build OnePass; the runner checks {@link #canOnePassPrimary()} before using it.
+   */
+  private boolean mayOnePassPrimary() {
+    OnePassAnalysis analysis = onePassAnalysis;
+    if (analysis != null) {
+      return analysis.canPrimary();
+    }
+    return !astAnalysis.hasLazy()
+        && prog.numCaptures() <= OnePass.MAX_CAPTURE_GROUPS
+        && !astAnalysis.hasNullableAlt()
+        && !prog.hasGraphemeSemantics();
+  }
+
+  /** Returns whether the OnePass analysis has been computed. For tests. */
+  boolean onePassAnalyzed() {
+    return onePassAnalysis != null;
   }
 
   /**
@@ -1245,8 +1269,16 @@ public final class Pattern implements Serializable {
     return !prog.anchorStart() && !matchDescriptor.hasFindFastPath();
   }
 
+  /**
+   * Returns whether to build OnePass in the constructor. OnePass is built eagerly when {@code
+   * find()} can use it: directly for start-anchored patterns, and for capture extraction in {@code
+   * group()} when the pattern has capturing groups. For other patterns only {@code matches()} and
+   * {@code lookingAt()} can use it, so it is built on first use.
+   */
   private boolean shouldEagerlyBuildOnePass() {
-    return !astAnalysis.hasLazy() && !matchDescriptor.hasFindFastPath();
+    return !astAnalysis.hasLazy()
+        && !matchDescriptor.hasFindFastPath()
+        && (prog.anchorStart() || numGroups() > 0);
   }
 
   /**
