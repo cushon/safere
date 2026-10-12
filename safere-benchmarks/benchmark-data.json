@@ -840,6 +840,28 @@
       "shared": true
     },
     {
+      "id": "endAnchoredFind.prose.{length}",
+      "axes": {
+        "length": [
+          64,
+          16384
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "Notes from a walk to the food market, where a shop still sends a fax by the old phone line. ",
+        "length": "{length}"
+      }
+    },
+    {
+      "id": "endAnchoredFind.prose.64.foo",
+      "recipe": {
+        "kind": "appendInput",
+        "input": "endAnchoredFind.prose.64",
+        "suffix": " foo"
+      }
+    },
+    {
       "id": "searchScaling.prose.{size}",
       "axes": {
         "size": [
@@ -14893,6 +14915,112 @@
       ],
       "inputs": [
         "literalAlternation.delayed.{gap}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "EndAnchoredFindBenchmark.{regex}.noMatch.16384",
+      "axes": {
+        "regex": [
+          {
+            "id": "fooOrFax",
+            "value": "(foo|fax)$"
+          },
+          {
+            "id": "fooOrFaxCaseInsensitive",
+            "value": "(?i)(foo|fax)$"
+          },
+          {
+            "id": "optionalUnderscore",
+            "value": "(?i)_?(foo|fax)$"
+          },
+          {
+            "id": "requiredWhitespace",
+            "value": "(?i)\\s+(foo|fax)$"
+          },
+          {
+            "id": "optionalWhitespace",
+            "value": "(?i)\\s*(foo|fax)$"
+          },
+          {
+            "id": "singleCharControl",
+            "value": "o$"
+          }
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "{regex}"
+      ],
+      "inputs": [
+        "endAnchoredFind.prose.16384"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "EndAnchoredFindBenchmark.{regex}.noMatch.64",
+      "axes": {
+        "regex": [
+          {
+            "id": "fooOrFax",
+            "value": "(foo|fax)$"
+          },
+          {
+            "id": "singleCharControl",
+            "value": "o$"
+          }
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "{regex}"
+      ],
+      "inputs": [
+        "endAnchoredFind.prose.64"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "EndAnchoredFindBenchmark.{regex}.match.64",
+      "axes": {
+        "regex": [
+          {
+            "id": "fooOrFax",
+            "value": "(foo|fax)$"
+          },
+          {
+            "id": "singleCharControl",
+            "value": "o$"
+          }
+        ]
+      },
+      "operation": "find",
+      "patterns": [
+        "{regex}"
+      ],
+      "inputs": [
+        "endAnchoredFind.prose.64.foo"
       ],
       "resultConsumption": "boolean",
       "measurement": {
