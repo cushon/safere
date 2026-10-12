@@ -1294,7 +1294,8 @@ final class Parser {
     // INTENTIONAL_DIVERGENCES.md).
     if (startsVerticalTabRangeStart()) {
       throw new IntentionalDivergenceSyntaxException(
-          "\\v before '-' in a character class is not supported; use \\x0B for U+000B",
+          "ambiguous \\v before '-' in a character class: use \\x0B for U+000B, or escape the"
+              + " hyphen as \\- to keep \\v as vertical whitespace",
           pattern,
           pos);
     }
@@ -1400,7 +1401,10 @@ final class Parser {
     // JDK Pattern reads a \v range end as U+000B; SafeRE rejects it, as it does a \v range start.
     if (startsVerticalTabEscapeAt(pos)) {
       throw new IntentionalDivergenceSyntaxException(
-          "\\v cannot end a character class range; use \\x0B for U+000B", pattern, pos);
+          "ambiguous \\v as a character class range end: use \\x0B for U+000B, or escape the"
+              + " hyphen as \\- to keep \\v as vertical whitespace",
+          pattern,
+          pos);
     }
     return new RangeEndpoint(parseCCCharacter(), new int[0]);
   }

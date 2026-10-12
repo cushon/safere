@@ -266,7 +266,8 @@ class in JDK 8 ([JDK-7014640][jdk-7014640],
 
 SafeRE rejects these spellings with `PatternSyntaxException` instead of copying
 the undocumented rule or silently treating `\v` as the class in a position where
-the JDK means something else. Use `\x0B` for U+000B. `\v` everywhere else,
+the JDK means something else. Use `\x0B` for U+000B, or escape the hyphen
+(`[\v\-z]`, `[\t\-\v]`) to keep `\v` as vertical whitespace. `\v` everywhere else,
 including `[\v]`, `[a\v]` and `(?x)[\v -z]` (whitespace before `-`), keeps its
 documented meaning and matches like the JDK.
 

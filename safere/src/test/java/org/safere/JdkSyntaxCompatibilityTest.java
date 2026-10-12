@@ -1134,12 +1134,24 @@ class JdkSyntaxCompatibilityTest {
           .isThrownBy(() -> java.util.regex.Pattern.compile(regex));
       assertThatThrownBy(() -> Pattern.compile(regex))
           .isInstanceOf(PatternSyntaxException.class)
-          .hasMessageContaining("\\x0B");
+          .hasMessageContaining("\\x0B")
+          .hasMessageContaining("\\-");
     }
 
     @ParameterizedTest(name = "/{0}/")
     @ValueSource(
-        strings = {"[\\v]", "[a\\v]", "[\\v\\Q-\\Ez]", "(?x)[\\v -z]", "\\v-z", "[\\x0B-z]"})
+        strings = {
+          "[\\v]",
+          "[a\\v]",
+          "[\\v\\Q-\\Ez]",
+          "(?x)[\\v -z]",
+          "\\v-z",
+          "[\\x0B-z]",
+          // The spellings the error message suggests for keeping \v as vertical whitespace.
+          "[\\v\\-z]",
+          "[\\v\\-]",
+          "[\\t\\-\\v]"
+        })
     @DisplayName("\\\\v away from a class range hyphen matches like JDK")
     void verticalTabAwayFromClassRangeHyphenMatchesLikeJdk(String regex) {
       assertFullMatchesSameForAll(
