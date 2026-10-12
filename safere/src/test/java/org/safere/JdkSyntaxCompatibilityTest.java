@@ -1108,6 +1108,56 @@ class JdkSyntaxCompatibilityTest {
       assertMatchesFull("\\v", " "); // should not match
     }
 
+    @ParameterizedTest(name = "/{0}/")
+    @ValueSource(
+        strings = {
+          "[\\v-z]",
+          "[^\\v-z]",
+          "[\\v-]",
+          "[\\v-[a]]",
+          "[\\v-\\v]",
+          "[\\v-\\x0c]",
+          "[\\t-\\v]",
+          "[\\Q\\E\\v-z]",
+          "[\\v\\Q\\E-z]",
+          "[\\v-\\Q\\Ez]",
+          "(?x)[\\v- z]",
+          "(?x)[\\t- \\v]"
+        })
+    @DisplayName("\\\\v next to a class range hyphen is rejected (intentional divergence)")
+    void verticalTabNextToClassRangeHyphenIsRejected(String regex) {
+      // JDK Pattern reads \v as U+000B, not vertical whitespace, when the next character is '-' or
+      // when \v ends a range. That rule is undocumented, so SafeRE rejects these spellings rather
+      // than silently matching something different. See INTENTIONAL_DIVERGENCES.md.
+      assertThatNoException()
+          .as("JDK should accept: %s", regex)
+          .isThrownBy(() -> java.util.regex.Pattern.compile(regex));
+      assertThatThrownBy(() -> Pattern.compile(regex))
+          .isInstanceOf(PatternSyntaxException.class)
+          .hasMessageContaining("\\x0B")
+          .hasMessageContaining("\\-");
+    }
+
+    @ParameterizedTest(name = "/{0}/")
+    @ValueSource(
+        strings = {
+          "[\\v]",
+          "[a\\v]",
+          "[\\v\\Q-\\Ez]",
+          "(?x)[\\v -z]",
+          "\\v-z",
+          "[\\x0B-z]",
+          // The spellings the error message suggests for keeping \v as vertical whitespace.
+          "[\\v\\-z]",
+          "[\\v\\-]",
+          "[\\t\\-\\v]"
+        })
+    @DisplayName("\\\\v away from a class range hyphen matches like JDK")
+    void verticalTabAwayFromClassRangeHyphenMatchesLikeJdk(String regex) {
+      assertFullMatchesSameForAll(
+          regex, List.of("a", "z", "-", "\t", "\n", "\u000B", "\f", "\u0085", "\u2028", "\n-z"));
+    }
+
     @Test
     @DisplayName("\\\\V matches non-vertical whitespace")
     void nonVerticalWhitespace() {

@@ -249,6 +249,28 @@ leak (so `[\u0100&&[a]&]` fails to match `\u0100`). SafeRE treats all Unicode co
 points uniformly according to boolean set algebra rather than reproducing JDK parser
 bugs and implementation accidents.
 
+## `\v` next to a Range Hyphen in Character Classes
+
+The JDK `Pattern` documentation defines `\v` as the vertical-whitespace class
+`[\n\x0B\f\r\x85\u2028\u2029]`. Inside a character class, though, the JDK
+reads `\v` as the single character U+000B (VERTICAL TAB) when the next character
+is `-` (after empty `\Q\E` quotes are removed), whether or not a range follows,
+and when `\v` ends a range. So `[\v-z]` means `[\x0B-z]`, `[\v-]` means
+`[\x0B-]`, and `[\t-\v]` means `[\t-\x0B]`. This rule is not in the Javadoc. It
+was kept for backward compatibility when `\v` became the vertical-whitespace
+class in JDK 8 ([JDK-7014640][jdk-7014640],
+[review thread][jdk-7014640-review]).
+
+[jdk-7014640]: https://bugs.openjdk.org/browse/JDK-7014640
+[jdk-7014640-review]: https://mail.openjdk.org/pipermail/core-libs-dev/2012-April/009986.html
+
+SafeRE rejects these spellings with `PatternSyntaxException` instead of copying
+the undocumented rule or silently treating `\v` as the class in a position where
+the JDK means something else. Use `\x0B` for U+000B, or escape the hyphen
+(`[\v\-z]`, `[\t\-\v]`) to keep `\v` as vertical whitespace. `\v` everywhere else,
+including `[\v]`, `[a\v]` and `(?x)[\v -z]` (whitespace before `-`), keeps its
+documented meaning and matches like the JDK.
+
 ## Quoting Constructs inside Comments
 
 Issue reference: #858.
