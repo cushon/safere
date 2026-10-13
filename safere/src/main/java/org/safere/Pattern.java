@@ -576,7 +576,10 @@ public final class Pattern implements Serializable {
    * NFA scan over the whole input.
    */
   private boolean canFindUtf8Directly() {
-    return !prog.anchorEnd() && !prog.hasGraphemeSemantics() && prog.numLoopRegs() == 0;
+    return enginePathOptions.dfa()
+        && !prog.anchorEnd()
+        && !prog.hasGraphemeSemantics()
+        && prog.numLoopRegs() == 0;
   }
 
   boolean findWithDiagnostics(Utf8InputScanner scanner) {

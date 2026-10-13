@@ -3243,9 +3243,10 @@ public final class Matcher implements MatchResult {
     boolean regionActive = (regionStart != 0 || regionEnd != text.length());
     if (!canUseForwardDfa()
         || !parentPattern.dfaGroupZeroReliable()
-        // dollarAnchorEnd is safe if start-anchored because we skip the reverse DFA scan.
-        || (parentPattern.prog().dollarAnchorEnd() && !parentPattern.prog().anchorStart())
-        || parentPattern.literalMatch() != null
+        // End-anchored patterns that are not start-anchored match at most once and benefit from
+        // find()'s reverse-first DFA rejection.
+        || (parentPattern.prog().anchorEnd() && !parentPattern.prog().anchorStart())
+        || parentPattern.matchDescriptor().hasFindFastPath()
         || parentPattern.astAnalysis().hasNullableAlt()
         || regionActive) {
       return null;
@@ -4863,7 +4864,8 @@ public final class Matcher implements MatchResult {
       if (accelerator != null && startAccelerationAllowed(fromIndex, accelerator.policy())) {
         if (accelerator instanceof StringStartAccelerator.LeadingExpansion le
             && le.canVerifyAtInner()
-            && canUseForwardDfa()) {
+            && canUseForwardDfa()
+            && !reverseFirstApplies(prog, scanner, false)) {
           int innerMatch = le.findInnerCandidate(text, fromIndex, prog.lineStartUnixLines());
           if (innerMatch < 0) {
             return -1L;
