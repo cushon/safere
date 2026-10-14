@@ -980,6 +980,22 @@
       }
     },
     {
+      "id": "replaceFastPathGate.prose.16384.foo",
+      "recipe": {
+        "kind": "appendInput",
+        "input": "endAnchoredFind.prose.16384",
+        "suffix": " foo"
+      }
+    },
+    {
+      "id": "replaceFastPathGate.dense.16384",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "order 12345 shipped on 2025-03-22 ",
+        "length": 16384
+      }
+    },
+    {
       "id": "searchScaling.prose.{size}",
       "axes": {
         "size": [
@@ -15851,6 +15867,109 @@
         "constraints": [
           "prematerializedInput"
         ]
+      }
+    },
+    {
+      "id": "ReplaceBenchmark.fastPathGate.{regex}.noMatch.16384",
+      "axes": {
+        "regex": [
+          {
+            "id": "digit",
+            "value": "[0-9]"
+          },
+          {
+            "id": "keyword",
+            "value": "(?i)\\b(?:foo|bar|baz)\\b"
+          },
+          {
+            "id": "endOfInput",
+            "value": "\\s*(?:foo|fax)\\z"
+          }
+        ]
+      },
+      "operation": "replaceAll",
+      "patterns": [
+        "{regex}"
+      ],
+      "inputs": [
+        "endAnchoredFind.prose.16384"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "X"
+      }
+    },
+    {
+      "id": "ReplaceBenchmark.fastPathGate.{regex}.match.16384",
+      "axes": {
+        "regex": [
+          {
+            "id": "keyword",
+            "value": "(?i)\\b(?:foo|bar|baz)\\b"
+          },
+          {
+            "id": "endOfInput",
+            "value": "\\s*(?:foo|fax)\\z"
+          }
+        ]
+      },
+      "operation": "replaceAll",
+      "patterns": [
+        "{regex}"
+      ],
+      "inputs": [
+        "replaceFastPathGate.prose.16384.foo"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "X"
+      }
+    },
+    {
+      "id": "ReplaceBenchmark.fastPathGate.{regex}.dense.16384",
+      "axes": {
+        "regex": [
+          {
+            "id": "digit",
+            "value": "[0-9]"
+          },
+          {
+            "id": "letter",
+            "value": "\\p{L}"
+          }
+        ]
+      },
+      "operation": "replaceAll",
+      "patterns": [
+        "{regex}"
+      ],
+      "inputs": [
+        "replaceFastPathGate.dense.16384"
+      ],
+      "resultConsumption": "string",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "arguments": {
+        "replacement": "X"
       }
     }
   ]
