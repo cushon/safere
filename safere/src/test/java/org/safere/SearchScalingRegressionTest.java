@@ -20,6 +20,55 @@ import org.junit.jupiter.api.Test;
 class SearchScalingRegressionTest {
 
   @Test
+  void nestedNullableLoopEntryResetsKeepFindWorkLinear() {
+    for (EnginePathOptions options :
+        new EnginePathOptions[] {
+          EnginePathOptions.builder().onePass(false).bitState(false).build(),
+          EnginePathOptions.builder().dfa(false).onePass(false).build(),
+          EnginePathOptions.builder().dfa(false).onePass(false).bitState(false).build()
+        }) {
+      Pattern pattern = Pattern.compile("(?:(?:x|)+?)*", 0, options);
+      assertFindAllWorkIsLinear(size -> pattern.matcher("x".repeat(size))::find, "String loops");
+      assertFindAllWorkIsLinear(
+          size -> pattern.matcher(Utf8Input.trusted("x".repeat(size).getBytes(UTF_8)))::find,
+          "UTF-8 loops");
+    }
+  }
+
+  @Test
+  void alternatingNestedNullableLoopWorkIsPolynomialInDepth() {
+    // Alternating lazy and greedy nullable loops do not simplify away. Each fresh entry must be
+    // expanded at most once per position, or every enclosing iteration re-expands the inner loops
+    // and per-position work grows exponentially with the nesting depth.
+    EnginePathOptions nfaOnly =
+        EnginePathOptions.builder().dfa(false).onePass(false).bitState(false).build();
+    String input = "x".repeat(64);
+    long[] work = new long[13];
+    for (int depth = 4; depth <= 12; depth += 4) {
+      Pattern pattern = Pattern.compile(alternatingNullableLoops(depth), 0, nfaOnly);
+      work[depth] =
+          WorkCounter.countForTesting(
+              () -> {
+                Matcher matcher = pattern.matcher(input);
+                while (matcher.find()) {}
+              });
+    }
+    // Measured at 4,296 / 21,780 / 96,624 units for depths 4 / 8 / 12. Re-expanding each fresh
+    // entry once per enclosing iteration measured 8,768 / 1,220,228 / 1,162,878,680.
+    assertThat(work[12])
+        .as("depth 4/8/12 work %d/%d/%d", work[4], work[8], work[12])
+        .isLessThan(8 * work[8]);
+  }
+
+  private static String alternatingNullableLoops(int depth) {
+    StringBuilder regex = new StringBuilder("(?:x|)");
+    for (int i = 0; i < depth; i++) {
+      regex.insert(0, "(?:").append(')').append(i % 2 == 0 ? "+?" : "*");
+    }
+    return regex.toString();
+  }
+
+  @Test
   void endAnchoredSearchSkipsUnrelatedPrefix() {
     for (String regex : new String[] {"abc$", "(ab)c\\z", "[YZ]abc$", "a+b$", "(?i:abc)$"}) {
       Pattern pattern = Pattern.compile(regex);
