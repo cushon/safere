@@ -1714,6 +1714,88 @@
       "shared": true
     },
     {
+      "id": "searchScaling.fixedOffsetClassEarlySuccess.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": " 2026 words without digits ",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "searchScaling.fixedOffsetClassDenseFalseFail.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "1111x 1x_",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "searchScaling.fixedOffsetClassDenseFalseSuccess.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "1111x 1x_",
+        "suffix": " 2026x",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "searchScaling.fixedOffsetClassUnicodeFail.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "\u00e9\ud83d\ude00 words without digits ",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "searchScaling.fixedOffsetClassUnicodeSuccess.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "\u00e9\ud83d\ude00 words without digits ",
+        "suffix": " 2026x",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
       "id": "realWorldRegex.poisonousSpacePrefix.match.{size}",
       "axes": {
         "size": [
@@ -3755,6 +3837,59 @@
         "length": 1048576,
         "seed": 42,
         "delimiterAlphabet": "x"
+      },
+      "shared": true
+    },
+    {
+      "id": "searchScaling.fixedOffsetClassDenseInteriorNoLeadingFail.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000,
+          262144
+        ]
+      },
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "1234567890",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "searchScaling.fixedOffsetClassDenseInteriorRareLeadingFail.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000,
+          262144
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "1234567890",
+        "suffix": " x",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "searchScaling.fixedOffsetClassDenseInteriorRareLeadingSuccess.{size}",
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000,
+          262144
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "1234567890",
+        "suffix": " 2026x",
+        "length": "{size}"
       },
       "shared": true
     }
@@ -5843,6 +5978,131 @@
           "match",
           "noMatch"
         ],
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.fixedOffsetClassEarlySuccess.{size}",
+      "operation": "find",
+      "patterns": [
+        " [0-9]{4,}"
+      ],
+      "inputs": [
+        "searchScaling.fixedOffsetClassEarlySuccess.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.fixedOffsetClassDenseFalseFail.{size}",
+      "operation": "find",
+      "patterns": [
+        " [0-9]{4,}"
+      ],
+      "inputs": [
+        "searchScaling.fixedOffsetClassDenseFalseFail.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.fixedOffsetClassDenseFalseSuccess.{size}",
+      "operation": "find",
+      "patterns": [
+        " [0-9]{4,}"
+      ],
+      "inputs": [
+        "searchScaling.fixedOffsetClassDenseFalseSuccess.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.fixedOffsetClassUnicodeFail.{size}",
+      "operation": "find",
+      "patterns": [
+        " [0-9]{4,}"
+      ],
+      "inputs": [
+        "searchScaling.fixedOffsetClassUnicodeFail.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.fixedOffsetClassUnicodeSuccess.{size}",
+      "operation": "find",
+      "patterns": [
+        " [0-9]{4,}"
+      ],
+      "inputs": [
+        "searchScaling.fixedOffsetClassUnicodeSuccess.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
         "size": [
           1000,
           10000,
@@ -15178,6 +15438,84 @@
         "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.fixedOffsetClassDenseInteriorNoLeadingFail.{size}",
+      "operation": "find",
+      "patterns": [
+        " [0-9]{4,}"
+      ],
+      "inputs": [
+        "searchScaling.fixedOffsetClassDenseInteriorNoLeadingFail.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000,
+          262144
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.fixedOffsetClassDenseInteriorRareLeadingFail.{size}",
+      "operation": "find",
+      "patterns": [
+        " [0-9]{4,}"
+      ],
+      "inputs": [
+        "searchScaling.fixedOffsetClassDenseInteriorRareLeadingFail.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000,
+          262144
+        ]
+      }
+    },
+    {
+      "id": "SearchScalingBenchmark.fixedOffsetClassDenseInteriorRareLeadingSuccess.{size}",
+      "operation": "find",
+      "patterns": [
+        " [0-9]{4,}"
+      ],
+      "inputs": [
+        "searchScaling.fixedOffsetClassDenseInteriorRareLeadingSuccess.{size}"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "axes": {
+        "size": [
+          1000,
+          10000,
+          100000,
+          262144
         ]
       }
     },
