@@ -3033,7 +3033,8 @@ public final class Matcher implements MatchResult {
       }
     }
 
-    if (parentPattern.matchDescriptor().charClassMatch() != null) {
+    if (parentPattern.matchDescriptor().charClassMatch() != null
+        || parentPattern.matchDescriptor().singleCharClass() != null) {
       String fastResult = charClassReplaceFastPath(replacement, limit);
       if (fastResult != null) {
         return fastResult;
@@ -3167,9 +3168,10 @@ public final class Matcher implements MatchResult {
     boolean regionActive = (regionStart != 0 || regionEnd != text.length());
     if (!canUseForwardDfa()
         || !parentPattern.dfaGroupZeroReliable()
-        // dollarAnchorEnd is safe if start-anchored because we skip the reverse DFA scan.
-        || (parentPattern.prog().dollarAnchorEnd() && !parentPattern.prog().anchorStart())
-        || parentPattern.literalMatch() != null
+        // End-anchored patterns that are not start-anchored match at most once and benefit from
+        // find()'s reverse-first DFA rejection.
+        || (parentPattern.prog().anchorEnd() && !parentPattern.prog().anchorStart())
+        || parentPattern.matchDescriptor().hasFindFastPath()
         || parentPattern.astAnalysis().hasNullableAlt()
         || regionActive) {
       return null;
@@ -3777,8 +3779,13 @@ public final class Matcher implements MatchResult {
 
   private String charClassReplaceFastPath(String replacement, int limit) {
     Pattern.CharClassMatchInfo ccMatch = parentPattern.matchDescriptor().charClassMatch();
+    // A pattern that is exactly one character class matches one code point at a time.
+    CharClassScanInfo single =
+        ccMatch == null && !parentPattern.prog().anchorStart()
+            ? parentPattern.matchDescriptor().singleCharClass()
+            : null;
     if (!enginePathOptions().charClassReplacementFastPath()
-        || ccMatch == null
+        || (ccMatch == null && single == null)
         || parentPattern.astAnalysis().hasLazy()) {
       return null;
     }
@@ -3788,7 +3795,7 @@ public final class Matcher implements MatchResult {
     if (accumulator != null) {
       accumulator.participate(MatchStrategy.CHARACTER_CLASS, StrategyRole.CANDIDATE_VERIFICATION);
     }
-    if (ccMatch.allowEmpty()) {
+    if (ccMatch != null && ccMatch.allowEmpty()) {
       return nullableCharClassReplaceFastPath(
           new LazyTemplate(replacement, groupCount()), limit, ccMatch);
     }
@@ -3800,22 +3807,28 @@ public final class Matcher implements MatchResult {
     int matchesFound = 0;
     StringBuilder sb = null;
 
-    int[] ranges = ccMatch.ranges();
-    long b0 = ccMatch.bitmap0();
-    long b1 = ccMatch.bitmap1();
+    int[] ranges = ccMatch != null ? ccMatch.ranges() : single.ranges();
+    long b0 = ccMatch != null ? ccMatch.bitmap0() : single.bitmap0();
+    long b1 = ccMatch != null ? ccMatch.bitmap1() : single.bitmap1();
+    InputScanner asciiScanner = single != null && single.isAscii() ? activeScanner() : null;
 
     int firstMatchStart = -1;
     int firstMatchEnd = -1;
 
     while (pos < textLen && matchesFound < limit) {
       int matchStart = -1;
-      while (pos < textLen) {
-        int cp = text.codePointAt(pos);
-        if (charClassContains(ranges, b0, b1, cp)) {
-          matchStart = pos;
-          break;
+      if (asciiScanner != null) {
+        matchStart = asciiScanner.indexOfCharClass(single, pos);
+        pos = matchStart < 0 ? textLen : matchStart;
+      } else {
+        while (pos < textLen) {
+          int cp = text.codePointAt(pos);
+          if (charClassContains(ranges, b0, b1, cp)) {
+            matchStart = pos;
+            break;
+          }
+          pos += Character.charCount(cp);
         }
-        pos += Character.charCount(cp);
       }
 
       if (matchStart == -1) {
@@ -3823,7 +3836,7 @@ public final class Matcher implements MatchResult {
       }
 
       pos += Character.charCount(text.codePointAt(pos));
-      while (pos < textLen) {
+      while (single == null && pos < textLen) {
         int cp = text.codePointAt(pos);
         if (!charClassContains(ranges, b0, b1, cp)) {
           break;
