@@ -158,6 +158,22 @@ class Utf8EnginePathEquivalenceTest {
   }
 
   @Test
+  @DisplayName("UTF-8 convenience find works with the DFA disabled")
+  void utf8ConvenienceFindWorksWithDfaDisabled() {
+    EnginePathOptions noDfa = EnginePathOptions.builder().dfa(false).build();
+    for (String regex :
+        List.of("a*[bc]d", "[a-z]+[0-9]", "(?:foo|fax)$", "é[ab]+c", "^[0-9]+ items")) {
+      for (String input : List.of("zzaabdzz", "xyz12", "a fax", "zzéabczz", "42 items", "none")) {
+        boolean expected = Pattern.compile(regex).matcher(input).find();
+        assertThat(
+                Pattern.compile(regex, 0, noDfa).find(Utf8Input.validated(input.getBytes(UTF_8))))
+            .as("/%s/ on %s", regex, input)
+            .isEqualTo(expected);
+      }
+    }
+  }
+
+  @Test
   @DisplayName("malformed trusted input is equivalent across UTF-8 fallback engines")
   void malformedTrustedInputIsEquivalentAcrossFallbackEngines() {
     byte[] bytes = {'a', (byte) 0x80, (byte) 0xc2, 'b', (byte) 0xf0, (byte) 0x9f, 'c'};

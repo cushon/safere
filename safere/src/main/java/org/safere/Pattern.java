@@ -579,7 +579,7 @@ public final class Pattern implements Serializable {
    * loop registers use the matcher instead, so they get its full strategy sequence.
    */
   private boolean canFindUtf8Directly() {
-    return !prog.hasGraphemeSemantics() && prog.numLoopRegs() == 0;
+    return enginePathOptions.dfa() && !prog.hasGraphemeSemantics() && prog.numLoopRegs() == 0;
   }
 
   boolean findWithDiagnostics(Utf8InputScanner scanner) {
