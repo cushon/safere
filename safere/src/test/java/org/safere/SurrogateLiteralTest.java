@@ -75,4 +75,29 @@ class SurrogateLiteralTest {
     assertThat(actual.end()).isEqualTo(expected.end()).isEqualTo(expectedEnd);
     assertThat(actual.group()).isEqualTo(expected.group());
   }
+
+  static Stream<Arguments> entryPointCases() {
+    return Stream.of(
+        Arguments.of("\\uDBFB", "a\uDBFB\uDDBDb\uDBFBc"),
+        Arguments.of("\\uDDBD", "a\uDBFB\uDDBDb\uDDBDc"),
+        Arguments.of("\\x{D800}\\x{DC00}", "a\uD800\uDC00b\uD800c\uDC00d"),
+        Arguments.of("a\\uDBFB", "a?a\uDBFBa\uDBFB\uDDBD"),
+        Arguments.of("(?i)a\\uDBFB", "A?A\uDBFBa\uDBFB\uDDBD"),
+        Arguments.of("(?i)\\uDC00[a-z]", "\uD800\uDC00A\uDC00B"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("entryPointCases")
+  void surrogateLiteralsAgreeWithJdkAcrossEntryPoints(String regex, String input) {
+    java.util.regex.Pattern expected = java.util.regex.Pattern.compile(regex);
+    Pattern actual = Pattern.compile(regex);
+
+    assertThat(actual.matcher(input).replaceAll("_"))
+        .isEqualTo(expected.matcher(input).replaceAll("_"));
+    assertThat(actual.matcher(input).replaceFirst("_"))
+        .isEqualTo(expected.matcher(input).replaceFirst("_"));
+    assertThat(actual.split(input)).containsExactly(expected.split(input));
+    assertThat(actual.matcher(input).results().map(r -> r.start() + "-" + r.end()).toList())
+        .isEqualTo(expected.matcher(input).results().map(r -> r.start() + "-" + r.end()).toList());
+  }
 }
