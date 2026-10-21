@@ -2797,6 +2797,9 @@ public final class Pattern implements Serializable {
 
     switch (node.op) {
       case LITERAL -> {
+        if (!Utils.isValidRune(node.rune)) {
+          return LiteralResult.NONE;
+        }
         foldCase = (node.flags & ParseFlags.FOLD_CASE) != 0;
         sb.appendCodePoint(node.rune);
       }
@@ -2804,6 +2807,9 @@ public final class Pattern implements Serializable {
         foldCase = (node.flags & ParseFlags.FOLD_CASE) != 0;
         if (node.runes != null) {
           for (int r : node.runes) {
+            if (!Utils.isValidRune(r)) {
+              return LiteralResult.NONE;
+            }
             sb.appendCodePoint(r);
           }
         }
@@ -2827,6 +2833,9 @@ public final class Pattern implements Serializable {
           boolean childFoldCase = (c.flags & ParseFlags.FOLD_CASE) != 0;
           switch (c.op) {
             case LITERAL -> {
+              if (!Utils.isValidRune(c.rune)) {
+                return LiteralResult.NONE;
+              }
               if (Inst.simpleFold(c.rune) != c.rune) {
                 if (!foldCaseInitialized) {
                   foldCase = childFoldCase;
@@ -2842,6 +2851,9 @@ public final class Pattern implements Serializable {
                 return LiteralResult.NONE;
               }
               for (int r : c.runes) {
+                if (!Utils.isValidRune(r)) {
+                  return LiteralResult.NONE;
+                }
                 if (Inst.simpleFold(r) != r) {
                   if (!foldCaseInitialized) {
                     foldCase = childFoldCase;
