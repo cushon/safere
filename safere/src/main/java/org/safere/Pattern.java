@@ -207,7 +207,7 @@ public final class Pattern implements Serializable {
    * fields, the {@link ThreadLocal} entry value in long-lived threads does not strongly reference
    * SafeRE classes and pin the child {@code ClassLoader}.
    */
-  private static final class ThreadCache {
+  static final class ThreadCache {
     BitState bitState;
     Nfa nfa;
     Dfa forwardFirstMatchDfa;
@@ -1314,7 +1314,12 @@ public final class Pattern implements Serializable {
     return ref != null ? ref.get() : null;
   }
 
-  private ThreadCache getOrCreateThreadCache() {
+  /**
+   * Returns the current thread's cache, creating it if needed. A {@link Matcher} fetches this once
+   * and passes it to the cache accessors, so each lookup does not repeat the {@link ThreadLocal}
+   * and {@link SoftReference} dereferences.
+   */
+  ThreadCache getOrCreateThreadCache() {
     ThreadCache cache = existingThreadCache();
     if (cache == null) {
       cache = new ThreadCache();
@@ -1329,6 +1334,10 @@ public final class Pattern implements Serializable {
     if (cache == null) {
       return null;
     }
+    return borrowBitState(cache);
+  }
+
+  static BitState borrowBitState(ThreadCache cache) {
     BitState bs = cache.bitState;
     cache.bitState = null; // take ownership
     return bs;
@@ -1336,8 +1345,12 @@ public final class Pattern implements Serializable {
 
   /** Returns a BitState to the thread-local cache for reuse by future Matchers. */
   void returnBitState(BitState bs) {
+    returnBitState(getOrCreateThreadCache(), bs);
+  }
+
+  static void returnBitState(ThreadCache cache, BitState bs) {
     bs.releaseInput();
-    getOrCreateThreadCache().bitState = bs;
+    cache.bitState = bs;
   }
 
   Nfa borrowNfa() {
@@ -1345,14 +1358,22 @@ public final class Pattern implements Serializable {
     if (cache == null) {
       return null;
     }
+    return borrowNfa(cache);
+  }
+
+  static Nfa borrowNfa(ThreadCache cache) {
     Nfa nfa = cache.nfa;
     cache.nfa = null;
     return nfa;
   }
 
   void returnNfa(Nfa nfa) {
+    returnNfa(getOrCreateThreadCache(), nfa);
+  }
+
+  static void returnNfa(ThreadCache cache, Nfa nfa) {
     nfa.releaseInputContext();
-    getOrCreateThreadCache().nfa = nfa;
+    cache.nfa = nfa;
   }
 
   /** Maximum number of DFA states before the DFA bails out. */
@@ -1397,7 +1418,10 @@ public final class Pattern implements Serializable {
   }
 
   Dfa forwardFirstMatchDfa() {
-    ThreadCache cache = getOrCreateThreadCache();
+    return forwardFirstMatchDfa(getOrCreateThreadCache());
+  }
+
+  Dfa forwardFirstMatchDfa(ThreadCache cache) {
     Dfa dfa = cache.forwardFirstMatchDfa;
     if (dfa == null) {
       dfa =
@@ -1414,7 +1438,10 @@ public final class Pattern implements Serializable {
   }
 
   Dfa forwardLongestMatchDfa() {
-    ThreadCache cache = getOrCreateThreadCache();
+    return forwardLongestMatchDfa(getOrCreateThreadCache());
+  }
+
+  Dfa forwardLongestMatchDfa(ThreadCache cache) {
     Dfa dfa = cache.forwardLongestMatchDfa;
     if (dfa == null) {
       dfa =
@@ -1435,7 +1462,10 @@ public final class Pattern implements Serializable {
    * compilation of the reverse program if needed.
    */
   Dfa reverseDfa() {
-    ThreadCache cache = getOrCreateThreadCache();
+    return reverseDfa(getOrCreateThreadCache());
+  }
+
+  Dfa reverseDfa(ThreadCache cache) {
     Dfa dfa = cache.reverseDfa;
     if (dfa == null) {
       Prog rp = flatReverseDfaProg();
