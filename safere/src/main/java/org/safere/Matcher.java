@@ -654,7 +654,8 @@ public final class Matcher implements MatchResult {
 
   private Pattern.ThreadCache threadCache() {
     Pattern.ThreadCache cache = threadCache;
-    if (cache == null) {
+    if (cache == null || cache.ownerThreadId != Thread.currentThread().threadId()) {
+      // A sequential handoff must not borrow through the previous thread's cache holder.
       cache = parentPattern.getOrCreateThreadCache();
       threadCache = cache;
     }

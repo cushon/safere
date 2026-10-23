@@ -968,12 +968,11 @@ class PatternInternalTest {
       Class<?> holderClass = loader.loadClass(ChildLoaderPatternHolder.class.getName());
       assertThat(holderClass.getClassLoader()).isSameAs(loader);
       // populateThreadCaches() returns List<SoftReference<?>>.
-      @SuppressWarnings("unchecked")
-      List<SoftReference<?>> refs =
-          (List<SoftReference<?>>) holderClass.getMethod("populateThreadCaches").invoke(null);
+      List<?> refs = (List<?>) holderClass.getMethod("populateThreadCaches").invoke(null);
       assertThat(refs).hasSize(3);
-      for (SoftReference<?> ref : refs) {
-        assertThat(ref).isNotNull();
+      for (Object value : refs) {
+        assertThat(value).isInstanceOf(SoftReference.class);
+        SoftReference<?> ref = (SoftReference<?>) value;
         assertThat(ref.getClass().getClassLoader()).isNull();
         Object cache = ref.get();
         assertThat(cache).isNotNull();

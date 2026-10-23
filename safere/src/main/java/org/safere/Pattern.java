@@ -208,6 +208,8 @@ public final class Pattern implements Serializable {
    * SafeRE classes and pin the child {@code ClassLoader}.
    */
   static final class ThreadCache {
+    // Use the ID rather than retaining the Thread and its other thread-local values.
+    final long ownerThreadId = Thread.currentThread().threadId();
     BitState bitState;
     Nfa nfa;
     Dfa forwardFirstMatchDfa;
