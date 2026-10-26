@@ -23,11 +23,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.api.parallel.Isolated;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 @Isolated
 @Execution(ExecutionMode.SAME_THREAD)
@@ -246,6 +250,43 @@ class DiagnosticsTest {
 
     assertThat(nfa.matcher("aaab").matches()).isTrue();
     assertThat(operationsFor(nfa).getLast().boundaryStrategy()).isEqualTo(MatchStrategy.NFA);
+  }
+
+  private static Stream<Arguments> reverseCandidateVerificationCases() {
+    return Stream.of(false, true)
+        .flatMap(
+            bitState ->
+                Stream.of(
+                    Arguments.of(bitState, "(?:foo|fax)$", "x".repeat(1400) + "foo"),
+                    Arguments.of(bitState, "(?:foo|fax)$", "x".repeat(1400) + "foo\r\n"),
+                    Arguments.of(bitState, "(?:foo|fax)\\z", "x".repeat(1400) + "fax"),
+                    Arguments.of(bitState, "foo[ab]*$", "zzfoo" + "a".repeat(2048))));
+  }
+
+  @ParameterizedTest
+  @MethodSource("reverseCandidateVerificationCases")
+  void utf8ReverseCandidateReportsItsExactEngine(boolean bitState, String regex, String input) {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern =
+        Pattern.compile(regex, 0, EnginePathOptions.builder().bitState(bitState).build());
+
+    assertThat(pattern.find(Utf8Input.validated(input.getBytes(UTF_8)))).isTrue();
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(
+            event -> {
+              assertThat(event.reverseDfaSearchCount()).isPositive();
+              assertThat(event.boundaryStrategy())
+                  .isEqualTo(bitState ? MatchStrategy.BIT_STATE : MatchStrategy.NFA);
+              assertThat(event.auxiliaryStrategies())
+                  .contains(
+                      new StrategyParticipation(
+                          bitState ? MatchStrategy.BIT_STATE : MatchStrategy.NFA,
+                          StrategyRole.CANDIDATE_VERIFICATION));
+              if (regex.equals("foo[ab]*$")) {
+                assertThat(event.reverseDfaSearchCount()).isEqualTo(2);
+              }
+            });
   }
 
   @Test

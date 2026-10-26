@@ -725,8 +725,7 @@ public final class Pattern implements Serializable {
     if (endAnchoredStart == -1) {
       return false;
     }
-    if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart)) {
-      diagnostics.boundary(MatchStrategy.NFA);
+    if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart, diagnostics)) {
       return true;
     }
     if (rejectPrefilter != null
@@ -749,8 +748,7 @@ public final class Pattern implements Serializable {
       if (endAnchoredStart == -1) {
         return false;
       }
-      if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart)) {
-        diagnostics.boundary(MatchStrategy.NFA);
+      if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart, diagnostics)) {
         return true;
       }
     }
@@ -967,9 +965,16 @@ public final class Pattern implements Serializable {
    * BitState exceeds its work budget.
    */
   private boolean findAt(InputScanner scanner, int start) {
+    return findAt(scanner, start, null);
+  }
+
+  private boolean findAt(InputScanner scanner, int start, DiagnosticAccumulator diagnostics) {
     int length = scanner.length();
     int maxBitStateLen = BitState.maxTextSize(prog);
     if (enginePathOptions.bitState() && maxBitStateLen >= 0 && length - start <= maxBitStateLen) {
+      if (diagnostics != null) {
+        diagnostics.participate(MatchStrategy.BIT_STATE, StrategyRole.CANDIDATE_VERIFICATION);
+      }
       ThreadCache cache = getOrCreateThreadCache();
       BitState bitState =
           BitState.getOrCreate(
@@ -977,21 +982,38 @@ public final class Pattern implements Serializable {
       int[] result = bitState.doSearch(start, start, true);
       returnBitState(cache, bitState);
       if (!bitState.budgetExceeded()) {
+        if (result != null && diagnostics != null) {
+          diagnostics.boundary(MatchStrategy.BIT_STATE);
+        }
         return result != null;
       }
+      if (diagnostics != null) {
+        diagnostics.decision(
+            MatchStrategy.BIT_STATE,
+            StrategyDisposition.FALLBACK,
+            StrategyReason.WORK_BUDGET_EXCEEDED);
+      }
     }
-    return Nfa.search(
-            prog,
-            scanner,
-            start,
-            scanner.length(),
-            scanner.length(),
-            0,
-            Nfa.Anchor.ANCHORED,
-            Nfa.MatchKind.FIRST_MATCH,
-            0,
-            null)
-        != null;
+    if (diagnostics != null) {
+      diagnostics.participate(MatchStrategy.NFA, StrategyRole.CANDIDATE_VERIFICATION);
+    }
+    boolean matched =
+        Nfa.search(
+                prog,
+                scanner,
+                start,
+                scanner.length(),
+                scanner.length(),
+                0,
+                Nfa.Anchor.ANCHORED,
+                Nfa.MatchKind.FIRST_MATCH,
+                0,
+                null)
+            != null;
+    if (matched && diagnostics != null) {
+      diagnostics.boundary(MatchStrategy.NFA);
+    }
+    return matched;
   }
 
   static int[] literalFailure(byte[] literal) {
