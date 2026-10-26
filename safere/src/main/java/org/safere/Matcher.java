@@ -5349,7 +5349,7 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean find(Matcher matcher, boolean regionActive) {
-      return matcher.doFindCore(regionActive);
+      return fallback.find(matcher, regionActive);
     }
 
     @Override
@@ -5384,7 +5384,7 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean lookingAt(Matcher matcher) {
-      return matcher.lookingAtCore();
+      return fallback.lookingAt(matcher);
     }
   }
 
