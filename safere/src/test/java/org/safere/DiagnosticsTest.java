@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -127,6 +128,21 @@ class DiagnosticsTest {
     assertThat(diagnostics.compilations).isEmpty();
     Pattern.setDiagnostics(SafeReMatchDiagnostics.NONE);
     assertThat(pattern.patternId()).isEqualTo(patternId);
+  }
+
+  @Test
+  void asPredicateReportsOneFindOperation() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile("[0-9]+x");
+
+    assertThat(pattern.asPredicate().test("ab 12x cd")).isTrue();
+    assertThat(pattern.asPredicate().test("ab 12 cd")).isFalse();
+
+    assertThat(operationsFor(pattern))
+        .extracting(OperationDiagnostics::operation, OperationDiagnostics::outcome)
+        .containsExactly(
+            tuple(MatchOperation.FIND, MatchOutcome.MATCH),
+            tuple(MatchOperation.FIND, MatchOutcome.NO_MATCH));
   }
 
   @Test

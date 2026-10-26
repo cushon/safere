@@ -555,7 +555,7 @@ public final class Pattern implements Serializable {
    */
   public boolean find(Utf8Input input) {
     ArrayUtf8Input arrayInput = (ArrayUtf8Input) Objects.requireNonNull(input, "input");
-    if (!canFindUtf8Directly()) {
+    if (!canFindWithoutMatcher()) {
       return new Utf8Matcher(this, arrayInput).find();
     }
     Utf8InputScanner scanner = arrayInput.scanner();
@@ -567,13 +567,14 @@ public final class Pattern implements Serializable {
   }
 
   /**
-   * Returns whether the matcher-free {@link #find(Utf8Input)} path can answer for this pattern.
+   * Returns whether the matcher-free existence searches ({@link #find(Utf8Input)} and {@link
+   * #asPredicate()}) can answer for this pattern.
    *
-   * <p>That path uses cheap checks followed by the forward first-match DFA or an end-anchored
+   * <p>Those paths use cheap checks followed by the forward first-match DFA or an end-anchored
    * reverse search, with exact NFA verification and fallback. Patterns with grapheme semantics or
-   * loop registers use the matcher instead, so they get its full strategy sequence.
+   * loop registers use a matcher instead, so they get its full strategy sequence.
    */
-  private boolean canFindUtf8Directly() {
+  private boolean canFindWithoutMatcher() {
     return enginePathOptions.dfa() && !prog.hasGraphemeSemantics() && prog.numLoopRegs() == 0;
   }
 
@@ -660,13 +661,13 @@ public final class Pattern implements Serializable {
         return true;
       }
     }
-    if (!prog.anchorEnd()) {
-      Dfa.SearchResult result =
-          forwardFirstMatchDfa()
-              .doSearch(scanner, searchStart, false, false, startPositionPreselected);
-      if (result != null) {
-        return result.matched();
-      }
+    // The forward DFA checks a stripped end anchor itself, as the matcher's DFA pass relies on, so
+    // end-anchored programs that the reverse probe could not settle avoid the NFA here too.
+    Dfa.SearchResult result =
+        forwardFirstMatchDfa()
+            .doSearch(scanner, searchStart, false, false, startPositionPreselected);
+    if (result != null) {
+      return result.matched();
     }
     return Nfa.search(
             prog,
@@ -753,19 +754,17 @@ public final class Pattern implements Serializable {
         return true;
       }
     }
-    if (!prog.anchorEnd()) {
-      diagnostics.participate(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
-      diagnostics.incrementForwardDfaSearchCount();
-      Dfa.SearchResult result =
-          forwardFirstMatchDfa()
-              .doSearch(scanner, searchStart, false, false, startPositionPreselected);
-      if (result != null) {
-        diagnostics.boundary(MatchStrategy.DFA);
-        return result.matched();
-      }
-      diagnostics.decision(
-          MatchStrategy.DFA, StrategyDisposition.FALLBACK, StrategyReason.DFA_BUDGET_EXCEEDED);
+    diagnostics.participate(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
+    diagnostics.incrementForwardDfaSearchCount();
+    Dfa.SearchResult result =
+        forwardFirstMatchDfa()
+            .doSearch(scanner, searchStart, false, false, startPositionPreselected);
+    if (result != null) {
+      diagnostics.boundary(MatchStrategy.DFA);
+      return result.matched();
     }
+    diagnostics.decision(
+        MatchStrategy.DFA, StrategyDisposition.FALLBACK, StrategyReason.DFA_BUDGET_EXCEEDED);
     boolean matched =
         Nfa.search(
                 prog,
@@ -962,7 +961,25 @@ public final class Pattern implements Serializable {
     return start;
   }
 
-  private boolean findAt(Utf8InputScanner scanner, int start) {
+  /**
+   * Returns whether a match starts at {@code start}. Uses BitState when the remaining input fits
+   * its bitmap, as {@code Matcher}'s end-anchored verification does, and the NFA otherwise or when
+   * BitState exceeds its work budget.
+   */
+  private boolean findAt(InputScanner scanner, int start) {
+    int length = scanner.length();
+    int maxBitStateLen = BitState.maxTextSize(prog);
+    if (enginePathOptions.bitState() && maxBitStateLen >= 0 && length - start <= maxBitStateLen) {
+      ThreadCache cache = getOrCreateThreadCache();
+      BitState bitState =
+          BitState.getOrCreate(
+              borrowBitState(cache), prog, scanner, start, length, 2, false, prog.anchorEnd());
+      int[] result = bitState.doSearch(start, start, true);
+      returnBitState(cache, bitState);
+      if (!bitState.budgetExceeded()) {
+        return result != null;
+      }
+    }
     return Nfa.search(
             prog,
             scanner,
@@ -1182,7 +1199,132 @@ public final class Pattern implements Serializable {
    * @return a predicate for partial matching
    */
   public Predicate<String> asPredicate() {
-    return input -> matcher(input).find();
+    return this::findInString;
+  }
+
+  /**
+   * Returns whether this pattern occurs in {@code input}, with the same result as {@code
+   * matcher(input).find()} but without creating a matcher or computing match bounds. Follows the
+   * same strategy sequence as {@link #findWithoutDiagnostics(Utf8InputScanner)}, with the String
+   * literal, prefix and start-accelerator data. With diagnostics enabled, delegates to a matcher so
+   * the reported operation is unchanged.
+   */
+  private boolean findInString(String input) {
+    if (!canFindWithoutMatcher() || SafeReMatchDiagnostics.isEnabled(diagnostics())) {
+      return matcher(input).find();
+    }
+    int length = input.length();
+    if (matchDescriptor.minMatchLength() > 0 && length < matchDescriptor.minMatchLength()) {
+      return false;
+    }
+    // literalMatchUtf8 is non-null only when literal fast paths are enabled.
+    if (literalMatchUtf8 != null && !literalFoldCase()) {
+      String literal = matchDescriptor.literalMatch();
+      return prog.anchorStart() ? input.startsWith(literal) : input.indexOf(literal) >= 0;
+    }
+    StringInputScanner scanner = new StringInputScanner(input);
+    if (enginePathOptions.keywordAlternationFastPath()
+        && matchDescriptor.keywordAlternation() != null) {
+      return matchDescriptor.keywordAlternation().find(scanner, 0) >= 0;
+    }
+    if (prog.anchorStart()) {
+      if (anchoredPrefixUtf8 != null) {
+        if (!input.startsWith(anchoredPrefix)) {
+          return false;
+        }
+      } else if (anchoredCharClassPrefix != null) {
+        if (length == 0 || !anchoredCharClassPrefix.contains(input.codePointAt(0))) {
+          return false;
+        }
+      }
+    }
+    int endAnchoredStart = endAnchoredSearchStart(scanner, 0, false, null);
+    if (endAnchoredStart == -1) {
+      return false;
+    }
+    if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart)) {
+      return true;
+    }
+    if (rejectPrefilter != null
+        && rejectPrefilter.canReject(scanner, input, 0, enginePathOptions)) {
+      return false;
+    }
+    int searchStart = 0;
+    boolean startPositionPreselected = false;
+    if (enginePathOptions.startAcceleration()
+        && stringStartAccelerator != null
+        && !prog.anchorStart()) {
+      searchStart = findNextStringStartCandidate(scanner, input);
+      if (searchStart < 0) {
+        return false;
+      }
+      startPositionPreselected = true;
+    }
+    if (endAnchoredStart == END_ANCHORED_SEARCH_DEFERRED) {
+      endAnchoredStart = endAnchoredSearchStart(scanner, searchStart, false, null, false);
+      if (endAnchoredStart == -1) {
+        return false;
+      }
+      if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart)) {
+        return true;
+      }
+    }
+    // The forward DFA checks a stripped end anchor itself, as the matcher's DFA pass relies on, so
+    // end-anchored programs that the reverse probe could not settle avoid the NFA here too.
+    Dfa.SearchResult result =
+        forwardFirstMatchDfa()
+            .doSearch(scanner, searchStart, false, false, startPositionPreselected);
+    if (result != null) {
+      return result.matched();
+    }
+    return Nfa.search(
+            prog,
+            scanner,
+            searchStart,
+            length,
+            length,
+            0,
+            Nfa.Anchor.UNANCHORED,
+            Nfa.MatchKind.FIRST_MATCH,
+            0,
+            null)
+        != null;
+  }
+
+  /**
+   * Selects the first String start candidate for {@link #findInString}. Literal scans use UTF-16
+   * indices, so candidates inside a surrogate pair are skipped, as in the matcher. A nullable
+   * leading expansion is first verified at its inner candidate, as in {@link
+   * #findNextUtf8StartCandidate}.
+   */
+  private int findNextStringStartCandidate(StringInputScanner scanner, String text) {
+    boolean unixLines = prog.lineStartUnixLines();
+    if (stringStartAccelerator instanceof StringStartAccelerator.LeadingExpansion le
+        && le.canVerifyAtInner()) {
+      int innerMatch = le.findInnerCandidate(text, 0, unixLines);
+      while (innerMatch > 0 && !scanner.isCodePointBoundary(innerMatch)) {
+        innerMatch = le.findInnerCandidate(text, innerMatch + 1, unixLines);
+      }
+      if (innerMatch < 0) {
+        return -1;
+      }
+      // With zero repetitions and no leading assertions, an unanchored rejection from the inner
+      // candidate also rejects every expanded start.
+      Dfa.SearchResult result =
+          forwardFirstMatchDfa().doSearch(scanner, innerMatch, false, false, true);
+      if (result != null && !result.matched()) {
+        return -1;
+      }
+      return le.expandBackward(text, innerMatch, 0);
+    }
+    int candidate =
+        StringStartAccelerator.findNextCandidate(stringStartAccelerator, text, 0, unixLines);
+    while (candidate > 0 && !scanner.isCodePointBoundary(candidate)) {
+      candidate =
+          StringStartAccelerator.findNextCandidate(
+              stringStartAccelerator, text, candidate + 1, unixLines);
+    }
+    return candidate;
   }
 
   /**
