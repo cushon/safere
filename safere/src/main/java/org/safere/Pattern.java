@@ -150,7 +150,8 @@ public final class Pattern implements Serializable {
   private final transient EnginePathOptions enginePathOptions;
   private final transient LiteralAlternation literalAlternation;
   private final transient InnerLiteralSearch innerLiteralSearch;
-  private final transient Matcher.PreparedMatchRunner defaultPreparedMatchRunner;
+  // Not final: a lazy ShiftDfa runner replaces itself once its analysis resolves.
+  private transient Matcher.PreparedMatchRunner defaultPreparedMatchRunner;
   private final transient Matcher.PreparedMatchRunner regionPreparedMatchRunner;
   private final long patternId;
   private transient volatile PatternAnalysis patternAnalysis;
@@ -1394,6 +1395,18 @@ public final class Pattern implements Serializable {
     return enginePathOptions;
   }
 
+  /**
+   * Replaces the default prepared runner if it is still {@code lazy}, so later operations skip the
+   * resolved lazy wrapper. Runners are immutable, so a racy publication is safe; a lazy runner
+   * nested inside another runner keeps its own cached resolution instead.
+   */
+  void replacePreparedMatchRunner(
+      Matcher.PreparedMatchRunner lazy, Matcher.PreparedMatchRunner resolved) {
+    if (defaultPreparedMatchRunner == lazy) {
+      defaultPreparedMatchRunner = resolved;
+    }
+  }
+
   Matcher.PreparedMatchRunner preparedMatchRunner(boolean regionActive) {
     return regionActive ? regionPreparedMatchRunner : defaultPreparedMatchRunner;
   }
@@ -1450,7 +1463,7 @@ public final class Pattern implements Serializable {
             ? new Matcher.OnePassAnchoredPreparedRunner(prog.numCaptures())
             : Matcher.FallbackPreparedRunner.INSTANCE;
     if (mayUseShiftDfa()) {
-      return new Matcher.ShiftDfaPreparedRunner(this, fallback);
+      return new Matcher.LazyShiftDfaPreparedRunner(this, fallback);
     }
 
     return fallback;
@@ -1728,8 +1741,8 @@ public final class Pattern implements Serializable {
   /**
    * Cheap conservative upper bound on {@code shiftDfa() != null}. Uses only properties known
    * without running {@link ShiftDfa#compile(Prog)} so that choosing a prepared runner does not
-   * build {@link ShiftDfa}; {@link Matcher.ShiftDfaPreparedRunner} compiles {@link ShiftDfa} lazily
-   * on the first {@code matches()} call.
+   * build {@link ShiftDfa}; {@link Matcher.LazyShiftDfaPreparedRunner} compiles {@link ShiftDfa}
+   * lazily on the first {@code matches()} call.
    */
   private boolean mayUseShiftDfa() {
     ShiftDfaAnalysis analysis = shiftDfaAnalysis;
