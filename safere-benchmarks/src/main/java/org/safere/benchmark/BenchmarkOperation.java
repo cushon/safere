@@ -28,6 +28,7 @@ enum BenchmarkOperation {
   SPLIT_LENGTH_SUM(EngineCapability.SPLIT),
   COMPILE(EngineCapability.COMPILE),
   COMPILE_AND_FIND(EngineCapability.COMPILE, EngineCapability.FIND),
+  COMPILE_AND_MATCHES(EngineCapability.COMPILE, EngineCapability.MATCHES),
   FIND_ROTATING_UTF16(EngineCapability.FIND),
   COMPILE_AND_FIND_ROTATING_UTF16(EngineCapability.COMPILE, EngineCapability.FIND),
   MATCHER_RESET_FIND(EngineCapability.FIND, EngineCapability.MATCHER_RESET),
@@ -64,6 +65,7 @@ enum BenchmarkOperation {
       case SPLIT_LENGTH_SUM -> SPLIT_LENGTH_SUM;
       case COMPILE -> COMPILE;
       case COMPILE_AND_FIND -> COMPILE_AND_FIND;
+      case COMPILE_AND_MATCHES -> COMPILE_AND_MATCHES;
       case FIND_ROTATING_UTF16 -> FIND_ROTATING_UTF16;
       case COMPILE_AND_FIND_ROTATING_UTF16 -> COMPILE_AND_FIND_ROTATING_UTF16;
       case MATCHER_RESET_FIND -> MATCHER_RESET_FIND;
@@ -140,6 +142,13 @@ enum BenchmarkOperation {
             try (RegexEngineVariant.CompiledRegex compiled =
                 variant.compile(patternSources.getFirst())) {
               blackhole.consume(compiled.find(input));
+            }
+          };
+      case COMPILE_AND_MATCHES ->
+          blackhole -> {
+            try (RegexEngineVariant.CompiledRegex compiled =
+                variant.compile(patternSources.getFirst())) {
+              blackhole.consume(compiled.matches(input));
             }
           };
       case MATCHER_RESET_FIND -> {
@@ -244,6 +253,12 @@ enum BenchmarkOperation {
         try (RegexEngineVariant.CompiledRegex compiled =
             variant.compile(patternSources.getFirst())) {
           yield compiled.find(input);
+        }
+      }
+      case COMPILE_AND_MATCHES -> {
+        try (RegexEngineVariant.CompiledRegex compiled =
+            variant.compile(patternSources.getFirst())) {
+          yield compiled.matches(input);
         }
       }
       case MATCHER_RESET_FIND -> {
