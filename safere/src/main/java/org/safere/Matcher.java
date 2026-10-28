@@ -5434,8 +5434,9 @@ public final class Matcher implements MatchResult {
   static final class LazyShiftDfaPreparedRunner implements PreparedMatchRunner {
     private final Pattern pattern;
     private final PreparedMatchRunner fallback;
-    // Racy single-check caching is safe: every candidate value is immutable with final fields.
-    private PreparedMatchRunner resolved;
+    // Racy single-check caching: every candidate value is immutable with final fields, and a
+    // duplicate resolution is harmless. Volatile makes the cross-thread publication explicit.
+    private volatile PreparedMatchRunner resolved;
 
     LazyShiftDfaPreparedRunner(Pattern pattern, PreparedMatchRunner fallback) {
       this.pattern = pattern;
