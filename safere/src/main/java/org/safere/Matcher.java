@@ -2316,6 +2316,27 @@ public final class Matcher implements MatchResult {
     if (keywordAlternation.greedyWholeInput) {
       return findGreedyWholeInputKeywordAlternation(keywordAlternation, startPos, ncap);
     }
+    long packed = findKeywordAlternationPacked(keywordAlternation, startPos);
+    if (packed == -1L) {
+      return applyFailedMatchResult();
+    }
+    int start = unpackStart(packed);
+    int end = unpackEnd(packed);
+    int[] keywordGroups = new int[2 * ncap];
+    Arrays.fill(keywordGroups, -1);
+    keywordGroups[0] = start;
+    keywordGroups[1] = end;
+    if (keywordAlternation.captureGroup > 0) {
+      int group = keywordAlternation.captureGroup;
+      keywordGroups[2 * group] = start;
+      keywordGroups[2 * group + 1] = end;
+    }
+    return applyFullMatchResult(keywordGroups);
+  }
+
+  /** Returns the first keyword match at or after {@code startPos} as packed positions, or -1. */
+  private long findKeywordAlternationPacked(
+      Pattern.KeywordAlternation keywordAlternation, int startPos) {
     for (int i = Math.max(0, startPos); i < text.length(); i++) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
@@ -2329,23 +2350,14 @@ public final class Matcher implements MatchResult {
           if (end <= text.length()
               && Ascii.regionMatchesIgnoreCase(text, i, keyword, keyword.length())
               && isWordBoundaryAt(end, keywordAlternation.unicodeWordBoundary)) {
-            int[] keywordGroups = new int[2 * ncap];
-            Arrays.fill(keywordGroups, -1);
-            keywordGroups[0] = i;
-            keywordGroups[1] = end;
-            if (keywordAlternation.captureGroup > 0) {
-              int group = keywordAlternation.captureGroup;
-              keywordGroups[2 * group] = i;
-              keywordGroups[2 * group + 1] = end;
-            }
-            return applyFullMatchResult(keywordGroups);
+            return packPositions(i, end);
           }
         }
       }
       int cp = text.codePointAt(i);
       i += Character.charCount(cp) - 1;
     }
-    return applyFailedMatchResult();
+    return -1L;
   }
 
   private boolean findGreedyWholeInputKeywordAlternation(
@@ -4739,12 +4751,15 @@ public final class Matcher implements MatchResult {
   }
 
   int findSplitPositions(int limit, SplitBuffer buffer) {
+    // The first search reuses this end-anchored probe instead of repeating it.
+    int firstEndAnchoredStart = END_ANCHORED_START_UNKNOWN;
     if (!parentPattern.prog().anchorStart()) {
       // As in replaceImpl, try the end-anchored search before the whole-input reject prefilter.
       int endAnchoredStart = parentPattern.endAnchoredSearchStart(activeScanner(), 0, true, null);
       if (endAnchoredStart == -1) {
         return 0;
       }
+      firstEndAnchoredStart = endAnchoredStart;
       RejectPrefilter rejectPrefilter = parentPattern.findRejectPrefilter();
       if (endAnchoredStart < 0 && rejectPrefilter != null && text != null) {
         if (rejectPrefilter.canReject(activeScanner(), text, 0, enginePathOptions())) {
@@ -4759,7 +4774,8 @@ public final class Matcher implements MatchResult {
     startBackoff = AdaptiveBackoff.NEUTRAL;
 
     while (searchFrom <= textLen) {
-      long packed = findNextMatchPacked(searchFrom);
+      long packed = findNextMatchPacked(searchFrom, firstEndAnchoredStart);
+      firstEndAnchoredStart = END_ANCHORED_START_UNKNOWN;
       if (packed == -1L) {
         break;
       }
@@ -4791,7 +4807,19 @@ public final class Matcher implements MatchResult {
     return buffer.size / 2;
   }
 
-  private long findNextMatchPacked(int fromIndex) {
+  /** Marks that {@link #findNextMatchPacked} has not yet probed from the input end. */
+  private static final int END_ANCHORED_START_UNKNOWN = Integer.MIN_VALUE;
+
+  /** {@link #endAnchoredSplitMatch} found no match from the end; continue the ordinary search. */
+  private static final long END_ANCHORED_UNRESOLVED = Long.MIN_VALUE;
+
+  /**
+   * Returns the next match at or after {@code fromIndex} as packed positions, or -1.
+   *
+   * @param endAnchoredStart the result of {@link Pattern#endAnchoredSearchStart} from {@code
+   *     fromIndex}, or {@link #END_ANCHORED_START_UNKNOWN} to probe here
+   */
+  private long findNextMatchPacked(int fromIndex, int endAnchoredStart) {
     InputScanner scanner = activeScanner();
     if (fromIndex > scanner.length()) {
       return -1L;
@@ -4891,6 +4919,31 @@ public final class Matcher implements MatchResult {
       return packPositions(idx, idx + Character.charCount(cp));
     }
 
+    // As in the prepared find() runner, a keyword alternation scans for its keywords directly.
+    Pattern.KeywordAlternation keywordAlternation =
+        parentPattern.matchDescriptor().keywordAlternation();
+    if (options.keywordAlternationFastPath()
+        && keywordAlternation != null
+        && !keywordAlternation.greedyWholeInput
+        && !prog.anchorStart()
+        && text != null) {
+      return findKeywordAlternationPacked(keywordAlternation, fromIndex);
+    }
+
+    // As in doFindCore, an end-anchored pattern can locate its next match from the input end
+    // instead of scanning forward from fromIndex. Do this before start acceleration.
+    boolean endAnchoredDeferred = false;
+    if (!prog.anchorStart()) {
+      if (endAnchoredStart == END_ANCHORED_START_UNKNOWN) {
+        endAnchoredStart = parentPattern.endAnchoredSearchStart(scanner, fromIndex, true, null);
+      }
+      endAnchoredDeferred = endAnchoredStart == Pattern.END_ANCHORED_SEARCH_DEFERRED;
+      long endAnchoredMatch = endAnchoredSplitMatch(scanner, endAnchoredStart);
+      if (endAnchoredMatch != END_ANCHORED_UNRESOLVED) {
+        return endAnchoredMatch;
+      }
+    }
+
     int effectiveStart = fromIndex;
     boolean startPositionPreselected = false;
     if (options.startAcceleration() && text != null && !prog.anchorStart()) {
@@ -4902,6 +4955,17 @@ public final class Matcher implements MatchResult {
         }
         effectiveStart = idx;
         startPositionPreselected = true;
+      }
+    }
+
+    // Retry a deferred reverse probe only after start acceleration narrows its work.
+    if (endAnchoredDeferred) {
+      long endAnchoredMatch =
+          endAnchoredSplitMatch(
+              scanner,
+              parentPattern.endAnchoredSearchStart(scanner, effectiveStart, true, null, false));
+      if (endAnchoredMatch != END_ANCHORED_UNRESOLVED) {
+        return endAnchoredMatch;
       }
     }
 
@@ -4963,6 +5027,34 @@ public final class Matcher implements MatchResult {
       return -1L;
     }
     return packPositions(result[0], result[1]);
+  }
+
+  /**
+   * Resolves an end-anchored probe result for {@link #findNextMatchPacked}: -1 when the probe rules
+   * out any further match, the match from a candidate start, or {@link #END_ANCHORED_UNRESOLVED}
+   * when the ordinary search must decide.
+   */
+  private long endAnchoredSplitMatch(InputScanner scanner, int endAnchoredStart) {
+    if (endAnchoredStart == -1) {
+      return -1L;
+    }
+    if (endAnchoredStart >= 0) {
+      int[] exact =
+          searchWithBitStateOrNfa(
+              parentPattern.prog(),
+              scanner,
+              endAnchoredStart,
+              endAnchoredStart,
+              scanner.length(),
+              true,
+              false,
+              false,
+              1);
+      if (exact != null) {
+        return packPositions(endAnchoredStart, exact[1]);
+      }
+    }
+    return END_ANCHORED_UNRESOLVED;
   }
 
   private static long packPositions(int start, int end) {

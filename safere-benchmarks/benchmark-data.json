@@ -4246,6 +4246,14 @@
       }
     },
     {
+      "id": "keywordSplit.16384",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "the quick brown fox jumps over the lazy Bar dog ",
+        "length": 16384
+      }
+    },
+    {
       "id": "denseDelimited.html.{size}",
       "axes": {
         "size": [
@@ -17540,6 +17548,54 @@
       ],
       "inputs": [
         "endAnchoredReplace.noLiteral.16384"
+      ],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "EndAnchoredSplitBenchmark.{regex}.match.16384",
+      "axes": {
+        "regex": [
+          {
+            "id": "fooOrFax",
+            "value": "(foo|fax)$"
+          },
+          {
+            "id": "optionalWhitespaceEndOfInput",
+            "value": "\\s*(foo|fax)\\z"
+          }
+        ]
+      },
+      "operation": "splitLengthSum",
+      "patterns": [
+        "{regex}"
+      ],
+      "inputs": [
+        "endAnchoredReplace.noLiteral.16384.foo"
+      ],
+      "resultConsumption": "integer",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "KeywordSplitBenchmark.caseInsensitiveKeywords.16384",
+      "operation": "splitLengthSum",
+      "patterns": [
+        "(?i)\\b(?:foo|bar|baz)\\b"
+      ],
+      "inputs": [
+        "keywordSplit.16384"
       ],
       "resultConsumption": "integer",
       "measurement": {
