@@ -264,7 +264,7 @@ Supported operations are grouped below. Names are exact JSON values.
 |---|---|
 | Matching | `matches`, `find`, `lookingAt`, `findAllCount`, `findAllLengthSum`, `findAllGroupLengthSum`, `matchesCorpus`, `matchesGroupLengthSum`, `findGroupPresent`, `findGroup`, `captureGroups` |
 | Replacement and splitting | `replaceFirst`, `replaceAll`, `replaceAllLengthSum`, `appendReplacement`, `manualReplaceAll`, `split`, `splitLengthSum` |
-| Compilation and matcher state | `compile`, `compileAndFind`, `findRotatingUtf16`, `compileAndFindRotatingUtf16`, `matcherConstruction`, `matcherResetFind`, `matcherRegionFind`, `findInWindow` |
+| Compilation and matcher state | `compile`, `compileAndFind`, `compileAndMatches`, `findRotatingUtf16`, `compileAndFindRotatingUtf16`, `matcherConstruction`, `matcherResetFind`, `matcherRegionFind`, `findInWindow` |
 | Pattern collections | `patternSetCompile`, `patternSetFind`, `patternSetMatches` |
 | UTF-8 | `utf8CaptureBounds`, `utf8DecodeFind`, `utf8Replacement` |
 | Diagnostics and memory | `analyzePattern`, `cachedAnalysis`, `compileAndAnalyze`, `dfaCacheGrowth`, `diagnosticsFind` |

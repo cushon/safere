@@ -333,6 +333,34 @@
       }
     },
     {
+      "id": "shiftDfa.trueFalse.match",
+      "recipe": {
+        "kind": "literal",
+        "text": "false "
+      }
+    },
+    {
+      "id": "shiftDfa.trueFalse.noMatch",
+      "recipe": {
+        "kind": "literal",
+        "text": "false!"
+      }
+    },
+    {
+      "id": "shiftDfa.overBudget.match",
+      "recipe": {
+        "kind": "literal",
+        "text": "aaaaaaaaabc"
+      }
+    },
+    {
+      "id": "shiftDfa.overBudget.noMatch",
+      "recipe": {
+        "kind": "literal",
+        "text": "aaaaaaaaacb"
+      }
+    },
+    {
       "id": "compile.firstFind.ing.match",
       "recipe": {
         "kind": "literal",
@@ -9709,6 +9737,122 @@
       "measurement": {
         "mode": "averageTime",
         "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.compileAndMatches.trueFalse.{outcome}",
+      "axes": {
+        "outcome": [
+          "match",
+          "noMatch"
+        ]
+      },
+      "operation": "compileAndMatches",
+      "patterns": [
+        "(?:true|false) ?"
+      ],
+      "inputs": [
+        "shiftDfa.trueFalse.{outcome}"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "ShiftDfa runs on String and pre-encoded UTF-8 input; timed conversion would hide the first-use cost.",
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.compileAndMatches.overBudget.{outcome}",
+      "axes": {
+        "outcome": [
+          "match",
+          "noMatch"
+        ]
+      },
+      "operation": "compileAndMatches",
+      "patterns": [
+        "a{9}b?c?"
+      ],
+      "inputs": [
+        "shiftDfa.overBudget.{outcome}"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "ShiftDfa runs on String and pre-encoded UTF-8 input; timed conversion would hide the first-use cost.",
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.matches.trueFalse.{outcome}",
+      "axes": {
+        "outcome": [
+          "match",
+          "noMatch"
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "(?:true|false) ?"
+      ],
+      "inputs": [
+        "shiftDfa.trueFalse.{outcome}"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "ShiftDfa runs on String and pre-encoded UTF-8 input; timed conversion would hide the first-use cost.",
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ShiftDfaBenchmark.matches.overBudget.{outcome}",
+      "axes": {
+        "outcome": [
+          "match",
+          "noMatch"
+        ]
+      },
+      "operation": "matches",
+      "patterns": [
+        "a{9}b?c?"
+      ],
+      "inputs": [
+        "shiftDfa.overBudget.{outcome}"
+      ],
+      "inputRepresentations": [
+        "javaString",
+        "preexistingUtf8"
+      ],
+      "inputRepresentationReason": "ShiftDfa runs on String and pre-encoded UTF-8 input; timed conversion would hide the first-use cost.",
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
         "constraints": [
           "prematerializedInput"
         ]

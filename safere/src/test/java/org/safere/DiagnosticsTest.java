@@ -203,7 +203,7 @@ class DiagnosticsTest {
             foldedUtf8LookingAt.matcher(Utf8Input.validated("FOObar".getBytes(UTF_8))).lookingAt())
         .isTrue();
     assertThat(operationsFor(foldedUtf8LookingAt).getLast().boundaryStrategy())
-        .isEqualTo(MatchStrategy.DFA);
+        .isEqualTo(MatchStrategy.ONE_PASS);
 
     Pattern foldedUtf8Matches = Pattern.compile("(?i)foo");
     assertThat(foldedUtf8Matches.matcher(Utf8Input.validated("FOO".getBytes(UTF_8))).matches())
@@ -216,6 +216,41 @@ class DiagnosticsTest {
         .isTrue();
     assertThat(operationsFor(foldedUtf8Find).getLast().boundaryStrategy())
         .isEqualTo(MatchStrategy.DFA);
+  }
+
+  @ParameterizedTest
+  @MethodSource("lazyShiftDfaSearchCases")
+  void lazyShiftDfaSearchesRetainOnePassFallback(
+      String regex, String input, MatchOperation operation, boolean utf8) {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile(regex);
+    assertThat(pattern.shiftDfaAnalyzed()).isFalse();
+
+    boolean matched;
+    if (utf8) {
+      Utf8Matcher matcher = pattern.matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+      matched = operation == MatchOperation.FIND ? matcher.find() : matcher.lookingAt();
+    } else {
+      Matcher matcher = pattern.matcher(input);
+      matched = operation == MatchOperation.FIND ? matcher.find() : matcher.lookingAt();
+    }
+
+    assertThat(matched).isTrue();
+    assertThat(operationsFor(pattern).getLast().boundaryStrategy())
+        .isEqualTo(MatchStrategy.ONE_PASS);
+    assertThat(pattern.shiftDfaAnalyzed()).isFalse();
+  }
+
+  private static Stream<Arguments> lazyShiftDfaSearchCases() {
+    Stream.Builder<Arguments> cases = Stream.builder();
+    for (boolean utf8 : List.of(false, true)) {
+      for (MatchOperation operation : List.of(MatchOperation.FIND, MatchOperation.LOOKING_AT)) {
+        cases.add(Arguments.of("^a[é]*", "aéé", operation, utf8));
+        cases.add(Arguments.of("^a{9}b?c?", "aaaaaaaaabc", operation, utf8));
+        cases.add(Arguments.of("^a[bc]*", "abcbc", operation, utf8));
+      }
+    }
+    return cases.build();
   }
 
   @Test

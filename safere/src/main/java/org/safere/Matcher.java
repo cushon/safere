@@ -4981,6 +4981,7 @@ public final class Matcher implements MatchResult {
           LiteralAlternationPreparedRunner,
           SingleCharClassPreparedRunner,
           KeywordAlternationPreparedRunner,
+          LazyShiftDfaPreparedRunner,
           ShiftDfaPreparedRunner,
           OnePassAnchoredPreparedRunner,
           FallbackPreparedRunner {
@@ -5338,16 +5339,63 @@ public final class Matcher implements MatchResult {
     }
   }
 
-  static final class ShiftDfaPreparedRunner implements PreparedMatchRunner {
-    private final ShiftDfa shiftDfa;
+  /**
+   * Defers ShiftDfa construction until the first whole-input {@code matches()}, then hands off to
+   * the resolved runner: {@link ShiftDfaPreparedRunner} if construction succeeded, otherwise the
+   * prepared fallback.
+   */
+  static final class LazyShiftDfaPreparedRunner implements PreparedMatchRunner {
+    private final Pattern pattern;
+    private final PreparedMatchRunner fallback;
+    // Racy single-check caching is safe: every candidate value is immutable with final fields.
+    private PreparedMatchRunner resolved;
 
-    ShiftDfaPreparedRunner(ShiftDfa shiftDfa) {
-      this.shiftDfa = shiftDfa;
+    LazyShiftDfaPreparedRunner(Pattern pattern, PreparedMatchRunner fallback) {
+      this.pattern = pattern;
+      this.fallback = fallback;
     }
 
     @Override
     public boolean find(Matcher matcher, boolean regionActive) {
-      return matcher.doFindCore(regionActive);
+      return fallback.find(matcher, regionActive);
+    }
+
+    @Override
+    public boolean matches(Matcher matcher) {
+      if (matcher.regionStart != 0
+          || matcher.regionEnd != matcher.activeScanner().length()
+          || matcher.transparentBounds
+          || !matcher.anchoringBounds) {
+        return matcher.matchesCore();
+      }
+      PreparedMatchRunner runner = resolved;
+      if (runner == null) {
+        ShiftDfa shiftDfa = pattern.shiftDfa();
+        runner = shiftDfa != null ? new ShiftDfaPreparedRunner(shiftDfa, fallback) : fallback;
+        resolved = runner;
+        pattern.replacePreparedMatchRunner(this, runner);
+      }
+      return runner.matches(matcher);
+    }
+
+    @Override
+    public boolean lookingAt(Matcher matcher) {
+      return fallback.lookingAt(matcher);
+    }
+  }
+
+  static final class ShiftDfaPreparedRunner implements PreparedMatchRunner {
+    private final ShiftDfa shiftDfa;
+    private final PreparedMatchRunner fallback;
+
+    ShiftDfaPreparedRunner(ShiftDfa shiftDfa, PreparedMatchRunner fallback) {
+      this.shiftDfa = shiftDfa;
+      this.fallback = fallback;
+    }
+
+    @Override
+    public boolean find(Matcher matcher, boolean regionActive) {
+      return fallback.find(matcher, regionActive);
     }
 
     @Override
@@ -5378,7 +5426,7 @@ public final class Matcher implements MatchResult {
 
     @Override
     public boolean lookingAt(Matcher matcher) {
-      return matcher.lookingAtCore();
+      return fallback.lookingAt(matcher);
     }
   }
 
