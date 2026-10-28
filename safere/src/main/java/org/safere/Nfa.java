@@ -390,7 +390,6 @@ final class Nfa {
         startPos,
         searchLimit,
         endPos,
-        endPos,
         regionStart,
         regionStart,
         endPos,
@@ -420,7 +419,6 @@ final class Nfa {
         startPos,
         searchLimit,
         endPos,
-        endPos,
         regionStart,
         regionStart,
         endPos,
@@ -452,7 +450,6 @@ final class Nfa {
         startPos,
         searchLimit,
         endPos,
-        endPos,
         consumeRegionStart,
         boundaryRegionStart,
         boundaryEndPos,
@@ -471,7 +468,6 @@ final class Nfa {
       int startPos,
       int searchLimit,
       int endPos,
-      int graphemeConsumeEndPos,
       int consumeRegionStart,
       int boundaryRegionStart,
       int boundaryEndPos,
@@ -488,7 +484,6 @@ final class Nfa {
         startPos,
         searchLimit,
         endPos,
-        graphemeConsumeEndPos,
         consumeRegionStart,
         boundaryRegionStart,
         boundaryEndPos,
@@ -507,7 +502,6 @@ final class Nfa {
       int startPos,
       int searchLimit,
       int endPos,
-      int graphemeConsumeEndPos,
       int consumeRegionStart,
       int boundaryRegionStart,
       int boundaryEndPos,
@@ -544,7 +538,6 @@ final class Nfa {
             startPos,
             searchLimit,
             endPos,
-            graphemeConsumeEndPos,
             consumeRegionStart,
             boundaryRegionStart,
             boundaryEndPos,
@@ -655,10 +648,10 @@ final class Nfa {
 
     int[] initialCap = new int[threadArraySize];
 
-    int engineEndPos = context.engineEndPos();
+    int endPos = context.endPos();
     boolean isUtf8 = text instanceof Utf8InputScanner;
     int pos = start;
-    while (pos < engineEndPos + 2) {
+    while (pos < endPos + 2) {
       if (WorkCounterConfig.ENABLED) {
         WorkCounter.record();
       }
@@ -682,7 +675,7 @@ final class Nfa {
         nextBoundaryPos = nextPos;
       } else {
         freeQueue(runq);
-        if (isUtf8 && pos < engineEndPos) {
+        if (isUtf8 && pos < endPos) {
           long decoded = text.decodeForward(pos);
           nextBoundaryPos = Math.max(pos + 1, InputScanner.position(decoded));
         } else {
@@ -696,7 +689,7 @@ final class Nfa {
               : isDelayedBufferEmpty(delayedBuffer))) {
         break;
       }
-      if (isUtf8 && pos < engineEndPos) {
+      if (isUtf8 && pos < endPos) {
         pos = nextBoundaryPos;
       } else {
         pos++;
@@ -782,8 +775,8 @@ final class Nfa {
   }
 
   private QueueState delayedQueueAt(Map<Integer, QueueState> delayedGrapheme, int pos) {
-    int engineEndPos = context.engineEndPos();
-    if (pos < 0 || pos > engineEndPos + 1) {
+    int endPos = context.endPos();
+    if (pos < 0 || pos > endPos + 1) {
       return null;
     }
     return delayedGrapheme.computeIfAbsent(pos, unused -> allocQueueState());
@@ -800,36 +793,54 @@ final class Nfa {
             pos,
             graphemeStart,
             context.consumeRegionStart(),
-            context.graphemeConsumeEndPos(),
+            context.endPos(),
             context.graphemeContext());
   }
 
   private long inputStep(InputScanner text, int pos) {
-    if (prog.hasGraphemeSemantics()) {
-      int cp = GraphemeSupport.inputCodePointAt(text, pos, context.endPos(), true);
-      int nextPos = GraphemeSupport.inputNextPos(text, pos, context.endPos(), true);
-      return InputScanner.decoded(cp, nextPos);
-    }
-    if (pos < 0 || pos >= context.engineEndPos()) {
-      int nextPos = nextBoundaryPosition(pos, context.endPos());
-      return InputScanner.decoded(-1, nextPos);
-    }
-    return decodeAtConsumeBoundary(text, pos);
+    return decodeAtConsumeBoundary(text, pos, context.endPos());
   }
 
   private int graphemeNextPos(InputScanner text, int pos) {
-    return GraphemeSupport.graphemeNextPos(text, pos, context.graphemeConsumeEndPos());
+    return GraphemeSupport.graphemeNextPos(text, pos, context.endPos());
   }
 
   private long decodeAtConsumeBoundary(InputScanner text, int pos) {
-    if (pos < 0 || pos >= context.engineEndPos()) {
-      return InputScanner.decoded(-1, nextBoundaryPosition(pos, context.engineEndPos()));
+    return decodeAtConsumeBoundary(text, pos, context.endPos());
+  }
+
+  private static long decodeAtConsumeBoundary(InputScanner text, int pos, int limit) {
+    if (pos < 0 || pos >= limit) {
+      return InputScanner.decoded(-1, nextBoundaryPosition(pos, limit));
     }
     long decoded = text.decodeForward(pos);
-    if (InputScanner.position(decoded) <= context.engineEndPos()) {
-      return decoded;
+    return InputScanner.position(decoded) <= limit ? decoded : text.decodeForward(pos, limit);
+  }
+
+  /**
+   * Accepts a candidate under the end constraints and records it when it wins match selection.
+   *
+   * <p>The caller owns candidate priority, queue lifetime, and whether to stop after acceptance.
+   *
+   * @return whether the candidate satisfies the end constraints, even if an existing longest match
+   *     remains better
+   */
+  private boolean acceptMatch(int[] capture, int pos) {
+    if (endmatch
+        && !(prog.anchorEnd()
+            ? matchesEndPosition(context.text(), pos)
+            : pos == context.endPos())) {
+      return false;
     }
-    return InputScanner.decoded(-1, nextBoundaryPosition(pos, context.engineEndPos()));
+    if (!longest
+        || !matched
+        || capture[0] < bestMatch[0]
+        || (capture[0] == bestMatch[0] && pos > bestMatch[1])) {
+      System.arraycopy(capture, 0, bestMatch, 0, ncapture);
+      bestMatch[1] = pos;
+      matched = true;
+    }
+    return true;
   }
 
   private static int nextBoundaryPosition(int pos, int endPos) {
@@ -953,7 +964,8 @@ final class Nfa {
                     consumedInput,
                     context.emptyAnchorStartPos(),
                     context.emptyAnchorEndPos(),
-                    context.effectiveBoundaryEndPos(consumedInput),
+                    context.boundaryEndPos(),
+                    context.boundaryEndPos(),
                     prog.hasWordBoundary(),
                     prog.hasTextAnchor());
           }
@@ -1103,7 +1115,7 @@ final class Nfa {
                     ? delayedQueueAt(delayedGrapheme, scalarEnd)
                     : delayedQueueAt(delayedBuffer, scalarEnd);
             if (destination != null) {
-              if (scalarEnd == context.graphemeConsumeEndPos()
+              if (scalarEnd == context.endPos()
                   || GraphemeSupport.isGraphemeClusterBoundary(
                       text, scalarEnd, graphemeStart, context.graphemeContext())) {
                 addToThreadq(destination, ip.out, text, scalarEnd, capture, true);
@@ -1125,27 +1137,10 @@ final class Nfa {
         }
 
         case MATCH -> {
-          boolean skip = endmatch && !matchesEndPosition(text, matchPos);
-          if (!skip) {
-            if (longest) {
-              if (!matched
-                  || capture[0] < bestMatch[0]
-                  || (capture[0] == bestMatch[0] && matchPos > bestMatch[1])) {
-                System.arraycopy(capture, 0, bestMatch, 0, ncapture);
-                bestMatch[1] = matchPos;
-                matched = true;
-              }
-            } else {
-              // First match mode: this is the best match (leftmost, due to priority).
-              // Cut off threads that can only find worse matches (remaining runq),
-              // but do not stop the main loop: threads already queued for later positions continue.
-              System.arraycopy(capture, 0, bestMatch, 0, ncapture);
-              bestMatch[1] = matchPos;
-              matched = true;
-              // Clear remaining runq entries; they can only find worse matches.
-              freeQueue(rq);
-              return false;
-            }
+          if (acceptMatch(capture, matchPos) && !longest) {
+            // Discard lower-priority threads here; previously queued successors still run.
+            freeQueue(rq);
+            return false;
           }
         }
 
@@ -1199,26 +1194,10 @@ final class Nfa {
         }
 
         case MATCH -> {
-          boolean skip = endmatch && !matchesEndPosition(text, matchPos);
-          if (!skip) {
-            if (longest) {
-              if (!matched
-                  || capture[0] < bestMatch[0]
-                  || (capture[0] == bestMatch[0] && matchPos > bestMatch[1])) {
-                System.arraycopy(capture, 0, bestMatch, 0, ncapture);
-                bestMatch[1] = matchPos;
-                matched = true;
-              }
-            } else {
-              // First match mode: this is the best match (leftmost, due to priority).
-              // Cut off threads that can only find worse matches (remaining runq),
-              // but do not stop the main loop: threads already in nextq continue.
-              System.arraycopy(capture, 0, bestMatch, 0, ncapture);
-              bestMatch[1] = matchPos;
-              matched = true;
-              freeQueue(rq);
-              return false;
-            }
+          if (acceptMatch(capture, matchPos) && !longest) {
+            // Discard lower-priority threads here; previously queued successors still run.
+            freeQueue(rq);
+            return false;
           }
         }
 
@@ -1241,14 +1220,13 @@ final class Nfa {
     if (matchPos == context.anchorEndPos()) {
       return true;
     }
-    if (matchPos == context.graphemeConsumeEndPos()
-        && context.graphemeConsumeEndPos() != context.endPos()
-        && context.anchorEndPos() == context.endPos()) {
-      return true;
-    }
     return prog.dollarAnchorEnd()
         && isAtTrailingLineTerminator(
-            text, matchPos, prog.dollarAnchorUnixLines(), context.anchorEndPos());
+            text,
+            matchPos,
+            prog.dollarAnchorUnixLines(),
+            Math.min(context.emptyAnchorStartPos(), context.boundaryRegionStart()),
+            context.anchorEndPos());
   }
 
   // ---------------------------------------------------------------------------
@@ -1334,6 +1312,7 @@ final class Nfa {
         0,
         text.length(),
         text.length(),
+        text.length(),
         hasWordBoundary,
         hasTextAnchor);
   }
@@ -1379,6 +1358,7 @@ final class Nfa {
         0,
         text.length(),
         text.length(),
+        text.length(),
         true,
         true);
   }
@@ -1406,6 +1386,7 @@ final class Nfa {
         anchorStartPos,
         anchorEndPos,
         boundaryEndPos,
+        boundaryEndPos,
         hasWordBoundary,
         hasTextAnchor);
   }
@@ -1421,65 +1402,24 @@ final class Nfa {
       int anchorStartPos,
       int anchorEndPos,
       int boundaryEndPos,
+      int wordBoundaryEndPos,
       boolean hasWordBoundary,
       boolean hasTextAnchor) {
     int flags = 0;
 
-    // Line assertions carry their own mode. Compute both sets at each position so branches
-    // with different scoped flags can coexist in the same engine state.
     if (hasTextAnchor) {
-      // Anchoring bounds set logical line ends; transparent bounds still expose CRLF context.
-      int lineContextStart = Math.min(anchorStartPos, regionStart);
-      if (pos == anchorStartPos) {
-        flags |= EmptyOp.BEGIN_TEXT;
-        if (pos < anchorEndPos) {
-          flags |= EmptyOp.BEGIN_LINE | EmptyOp.UNIX_BEGIN_LINE;
-        }
-      } else if (pos > anchorStartPos && pos < anchorEndPos) {
-        int prev = text.codePointBefore(pos);
-        if (prev == '\n') {
-          flags |= EmptyOp.BEGIN_LINE | EmptyOp.UNIX_BEGIN_LINE;
-        } else if (prev == '\u0085'
-            || prev == '\u2028'
-            || prev == '\u2029'
-            || (prev == '\r' && text.asciiAt(pos) != '\n')) {
-          flags |= EmptyOp.BEGIN_LINE;
-        }
-      }
-
-      if (pos == anchorEndPos) {
-        flags |=
-            EmptyOp.END_TEXT
-                | EmptyOp.END_LINE
-                | EmptyOp.UNIX_END_LINE
-                | EmptyOp.DOLLAR_END
-                | EmptyOp.UNIX_DOLLAR_END;
-      } else {
-        if (pos >= anchorStartPos && pos < anchorEndPos) {
-          int ch = text.codePointAt(pos);
-          if (ch == '\n') {
-            flags |= EmptyOp.UNIX_END_LINE;
-          }
-          // Standard line mode treats CRLF as one atomic terminator.
-          if (isLineTerminator(ch)
-              && !(ch == '\n' && pos > lineContextStart && text.asciiAt(pos - 1) == '\r')) {
-            flags |= EmptyOp.END_LINE;
-          }
-        }
-        if (isAtTrailingLineTerminator(text, pos, false, lineContextStart, anchorEndPos)) {
-          flags |= EmptyOp.DOLLAR_END;
-        }
-        if (isAtTrailingLineTerminator(text, pos, true, lineContextStart, anchorEndPos)) {
-          flags |= EmptyOp.UNIX_DOLLAR_END;
-        }
-      }
+      flags |= anchorFlags(text, pos, anchorStartPos, anchorEndPos, regionStart);
     }
 
     // \b and \B
     if (hasWordBoundary) {
-      int prevCp = pos > regionStart ? text.codePointBefore(pos) : -1;
+      int prevCp =
+          pos > regionStart ? InputScanner.codePoint(text.decodeBackward(pos, regionStart)) : -1;
       boolean prevWord = prevCp >= 0 && isWordChar(prevCp);
-      int nextCp = pos < boundaryEndPos ? text.codePointAt(pos) : -1;
+      int nextCp =
+          pos < wordBoundaryEndPos
+              ? InputScanner.codePoint(text.decodeForward(pos, wordBoundaryEndPos))
+              : -1;
       boolean nextWord = nextCp >= 0 && isWordChar(nextCp);
       if (prevWord != nextWord) {
         flags |= EmptyOp.WORD_BOUNDARY;
@@ -1505,6 +1445,57 @@ final class Nfa {
               text, pos, graphemeContext, matchStart, regionStart, consumedInput, boundaryEndPos);
     }
 
+    return flags;
+  }
+
+  private static int anchorFlags(
+      InputScanner text, int pos, int anchorStartPos, int anchorEndPos, int regionStart) {
+    int flags = 0;
+    // Anchoring bounds set logical line ends; transparent bounds still expose CRLF context.
+    int lineContextStart = Math.min(anchorStartPos, regionStart);
+    if (pos == anchorStartPos) {
+      flags |= EmptyOp.BEGIN_TEXT;
+      if (pos < anchorEndPos) {
+        flags |= EmptyOp.BEGIN_LINE | EmptyOp.UNIX_BEGIN_LINE;
+      }
+    } else if (pos > anchorStartPos && pos < anchorEndPos) {
+      int prev = text.codePointBefore(pos);
+      if (prev == '\n') {
+        flags |= EmptyOp.BEGIN_LINE | EmptyOp.UNIX_BEGIN_LINE;
+      } else if (prev == '\u0085'
+          || prev == '\u2028'
+          || prev == '\u2029'
+          || (prev == '\r' && text.asciiAt(pos) != '\n')) {
+        flags |= EmptyOp.BEGIN_LINE;
+      }
+    }
+
+    if (pos == anchorEndPos) {
+      flags |=
+          EmptyOp.END_TEXT
+              | EmptyOp.END_LINE
+              | EmptyOp.UNIX_END_LINE
+              | EmptyOp.DOLLAR_END
+              | EmptyOp.UNIX_DOLLAR_END;
+    } else {
+      if (pos >= anchorStartPos && pos < anchorEndPos) {
+        int ch = text.codePointAt(pos);
+        if (ch == '\n') {
+          flags |= EmptyOp.UNIX_END_LINE;
+        }
+        // Standard line mode treats CRLF as one atomic terminator.
+        if (isLineTerminator(ch)
+            && !(ch == '\n' && pos > lineContextStart && text.asciiAt(pos - 1) == '\r')) {
+          flags |= EmptyOp.END_LINE;
+        }
+      }
+      if (isAtTrailingLineTerminator(text, pos, false, lineContextStart, anchorEndPos)) {
+        flags |= EmptyOp.DOLLAR_END;
+      }
+      if (isAtTrailingLineTerminator(text, pos, true, lineContextStart, anchorEndPos)) {
+        flags |= EmptyOp.UNIX_DOLLAR_END;
+      }
+    }
     return flags;
   }
 
