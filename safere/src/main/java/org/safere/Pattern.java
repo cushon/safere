@@ -150,8 +150,10 @@ public final class Pattern implements Serializable {
   private final transient EnginePathOptions enginePathOptions;
   private final transient LiteralAlternation literalAlternation;
   private final transient InnerLiteralSearch innerLiteralSearch;
-  // Not final: a lazy ShiftDfa runner replaces itself once its analysis resolves.
-  private transient Matcher.PreparedMatchRunner defaultPreparedMatchRunner;
+  // Not final: a lazy ShiftDfa runner replaces itself once its analysis resolves. Volatile because
+  // that replacement happens on whichever thread first calls matches(). Every runner has only final
+  // fields, so a racy read was already safe, but volatile makes the publication explicit.
+  private transient volatile Matcher.PreparedMatchRunner defaultPreparedMatchRunner;
   private final transient Matcher.PreparedMatchRunner regionPreparedMatchRunner;
   private final long patternId;
   private transient volatile PatternAnalysis patternAnalysis;
