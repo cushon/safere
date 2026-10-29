@@ -9,6 +9,7 @@ package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** Tests for {@link Pattern#asPredicate()} and {@link Pattern#asMatchPredicate()}. */
 class PatternPredicateTest {
@@ -129,6 +131,48 @@ class PatternPredicateTest {
       assertThat(predicate.test(input))
           .as("/%s/ flags=%d on %s", regex, flags, escape(input))
           .isEqualTo(pattern.matcher(input).find());
+    }
+  }
+
+  /**
+   * Start-anchored patterns on inputs long enough for the DFA to try start acceleration. A later
+   * suffix that would match on its own must not satisfy the start anchor.
+   */
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "^(a)*b$",
+        "^a*b$",
+        "\\Aa*b\\z",
+        "^a*b",
+        "^([a-z]+)END\\z",
+        "^([a-z]+)[0-9]$",
+        "^(?:a|c)*b$",
+      })
+  void startAnchoredPatternsDoNotMatchAfterAnInteriorFailure(String regex) {
+    Pattern pattern = Pattern.compile(regex);
+    Predicate<String> predicate = pattern.asPredicate();
+    java.util.regex.Pattern jdkPattern = java.util.regex.Pattern.compile(regex);
+    for (int n = 0; n <= 80; n++) {
+      String prefix = "a".repeat(n);
+      for (String input :
+          List.of(
+              prefix + "b",
+              prefix + "!ab",
+              prefix + "!b",
+              prefix + "END",
+              prefix + "!aEND",
+              prefix + "5",
+              prefix + "!a5",
+              "!" + prefix + "b")) {
+        boolean expected = jdkPattern.matcher(input).find();
+        Utf8Input utf8 = Utf8Input.validated(input.getBytes(StandardCharsets.UTF_8));
+        String description = "/%s/ on %s".formatted(regex, escape(input));
+        assertThat(pattern.matcher(input).find()).as(description).isEqualTo(expected);
+        assertThat(predicate.test(input)).as(description).isEqualTo(expected);
+        assertThat(pattern.matcher(utf8).find()).as(description).isEqualTo(expected);
+        assertThat(pattern.find(utf8)).as(description).isEqualTo(expected);
+      }
     }
   }
 
