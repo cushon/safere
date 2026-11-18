@@ -311,60 +311,47 @@ public final class Matcher implements MatchResult {
     return policy.isExactMatchCandidate() || pos >= AdaptiveBackoff.resumePos(startBackoff);
   }
 
-  private boolean hasLiteralStartAccelerator(InputScanner scanner) {
-    return parentPattern.startPrecedesFindReject()
-        && (text != null
-            || scanner instanceof Utf8InputScanner
-            || scanner instanceof StringRegionInputScanner);
+  /** Returns whether {@link #doFindCore} runs the start accelerator for {@code scanner}. */
+  private boolean startSearchRuns(InputScanner scanner) {
+    return text != null
+        || scanner instanceof Utf8InputScanner
+        || scanner instanceof StringRegionInputScanner;
   }
 
   /**
    * Like {@link #rejectFindFrom}, for the tail after a short input's first start candidate (see
    * {@link RejectPrefilter#canRejectTail}).
    */
-  private boolean rejectTailFrom(InputScanner scanner, int fromIndex, EnginePathOptions options) {
-    RejectPrefilter rejectPrefilter =
-        scanner instanceof Utf8InputScanner
-            ? parentPattern.utf8FindRejectPrefilter()
-            : parentPattern.findRejectPrefilter();
-    if (rejectPrefilter == null) {
-      return false;
-    }
+  private boolean rejectTailFrom(
+      RejectPrefilter rejectPrefilter,
+      InputScanner scanner,
+      int fromIndex,
+      EnginePathOptions options) {
     return diagnosticsAccumulator() == null
         ? rejectPrefilter.canRejectTail(text, scanner, fromIndex, options)
         : reportRejection(rejectPrefilter.tailRejectionStrategy(text, scanner, fromIndex, options));
   }
 
-  private boolean rejectFindFrom(InputScanner scanner, int fromIndex, EnginePathOptions options) {
-    RejectPrefilter rejectPrefilter =
-        scanner instanceof Utf8InputScanner
-            ? parentPattern.utf8FindRejectPrefilter()
-            : parentPattern.findRejectPrefilter();
-    if (rejectPrefilter == null) {
-      return false;
-    }
+  private boolean rejectFindFrom(
+      RejectPrefilter rejectPrefilter,
+      InputScanner scanner,
+      int fromIndex,
+      EnginePathOptions options) {
     return diagnosticsAccumulator() == null
         ? rejectPrefilter.canReject(text, scanner, fromIndex, options)
         : rejectWithDiagnostics(rejectPrefilter, text, scanner, fromIndex, options);
   }
 
   /**
-   * Charges a matcher-level start-accelerator call from {@code pos} to {@link #startBackoff},
-   * unless its candidates are exact match starts (see {@link #startAccelerationAllowed}).
-   *
-   * <p>A leading expansion over a wide class such as non-DOTALL {@code .} is not charged either. It
-   * often returns the search start itself (for a short skip, or a hit on the first line), and
-   * charging that as a failed skip would quarantine {@link #startBackoff}, which also stops the
-   * forward DFA from fast-forwarding through its start state. Each call already costs at most one
-   * scan to the next inner hit plus one walk back over the line holding it, and later calls resume
-   * after the previous match, which lies past that hit.
+   * Charges a matcher-level start-accelerator call from {@code pos} to {@link #startBackoff} when
+   * its policy {@linkplain AcceleratorPolicy#chargesSkips charges skips}.
    */
   private void chargeStartAcceleration(
-      int pos, int candidate, int textLen, AcceleratorPolicy policy, boolean wideLeadingClass) {
+      int pos, int candidate, int textLen, AcceleratorPolicy policy) {
     if (WorkCounterConfig.ENABLED) {
       WorkCounter.recordStartScan(candidate - pos);
     }
-    if (!policy.isExactMatchCandidate() && !wideLeadingClass) {
+    if (policy.chargesSkips()) {
       startBackoff = AdaptiveBackoff.recordSkip(startBackoff, pos, candidate, textLen, policy);
     }
   }
@@ -1906,7 +1893,7 @@ public final class Matcher implements MatchResult {
     int effectiveStart = searchFrom;
     if (!transparentBounds && text != null && prog.hasGraphemeClusterInstruction()) {
       EnginePathOptions options = enginePathOptions();
-      RejectPrefilter rejection = parentPattern.findRejectPrefilter();
+      RejectPrefilter rejection = parentPattern.findPlan().stringReject();
       if (options.charClassMatchFastPaths() && rejection != null) {
         if (regionClassSearch == null) {
           regionClassSearch = new RegionClassSearch();
@@ -1936,7 +1923,7 @@ public final class Matcher implements MatchResult {
           return applyFailedMatchResult();
         }
         chargeStartAcceleration(
-            searchFrom - regionStart, candidate, region.length(), accelerator.policy(), false);
+            searchFrom - regionStart, candidate, region.length(), accelerator.policy());
         effectiveStart = regionStart + candidate;
       }
     }
@@ -2025,15 +2012,13 @@ public final class Matcher implements MatchResult {
       }
     }
 
-    boolean literalStartFirst =
-        options.startAcceleration()
-            && !prog.anchorStart()
-            && scanner.length() - searchFrom < Pattern.MAX_LITERAL_START_FIRST_LENGTH
-            && hasLiteralStartAccelerator(scanner);
-    // A wide-class leading expansion's literal search below fails exactly when this would reject.
-    if (!literalStartFirst
-        && !(options.startAcceleration() && parentPattern.startSubsumesFindReject())
-        && rejectFindFrom(scanner, searchFrom, options)) {
+    FindPlan findPlan = parentPattern.findPlan();
+    RejectPrefilter rejectPrefilter = findPlan.reject(scanner instanceof Utf8InputScanner);
+    int rejectMode =
+        findPlan.rejectMode(
+            rejectPrefilter, scanner.length() - searchFrom, startSearchRuns(scanner));
+    if (rejectMode == FindPlan.REJECT_FIRST
+        && rejectFindFrom(rejectPrefilter, scanner, searchFrom, options)) {
       return applyFailedMatchResult();
     }
 
@@ -2072,10 +2057,9 @@ public final class Matcher implements MatchResult {
         }
       }
     }
-    if (literalStartFirst
-        && startPositionPreselected
-        && scanner.length() - effectiveStart >= Pattern.MIN_REJECT_AFTER_START_REMAINING
-        && rejectTailFrom(scanner, effectiveStart, options)) {
+    if (startPositionPreselected
+        && FindPlan.rejectsTail(rejectMode, scanner.length() - effectiveStart)
+        && rejectTailFrom(rejectPrefilter, scanner, effectiveStart, options)) {
       return applyFailedMatchResult();
     }
 
@@ -2350,7 +2334,7 @@ public final class Matcher implements MatchResult {
         }
         return -1;
       }
-      chargeStartAcceleration(fromIndex, innerMatch, scanner.length(), policy, false);
+      chargeStartAcceleration(fromIndex, innerMatch, scanner.length(), policy);
       // As in findNextStringStartCandidate, an unanchored rejection at the inner candidate rules
       // out every expanded start.
       diagnosticParticipation(MatchStrategy.DFA, StrategyRole.CANDIDATE_VERIFICATION);
@@ -2368,12 +2352,7 @@ public final class Matcher implements MatchResult {
         diagnosticBoundary(strategy);
       }
     } else {
-      chargeStartAcceleration(
-          fromIndex,
-          candidate,
-          scanner.length(),
-          policy,
-          accelerator instanceof Utf8StartAccelerator.LeadingExpansion le && le.wideLeadingClass());
+      chargeStartAcceleration(fromIndex, candidate, scanner.length(), policy);
     }
     return candidate;
   }
@@ -2403,7 +2382,7 @@ public final class Matcher implements MatchResult {
         }
         return -1;
       }
-      chargeStartAcceleration(fromIndex, innerMatch, scanner.length(), policy, false);
+      chargeStartAcceleration(fromIndex, innerMatch, scanner.length(), policy);
       // Zero repetitions are legal and there are no leading assertions. Every match from an
       // expanded start therefore has a suffix matching from an inner candidate. An unanchored
       // rejection here rules out all later starts without traversing the leading run backward.
@@ -2436,13 +2415,7 @@ public final class Matcher implements MatchResult {
         diagnosticBoundary(strategy);
       }
     } else {
-      chargeStartAcceleration(
-          fromIndex,
-          candidate,
-          scanner.length(),
-          policy,
-          accelerator instanceof StringStartAccelerator.LeadingExpansion le
-              && le.wideLeadingClass());
+      chargeStartAcceleration(fromIndex, candidate, scanner.length(), policy);
     }
     return candidate;
   }
@@ -3385,7 +3358,7 @@ public final class Matcher implements MatchResult {
         }
         hasEndAnchoredCandidate = endAnchoredStart >= 0;
       }
-      RejectPrefilter rejectPrefilter = parentPattern.findRejectPrefilter();
+      RejectPrefilter rejectPrefilter = parentPattern.findPlan().stringReject();
       if (!hasEndAnchoredCandidate
           && rejectPrefilter != null
           && text != null
@@ -5058,7 +5031,7 @@ public final class Matcher implements MatchResult {
         return 0;
       }
       firstEndAnchoredStart = endAnchoredStart;
-      RejectPrefilter rejectPrefilter = parentPattern.findRejectPrefilter();
+      RejectPrefilter rejectPrefilter = parentPattern.findPlan().stringReject();
       if (endAnchoredStart < 0 && rejectPrefilter != null && text != null) {
         if (rejectPrefilter.canReject(text, null, 0, enginePathOptions())) {
           return 0;

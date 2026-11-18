@@ -24,6 +24,9 @@ package org.safere;
  * @param maxQuarantineWindow Ceiling on the quarantine window under exponential backoff.
  * @param isExactMatchCandidate Whether this accelerator identifies an exact candidate match start
  *     that can be validated directly.
+ * @param chargesSkips Whether matcher-level calls are charged to the start backoff. Exact-match
+ *     accelerators are not (see {@code Matcher.startAccelerationAllowed}), nor are leading
+ *     expansions over a wide class (see {@link #WIDE_LEADING_EXPANSION}).
  * @param strategy The diagnostic strategy associated with this accelerator, or {@code null} if
  *     none.
  */
@@ -34,6 +37,7 @@ record AcceleratorPolicy(
     int initialQuarantineWindow,
     int maxQuarantineWindow,
     boolean isExactMatchCandidate,
+    boolean chargesSkips,
     MatchStrategy strategy) {
 
   // TODO: Conduct systematic empirical micro-benchmarking across diverse CPU architectures (x86
@@ -92,6 +96,7 @@ record AcceleratorPolicy(
         DEFAULT_INITIAL_QUARANTINE_WINDOW,
         DEFAULT_MAX_QUARANTINE_WINDOW,
         isExactMatchCandidate,
+        !isExactMatchCandidate,
         strategy);
   }
 
@@ -123,6 +128,16 @@ record AcceleratorPolicy(
    */
   static final AcceleratorPolicy LEADING_EXPANSION = of(32, false, null);
 
+  /**
+   * Policy for leading expansions over a wide class such as non-DOTALL {@code .}. Their calls are
+   * not charged to the start backoff: such an expansion often returns the search start itself (for
+   * a short skip, or a hit on the first line), and charging that as a failed skip would quarantine
+   * the backoff, which also stops the forward DFA from fast-forwarding through its start state.
+   * Each call already costs at most one scan to the next inner hit plus one walk back over the line
+   * holding it, and later calls resume after the previous match, which lies past that hit.
+   */
+  static final AcceleratorPolicy WIDE_LEADING_EXPANSION = LEADING_EXPANSION.withoutSkipCharges();
+
   /** Default fallback policy for generic or composite accelerators. */
   static final AcceleratorPolicy DEFAULT = of(32, false, null);
 
@@ -135,6 +150,19 @@ record AcceleratorPolicy(
         initialQuarantineWindow,
         maxQuarantineWindow,
         isExactMatchCandidate,
+        chargesSkips,
+        strategy);
+  }
+
+  private AcceleratorPolicy withoutSkipCharges() {
+    return new AcceleratorPolicy(
+        minProfitableSkip,
+        strikeBudget,
+        minDensityStride,
+        initialQuarantineWindow,
+        maxQuarantineWindow,
+        isExactMatchCandidate,
+        false,
         strategy);
   }
 }
