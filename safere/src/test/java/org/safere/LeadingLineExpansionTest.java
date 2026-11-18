@@ -68,7 +68,7 @@ class LeadingLineExpansionTest {
           """);
 
   @Test
-  void utf8ExistenceAgreesWithJdkAcrossLeadingRepeatConstraints() {
+  void existenceSearchesAgreeWithJdkAcrossLeadingRepeatConstraints() {
     List<String> regexes =
         List.of(
             ".*error: \\w+",
@@ -86,7 +86,13 @@ class LeadingLineExpansionTest {
             ".*error: \\w+$",
             ".*[ab]{2}error: \\w+",
             "(?i).*ERROR: \\w+",
-            ".*error\\X");
+            ".*error\\X",
+            // Narrow classes verify at the inner candidate too.
+            "\\s*error: \\w+",
+            "\\s*?error: \\w+",
+            "[a-z ]*error: \\w+",
+            "\\s+error: \\w+",
+            "\\b\\s*error: \\w+");
     List<String> inputs =
         List.of(
             "",
@@ -108,6 +114,9 @@ class LeadingLineExpansionTest {
           for (String prefix : List.of("", PAD, PAD + "\n")) {
             String input = prefix + tail;
             boolean expected = jdk.matcher(input).find();
+            assertThat(pattern.asPredicate().test(input))
+                .as("predicate /%s/ flags=%s on %s", regex, flags, input)
+                .isEqualTo(expected);
             // A nonzero byte window must retain assertion context relative to the window.
             byte[] bytes = input.getBytes(UTF_8);
             byte[] wordPadded = ("before" + input + "after").getBytes(UTF_8);
