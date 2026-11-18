@@ -866,45 +866,16 @@ public final class Pattern implements Serializable {
       diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
     }
     if (findPlan.existenceStartsAtInner()
-        && findPlan.wideLeadingExpansion()
         && utf8StartAccelerator instanceof Utf8StartAccelerator.LeadingExpansion le) {
-      // Preserve the wide expansion's short-input decline to avoid adding literal-scan setup
-      // to native verification. Nearby hits below retain its minimum profitable skip too.
-      if (scanner.length() < MultiAnchorCompiler.MIN_WIDE_LEADING_SKIP) {
+      // Existence does not need the expanded match start (see FindPlan#existenceStartsAtInner).
+      // One ordinary search from the inner candidate verifies the tail and handles later
+      // candidates, so no probe, walk back or second search is needed.
+      if (findPlan.skipsExistenceScan(scanner.length())) {
         return 0;
       }
-      // Existence does not need the expanded match start. Every match has a suffix at or after
-      // the first inner literal, and that suffix is itself a match with zero leading repetitions.
-      // Keep the full scanner so assertions retain their input context. One ordinary search from
-      // this candidate verifies the tail and handles later candidates without repeated probes.
       int candidate = le.findInnerCandidate(scanner, 0);
       if (candidate >= 0) {
-        // Leave nearby hits to the forward search, as in wide leading expansion.
-        return candidate < MultiAnchorCompiler.MIN_WIDE_LEADING_SKIP ? 0 : candidate;
-      }
-    } else if (utf8StartAccelerator instanceof Utf8StartAccelerator.LeadingExpansion le
-        && le.canVerifyAtInner()) {
-      int innerMatch = le.findInnerCandidate(scanner, 0);
-      if (innerMatch >= 0) {
-        // With zero repetitions and no leading assertions, an unanchored rejection from the
-        // inner candidate also rejects every expanded start. Do this before walking backward.
-        if (diagnostics != null) {
-          diagnostics.participate(MatchStrategy.DFA, StrategyRole.CANDIDATE_VERIFICATION);
-          diagnostics.incrementForwardDfaSearchCount();
-        }
-        Dfa.SearchResult result =
-            forwardFirstMatchDfa().doSearch(scanner, innerMatch, false, false, true);
-        if (result != null && !result.matched()) {
-          if (diagnostics != null) {
-            diagnostics.boundary(MatchStrategy.DFA);
-          }
-          return -1;
-        }
-        if (result == null && diagnostics != null) {
-          diagnostics.decision(
-              MatchStrategy.DFA, StrategyDisposition.FALLBACK, StrategyReason.DFA_BUDGET_EXCEEDED);
-        }
-        return le.expandBackward(scanner, innerMatch, 0);
+        return findPlan.existenceStart(candidate);
       }
     } else {
       int candidate = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
@@ -1406,29 +1377,21 @@ public final class Pattern implements Serializable {
 
   /**
    * Selects the first String start candidate for {@link #findInString}. Literal scans use UTF-16
-   * indices, so candidates inside a surrogate pair are skipped, as in the matcher. A nullable
-   * leading expansion is first verified at its inner candidate, as in {@link
-   * #findNextUtf8StartCandidate}.
+   * indices, so candidates inside a surrogate pair are skipped, as in the matcher. An eligible
+   * leading expansion starts at its inner candidate, as in {@link #findNextUtf8StartCandidate}.
    */
   private int findNextStringStartCandidate(StringInputScanner scanner, String text) {
     boolean unixLines = prog.lineStartUnixLines();
-    if (stringStartAccelerator instanceof StringStartAccelerator.LeadingExpansion le
-        && le.canVerifyAtInner()) {
+    if (findPlan.existenceStartsAtInner()
+        && stringStartAccelerator instanceof StringStartAccelerator.LeadingExpansion le) {
+      if (findPlan.skipsExistenceScan(text.length())) {
+        return 0;
+      }
       int innerMatch = le.findInnerCandidate(text, 0, unixLines);
       while (innerMatch > 0 && !scanner.isCodePointBoundary(innerMatch)) {
         innerMatch = le.findInnerCandidate(text, innerMatch + 1, unixLines);
       }
-      if (innerMatch < 0) {
-        return -1;
-      }
-      // With zero repetitions and no leading assertions, an unanchored rejection from the inner
-      // candidate also rejects every expanded start.
-      Dfa.SearchResult result =
-          forwardFirstMatchDfa().doSearch(scanner, innerMatch, false, false, true);
-      if (result != null && !result.matched()) {
-        return -1;
-      }
-      return le.expandBackward(text, innerMatch, 0);
+      return innerMatch < 0 ? -1 : findPlan.existenceStart(innerMatch);
     }
     int candidate =
         StringStartAccelerator.findNextCandidate(stringStartAccelerator, text, 0, unixLines);

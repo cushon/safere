@@ -89,6 +89,25 @@ record FindPlan(
     return !wideLeadingExpansion;
   }
 
+  /**
+   * Returns whether an {@link #existenceStartsAtInner} search over {@code length} units starts at
+   * the search start without a literal scan. A wide expansion declines short inputs, where the
+   * scan's setup costs more than the forward search it could skip.
+   */
+  boolean skipsExistenceScan(int length) {
+    return wideLeadingExpansion && length < MultiAnchorCompiler.MIN_WIDE_LEADING_SKIP;
+  }
+
+  /**
+   * Returns the existence search start for the first inner {@code candidate}. A wide expansion
+   * leaves nearby hits to the forward search, keeping its minimum profitable skip.
+   */
+  int existenceStart(int candidate) {
+    return wideLeadingExpansion && candidate < MultiAnchorCompiler.MIN_WIDE_LEADING_SKIP
+        ? 0
+        : candidate;
+  }
+
   static FindPlan create(
       MultiAnchorDescriptor multiAnchor,
       RejectPrefilter stringReject,
