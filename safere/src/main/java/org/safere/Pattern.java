@@ -58,13 +58,6 @@ public final class Pattern implements Serializable {
 
   // Avoid another DFA setup for tiny unproved candidates; longer ones benefit from its scan.
   private static final int MIN_DFA_END_VERIFICATION_UNITS = 64;
-  // A competitive literal start accelerator runs before the find reject prefilter only on inputs
-  // shorter than this, where the separate prefilter call dominates. Longer inputs keep the
-  // single-pass reject prefilter first.
-  static final int MAX_LITERAL_START_FIRST_LENGTH = 512;
-  // After a short-input start scan, the reject prefilter re-runs from the start candidate only when
-  // at least this many units remain. On a shorter tail the DFA's check costs less than the call.
-  static final int MIN_REJECT_AFTER_START_REMAINING = 64;
   private static final AtomicLong NEXT_PATTERN_ID = new AtomicLong(1);
   private static final MethodType DIAGNOSTICS_TYPE =
       MethodType.methodType(SafeReMatchDiagnostics.class);
@@ -177,11 +170,8 @@ public final class Pattern implements Serializable {
    */
   private final transient RejectPrefilter rejectPrefilter;
 
-  private final transient RejectPrefilter utf8FindRejectPrefilter;
-
-  private final boolean startPrecedesFindReject;
-  private final boolean dfaStartAcceleration;
-  private final boolean startSubsumesFindReject;
+  /** Find decisions shared by the matcher and the matcher-free existence searches. */
+  private final transient FindPlan findPlan;
 
   /**
    * OnePass analysis results, computed during construction when eligible analysis can support
@@ -331,19 +321,8 @@ public final class Pattern implements Serializable {
         wideLeadingExpansion && prog.hasGraphemeClusterInstruction()
             ? null
             : StringStartAccelerator.create(this.multiAnchor, prog.hasWordBoundary());
-    // The wide expansion can walk backward over an entire line. Keep it out of the DFA loop,
-    // which could otherwise repeat that walk at each position before the same inner hit.
-    this.dfaStartAcceleration = !wideLeadingExpansion;
     this.enginePathOptions = enginePathOptions;
     this.rejectPrefilter = RejectPrefilter.create(this.multiAnchor);
-    // When find() runs a wide-class leading expansion, its inner literal search fails exactly when
-    // the reject prefilter would reject, so the prefilter's scan would only repeat it.
-    this.startSubsumesFindReject =
-        enginePathOptions.startAcceleration()
-            && !prog.anchorStart()
-            && stringStartAccelerator != null
-            && utf8StartAccelerator != null
-            && this.multiAnchor.startSubsumesFindReject();
     this.innerLiteralSearch =
         enginePathOptions.startAcceleration()
                 && enginePathOptions.literalFastPaths()
@@ -354,13 +333,6 @@ public final class Pattern implements Serializable {
                 && !lit.foldCase()
             ? InnerLiteralSearch.compile(ast, rejectPrefilter)
             : null;
-    this.startPrecedesFindReject =
-        enginePathOptions.startAcceleration()
-            && !prog.anchorStart()
-            && findRejectPrefilter() != null
-            && stringStartAccelerator != null
-            && utf8StartAccelerator != null
-            && this.multiAnchor.startPrecedesFindReject();
     // The literal-alternation runner skips canReject on its initial String find().
     // The filter's type still selects its window policy; fallback operations retain the filter.
     this.literalAlternation =
@@ -397,13 +369,22 @@ public final class Pattern implements Serializable {
     this.forwardDfaSupported = enginePathOptions.dfa() && supportsForwardDfa(forwardProgram);
     RejectPrefilter baseFindReject =
         this.innerLiteralSearch == null || !this.forwardDfaSupported ? this.rejectPrefilter : null;
-    this.utf8FindRejectPrefilter =
+    RejectPrefilter utf8FindReject =
         baseFindReject != null
                 && enginePathOptions.startAcceleration()
                 && this.utf8StartAccelerator != null
                 && !prog.anchorStart()
             ? RejectPrefilter.withoutDisjointLiterals(baseFindReject)
             : baseFindReject;
+    this.findPlan =
+        FindPlan.create(
+            this.multiAnchor,
+            baseFindReject,
+            utf8FindReject,
+            enginePathOptions.startAcceleration()
+                && !prog.anchorStart()
+                && stringStartAccelerator != null
+                && utf8StartAccelerator != null);
 
     SafeReMatchDiagnostics listener = diagnostics();
     if (SafeReMatchDiagnostics.isEnabled(listener)) {
@@ -726,14 +707,9 @@ public final class Pattern implements Serializable {
     if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart)) {
       return true;
     }
-    RejectPrefilter findRejectPrefilter = utf8FindRejectPrefilter();
-    boolean rejectAfterStart =
-        findRejectPrefilter != null
-            && startPrecedesFindReject
-            && length < MAX_LITERAL_START_FIRST_LENGTH;
-    if (findRejectPrefilter != null
-        && !rejectAfterStart
-        && !startSubsumesFindReject
+    RejectPrefilter findRejectPrefilter = findPlan.utf8Reject();
+    int rejectMode = findPlan.rejectMode(findRejectPrefilter, length, true);
+    if (rejectMode == FindPlan.REJECT_FIRST
         && findRejectPrefilter.canReject(null, scanner, 0, enginePathOptions)) {
       return false;
     }
@@ -744,8 +720,7 @@ public final class Pattern implements Serializable {
         && !prog.anchorStart()) {
       searchStart = findNextUtf8StartCandidate(scanner, null);
       if (searchStart < 0
-          || (rejectAfterStart
-              && length - searchStart >= MIN_REJECT_AFTER_START_REMAINING
+          || (FindPlan.rejectsTail(rejectMode, length - searchStart)
               && findRejectPrefilter.canRejectTail(
                   null, scanner, searchStart, enginePathOptions))) {
         return false;
@@ -835,14 +810,9 @@ public final class Pattern implements Serializable {
     if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart, diagnostics)) {
       return true;
     }
-    RejectPrefilter findRejectPrefilter = utf8FindRejectPrefilter();
-    boolean rejectAfterStart =
-        findRejectPrefilter != null
-            && startPrecedesFindReject
-            && length < MAX_LITERAL_START_FIRST_LENGTH;
-    if (findRejectPrefilter != null
-        && !rejectAfterStart
-        && !startSubsumesFindReject
+    RejectPrefilter findRejectPrefilter = findPlan.utf8Reject();
+    int rejectMode = findPlan.rejectMode(findRejectPrefilter, length, true);
+    if (rejectMode == FindPlan.REJECT_FIRST
         && rejectsWithDiagnostics(findRejectPrefilter, scanner, 0, diagnostics)) {
       return false;
     }
@@ -853,8 +823,7 @@ public final class Pattern implements Serializable {
         && !prog.anchorStart()) {
       searchStart = findNextUtf8StartCandidate(scanner, diagnostics);
       if (searchStart < 0
-          || (rejectAfterStart
-              && length - searchStart >= MIN_REJECT_AFTER_START_REMAINING
+          || (FindPlan.rejectsTail(rejectMode, length - searchStart)
               && rejectsTailWithDiagnostics(
                   findRejectPrefilter, scanner, searchStart, diagnostics))) {
         return false;
@@ -905,11 +874,9 @@ public final class Pattern implements Serializable {
     if (diagnostics != null && strategy != null) {
       diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
     }
-    if (utf8StartAccelerator instanceof Utf8StartAccelerator.LeadingExpansion le
-        && le.wideLeadingClass()
-        && le.minRepetition() == 0
-        && !le.hasLeadingAssertions()
-        && le.inner() instanceof Utf8StartAccelerator.Literal) {
+    if (findPlan.existenceStartsAtInner()
+        && findPlan.wideLeadingExpansion()
+        && utf8StartAccelerator instanceof Utf8StartAccelerator.LeadingExpansion le) {
       // Preserve the wide expansion's short-input decline to avoid adding literal-scan setup
       // to native verification. Nearby hits below retain its minimum profitable skip too.
       if (scanner.length() < MultiAnchorCompiler.MIN_WIDE_LEADING_SKIP) {
@@ -1467,14 +1434,9 @@ public final class Pattern implements Serializable {
     if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart)) {
       return true;
     }
-    RejectPrefilter findRejectPrefilter = findRejectPrefilter();
-    boolean rejectAfterStart =
-        findRejectPrefilter != null
-            && startPrecedesFindReject
-            && length < MAX_LITERAL_START_FIRST_LENGTH;
-    if (findRejectPrefilter != null
-        && !rejectAfterStart
-        && !startSubsumesFindReject
+    RejectPrefilter findRejectPrefilter = findPlan.stringReject();
+    int rejectMode = findPlan.rejectMode(findRejectPrefilter, length, true);
+    if (rejectMode == FindPlan.REJECT_FIRST
         && findRejectPrefilter.canReject(input, null, 0, enginePathOptions)) {
       return false;
     }
@@ -1485,8 +1447,7 @@ public final class Pattern implements Serializable {
         && !prog.anchorStart()) {
       searchStart = findNextStringStartCandidate(scanner, input);
       if (searchStart < 0
-          || (rejectAfterStart
-              && length - searchStart >= MIN_REJECT_AFTER_START_REMAINING
+          || (FindPlan.rejectsTail(rejectMode, length - searchStart)
               && findRejectPrefilter.canRejectTail(input, null, searchStart, enginePathOptions))) {
         return false;
       }
@@ -1784,7 +1745,7 @@ public final class Pattern implements Serializable {
   }
 
   private boolean dfaStartAcceleration() {
-    return enginePathOptions.startAcceleration() && dfaStartAcceleration;
+    return enginePathOptions.startAcceleration() && findPlan.dfaStartAcceleration();
   }
 
   /** Returns whether DFA paths implement every instruction in {@link #flatDfaProg()}. */
@@ -2179,26 +2140,17 @@ public final class Pattern implements Serializable {
     return true;
   }
 
-  /** Forward DFA narrowing checks the suffix after failure; avoid an eager duplicate scan. */
-  RejectPrefilter findRejectPrefilter() {
-    return innerLiteralSearch == null || !forwardDfaSupported ? rejectPrefilter : null;
-  }
-
   /**
-   * UTF-8 {@code find()} counterpart to {@link #findRejectPrefilter()}: also omits {@link
-   * RejectPrefilter.DisjointLiterals} when UTF-8 start acceleration already covers the search.
+   * Returns the String find reject prefilter. Forward DFA narrowing checks the suffix after
+   * failure, so patterns with an inner literal search have none, avoiding an eager duplicate scan.
    */
-  RejectPrefilter utf8FindRejectPrefilter() {
-    return utf8FindRejectPrefilter;
+  RejectPrefilter findRejectPrefilter() {
+    return findPlan.stringReject();
   }
 
-  boolean startPrecedesFindReject() {
-    return startPrecedesFindReject;
-  }
-
-  /** Returns whether find() skips the reject prefilter in favor of the start accelerator. */
-  boolean startSubsumesFindReject() {
-    return startSubsumesFindReject;
+  /** Returns the find decisions shared by every find entry point. */
+  FindPlan findPlan() {
+    return findPlan;
   }
 
   MultiAnchorDescriptor multiAnchor() {
