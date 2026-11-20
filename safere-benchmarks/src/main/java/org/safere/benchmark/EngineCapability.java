@@ -18,7 +18,8 @@ enum EngineCapability {
   APPEND_REPLACEMENT,
   SPLIT,
   MATCHER_RESET,
-  REGIONS;
+  REGIONS,
+  EXISTENCE_PREDICATE;
 
   int bit() {
     return switch (this) {
@@ -34,6 +35,7 @@ enum EngineCapability {
       case MATCHER_RESET -> 1 << 9;
       case REGIONS -> 1 << 10;
       case FUNCTIONAL_REPLACEMENT -> 1 << 11;
+      case EXISTENCE_PREDICATE -> 1 << 12;
     };
   }
 }

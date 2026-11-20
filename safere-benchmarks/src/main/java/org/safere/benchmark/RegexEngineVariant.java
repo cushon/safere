@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.regex.MatchResult;
 import org.openjdk.jmh.infra.Blackhole;
 import org.safere.Utf8Sink;
@@ -26,10 +27,16 @@ enum RegexEngineVariant {
     @Override
     CompiledRegex compile(String regex) {
       org.safere.Pattern pattern = org.safere.Pattern.compile(regex);
+      Predicate<String> predicate = pattern.asPredicate();
       return new CompiledRegex() {
         @Override
         public boolean find(RegexInput input) {
           return pattern.matcher(string(input)).find();
+        }
+
+        @Override
+        public boolean exists(RegexInput input) {
+          return predicate.test(string(input));
         }
 
         @Override
@@ -132,13 +139,19 @@ enum RegexEngineVariant {
           EngineCapability.REPLACE,
           EngineCapability.APPEND_REPLACEMENT,
           EngineCapability.MATCHER_RESET,
-          EngineCapability.REGIONS)) {
+          EngineCapability.REGIONS,
+          EngineCapability.EXISTENCE_PREDICATE)) {
     @Override
     CompiledRegex compile(String regex) {
       org.safere.Pattern pattern = org.safere.Pattern.compile(regex);
       return new CompiledRegex() {
         @Override
         public boolean find(RegexInput input) {
+          return pattern.find(utf8(input));
+        }
+
+        @Override
+        public boolean exists(RegexInput input) {
           return pattern.find(utf8(input));
         }
 
@@ -239,10 +252,16 @@ enum RegexEngineVariant {
     @Override
     CompiledRegex compile(String regex) {
       java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
+      Predicate<String> predicate = pattern.asPredicate();
       return new CompiledRegex() {
         @Override
         public boolean find(RegexInput input) {
           return pattern.matcher(string(input)).find();
+        }
+
+        @Override
+        public boolean exists(RegexInput input) {
+          return predicate.test(string(input));
         }
 
         @Override
@@ -605,6 +624,8 @@ enum RegexEngineVariant {
           features.add(DeclarativeBenchmarkPlan.Feature.MATCHER_STATE);
           features.add(DeclarativeBenchmarkPlan.Feature.REGIONS);
         }
+        case EXISTENCE_PREDICATE ->
+            features.add(DeclarativeBenchmarkPlan.Feature.EXISTENCE_PREDICATE);
       }
     }
     switch (this) {
@@ -736,6 +757,8 @@ enum RegexEngineVariant {
     EnumSet<EngineCapability> capabilities = allCapabilities();
     capabilities.remove(EngineCapability.REGIONS);
     capabilities.remove(EngineCapability.FUNCTIONAL_REPLACEMENT);
+    // RE2/J has no matcher-free existence predicate.
+    capabilities.remove(EngineCapability.EXISTENCE_PREDICATE);
     return capabilities;
   }
 
@@ -906,6 +929,15 @@ enum RegexEngineVariant {
 
   interface CompiledRegex extends AutoCloseable {
     default boolean find(RegexInput input) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns whether the pattern occurs in {@code input} through the engine's matcher-free
+     * existence API: {@code Pattern.asPredicate().test} for String input and SafeRE's {@code
+     * Pattern.find(Utf8Input)} for UTF-8 input.
+     */
+    default boolean exists(RegexInput input) {
       throw new UnsupportedOperationException();
     }
 

@@ -263,7 +263,7 @@ Supported operations are grouped below. Names are exact JSON values.
 
 | Group | Operations |
 |---|---|
-| Matching | `matches`, `find`, `lookingAt`, `findAllCount`, `findAllLengthSum`, `findAllGroupLengthSum`, `matchesCorpus`, `matchesGroupLengthSum`, `findGroupPresent`, `findGroup`, `captureGroups` |
+| Matching | `matches`, `find`, `exists`, `lookingAt`, `findAllCount`, `findAllLengthSum`, `findAllGroupLengthSum`, `matchesCorpus`, `matchesGroupLengthSum`, `findGroupPresent`, `findGroup`, `captureGroups` |
 | Replacement and splitting | `replaceFirst`, `replaceAll`, `replaceAllFunction`, `replaceAllLengthSum`, `appendReplacement`, `manualReplaceAll`, `split`, `splitLengthSum` |
 | Compilation and matcher state | `compile`, `compileAndFind`, `compileAndFindGroupPresent`, `compileAndMatches`, `findRotatingUtf16`, `compileAndFindRotatingUtf16`, `matcherConstruction`, `matcherResetFind`, `matcherRegionFind`, `matcherRegionMatches`, `matcherRegionTokenize`, `findInWindow` |
 | Pattern collections | `patternSetCompile`, `patternSetFind`, `patternSetMatches` |
@@ -278,6 +278,11 @@ group's literal text (or empty text for a nonparticipating group). The Java and
 .NET callbacks are bound outside timing; Rust uses a closure over the prepared
 group metadata. This operation is supported by SafeRE String, JDK String, Rust
 regex, and .NET; adapters without a capture-aware callback operation are excluded.
+`exists` measures each engine's matcher-free existence check:
+`Pattern.asPredicate().test` for SafeRE String and JDK String, and
+`Pattern.find(Utf8Input)` for SafeRE UTF-8. `find` instead calls `matcher().find()`
+for String variants. Adapters without an existence predicate (RE2/J, RE2 FFM, and
+the native runners) are excluded.
 Split operations accept `limit`;
 PatternSet operations require `anchor` with `anchored` or `unanchored` and may
 declare `patternCount`; flagged compilation uses `flagSet`; rotating UTF-16
@@ -288,7 +293,7 @@ Flags are `caseInsensitive`, `multiline`, `dotAll`, `unicodeCase`,
 the exact flag set they support; an unsupported flag is distinct from an
 unsupported API feature.
 
-Engine-neutral requirements are `find`, `matches`, `lookingAt`,
+Engine-neutral requirements are `find`, `existencePredicate`, `matches`, `lookingAt`,
 `captureParticipation`, `captureText`, `namedGroups`, `replace`, `numberedReplacement`,
 `namedReplacement`, `appendReplacement`, `functionalReplacement`, `split`,
 `matcherState`, `regions`, `bounds`, `patternSet`, `utf8Input`,
