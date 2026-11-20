@@ -5018,6 +5018,77 @@
         "length": "{size}"
       },
       "shared": true
+    },
+    {
+      "id": "existenceStart.wide.singleLine.{size}",
+      "axes": {
+        "size": [
+          768,
+          16384
+        ]
+      },
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "abcdefghijklmnopqrstuvwxyz ",
+        "suffix": "error: disk",
+        "length": "{size}"
+      },
+      "shared": true
+    },
+    {
+      "id": "existenceStart.wide.shortLines.16384",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz \n",
+        "suffix": "x error: disk",
+        "length": 16384
+      },
+      "shared": true
+    },
+    {
+      "id": "existenceStart.wide.none.16384",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz \n",
+        "length": 16384
+      },
+      "shared": true
+    },
+    {
+      "id": "existenceStart.narrow.longRun.20007",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": " ",
+        "suffix": "# noqa1",
+        "length": 20007
+      },
+      "shared": true
+    },
+    {
+      "id": "existenceStart.narrow.nearby",
+      "recipe": {
+        "kind": "literal",
+        "text": "import os  # noqa1"
+      },
+      "shared": true
+    },
+    {
+      "id": "existenceStart.narrow.none.16384",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "import os  # todo\n",
+        "length": 16384
+      },
+      "shared": true
+    },
+    {
+      "id": "existenceStart.log.16384",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "2026-10-31T12:00:00Z INFO  request id=42 path=/api/v1/items status=200\n",
+        "length": 16384
+      },
+      "shared": true
     }
   ],
   "workloads": [
@@ -23974,6 +24045,186 @@
       ],
       "arguments": {
         "group": 1
+      }
+    },
+    {
+      "id": "ExistenceStartBenchmark.wide.singleLine.{size}",
+      "operation": "find",
+      "patterns": [
+        ".*error: \\w+"
+      ],
+      "inputs": [
+        "existenceStart.wide.singleLine.{size}"
+      ],
+      "axes": {
+        "size": [
+          768,
+          16384
+        ]
+      },
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": true
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ExistenceStartBenchmark.wide.shortLines.16384",
+      "operation": "find",
+      "patterns": [
+        ".*error: \\w+"
+      ],
+      "inputs": [
+        "existenceStart.wide.shortLines.16384"
+      ],
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": true
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ExistenceStartBenchmark.wide.none.16384",
+      "operation": "find",
+      "patterns": [
+        ".*error: \\w+"
+      ],
+      "inputs": [
+        "existenceStart.wide.none.16384"
+      ],
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": false
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ExistenceStartBenchmark.narrow.longRun.20007",
+      "operation": "find",
+      "patterns": [
+        "\\s*# noqa[0-9]"
+      ],
+      "inputs": [
+        "existenceStart.narrow.longRun.20007"
+      ],
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": true
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "microseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ExistenceStartBenchmark.narrow.nearby",
+      "operation": "find",
+      "patterns": [
+        "\\s*# noqa[0-9]"
+      ],
+      "inputs": [
+        "existenceStart.narrow.nearby"
+      ],
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": true
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ExistenceStartBenchmark.narrow.none.16384",
+      "operation": "find",
+      "patterns": [
+        "\\s*# noqa[0-9]"
+      ],
+      "inputs": [
+        "existenceStart.narrow.none.16384"
+      ],
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": false
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ExistenceStartBenchmark.logMiss.{pattern}.16384",
+      "operation": "find",
+      "patterns": [
+        "{pattern}"
+      ],
+      "inputs": [
+        "existenceStart.log.16384"
+      ],
+      "axes": {
+        "pattern": [
+          {
+            "id": "startLiteral",
+            "value": "status=3\\d\\d took=(\\d+)ms"
+          },
+          {
+            "id": "caseFolded",
+            "value": "(?i:status=3\\d\\d) took=(\\d+)ms"
+          },
+          {
+            "id": "weakAnchor",
+            "value": "er\\d+<<!nav>>\\d+"
+          },
+          {
+            "id": "unanchored",
+            "value": "et\\d+<<!nav>>\\d+"
+          }
+        ]
+      },
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": false
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
       }
     }
   ]
