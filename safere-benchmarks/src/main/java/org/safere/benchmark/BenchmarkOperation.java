@@ -18,6 +18,7 @@ import org.openjdk.jmh.infra.Blackhole;
 enum BenchmarkOperation {
   MATCHES(EngineCapability.MATCHES),
   FIND(EngineCapability.FIND),
+  EXISTS(EngineCapability.EXISTENCE_PREDICATE),
   LOOKING_AT(EngineCapability.LOOKING_AT),
   FIND_ALL_COUNT(EngineCapability.FIND),
   MATCHES_CORPUS(EngineCapability.MATCHES),
@@ -63,6 +64,7 @@ enum BenchmarkOperation {
     return switch (operation) {
       case MATCHES -> MATCHES;
       case FIND -> FIND;
+      case EXISTS -> EXISTS;
       case LOOKING_AT -> LOOKING_AT;
       case FIND_ALL_COUNT -> FIND_ALL_COUNT;
       case MATCHES_CORPUS -> MATCHES_CORPUS;
@@ -165,6 +167,7 @@ enum BenchmarkOperation {
           lifecycle.matcher() == DeclarativeBenchmarkPlan.MatcherReuse.NONE
               ? blackhole -> blackhole.consume(pattern.find(input))
               : blackhole -> blackhole.consume(pattern.matcher(input).find());
+      case EXISTS -> blackhole -> blackhole.consume(pattern.exists(input));
       case LOOKING_AT -> blackhole -> blackhole.consume(pattern.matcher(input).lookingAt());
       case FIND_ALL_COUNT -> blackhole -> blackhole.consume(findAllCount(pattern.matcher(input)));
       case MATCHES_CORPUS -> blackhole -> blackhole.consume(matchesCorpus(pattern, inputs));
@@ -336,6 +339,7 @@ enum BenchmarkOperation {
           lifecycle.matcher() == DeclarativeBenchmarkPlan.MatcherReuse.NONE
               ? pattern.find(input)
               : pattern.matcher(input).find();
+      case EXISTS -> pattern.exists(input);
       case LOOKING_AT -> pattern.matcher(input).lookingAt();
       case FIND_ALL_COUNT -> findAllCount(pattern.matcher(input));
       case MATCHES_CORPUS -> matchesCorpus(pattern, inputs);

@@ -22,6 +22,7 @@ final class CrossEngineBenchmarkPlan {
       EnumSet.of(
           DeclarativeBenchmarkPlan.Operation.MATCHES,
           DeclarativeBenchmarkPlan.Operation.FIND,
+          DeclarativeBenchmarkPlan.Operation.EXISTS,
           DeclarativeBenchmarkPlan.Operation.LOOKING_AT,
           DeclarativeBenchmarkPlan.Operation.FIND_ALL_COUNT,
           DeclarativeBenchmarkPlan.Operation.MATCHES_CORPUS,

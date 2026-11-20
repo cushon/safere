@@ -24827,7 +24827,7 @@
     },
     {
       "id": "ExistenceStartBenchmark.wide.singleLine.{size}",
-      "operation": "find",
+      "operation": "exists",
       "patterns": [
         ".*error: \\w+"
       ],
@@ -24855,7 +24855,7 @@
     },
     {
       "id": "ExistenceStartBenchmark.wide.shortLines.16384",
-      "operation": "find",
+      "operation": "exists",
       "patterns": [
         ".*error: \\w+"
       ],
@@ -24877,7 +24877,7 @@
     },
     {
       "id": "ExistenceStartBenchmark.wide.none.16384",
-      "operation": "find",
+      "operation": "exists",
       "patterns": [
         ".*error: \\w+"
       ],
@@ -24899,7 +24899,7 @@
     },
     {
       "id": "ExistenceStartBenchmark.narrow.longRun.20007",
-      "operation": "find",
+      "operation": "exists",
       "patterns": [
         "\\s*# noqa[0-9]"
       ],
@@ -24921,7 +24921,7 @@
     },
     {
       "id": "ExistenceStartBenchmark.narrow.nearby",
-      "operation": "find",
+      "operation": "exists",
       "patterns": [
         "\\s*# noqa[0-9]"
       ],
@@ -24943,7 +24943,7 @@
     },
     {
       "id": "ExistenceStartBenchmark.narrow.none.16384",
-      "operation": "find",
+      "operation": "exists",
       "patterns": [
         "\\s*# noqa[0-9]"
       ],
