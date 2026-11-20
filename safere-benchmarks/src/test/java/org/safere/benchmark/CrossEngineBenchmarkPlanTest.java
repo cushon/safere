@@ -1207,7 +1207,9 @@ class CrossEngineBenchmarkPlanTest {
                     : new RegexEngineVariant.StringRegexInput(text);
             boolean expected = text.contains("error");
             safereFrames.clear();
-            assertThat(pattern.exists(input)).as("%s on %s", variant, text).isEqualTo(expected);
+            assertThat(pattern.bindExists(input).getAsBoolean())
+                .as("%s on %s", variant, text)
+                .isEqualTo(expected);
             switch (variant) {
               case SAFERE_STRING ->
                   assertThat(safereFrames).contains("org.safere.Pattern.findInString");

@@ -14,6 +14,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.MatchResult;
@@ -27,7 +28,6 @@ enum RegexEngineVariant {
     @Override
     CompiledRegex compile(String regex) {
       org.safere.Pattern pattern = org.safere.Pattern.compile(regex);
-      Predicate<String> predicate = pattern.asPredicate();
       return new CompiledRegex() {
         @Override
         public boolean find(RegexInput input) {
@@ -35,8 +35,10 @@ enum RegexEngineVariant {
         }
 
         @Override
-        public boolean exists(RegexInput input) {
-          return predicate.test(string(input));
+        public BooleanSupplier bindExists(RegexInput input) {
+          Predicate<String> predicate = pattern.asPredicate();
+          String text = string(input);
+          return () -> predicate.test(text);
         }
 
         @Override
@@ -151,8 +153,9 @@ enum RegexEngineVariant {
         }
 
         @Override
-        public boolean exists(RegexInput input) {
-          return pattern.find(utf8(input));
+        public BooleanSupplier bindExists(RegexInput input) {
+          org.safere.Utf8Input text = utf8(input);
+          return () -> pattern.find(text);
         }
 
         @Override
@@ -252,7 +255,6 @@ enum RegexEngineVariant {
     @Override
     CompiledRegex compile(String regex) {
       java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
-      Predicate<String> predicate = pattern.asPredicate();
       return new CompiledRegex() {
         @Override
         public boolean find(RegexInput input) {
@@ -260,8 +262,10 @@ enum RegexEngineVariant {
         }
 
         @Override
-        public boolean exists(RegexInput input) {
-          return predicate.test(string(input));
+        public BooleanSupplier bindExists(RegexInput input) {
+          Predicate<String> predicate = pattern.asPredicate();
+          String text = string(input);
+          return () -> predicate.test(text);
         }
 
         @Override
@@ -933,11 +937,11 @@ enum RegexEngineVariant {
     }
 
     /**
-     * Returns whether the pattern occurs in {@code input} through the engine's matcher-free
-     * existence API: {@code Pattern.asPredicate().test} for String input and SafeRE's {@code
+     * Binds the input and prepares the engine's existence API outside timing. The returned check
+     * invokes {@code Pattern.asPredicate().test} for String input or SafeRE's {@code
      * Pattern.find(Utf8Input)} for UTF-8 input.
      */
-    default boolean exists(RegexInput input) {
+    default BooleanSupplier bindExists(RegexInput input) {
       throw new UnsupportedOperationException();
     }
 

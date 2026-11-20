@@ -9,6 +9,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
@@ -167,7 +168,10 @@ enum BenchmarkOperation {
           lifecycle.matcher() == DeclarativeBenchmarkPlan.MatcherReuse.NONE
               ? blackhole -> blackhole.consume(pattern.find(input))
               : blackhole -> blackhole.consume(pattern.matcher(input).find());
-      case EXISTS -> blackhole -> blackhole.consume(pattern.exists(input));
+      case EXISTS -> {
+        BooleanSupplier exists = pattern.bindExists(input);
+        yield blackhole -> blackhole.consume(exists.getAsBoolean());
+      }
       case LOOKING_AT -> blackhole -> blackhole.consume(pattern.matcher(input).lookingAt());
       case FIND_ALL_COUNT -> blackhole -> blackhole.consume(findAllCount(pattern.matcher(input)));
       case MATCHES_CORPUS -> blackhole -> blackhole.consume(matchesCorpus(pattern, inputs));
@@ -339,7 +343,7 @@ enum BenchmarkOperation {
           lifecycle.matcher() == DeclarativeBenchmarkPlan.MatcherReuse.NONE
               ? pattern.find(input)
               : pattern.matcher(input).find();
-      case EXISTS -> pattern.exists(input);
+      case EXISTS -> pattern.bindExists(input).getAsBoolean();
       case LOOKING_AT -> pattern.matcher(input).lookingAt();
       case FIND_ALL_COUNT -> findAllCount(pattern.matcher(input));
       case MATCHES_CORPUS -> matchesCorpus(pattern, inputs);
