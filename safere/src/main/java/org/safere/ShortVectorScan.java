@@ -7,7 +7,6 @@ package org.safere;
 
 import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
-import static jdk.incubator.vector.VectorOperators.GE;
 import static jdk.incubator.vector.VectorOperators.LE;
 import static org.safere.Ascii.toLowerCase;
 import static org.safere.Ascii.toUpperCase;
@@ -25,6 +24,9 @@ import jdk.incubator.vector.VectorSpecies;
  */
 final class ShortVectorScan {
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
+
+  /** The most ranges {@link #matches(ShortVector, int[])} accepts. */
+  static final int MAXIMUM_RANGES = 8;
 
   static int indexOfCharClass(char[] chars, int offset, int length, int[] ranges, int start) {
     return indexOfCharClass(SPECIES, chars, offset, length, ranges, start);
@@ -226,39 +228,47 @@ final class ShortVectorScan {
     return -1;
   }
 
-  private static VectorMask<Short> matches(ShortVector values, int[] ranges) {
-    VectorMask<Short> matches = matches(values, ranges[0], ranges[1]);
-    if (ranges.length >= 4) {
-      matches = matches.or(matches(values, ranges[2], ranges[3]));
-    }
-    if (ranges.length >= 6) {
-      matches = matches.or(matches(values, ranges[4], ranges[5]));
-    }
-    if (ranges.length == 8) {
-      matches = matches.or(matches(values, ranges[6], ranges[7]));
-    }
-    return matches;
+  /**
+   * Returns the lanes of {@code values} inside one of up to {@link #MAXIMUM_RANGES} BMP code unit
+   * ranges.
+   *
+   * <p>The vector code must inline into the scan loop: a call that C2 does not inline boxes its
+   * vector arguments and result. So the work is split into methods under C1's and C2's inlining
+   * size limit ({@code MaxInlineSize}, 35 bytecodes), which inline everywhere and are never hot
+   * enough to be compiled on their own into a body too big to inline later. Ranges are combined
+   * without loops so that no mask flows through a loop phi.
+   */
+  static VectorMask<Short> matches(ShortVector values, int[] ranges) {
+    VectorMask<Short> low = matchesUpTo4(values, ranges, 0);
+    return ranges.length <= 8 ? low : low.or(matchesUpTo4(values, ranges, 8));
   }
 
-  private static VectorMask<Short> matches(ShortVector values, int lowBound, int highBound) {
-    short low = (short) lowBound;
-    short high = (short) highBound;
-    if (low == high) {
-      return values.eq(low);
-    }
-    if (highBound == lowBound + 1) {
-      return values.eq(low).or(values.eq(high));
-    }
-    if (highBound <= 0x7FFF || lowBound >= 0x8000) {
-      return values.compare(GE, low).and(values.compare(LE, high));
-    }
-    ShortVector biasedValues = values.lanewise(VectorOperators.XOR, Short.MIN_VALUE);
-    short biasedLow = (short) (low ^ Short.MIN_VALUE);
-    short biasedHigh = (short) (high ^ Short.MIN_VALUE);
-    return biasedValues.compare(GE, biasedLow).and(biasedValues.compare(LE, biasedHigh));
+  /** Matches the up to four ranges starting at {@code ranges[from]}. */
+  private static VectorMask<Short> matchesUpTo4(ShortVector values, int[] ranges, int from) {
+    VectorMask<Short> low = matchesUpTo2(values, ranges, from);
+    return ranges.length <= from + 4 ? low : low.or(matchesUpTo2(values, ranges, from + 4));
   }
 
-  private static boolean matches(char value, int[] ranges) {
+  /** Matches the one or two ranges starting at {@code ranges[from]}. */
+  private static VectorMask<Short> matchesUpTo2(ShortVector values, int[] ranges, int from) {
+    VectorMask<Short> low = inRange(values, ranges, from);
+    return ranges.length <= from + 2 ? low : low.or(inRange(values, ranges, from + 2));
+  }
+
+  /**
+   * Matches {@code [ranges[index], ranges[index + 1]]} with one subtraction and one comparison:
+   * {@code low <= v <= high} exactly when {@code v - low}, as an unsigned 16-bit value, is at most
+   * {@code high - low}. Flipping the sign bit of both sides turns that into a signed comparison,
+   * and subtracting {@code low ^ 0x8000} computes {@code (v - low) ^ 0x8000}.
+   */
+  private static VectorMask<Short> inRange(ShortVector values, int[] ranges, int index) {
+    int low = ranges[index];
+    return values
+        .sub((short) (low ^ 0x8000))
+        .compare(LE, (short) ((ranges[index + 1] - low) ^ 0x8000));
+  }
+
+  static boolean matches(char value, int[] ranges) {
     for (int index = 0; index < ranges.length; index += 2) {
       if (value >= ranges[index] && value <= ranges[index + 1]) {
         return true;
