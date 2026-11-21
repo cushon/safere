@@ -5212,6 +5212,24 @@
       "shared": true
     },
     {
+      "id": "existenceStart.wide.suffixMiss.16384",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz x error: -- abcdefghijklmnopqrstuvwxyz\n",
+        "length": 16384
+      },
+      "shared": true
+    },
+    {
+      "id": "existenceStart.narrow.suffixMiss.16384",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "import os  # noqa: E501\n",
+        "length": 16384
+      },
+      "shared": true
+    },
+    {
       "id": "existenceStart.log.16384",
       "recipe": {
         "kind": "repeatToLength",
@@ -24898,6 +24916,28 @@
       }
     },
     {
+      "id": "ExistenceStartBenchmark.wide.suffixMiss.16384",
+      "operation": "exists",
+      "patterns": [
+        ".*error: \\w+"
+      ],
+      "inputs": [
+        "existenceStart.wide.suffixMiss.16384"
+      ],
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": false
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
       "id": "ExistenceStartBenchmark.narrow.longRun.20007",
       "operation": "exists",
       "patterns": [
@@ -24949,6 +24989,28 @@
       ],
       "inputs": [
         "existenceStart.narrow.none.16384"
+      ],
+      "resultConsumption": "boolean",
+      "expected": {
+        "type": "boolean",
+        "value": false
+      },
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      }
+    },
+    {
+      "id": "ExistenceStartBenchmark.narrow.suffixMiss.16384",
+      "operation": "exists",
+      "patterns": [
+        "\\s*# noqa[0-9]"
+      ],
+      "inputs": [
+        "existenceStart.narrow.suffixMiss.16384"
       ],
       "resultConsumption": "boolean",
       "expected": {
