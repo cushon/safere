@@ -75,7 +75,7 @@ final class StringVectorLoads {
     if (text.length() - from < MINIMUM_REMAINING_LENGTH) {
       return VectorScanProvider.UNSUPPORTED;
     }
-    return StringVectorScan.indexOfCharClass(MODE, text, ranges, from, chunkOwner);
+    return StringVectorScan.indexOfCharClassOutOfLine(MODE, text, ranges, from, chunkOwner);
   }
 
   static Mode select(String property) {

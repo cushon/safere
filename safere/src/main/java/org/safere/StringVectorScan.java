@@ -44,7 +44,27 @@ final class StringVectorScan {
    */
   private static final MethodHandle FROM_STRING = findFromString();
 
+  /**
+   * The scan entry point, behind a field that C2 does not treat as a constant. Calls through it
+   * can't be inlined, so C2 compiles {@link #indexOfCharClass} as its own root. Inlined into a deep
+   * caller instead, the Vector API calls below it can exceed {@code MaxInlineLevel} and stop being
+   * intrinsified, which made the scans slower than scalar ones.
+   */
+  private static final OutOfLine OUT_OF_LINE = new OutOfLine();
+
   private StringVectorScan() {}
+
+  /** Like {@link #indexOfCharClass}, but never inlined into the caller. */
+  static int indexOfCharClassOutOfLine(
+      Mode mode, String text, int[] ranges, int start, StringInputScanner chunkOwner) {
+    try {
+      return (int) OUT_OF_LINE.indexOfCharClass.invokeExact(mode, text, ranges, start, chunkOwner);
+    } catch (RuntimeException | Error e) {
+      throw e;
+    } catch (Throwable t) {
+      throw new AssertionError(t);
+    }
+  }
 
   /** Returns the mode to use for {@code requested}, or the default when it is not available. */
   static Mode select(Mode requested) {
@@ -240,6 +260,33 @@ final class StringVectorScan {
       return null;
     }
     return fromString;
+  }
+
+  /**
+   * Holds a {@link MethodHandle} in a final instance field, which C2 does not trust as a constant
+   * (unlike static finals and record components).
+   */
+  private static final class OutOfLine {
+    final MethodHandle indexOfCharClass;
+
+    OutOfLine() {
+      try {
+        indexOfCharClass =
+            MethodHandles.lookup()
+                .findStatic(
+                    StringVectorScan.class,
+                    "indexOfCharClass",
+                    MethodType.methodType(
+                        int.class,
+                        Mode.class,
+                        String.class,
+                        int[].class,
+                        int.class,
+                        StringInputScanner.class));
+      } catch (ReflectiveOperationException e) {
+        throw new LinkageError("StringVectorScan.indexOfCharClass", e);
+      }
+    }
   }
 
   /**
