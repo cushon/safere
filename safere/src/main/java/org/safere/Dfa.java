@@ -2048,8 +2048,11 @@ final class Dfa {
       return idx >= 0 ? Math.min(idx, posDepThreshold - 1) : -1;
     }
     if (text instanceof StringInputScanner stringScanner && stringStartAccelerator != null) {
-      return StringStartAccelerator.findNextCandidate(
-          stringStartAccelerator, stringScanner, pos, prog.lineStartUnixLines());
+      return StringVectorLoads.ENABLED
+          ? StringStartAccelerator.findNextCandidate(
+              stringStartAccelerator, stringScanner, pos, prog.lineStartUnixLines())
+          : StringStartAccelerator.findNextCandidate(
+              stringStartAccelerator, stringScanner.text(), pos, prog.lineStartUnixLines());
     }
     if (text instanceof StringRegionInputScanner region && stringStartAccelerator != null) {
       return StringStartAccelerator.findNextCandidate(

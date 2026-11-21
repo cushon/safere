@@ -2412,10 +2412,10 @@ public final class Matcher implements MatchResult {
   }
 
   /**
-   * Runs the String start accelerator. A {@link StringInputScanner} always scans the whole text, so
-   * the accelerator may use its buffers.
+   * Runs the String start accelerator when {@link StringVectorLoads#ENABLED}. A {@link
+   * StringInputScanner} always scans the whole text, so the accelerator may use its buffers.
    */
-  private int nextStringStartCandidate(
+  private int nextVectorStringStartCandidate(
       StringStartAccelerator accelerator,
       InputScanner scanner,
       CharSequence startText,
@@ -2466,13 +2466,21 @@ public final class Matcher implements MatchResult {
       // captures. A DFA budget bailout also resumes from the conservatively expanded start.
       return le.expandBackward(startText, innerMatch, fromIndex);
     }
-    int candidate = nextStringStartCandidate(accelerator, scanner, startText, fromIndex);
+    int candidate =
+        StringVectorLoads.ENABLED
+            ? nextVectorStringStartCandidate(accelerator, scanner, startText, fromIndex)
+            : StringStartAccelerator.findNextCandidate(
+                accelerator, startText, fromIndex, prog.lineStartUnixLines());
     if (!prog.hasGraphemeClusterInstruction()) {
       // Literal scans can nominate a low surrogate inside a pair. Scalar searches may start
       // there only when the caller explicitly supplies that initial cursor.
       // Each rejected candidate advances the scan, so filtering remains linear in input length.
       while (candidate > fromIndex && !activeScanner().isCodePointBoundary(candidate)) {
-        candidate = nextStringStartCandidate(accelerator, scanner, startText, candidate + 1);
+        candidate =
+            StringVectorLoads.ENABLED
+                ? nextVectorStringStartCandidate(accelerator, scanner, startText, candidate + 1)
+                : StringStartAccelerator.findNextCandidate(
+                    accelerator, startText, candidate + 1, prog.lineStartUnixLines());
       }
     }
     if (candidate < 0) {
