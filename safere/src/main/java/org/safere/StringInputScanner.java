@@ -11,6 +11,7 @@ final class StringInputScanner implements InputScanner {
   private static final int SMALL_SET_SEARCH_WINDOW = 4096;
 
   private final String text;
+  private char[] chunkBuffer;
 
   StringInputScanner(String text) {
     this.text = text;
@@ -18,6 +19,16 @@ final class StringInputScanner implements InputScanner {
 
   String text() {
     return text;
+  }
+
+  /** Returns this scanner's buffer for {@link StringVectorLoads.Mode#CHUNKED} scans. */
+  char[] chunkBuffer() {
+    char[] buffer = chunkBuffer;
+    if (buffer == null) {
+      buffer = new char[StringVectorLoads.CHUNK_LENGTH];
+      chunkBuffer = buffer;
+    }
+    return buffer;
   }
 
   @Override

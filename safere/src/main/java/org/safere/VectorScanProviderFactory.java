@@ -23,4 +23,20 @@ final class VectorScanProviderFactory {
     }
     return new IncubatorVectorScanProvider();
   }
+
+  /**
+   * Returns whether the incubator Vector API module is in the boot layer, and makes SafeRE read it
+   * when SafeRE is a named module. Returns {@code false} instead of throwing when it is absent.
+   */
+  static boolean vectorModuleReadable() {
+    Module vectorModule = ModuleLayer.boot().findModule(VECTOR_MODULE_NAME).orElse(null);
+    if (vectorModule == null) {
+      return false;
+    }
+    Module safeReModule = VectorScanProviderFactory.class.getModule();
+    if (safeReModule.isNamed()) {
+      safeReModule.addReads(vectorModule);
+    }
+    return true;
+  }
 }
