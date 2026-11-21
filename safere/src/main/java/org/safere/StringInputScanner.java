@@ -159,6 +159,12 @@ final class StringInputScanner implements InputScanner {
 
   @Override
   public int indexOfCharClass(CharClassScanInfo scanInfo, int start) {
+    if (StringVectorLoads.ENABLED && !(scanInfo instanceof CharClassScanInfo.SmallSet)) {
+      int found = StringVectorLoads.indexOfCharClass(text, scanInfo.ranges(), start, this);
+      if (found != VectorScanProvider.UNSUPPORTED) {
+        return found;
+      }
+    }
     return indexOfCharClass(text, scanInfo, start);
   }
 

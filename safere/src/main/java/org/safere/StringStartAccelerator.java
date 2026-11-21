@@ -89,6 +89,20 @@ sealed interface StringStartAccelerator {
     };
   }
 
+  /**
+   * Like {@link #findNextCandidate(StringStartAccelerator, String, int, boolean)} on {@code
+   * scanner}'s text, but lets a character class scan use the scanner's chunk buffer.
+   */
+  static int findNextCandidate(
+      StringStartAccelerator accelerator,
+      StringInputScanner scanner,
+      int fromIndex,
+      boolean unixLines) {
+    return accelerator instanceof CharClass cc
+        ? cc.findCandidate(scanner.text(), fromIndex, scanner)
+        : findNextCandidate(accelerator, scanner.text(), fromIndex, unixLines);
+  }
+
   /** Uses the same plans on a bounded, region-relative String view. */
   static int findNextCandidate(
       StringStartAccelerator accelerator,
@@ -485,10 +499,24 @@ sealed interface StringStartAccelerator {
     }
 
     int findCandidate(String text, int fromIndex, boolean unixLines) {
+      return findCandidate(text, fromIndex, (StringInputScanner) null);
+    }
+
+    /**
+     * @param chunkOwner the scanner whose buffer a chunked vector scan may use, or {@code null}
+     */
+    int findCandidate(String text, int fromIndex, StringInputScanner chunkOwner) {
       // Three members cost three intrinsic passes over a gap, which has not been measured against
       // the table scan below, so only one- and two-member sets take the per-member search.
       if (scanInfo instanceof CharClassScanInfo.SmallSet smallSet && smallSet.chars().length <= 2) {
         return StringInputScanner.indexOfSmallSet(text, smallSet.chars(), fromIndex);
+      }
+      if (StringVectorLoads.ENABLED) {
+        int found =
+            StringVectorLoads.indexOfCharClass(text, scanInfo.ranges(), fromIndex, chunkOwner);
+        if (found != VectorScanProvider.UNSUPPORTED) {
+          return found;
+        }
       }
       return indexOfCharClass(text, asciiTable, scanInfo.ranges(), scanInfo.isAscii(), fromIndex);
     }

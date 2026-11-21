@@ -2049,7 +2049,7 @@ final class Dfa {
     }
     if (text instanceof StringInputScanner stringScanner && stringStartAccelerator != null) {
       return StringStartAccelerator.findNextCandidate(
-          stringStartAccelerator, stringScanner.text(), pos, prog.lineStartUnixLines());
+          stringStartAccelerator, stringScanner, pos, prog.lineStartUnixLines());
     }
     if (text instanceof StringRegionInputScanner region && stringStartAccelerator != null) {
       return StringStartAccelerator.findNextCandidate(

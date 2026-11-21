@@ -2411,6 +2411,21 @@ public final class Matcher implements MatchResult {
     return candidate;
   }
 
+  /**
+   * Runs the String start accelerator. A {@link StringInputScanner} always scans the whole text, so
+   * the accelerator may use its buffers.
+   */
+  private int nextStringStartCandidate(
+      StringStartAccelerator accelerator,
+      InputScanner scanner,
+      CharSequence startText,
+      int fromIndex) {
+    boolean unixLines = parentPattern.prog().lineStartUnixLines();
+    return scanner instanceof StringInputScanner stringScanner
+        ? StringStartAccelerator.findNextCandidate(accelerator, stringScanner, fromIndex, unixLines)
+        : StringStartAccelerator.findNextCandidate(accelerator, startText, fromIndex, unixLines);
+  }
+
   /** Selects a start, rejecting nullable leading expansions at the inner candidate first. */
   private int findNextStringStartCandidate(StringStartAccelerator accelerator, int fromIndex) {
     Prog prog = parentPattern.prog();
@@ -2451,17 +2466,13 @@ public final class Matcher implements MatchResult {
       // captures. A DFA budget bailout also resumes from the conservatively expanded start.
       return le.expandBackward(startText, innerMatch, fromIndex);
     }
-    int candidate =
-        StringStartAccelerator.findNextCandidate(
-            accelerator, startText, fromIndex, prog.lineStartUnixLines());
+    int candidate = nextStringStartCandidate(accelerator, scanner, startText, fromIndex);
     if (!prog.hasGraphemeClusterInstruction()) {
       // Literal scans can nominate a low surrogate inside a pair. Scalar searches may start
       // there only when the caller explicitly supplies that initial cursor.
       // Each rejected candidate advances the scan, so filtering remains linear in input length.
       while (candidate > fromIndex && !activeScanner().isCodePointBoundary(candidate)) {
-        candidate =
-            StringStartAccelerator.findNextCandidate(
-                accelerator, startText, candidate + 1, prog.lineStartUnixLines());
+        candidate = nextStringStartCandidate(accelerator, scanner, startText, candidate + 1);
       }
     }
     if (candidate < 0) {
