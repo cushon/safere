@@ -317,7 +317,6 @@ final class WorkCounterConfig {
             <configuration>
               <argLine>
                 @{argLine} --add-modules=jdk.incubator.vector
-                --add-opens=java.base/java.lang=ALL-UNNAMED
                 -Dorg.safere.experimental.vectorScanProvider=vector
               </argLine>
               <classesDirectory>
@@ -325,6 +324,29 @@ final class WorkCounterConfig {
               </classesDirectory>
               <useModulePath>false</useModulePath>
             </configuration>
+            <executions>
+              <execution>
+                <!-- The main run above has no add-opens, like a normal user JVM. This one opens
+                     java.lang and selects the reflective String vector loads, for the tests that
+                     cover them. -->
+                <id>string-vector-reflective</id>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <argLine>
+                    @{argLine} --add-modules=jdk.incubator.vector
+                    --add-opens=java.base/java.lang=ALL-UNNAMED
+                    -Dorg.safere.experimental.vectorScanProvider=vector
+                    -Dorg.safere.experimental.stringVectorLoads=reflective
+                  </argLine>
+                  <test>StringVectorScanTest,StringCharClassFindTest</test>
+                  <reportsDirectory>
+                    ${project.build.directory}/surefire-reports-string-vector-reflective
+                  </reportsDirectory>
+                </configuration>
+              </execution>
+            </executions>
           </plugin>
         </plugins>
       </build>

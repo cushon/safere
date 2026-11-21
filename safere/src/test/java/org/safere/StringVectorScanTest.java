@@ -7,9 +7,11 @@ package org.safere;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -156,6 +158,24 @@ class StringVectorScanTest {
         .isEqualTo(VectorScanProvider.UNSUPPORTED);
     assertThat(StringVectorLoads.indexOfCharClass("", digits, 0))
         .isEqualTo(VectorScanProvider.UNSUPPORTED);
+  }
+
+  /**
+   * The main {@code vector-tests} run doesn't open {@code java.lang}, like a normal user JVM, so
+   * the reflective loads must be unavailable there and nothing else may depend on them. A separate
+   * execution opens {@code java.lang} and selects the reflective mode.
+   */
+  @Test
+  void reflectiveLoadsNeedJavaLangOpened() {
+    assumeTrue(VECTOR_MODULE, "needs --add-modules jdk.incubator.vector");
+    assumeFalse(
+        Objects.equals(System.getProperty(StringVectorLoads.PROPERTY), "reflective"),
+        "the reflective test execution opens java.lang");
+    assertThat(String.class.getModule().isOpen("java.lang", StringVectorScan.class.getModule()))
+        .as("java.lang is opened to SafeRE; the main vector-tests run shouldn't use --add-opens")
+        .isFalse();
+    assertThat(StringVectorScan.available(Mode.REFLECTIVE)).isFalse();
+    assertThat(StringVectorLoads.select("reflective")).isEqualTo(StringVectorLoads.select(""));
   }
 
   @Test
