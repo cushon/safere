@@ -21,8 +21,6 @@ package org.safere;
  *   <li>{@code reflective}: reads {@code String.value} and {@code String.coder} directly. Needs
  *       {@code --add-opens java.base/java.lang=<SafeRE's module>}, and falls back to the default
  *       when that access is not available.
- *   <li>{@code chunked}: copies chunks with {@link String#getChars} into a per-scanner buffer and
- *       loads them with {@code ShortVector.fromCharArray}.
  *   <li>{@code none}: scalar scans.
  * </ul>
  *
@@ -36,8 +34,7 @@ final class StringVectorLoads {
   enum Mode {
     NONE,
     JDK,
-    REFLECTIVE,
-    CHUNKED
+    REFLECTIVE
   }
 
   /**
@@ -45,9 +42,6 @@ final class StringVectorLoads {
    * this, setting up the vector loop costs more than the scalar scan it replaces.
    */
   static final int MINIMUM_REMAINING_LENGTH = 64;
-
-  /** The length, in chars, of each scanner's buffer in {@link Mode#CHUNKED} mode. */
-  static final int CHUNK_LENGTH = 1024;
 
   static final Mode MODE = select(System.getProperty(PROPERTY, ""));
 
@@ -67,15 +61,13 @@ final class StringVectorLoads {
    * <p>{@code ranges} must describe a class whose members are exactly the code points it matches as
    * code units: BMP ranges that do not overlap the surrogates. A surrogate pair can then never
    * produce a false match, and every match is a code point boundary.
-   *
-   * @param chunkOwner the scanner whose buffer {@link Mode#CHUNKED} may use, or {@code null}
    */
-  static int indexOfCharClass(String text, int[] ranges, int start, StringInputScanner chunkOwner) {
+  static int indexOfCharClass(String text, int[] ranges, int start) {
     int from = Math.max(0, start);
     if (text.length() - from < MINIMUM_REMAINING_LENGTH) {
       return VectorScanProvider.UNSUPPORTED;
     }
-    return StringVectorScan.indexOfCharClassOutOfLine(MODE, text, ranges, from, chunkOwner);
+    return StringVectorScan.indexOfCharClassOutOfLine(MODE, text, ranges, from);
   }
 
   static Mode select(String property) {
@@ -84,7 +76,6 @@ final class StringVectorLoads {
           case "" -> null;
           case "jdk" -> Mode.JDK;
           case "reflective" -> Mode.REFLECTIVE;
-          case "chunked" -> Mode.CHUNKED;
           case "none" -> Mode.NONE;
           default -> throw new IllegalStateException("Unknown String vector load mode " + property);
         };

@@ -1550,17 +1550,11 @@ public final class Pattern implements Serializable {
       return le.expandBackward(text, innerMatch, 0);
     }
     int candidate =
-        StringVectorLoads.ENABLED
-            ? StringStartAccelerator.findNextCandidate(
-                stringStartAccelerator, scanner, 0, unixLines)
-            : StringStartAccelerator.findNextCandidate(stringStartAccelerator, text, 0, unixLines);
+        StringStartAccelerator.findNextCandidate(stringStartAccelerator, text, 0, unixLines);
     while (candidate > 0 && !scanner.isCodePointBoundary(candidate)) {
       candidate =
-          StringVectorLoads.ENABLED
-              ? StringStartAccelerator.findNextCandidate(
-                  stringStartAccelerator, scanner, candidate + 1, unixLines)
-              : StringStartAccelerator.findNextCandidate(
-                  stringStartAccelerator, text, candidate + 1, unixLines);
+          StringStartAccelerator.findNextCandidate(
+              stringStartAccelerator, text, candidate + 1, unixLines);
     }
     return candidate;
   }

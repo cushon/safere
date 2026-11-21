@@ -24,7 +24,8 @@ import org.safere.StringVectorLoads.Mode;
  * StringVectorScan#indexOfCharClass}. The scans use the preferred species; run with {@code
  * -XX:MaxVectorSize=8}, {@code 16} or {@code 32} to cover narrower ones. The JDK mode needs a
  * runtime with {@code ShortVector.fromString}, and the reflective mode needs {@code --add-opens
- * java.base/java.lang=ALL-UNNAMED}; tests for unavailable modes are skipped.
+ * java.base/java.lang=ALL-UNNAMED}; tests for unavailable modes are skipped. The shared kernel is
+ * also run over {@code char[]} copies, so it is covered whenever the incubator module is present.
  */
 @DisabledForCrosscheck("implementation test uses package-private String vector internals")
 class StringVectorScanTest {
@@ -51,27 +52,49 @@ class StringVectorScanTest {
     return ModuleLayer.boot().findModule("jdk.incubator.vector").isPresent();
   }
 
-  static Stream<Mode> vectorModes() {
-    return Stream.of(Mode.values()).filter(mode -> mode != Mode.NONE);
+  /** Ways to run the scan: each String load mode, and the kernel over a {@code char[]} copy. */
+  enum Backend {
+    JDK,
+    REFLECTIVE,
+    CHAR_ARRAY;
+
+    boolean available() {
+      return switch (this) {
+        case JDK -> StringVectorScan.available(Mode.JDK);
+        case REFLECTIVE -> StringVectorScan.available(Mode.REFLECTIVE);
+        case CHAR_ARRAY -> true;
+      };
+    }
+
+    int indexOfCharClass(String text, int[] ranges, int start) {
+      return switch (this) {
+        case JDK -> StringVectorScan.indexOfCharClass(Mode.JDK, text, ranges, start);
+        case REFLECTIVE -> StringVectorScan.indexOfCharClass(Mode.REFLECTIVE, text, ranges, start);
+        case CHAR_ARRAY -> StringVectorScan.indexOfCharClass(text.toCharArray(), ranges, start);
+      };
+    }
   }
 
-  private static void assumeAvailable(Mode mode) {
+  static Stream<Backend> backends() {
+    return Stream.of(Backend.values());
+  }
+
+  private static void assumeAvailable(Backend backend) {
     assumeTrue(VECTOR_MODULE, "needs --add-modules jdk.incubator.vector");
-    assumeTrue(StringVectorScan.available(mode), mode + " loads are not available in this JVM");
+    assumeTrue(backend.available(), backend + " is not available in this JVM");
   }
 
   @ParameterizedTest
-  @MethodSource("vectorModes")
-  void randomStringsMatchScalarReference(Mode mode) {
-    assumeAvailable(mode);
-    Random random = new Random(mode.name().hashCode());
+  @MethodSource("backends")
+  void randomStringsMatchScalarReference(Backend backend) {
+    assumeAvailable(backend);
+    Random random = new Random(backend.name().hashCode());
     for (int iteration = 0; iteration < 400; iteration++) {
       String text = randomString(random, random.nextInt(300), iteration % 3);
-      StringInputScanner owner = new StringInputScanner(text);
       for (int[] ranges : RANGES) {
         for (int start : starts(text.length())) {
-          assertThat(StringVectorScan.indexOfCharClass(mode, text, ranges, start, owner))
-              .as("%s, ranges %s, start %d, text %s", mode, ranges, start, text)
+          assertThat(backend.indexOfCharClass(text, ranges, start))
+              .as("%s, ranges %s, start %d, text %s", backend, ranges, start, text)
               .isEqualTo(reference(text, ranges, start));
         }
       }
@@ -79,22 +102,19 @@ class StringVectorScanTest {
   }
 
   @ParameterizedTest
-  @MethodSource("vectorModes")
-  void findsEveryPositionInBothCoders(Mode mode) {
-    assumeAvailable(mode);
+  @MethodSource("backends")
+  void findsEveryPositionInBothCoders(Backend backend) {
+    assumeAvailable(backend);
     int[] digits = {'0', '9'};
     for (String filler : new String[] {"x", "\u00e9", "\u0100", "\ud83d\ude00"}) {
       for (int length : new int[] {1, 3, 4, 7, 8, 15, 16, 17, 31, 32, 33, 64, 127, 129, 1025}) {
         String base = filler.repeat(length);
-        StringInputScanner owner = new StringInputScanner(base);
-        assertThat(StringVectorScan.indexOfCharClass(mode, base, digits, 0, owner)).isEqualTo(-1);
+        assertThat(backend.indexOfCharClass(base, digits, 0)).isEqualTo(-1);
         for (int position = 0; position < base.length(); position += 1 + position / 8) {
           String text = base.substring(0, position) + '7' + base.substring(position + 1);
           int start = Math.max(0, position - 40);
-          assertThat(
-                  StringVectorScan.indexOfCharClass(
-                      mode, text, digits, start, new StringInputScanner(text)))
-              .as("%s, filler %s, length %d, position %d", mode, filler, length, position)
+          assertThat(backend.indexOfCharClass(text, digits, start))
+              .as("%s, filler %s, length %d, position %d", backend, filler, length, position)
               .isEqualTo(reference(text, digits, start));
         }
       }
@@ -102,45 +122,28 @@ class StringVectorScanTest {
   }
 
   @ParameterizedTest
-  @MethodSource("vectorModes")
-  void surrogatesNeverMatchBmpRanges(Mode mode) {
-    assumeAvailable(mode);
+  @MethodSource("backends")
+  void surrogatesNeverMatchBmpRanges(Backend backend) {
+    assumeAvailable(backend);
     // Every code unit of these supplementary code points is outside the class, although the code
     // points' low bits fall inside it.
     String text = "\ud800\udc30\udbff\udfff\ud83d\ude00".repeat(40) + "\ud800" + "a" + "\udc00";
     int[] ranges = {'0', '9', 'a', 'z', 0xE000, 0xFFFF};
-    assertThat(
-            StringVectorScan.indexOfCharClass(mode, text, ranges, 0, new StringInputScanner(text)))
-        .isEqualTo(text.indexOf('a'));
+    assertThat(backend.indexOfCharClass(text, ranges, 0)).isEqualTo(text.indexOf('a'));
   }
 
-  @Test
-  void chunkedModeNeedsABufferOwner() {
-    assumeAvailable(Mode.CHUNKED);
-    String text = "x".repeat(200) + "7";
-    assertThat(StringVectorScan.indexOfCharClass(Mode.CHUNKED, text, new int[] {'0', '9'}, 0, null))
-        .isEqualTo(VectorScanProvider.UNSUPPORTED);
-  }
-
-  @Test
-  void chunkedModeReusesOneBufferPerScanner() {
-    StringInputScanner scanner = new StringInputScanner("text");
-    assertThat(scanner.chunkBuffer()).hasSize(StringVectorLoads.CHUNK_LENGTH);
-    assertThat(scanner.chunkBuffer()).isSameAs(scanner.chunkBuffer());
-  }
-
-  @Test
-  void rangesTheKernelCannotMatchAsCodeUnitsAreUnsupported() {
-    assumeAvailable(Mode.CHUNKED);
+  @ParameterizedTest
+  @MethodSource("backends")
+  void rangesTheKernelCannotMatchAsCodeUnitsAreUnsupported(Backend backend) {
+    assumeAvailable(backend);
     String text = "x".repeat(200);
-    StringInputScanner owner = new StringInputScanner(text);
     int[][] unsupported = {
       {0xD800, 0xDBFF},
       {'a', 'z', 0x10000, 0x10FFFF},
       {0, 1, 3, 3, 5, 5, 7, 7, 9, 9, 11, 11, 13, 13, 15, 15, 17, 17}
     };
     for (int[] ranges : unsupported) {
-      assertThat(StringVectorScan.indexOfCharClass(Mode.CHUNKED, text, ranges, 0, owner))
+      assertThat(backend.indexOfCharClass(text, ranges, 0))
           .isEqualTo(VectorScanProvider.UNSUPPORTED);
     }
   }
@@ -149,9 +152,9 @@ class StringVectorScanTest {
   void shortRemaindersStayScalar() {
     String text = "x".repeat(StringVectorLoads.MINIMUM_REMAINING_LENGTH + 10);
     int[] digits = {'0', '9'};
-    assertThat(StringVectorLoads.indexOfCharClass(text, digits, 11, null))
+    assertThat(StringVectorLoads.indexOfCharClass(text, digits, 11))
         .isEqualTo(VectorScanProvider.UNSUPPORTED);
-    assertThat(StringVectorLoads.indexOfCharClass("", digits, 0, null))
+    assertThat(StringVectorLoads.indexOfCharClass("", digits, 0))
         .isEqualTo(VectorScanProvider.UNSUPPORTED);
   }
 
@@ -167,8 +170,6 @@ class StringVectorScanTest {
   void explicitModesFallBackWhenUnavailable() {
     Mode defaultMode = StringVectorLoads.select("");
     assertThat(StringVectorLoads.select("none")).isEqualTo(Mode.NONE);
-    assertThat(StringVectorLoads.select(" chunked "))
-        .isEqualTo(VECTOR_MODULE ? Mode.CHUNKED : Mode.NONE);
     assertThat(StringVectorLoads.select("jdk")).isEqualTo(defaultMode);
     Mode reflective = StringVectorLoads.select("reflective");
     if (VECTOR_MODULE && StringVectorScan.available(Mode.REFLECTIVE)) {
@@ -176,9 +177,11 @@ class StringVectorScanTest {
     } else {
       assertThat(reflective).isEqualTo(defaultMode);
     }
-    assertThatThrownBy(() -> StringVectorLoads.select("bogus"))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("bogus");
+    for (String unknown : new String[] {"bogus", "chunked"}) {
+      assertThatThrownBy(() -> StringVectorLoads.select(unknown))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining(unknown);
+    }
   }
 
   private static boolean jdkHasShortVectorFromString() {

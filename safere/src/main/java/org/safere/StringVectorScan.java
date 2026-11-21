@@ -55,10 +55,9 @@ final class StringVectorScan {
   private StringVectorScan() {}
 
   /** Like {@link #indexOfCharClass}, but never inlined into the caller. */
-  static int indexOfCharClassOutOfLine(
-      Mode mode, String text, int[] ranges, int start, StringInputScanner chunkOwner) {
+  static int indexOfCharClassOutOfLine(Mode mode, String text, int[] ranges, int start) {
     try {
-      return (int) OUT_OF_LINE.indexOfCharClass.invokeExact(mode, text, ranges, start, chunkOwner);
+      return (int) OUT_OF_LINE.indexOfCharClass.invokeExact(mode, text, ranges, start);
     } catch (RuntimeException | Error e) {
       throw e;
     } catch (Throwable t) {
@@ -68,9 +67,6 @@ final class StringVectorScan {
 
   /** Returns the mode to use for {@code requested}, or the default when it is not available. */
   static Mode select(Mode requested) {
-    if (requested == Mode.CHUNKED) {
-      return Mode.CHUNKED;
-    }
     if (requested == Mode.REFLECTIVE && Reflective.AVAILABLE) {
       return Mode.REFLECTIVE;
     }
@@ -83,7 +79,6 @@ final class StringVectorScan {
       case NONE -> false;
       case JDK -> FROM_STRING != null;
       case REFLECTIVE -> Reflective.AVAILABLE;
-      case CHUNKED -> true;
     };
   }
 
@@ -92,8 +87,7 @@ final class StringVectorScan {
    * when there is none, or {@link VectorScanProvider#UNSUPPORTED}. See {@link
    * StringVectorLoads#indexOfCharClass}. Tests call this directly to force a mode.
    */
-  static int indexOfCharClass(
-      Mode mode, String text, int[] ranges, int start, StringInputScanner chunkOwner) {
+  static int indexOfCharClass(Mode mode, String text, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, ShortVectorScan.MAXIMUM_RANGES)) {
       return VectorScanProvider.UNSUPPORTED;
     }
@@ -108,11 +102,31 @@ final class StringVectorScan {
           Reflective.AVAILABLE
               ? indexOfCharClassReflective(text, ranges, from)
               : VectorScanProvider.UNSUPPORTED;
-      case CHUNKED ->
-          chunkOwner == null
-              ? VectorScanProvider.UNSUPPORTED
-              : indexOfCharClassChunked(text, ranges, from, chunkOwner.chunkBuffer());
     };
+  }
+
+  /**
+   * Runs the same match kernel over {@code chars}, loaded with {@code ShortVector.fromCharArray}.
+   * For tests, so that the kernel is covered on JVMs where no String load is available.
+   */
+  static int indexOfCharClass(char[] chars, int[] ranges, int start) {
+    if (!Swar.supportsBmpCodeUnitRanges(ranges, ShortVectorScan.MAXIMUM_RANGES)) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
+    int position = Math.max(0, start);
+    for (; position <= chars.length - LANES; position += LANES) {
+      VectorMask<Short> matches =
+          ShortVectorScan.matches(ShortVector.fromCharArray(SPECIES, chars, position), ranges);
+      if (matches.anyTrue()) {
+        return position + matches.firstTrue();
+      }
+    }
+    for (; position < chars.length; position++) {
+      if (ShortVectorScan.matches(chars[position], ranges)) {
+        return position;
+      }
+    }
+    return -1;
   }
 
   private static int indexOfCharClassJdk(String text, int[] ranges, int start) {
@@ -177,32 +191,6 @@ final class StringVectorScan {
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
       }
-    }
-    return indexOfCharClassScalar(text, ranges, position);
-  }
-
-  private static int indexOfCharClassChunked(String text, int[] ranges, int start, char[] buffer) {
-    int length = text.length();
-    // Start with a few vectors and double up to the buffer length, so that a match near the start
-    // does not pay for copying a whole buffer.
-    int chunk = Math.min(4 * LANES, buffer.length);
-    int position = start;
-    while (true) {
-      int count = Math.min(chunk, length - position);
-      count -= count % LANES;
-      if (count == 0) {
-        break;
-      }
-      text.getChars(position, position + count, buffer, 0);
-      for (int i = 0; i < count; i += LANES) {
-        VectorMask<Short> matches =
-            ShortVectorScan.matches(ShortVector.fromCharArray(SPECIES, buffer, i), ranges);
-        if (matches.anyTrue()) {
-          return position + i + matches.firstTrue();
-        }
-      }
-      position += count;
-      chunk = Math.min(chunk << 1, buffer.length);
     }
     return indexOfCharClassScalar(text, ranges, position);
   }
@@ -277,12 +265,7 @@ final class StringVectorScan {
                     StringVectorScan.class,
                     "indexOfCharClass",
                     MethodType.methodType(
-                        int.class,
-                        Mode.class,
-                        String.class,
-                        int[].class,
-                        int.class,
-                        StringInputScanner.class));
+                        int.class, Mode.class, String.class, int[].class, int.class));
       } catch (ReflectiveOperationException e) {
         throw new LinkageError("StringVectorScan.indexOfCharClass", e);
       }

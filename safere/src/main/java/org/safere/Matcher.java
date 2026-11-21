@@ -2411,21 +2411,6 @@ public final class Matcher implements MatchResult {
     return candidate;
   }
 
-  /**
-   * Runs the String start accelerator when {@link StringVectorLoads#ENABLED}. A {@link
-   * StringInputScanner} always scans the whole text, so the accelerator may use its buffers.
-   */
-  private int nextVectorStringStartCandidate(
-      StringStartAccelerator accelerator,
-      InputScanner scanner,
-      CharSequence startText,
-      int fromIndex) {
-    boolean unixLines = parentPattern.prog().lineStartUnixLines();
-    return scanner instanceof StringInputScanner stringScanner
-        ? StringStartAccelerator.findNextCandidate(accelerator, stringScanner, fromIndex, unixLines)
-        : StringStartAccelerator.findNextCandidate(accelerator, startText, fromIndex, unixLines);
-  }
-
   /** Selects a start, rejecting nullable leading expansions at the inner candidate first. */
   private int findNextStringStartCandidate(StringStartAccelerator accelerator, int fromIndex) {
     Prog prog = parentPattern.prog();
@@ -2467,20 +2452,16 @@ public final class Matcher implements MatchResult {
       return le.expandBackward(startText, innerMatch, fromIndex);
     }
     int candidate =
-        StringVectorLoads.ENABLED
-            ? nextVectorStringStartCandidate(accelerator, scanner, startText, fromIndex)
-            : StringStartAccelerator.findNextCandidate(
-                accelerator, startText, fromIndex, prog.lineStartUnixLines());
+        StringStartAccelerator.findNextCandidate(
+            accelerator, startText, fromIndex, prog.lineStartUnixLines());
     if (!prog.hasGraphemeClusterInstruction()) {
       // Literal scans can nominate a low surrogate inside a pair. Scalar searches may start
       // there only when the caller explicitly supplies that initial cursor.
       // Each rejected candidate advances the scan, so filtering remains linear in input length.
       while (candidate > fromIndex && !activeScanner().isCodePointBoundary(candidate)) {
         candidate =
-            StringVectorLoads.ENABLED
-                ? nextVectorStringStartCandidate(accelerator, scanner, startText, candidate + 1)
-                : StringStartAccelerator.findNextCandidate(
-                    accelerator, startText, candidate + 1, prog.lineStartUnixLines());
+            StringStartAccelerator.findNextCandidate(
+                accelerator, startText, candidate + 1, prog.lineStartUnixLines());
       }
     }
     if (candidate < 0) {
