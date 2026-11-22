@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Field;
@@ -70,6 +71,21 @@ class MatcherThreadHandoffTest {
           };
         });
     assertThat(worker[0]).isNotSameAs(original).isSameAs(worker[1]);
+  }
+
+  @Test
+  void warmedPatternCanMatchOnAnotherThreadWhileItsMonitorIsHeld() throws Exception {
+    Pattern pattern = Pattern.compile("[a-q][^u-z]{3}x");
+    String input = "zz abcdx zz bcdex";
+    Matcher warmup = pattern.matcher(input);
+    assertThat(warmup.find()).isTrue();
+    assertThat(field("cachedStartRegister").get(warmup)).isNotNull();
+
+    try (ExecutorService worker = Executors.newSingleThreadExecutor()) {
+      synchronized (pattern) {
+        assertThat(worker.submit(() -> pattern.matcher(input).find()).get(5, SECONDS)).isTrue();
+      }
+    }
   }
 
   @ParameterizedTest

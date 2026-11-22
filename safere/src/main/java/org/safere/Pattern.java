@@ -282,6 +282,9 @@ public final class Pattern implements Serializable {
   @SuppressWarnings("ThreadLocalUsage")
   private transient volatile ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches;
 
+  // Cache initialization must not compete with callers holding the Pattern monitor.
+  private final transient Object threadCacheLock = new Object();
+
   /** Holder for OnePass analysis results. */
   private record OnePassAnalysis(
       OnePass onePass, boolean canPrimary, boolean canFind, boolean canSubmatch) {
@@ -1657,7 +1660,7 @@ public final class Pattern implements Serializable {
     long threadId = Thread.currentThread().threadId();
     long owner = ownerThreadId;
     if (owner == 0) {
-      synchronized (this) {
+      synchronized (threadCacheLock) {
         owner = ownerThreadId;
         if (owner == 0) {
           owner = threadId;
@@ -1687,7 +1690,7 @@ public final class Pattern implements Serializable {
   private ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches() {
     ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches;
     if (caches == null) {
-      synchronized (this) {
+      synchronized (threadCacheLock) {
         caches = otherThreadCaches;
         if (caches == null) {
           caches = new ThreadLocal<>();
