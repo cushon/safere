@@ -7,7 +7,6 @@ package org.safere;
 
 import static org.safere.Ascii.equalsIgnoreCase;
 import static org.safere.Ascii.ignoreCaseFailure;
-import static org.safere.Ascii.toLowerCase;
 
 /** UTF-16 code unit traversal and search utilities. */
 final class Utf16 {
@@ -140,9 +139,7 @@ final class Utf16 {
   /** Returns whether a character sequence matches a pattern prefix ignoring ASCII case. */
   static boolean regionMatchesIgnoreCase(char[] chars, int offset, String prefix, int prefixLen) {
     for (int i = 0; i < prefixLen; i++) {
-      char c = chars[offset + i];
-      char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != p) {
+      if (!equalsIgnoreCase(chars[offset + i], prefix.charAt(i))) {
         return false;
       }
     }
@@ -157,8 +154,7 @@ final class Utf16 {
           (char)
               ((bytes[byteOffset + (i << 1)] & 0xFF)
                   | ((bytes[byteOffset + (i << 1) + 1] & 0xFF) << 8));
-      char p = prefix.charAt(i);
-      if (c != p && toLowerCase(c) != p) {
+      if (!equalsIgnoreCase(c, prefix.charAt(i))) {
         return false;
       }
     }

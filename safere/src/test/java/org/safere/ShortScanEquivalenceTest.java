@@ -198,6 +198,13 @@ class ShortScanEquivalenceTest {
       assertThat(utf16VecByte).isEqualTo(705);
       assertThat(utf16VecChar).isEqualTo(705);
     }
+
+    char[] singleChars = "xxz".toCharArray();
+    byte[] singleUtf16 = "xxz".getBytes(UTF_16LE);
+    assertThat(ShortSwarScan.indexOfIgnoreCase(singleChars, 0, singleChars.length, "Z", 0))
+        .isEqualTo(2);
+    assertThat(ShortSwarScan.indexOfIgnoreCaseUtf16(singleUtf16, 0, singleChars.length, "Z", 0))
+        .isEqualTo(2);
   }
 
   @Test
