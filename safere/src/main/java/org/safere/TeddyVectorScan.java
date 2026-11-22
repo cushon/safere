@@ -15,8 +15,21 @@ import jdk.incubator.vector.VectorSpecies;
 /** Stateless SIMD Teddy multi-keyword vector-shuffle scanning kernels using the Vector API. */
 final class TeddyVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
+  private static final int NIBBLE_TABLE_SIZE = 16;
+
+  /**
+   * Returns whether the preferred byte vector width can evaluate Teddy's 16-entry nibble shuffle
+   * and pack the resulting lane mask into a {@code long}.
+   */
+  static boolean isSupported() {
+    int vectorLen = SPECIES.length();
+    return vectorLen >= NIBBLE_TABLE_SIZE && vectorLen <= Long.SIZE;
+  }
 
   static int indexOfTeddyUtf8(byte[] bytes, int offset, int length, TeddyModel model, int start) {
+    if (!isSupported()) {
+      return VectorScanProvider.UNSUPPORTED;
+    }
     int minLen = model.minLength();
     int pos = Math.max(0, start);
     int vectorLen = SPECIES.length();

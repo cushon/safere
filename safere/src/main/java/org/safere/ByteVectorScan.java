@@ -467,7 +467,9 @@ final class ByteVectorScan {
       ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
       VectorMask<Byte> matchMask = matches(inputVec, anchorRanges);
 
-      if (teddyModel != null && MultiLiteralSelectionPolicy.shouldObserve(observedBytes)) {
+      if (teddyModel != null
+          && TeddyVectorScan.isSupported()
+          && MultiLiteralSelectionPolicy.shouldObserve(observedBytes)) {
         observedBytes += vectorLen;
         estimatedVerificationBytes += (long) matchMask.trueCount() * minLength;
         if (MultiLiteralSelectionPolicy.prefersTeddy(estimatedVerificationBytes, observedBytes)) {

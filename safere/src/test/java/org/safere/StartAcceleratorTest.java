@@ -590,7 +590,9 @@ class StartAcceleratorTest {
             teddyModel,
             0);
 
-    assertThat(result).isEqualTo(prefix.length());
+    assertThat(result)
+        .isEqualTo(
+            TeddyVectorScan.isSupported() ? prefix.length() : VectorScanProvider.UNSUPPORTED);
   }
 
   @Test
