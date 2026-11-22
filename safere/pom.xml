@@ -22,6 +22,8 @@
     <workCounter.enabled>false</workCounter.enabled>
     <test.groups></test.groups>
     <test.excludedGroups>work-counter</test.excludedGroups>
+    <skipTests>false</skipTests>
+    <test.skipNarrowVectorWidths>${skipTests}</test.skipNarrowVectorWidths>
     <error-prone.extra-checks>-Xep:UnnecessarilyFullyQualified:ERROR</error-prone.extra-checks>
     <error-prone.library-checks>-Xep:SystemOut:ERROR -Xep:SystemExitOutsideMain:ERROR</error-prone.library-checks>
   </properties>
@@ -334,7 +336,7 @@ final class WorkCounterConfig {
                   <goal>test</goal>
                 </goals>
                 <configuration>
-                  <skipTests>${workCounter.enabled}</skipTests>
+                  <skipTests>${test.skipNarrowVectorWidths}</skipTests>
                   <argLine>
                     @{argLine} -XX:MaxVectorSize=8
                     --add-modules=jdk.incubator.vector
@@ -365,7 +367,7 @@ final class WorkCounterConfig {
                   <goal>test</goal>
                 </goals>
                 <configuration>
-                  <skipTests>${workCounter.enabled}</skipTests>
+                  <skipTests>${test.skipNarrowVectorWidths}</skipTests>
                   <argLine>
                     @{argLine} -XX:MaxVectorSize=16
                     --add-modules=jdk.incubator.vector
@@ -398,6 +400,7 @@ final class WorkCounterConfig {
       <id>work-counters</id>
       <properties>
         <workCounter.enabled>true</workCounter.enabled>
+        <test.skipNarrowVectorWidths>true</test.skipNarrowVectorWidths>
         <test.groups>work-counter</test.groups>
         <test.excludedGroups></test.excludedGroups>
       </properties>
