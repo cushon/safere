@@ -12,7 +12,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.MutableCallSite;
-import java.lang.invoke.VarHandle;
 import java.lang.ref.SoftReference;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
@@ -278,17 +277,6 @@ public final class Pattern implements Serializable {
   // Per-Pattern ThreadLocal is intentional, see above.
   @SuppressWarnings("ThreadLocalUsage")
   private transient volatile ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches;
-
-  private static final VarHandle OWNER_THREAD_ID;
-
-  static {
-    try {
-      OWNER_THREAD_ID =
-          MethodHandles.lookup().findVarHandle(Pattern.class, "ownerThreadId", long.class);
-    } catch (ReflectiveOperationException e) {
-      throw new ExceptionInInitializerError(e);
-    }
-  }
 
   /** Holder for OnePass analysis results. */
   private record OnePassAnalysis(
@@ -1664,8 +1652,14 @@ public final class Pattern implements Serializable {
   ThreadCache getOrCreateThreadCache() {
     long threadId = Thread.currentThread().threadId();
     long owner = ownerThreadId;
-    if (owner == 0 && OWNER_THREAD_ID.compareAndSet(this, 0L, threadId)) {
-      owner = threadId;
+    if (owner == 0) {
+      synchronized (this) {
+        owner = ownerThreadId;
+        if (owner == 0) {
+          owner = threadId;
+          ownerThreadId = owner;
+        }
+      }
     }
     if (owner == threadId) {
       SoftReference<ThreadCache> ref = ownerCache;
