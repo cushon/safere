@@ -12,6 +12,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.MutableCallSite;
+import java.lang.invoke.VarHandle;
 import java.lang.ref.SoftReference;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
@@ -261,10 +262,33 @@ public final class Pattern implements Serializable {
     return cache.startRegister;
   }
 
-  // Per-Pattern ThreadLocal is intentional: each Pattern caches its own DFA/BitState/Nfa state per
-  // thread, so warm state caches persist across the common pattern.matcher(t).find() idiom.
+  // Each Pattern caches its own DFA/BitState/Nfa state per thread, so warm state caches persist
+  // across the common pattern.matcher(t).find() idiom. The first thread to use the pattern keeps
+  // its
+  // cache in ownerCache, so a pattern that is only used by one thread (including one compiled and
+  // discarded per operation) never adds an entry to a ThreadLocalMap. Other threads use
+  // otherThreadCaches, which is created when a second thread first needs a cache.
+
+  /** The {@link Thread#threadId} of the thread that owns {@link #ownerCache}, or 0 if unclaimed. */
+  private transient volatile long ownerThreadId;
+
+  /** Only accessed by the thread whose ID is {@link #ownerThreadId}. */
+  private transient SoftReference<ThreadCache> ownerCache;
+
+  // Per-Pattern ThreadLocal is intentional, see above.
   @SuppressWarnings("ThreadLocalUsage")
-  private final transient ThreadLocal<SoftReference<ThreadCache>> threadCache = new ThreadLocal<>();
+  private transient volatile ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches;
+
+  private static final VarHandle OWNER_THREAD_ID;
+
+  static {
+    try {
+      OWNER_THREAD_ID =
+          MethodHandles.lookup().findVarHandle(Pattern.class, "ownerThreadId", long.class);
+    } catch (ReflectiveOperationException e) {
+      throw new ExceptionInInitializerError(e);
+    }
+  }
 
   /** Holder for OnePass analysis results. */
   private record OnePassAnalysis(
@@ -1622,22 +1646,58 @@ public final class Pattern implements Serializable {
   }
 
   private ThreadCache existingThreadCache() {
-    SoftReference<ThreadCache> ref = threadCache.get();
+    SoftReference<ThreadCache> ref;
+    if (ownerThreadId == Thread.currentThread().threadId()) {
+      ref = ownerCache;
+    } else {
+      ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches;
+      ref = caches != null ? caches.get() : null;
+    }
     return ref != null ? ref.get() : null;
   }
 
   /**
    * Returns the current thread's cache, creating it if needed. A {@link Matcher} fetches this once
-   * and passes it to the cache accessors, so each lookup does not repeat the {@link ThreadLocal}
-   * and {@link SoftReference} dereferences.
+   * and passes it to the cache accessors, so each lookup does not repeat the thread check and
+   * {@link SoftReference} dereference.
    */
   ThreadCache getOrCreateThreadCache() {
-    ThreadCache cache = existingThreadCache();
+    long threadId = Thread.currentThread().threadId();
+    long owner = ownerThreadId;
+    if (owner == 0 && OWNER_THREAD_ID.compareAndSet(this, 0L, threadId)) {
+      owner = threadId;
+    }
+    if (owner == threadId) {
+      SoftReference<ThreadCache> ref = ownerCache;
+      ThreadCache cache = ref != null ? ref.get() : null;
+      if (cache == null) {
+        cache = new ThreadCache();
+        ownerCache = new SoftReference<>(cache);
+      }
+      return cache;
+    }
+    ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches();
+    SoftReference<ThreadCache> ref = caches.get();
+    ThreadCache cache = ref != null ? ref.get() : null;
     if (cache == null) {
       cache = new ThreadCache();
-      threadCache.set(new SoftReference<>(cache));
+      caches.set(new SoftReference<>(cache));
     }
     return cache;
+  }
+
+  private ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches() {
+    ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches;
+    if (caches == null) {
+      synchronized (this) {
+        caches = otherThreadCaches;
+        if (caches == null) {
+          caches = new ThreadLocal<>();
+          otherThreadCaches = caches;
+        }
+      }
+    }
+    return caches;
   }
 
   /** Returns the thread-local cached BitState, or null if none has been cached yet. */
