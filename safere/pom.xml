@@ -330,17 +330,22 @@ final class WorkCounterConfig {
                      java.lang and selects the reflective String vector loads, for the tests that
                      cover them. -->
                 <id>string-vector-reflective</id>
+                <phase>test</phase>
                 <goals>
                   <goal>test</goal>
                 </goals>
                 <configuration>
+                  <skipTests>${workCounter.enabled}</skipTests>
                   <argLine>
                     @{argLine} --add-modules=jdk.incubator.vector
                     --add-opens=java.base/java.lang=ALL-UNNAMED
                     -Dorg.safere.experimental.vectorScanProvider=vector
                     -Dorg.safere.experimental.stringVectorLoads=reflective
                   </argLine>
-                  <test>StringVectorScanTest,StringCharClassFindTest</test>
+                  <includes>
+                    <include>org/safere/StringVectorScanTest.java</include>
+                    <include>org/safere/StringCharClassFindTest.java</include>
+                  </includes>
                   <reportsDirectory>
                     ${project.build.directory}/surefire-reports-string-vector-reflective
                   </reportsDirectory>

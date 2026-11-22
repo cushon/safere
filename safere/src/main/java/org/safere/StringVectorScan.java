@@ -285,8 +285,8 @@ final class StringVectorScan {
     static final boolean AVAILABLE;
 
     static {
-      VarHandle value = null;
-      VarHandle coder = null;
+      VarHandle value;
+      VarHandle coder;
       try {
         MethodHandles.Lookup lookup =
             MethodHandles.privateLookupIn(String.class, MethodHandles.lookup());
