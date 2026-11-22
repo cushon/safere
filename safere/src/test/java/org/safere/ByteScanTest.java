@@ -10,13 +10,76 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 import java.util.stream.IntStream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @DisabledForCrosscheck("package-private byte scanner tests exercise SafeRE internals")
 class ByteScanTest {
+  private static final List<int[]> ASCII_CHAR_CLASS_RANGES =
+      List.of(
+          new int[] {'0', '9'},
+          new int[] {'a', 'z'},
+          new int[] {'a', 'z', 'A', 'Z'},
+          new int[] {'0', '9', 'a', 'z', 'A', 'Z'},
+          new int[] {'0', '9', 'a', 'z', 'A', 'Z', '_', '_'});
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, 1, 3, 7, 15, 16, 31, 32, 63, 64, 127, 128, 512, 1024, 2048})
+  void asciiClassScansMatchScalarReference(int length) {
+    Random random = new Random(42 + length);
+    byte[] input = new byte[length];
+    for (int i = 0; i < length; i++) {
+      input[i] = (byte) (random.nextInt(26) + 'a');
+    }
+
+    for (int[] ranges : ASCII_CHAR_CLASS_RANGES) {
+      for (int start : new int[] {0, 1, 7, 15, 31, Math.max(0, length - 5)}) {
+        if (start > length) {
+          continue;
+        }
+        int expected = scalarIndexOfAsciiClass(input, ranges, start);
+        if (ranges.length <= 4) {
+          assertThat(ByteSwarScan.indexOfAsciiClass(input, 0, length, ranges, start))
+              .as("ByteSwarScan at start=%d, len=%d", start, length)
+              .isEqualTo(expected);
+        }
+        if (isVectorApiAvailable()) {
+          assertThat(ByteVectorScan.indexOfAsciiClass(input, 0, length, ranges, start))
+              .as("ByteVectorScan at start=%d, len=%d", start, length)
+              .isEqualTo(expected);
+        }
+      }
+    }
+  }
+
+  @Test
+  void swarAsciiClassRejectsUnsupportedRanges() {
+    byte[] bytes = new byte[64];
+    bytes[10] = (byte) 0xE9;
+    assertThat(ByteSwarScan.indexOfAsciiClass(bytes, 0, bytes.length, new int[] {233, 233}, 0))
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+    assertThat(ByteSwarScan.indexOfAsciiClass(bytes, 0, bytes.length, new int[] {'z', 'a'}, 0))
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+  }
+
+  @Test
+  void denseIgnoreCaseCandidatesFallBackBeforeReplayingLongPrefixes() {
+    assumeTrue(isVectorApiAvailable(), "Vector API not available on module path");
+    String prefix = "z".repeat(64) + "y";
+    byte[] input = "z".repeat(4_096).getBytes(UTF_8);
+
+    assertThat(
+            ByteVectorScan.indexOfIgnoreCase(
+                input, 0, input.length, prefix, prefix.length(), 0, (byte) 'z', (byte) 'Z', 0))
+        .isEqualTo(VectorScanProvider.UNSUPPORTED);
+  }
+
   @ParameterizedTest
   @CsvSource({
     "false, 0, false", "false, 3, false", "false, 0, true", "false, 3, true",
@@ -87,6 +150,18 @@ class ByteScanTest {
         }
       }
     }
+  }
+
+  private static int scalarIndexOfAsciiClass(byte[] input, int[] ranges, int start) {
+    for (int i = start; i < input.length; i++) {
+      int b = input[i] & 0xFF;
+      for (int r = 0; r < ranges.length; r += 2) {
+        if (b >= ranges[r] && b <= ranges[r + 1]) {
+          return i;
+        }
+      }
+    }
+    return -1;
   }
 
   private static boolean isVectorApiAvailable() {

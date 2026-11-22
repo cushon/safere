@@ -19,14 +19,10 @@ class VectorSpeciesSimulationTest {
   private static final boolean VECTOR_AVAILABLE = isVectorApiAvailable();
   private static final List<SpeciesHandle> BYTE_SPECIES =
       VECTOR_AVAILABLE ? getSpeciesList("jdk.incubator.vector.ByteVector") : List.of();
-  private static final List<SpeciesHandle> SHORT_SPECIES =
-      VECTOR_AVAILABLE ? getSpeciesList("jdk.incubator.vector.ShortVector") : List.of();
   private static final Method BYTE_INDEX_OF_ASCII_CLASS =
       VECTOR_AVAILABLE ? resolveByteIndexOfAsciiClass() : null;
   private static final Method BYTE_INDEX_OF_IGNORE_CASE =
       VECTOR_AVAILABLE ? resolveByteIndexOfIgnoreCase() : null;
-  private static final Method SHORT_INDEX_OF_CHAR_CLASS =
-      VECTOR_AVAILABLE ? resolveShortIndexOfCharClass() : null;
 
   private record SpeciesHandle(Object value) {}
 
@@ -94,25 +90,6 @@ class VectorSpeciesSimulationTest {
     }
   }
 
-  private static Method resolveShortIndexOfCharClass() {
-    try {
-      Class<?> speciesClass = Class.forName("jdk.incubator.vector.VectorSpecies");
-      Method m =
-          ShortVectorScan.class.getDeclaredMethod(
-              "indexOfCharClass",
-              speciesClass,
-              char[].class,
-              int.class,
-              int.class,
-              int[].class,
-              int.class);
-      m.setAccessible(true);
-      return m;
-    } catch (ReflectiveOperationException | LinkageError e) {
-      throw new ExceptionInInitializerError(e);
-    }
-  }
-
   private static int invokeByteIndexOfAsciiClass(
       SpeciesHandle species, byte[] bytes, int offset, int length, int[] ranges, int start) {
     try {
@@ -149,17 +126,6 @@ class VectorSpeciesSimulationTest {
               low,
               high,
               start);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private static int invokeShortIndexOfCharClass(
-      SpeciesHandle species, char[] chars, int offset, int length, int[] ranges, int start) {
-    try {
-      return (int)
-          SHORT_INDEX_OF_CHAR_CLASS.invoke(
-              null, species.value(), chars, offset, length, ranges, start);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -240,30 +206,6 @@ class VectorSpeciesSimulationTest {
                     0))
             .as("IgnoreCase absent for species %s, pad %d", species, pad)
             .isEqualTo(-1);
-      }
-    }
-  }
-
-  @Test
-  void charClassMatchingAcrossAllShortVectorSpecies() {
-    assumeTrue(VECTOR_AVAILABLE, "Vector API not available on module path");
-    int[] ranges = {'0', '9', 'A', 'Z'};
-    for (SpeciesHandle species : SHORT_SPECIES) {
-      for (int len = 0; len <= 128; len++) {
-        char[] chars = "a".repeat(len).toCharArray();
-        for (int start = 0; start <= len; start++) {
-          assertThat(invokeShortIndexOfCharClass(species, chars, 0, len, ranges, start))
-              .as("Short absent for species %s, len %d, start %d", species, len, start)
-              .isEqualTo(-1);
-        }
-
-        if (len > 0) {
-          char[] matchEnd = chars.clone();
-          matchEnd[len - 1] = '9';
-          assertThat(invokeShortIndexOfCharClass(species, matchEnd, 0, len, ranges, 0))
-              .as("Short end match for species %s, len %d", species, len)
-              .isEqualTo(len - 1);
-        }
       }
     }
   }

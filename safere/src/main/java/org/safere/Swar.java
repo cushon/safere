@@ -11,9 +11,6 @@ final class Swar {
   static final long BYTE_ONES = 0x0101_0101_0101_0101L;
   static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
-  static final long SHORT_ONES = 0x0001_0001_0001_0001L;
-  static final long SHORT_HIGH_BITS = 0x8000_8000_8000_8000L;
-
   private Swar() {}
 
   /** Returns whether the ranges can be matched one UTF-16 code unit at a time. */
@@ -52,12 +49,5 @@ final class Swar {
     long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
     long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
     return ascii & atLeastLow & atMostHigh;
-  }
-
-  /** Computes a borrow-free 2-byte UTF-16 SWAR range mask for {@code [low, high]}. */
-  static long exactShortRangeMask(long word, long repeatedLow, long repeatedHigh) {
-    long atLeastLow = ((word | SHORT_HIGH_BITS) - repeatedLow) & SHORT_HIGH_BITS;
-    long atMostHigh = ((repeatedHigh | SHORT_HIGH_BITS) - word) & SHORT_HIGH_BITS;
-    return atLeastLow & atMostHigh;
   }
 }

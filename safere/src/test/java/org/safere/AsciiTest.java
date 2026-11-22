@@ -125,6 +125,7 @@ class AsciiTest {
     assertThat(Ascii.ignoreCaseFailure("a")).containsExactly(0);
     assertThat(Ascii.ignoreCaseFailure("aA")).containsExactly(0, 1);
     assertThat(Ascii.ignoreCaseFailure("abAb")).containsExactly(0, 0, 1, 2);
+    assertThat(Ascii.ignoreCaseFailure("aaaaab")).containsExactly(0, 1, 2, 3, 4, 0);
   }
 
   @Test
