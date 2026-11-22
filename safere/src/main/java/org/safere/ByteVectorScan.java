@@ -22,18 +22,13 @@ final class ByteVectorScan {
   private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_PREFERRED;
 
   static int indexOfAsciiClass(byte[] bytes, int offset, int length, int[] ranges, int start) {
-    return indexOfAsciiClass(SPECIES, bytes, offset, length, ranges, start);
-  }
-
-  static int indexOfAsciiClass(
-      VectorSpecies<Byte> species, byte[] bytes, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsAsciiRanges(ranges, 4)) {
       return VectorScanProvider.UNSUPPORTED;
     }
     int position = Math.max(0, start);
-    int limit = position + species.loopBound(length - position);
-    for (; position < limit; position += species.length()) {
-      ByteVector values = ByteVector.fromArray(species, bytes, offset + position);
+    int limit = position + SPECIES.loopBound(length - position);
+    for (; position < limit; position += SPECIES.length()) {
+      ByteVector values = ByteVector.fromArray(SPECIES, bytes, offset + position);
       VectorMask<Byte> matches = matches(values, ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
@@ -48,16 +43,11 @@ final class ByteVectorScan {
   }
 
   static int indexOfByte(byte[] bytes, int offset, int length, byte target, int start) {
-    return indexOfByte(SPECIES, bytes, offset, length, target, start);
-  }
-
-  static int indexOfByte(
-      VectorSpecies<Byte> species, byte[] bytes, int offset, int length, byte target, int start) {
     int position = Math.max(0, start);
-    int limit = position + species.loopBound(length - position);
-    ByteVector targetVec = ByteVector.broadcast(species, target);
-    for (; position < limit; position += species.length()) {
-      ByteVector values = ByteVector.fromArray(species, bytes, offset + position);
+    int limit = position + SPECIES.loopBound(length - position);
+    ByteVector targetVec = ByteVector.broadcast(SPECIES, target);
+    for (; position < limit; position += SPECIES.length()) {
+      ByteVector values = ByteVector.fromArray(SPECIES, bytes, offset + position);
       VectorMask<Byte> matches = values.compare(EQ, targetVec);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
@@ -161,21 +151,6 @@ final class ByteVectorScan {
       byte low,
       byte high,
       int start) {
-    return indexOfIgnoreCase(
-        SPECIES, bytes, offset, length, prefix, prefixLen, anchorOffset, low, high, start);
-  }
-
-  public static int indexOfIgnoreCase(
-      VectorSpecies<Byte> species,
-      byte[] bytes,
-      int offset,
-      int length,
-      String prefix,
-      int prefixLen,
-      int anchorOffset,
-      byte low,
-      byte high,
-      int start) {
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
     }
@@ -199,7 +174,7 @@ final class ByteVectorScan {
       }
     }
 
-    int vectorLen = species.length();
+    int vectorLen = SPECIES.length();
     int limit = lastLoadStart(length, 0, vectorLen);
     if (pos > limit) {
       int limitScalar = lastMatchStart(length, prefixLen);
@@ -219,11 +194,11 @@ final class ByteVectorScan {
       return -1;
     }
 
-    ByteVector lowVec = ByteVector.broadcast(species, low);
-    ByteVector highVec = ByteVector.broadcast(species, high);
+    ByteVector lowVec = ByteVector.broadcast(SPECIES, low);
+    ByteVector highVec = ByteVector.broadcast(SPECIES, high);
 
     for (; pos <= limit; pos += vectorLen) {
-      ByteVector inputVec = ByteVector.fromArray(species, bytes, offset + pos);
+      ByteVector inputVec = ByteVector.fromArray(SPECIES, bytes, offset + pos);
       VectorMask<Byte> matchMask = inputVec.compare(EQ, lowVec).or(inputVec.compare(EQ, highVec));
 
       if (matchMask.anyTrue()) {

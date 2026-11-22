@@ -165,7 +165,7 @@ jobs:
         run: >
           mvn clean verify -pl safere
           -Pvector-tests
-          -Dtest=ByteScanTest,Utf8InputScannerTest,Utf8VectorPairTripleTest,VectorSpeciesSimulationTest,StringLiteralSearchTest,MultiLiteralTest
+          -Dtest=ByteScanTest,Utf8InputScannerTest,Utf8VectorPairTripleTest,VectorScanBoundaryTest,StringLiteralSearchTest,MultiLiteralTest,ShortScanEquivalenceTest,TeddyVectorScanTest
           -Dtest.parallelism=4
           --batch-mode --no-transfer-progress
 
@@ -272,7 +272,10 @@ jobs:
 
       - name: Run full SafeRE tests with Vector enabled
         run: >
-          mvn jacoco:prepare-agent surefire:test -pl safere
+          mvn jacoco:prepare-agent surefire:test
+          surefire:test@vector-width-64
+          surefire:test@vector-width-128
+          -pl safere
           -Pvector-tests
           -Dtest.parallelism=4
           --batch-mode --no-transfer-progress

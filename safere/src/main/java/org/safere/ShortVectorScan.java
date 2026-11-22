@@ -25,22 +25,18 @@ import jdk.incubator.vector.VectorSpecies;
  */
 final class ShortVectorScan {
   private static final VectorSpecies<Short> SPECIES = ShortVector.SPECIES_PREFERRED;
+  private static final VectorSpecies<Byte> BYTE_SPECIES = SPECIES.withLanes(byte.class);
 
   static int indexOfCharClass(char[] chars, int offset, int length, int[] ranges, int start) {
-    return indexOfCharClass(SPECIES, chars, offset, length, ranges, start);
-  }
-
-  static int indexOfCharClass(
-      VectorSpecies<Short> species, char[] chars, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 4)) {
       return VectorScanProvider.UNSUPPORTED;
     }
     int position = Math.max(0, start);
-    int vectorLen = species.length();
+    int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
 
     for (; position <= limit; position += vectorLen) {
-      ShortVector values = ShortVector.fromCharArray(species, chars, offset + position);
+      ShortVector values = ShortVector.fromCharArray(SPECIES, chars, offset + position);
       VectorMask<Short> matches = matches(values, ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
@@ -57,22 +53,16 @@ final class ShortVectorScan {
   }
 
   static int indexOfCharClassUtf16(byte[] bytes, int offset, int length, int[] ranges, int start) {
-    return indexOfCharClassUtf16(SPECIES, bytes, offset, length, ranges, start);
-  }
-
-  static int indexOfCharClassUtf16(
-      VectorSpecies<Short> species, byte[] bytes, int offset, int length, int[] ranges, int start) {
     if (!Swar.supportsBmpCodeUnitRanges(ranges, 4) || nativeOrder() == BIG_ENDIAN) {
       return VectorScanProvider.UNSUPPORTED;
     }
     int position = Math.max(0, start);
-    int vectorLen = species.length();
+    int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
-    VectorSpecies<Byte> byteSpecies = species.withLanes(byte.class);
 
     for (; position <= limit; position += vectorLen) {
       ShortVector values =
-          ByteVector.fromArray(byteSpecies, bytes, offset + (position << 1)).reinterpretAsShorts();
+          ByteVector.fromArray(BYTE_SPECIES, bytes, offset + (position << 1)).reinterpretAsShorts();
       VectorMask<Short> matches = matches(values, ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
@@ -92,16 +82,6 @@ final class ShortVectorScan {
   }
 
   static int indexOfIgnoreCase(char[] chars, int offset, int length, String prefix, int start) {
-    return indexOfIgnoreCase(SPECIES, chars, offset, length, prefix, start);
-  }
-
-  static int indexOfIgnoreCase(
-      VectorSpecies<Short> species,
-      char[] chars,
-      int offset,
-      int length,
-      String prefix,
-      int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
@@ -116,17 +96,17 @@ final class ShortVectorScan {
     }
 
     int pos = Math.max(0, start);
-    int vectorLen = species.length();
+    int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
 
     char first = prefix.charAt(0);
     short low = (short) toLowerCase(first);
     short high = (short) toUpperCase(first);
-    ShortVector lowVec = ShortVector.broadcast(species, low);
-    ShortVector highVec = ShortVector.broadcast(species, high);
+    ShortVector lowVec = ShortVector.broadcast(SPECIES, low);
+    ShortVector highVec = ShortVector.broadcast(SPECIES, high);
 
     for (; pos <= limit; pos += vectorLen) {
-      ShortVector inputVec = ShortVector.fromCharArray(species, chars, offset + pos);
+      ShortVector inputVec = ShortVector.fromCharArray(SPECIES, chars, offset + pos);
       VectorMask<Short> matchMask =
           inputVec
               .compare(VectorOperators.EQ, lowVec)
@@ -157,16 +137,6 @@ final class ShortVectorScan {
 
   static int indexOfIgnoreCaseUtf16(
       byte[] bytes, int offset, int length, String prefix, int start) {
-    return indexOfIgnoreCaseUtf16(SPECIES, bytes, offset, length, prefix, start);
-  }
-
-  static int indexOfIgnoreCaseUtf16(
-      VectorSpecies<Short> species,
-      byte[] bytes,
-      int offset,
-      int length,
-      String prefix,
-      int start) {
     int prefixLen = prefix.length();
     if (prefixLen == 0) {
       return Math.min(Math.max(0, start), length);
@@ -184,19 +154,18 @@ final class ShortVectorScan {
     }
 
     int pos = Math.max(0, start);
-    int vectorLen = species.length();
+    int vectorLen = SPECIES.length();
     int limit = length - vectorLen;
-    VectorSpecies<Byte> byteSpecies = species.withLanes(byte.class);
 
     char first = prefix.charAt(0);
     short low = (short) toLowerCase(first);
     short high = (short) toUpperCase(first);
-    ShortVector lowVec = ShortVector.broadcast(species, low);
-    ShortVector highVec = ShortVector.broadcast(species, high);
+    ShortVector lowVec = ShortVector.broadcast(SPECIES, low);
+    ShortVector highVec = ShortVector.broadcast(SPECIES, high);
 
     for (; pos <= limit; pos += vectorLen) {
       ShortVector inputVec =
-          ByteVector.fromArray(byteSpecies, bytes, offset + (pos << 1)).reinterpretAsShorts();
+          ByteVector.fromArray(BYTE_SPECIES, bytes, offset + (pos << 1)).reinterpretAsShorts();
       VectorMask<Short> matchMask =
           inputVec
               .compare(VectorOperators.EQ, lowVec)
