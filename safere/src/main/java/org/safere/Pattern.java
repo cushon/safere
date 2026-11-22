@@ -217,10 +217,13 @@ public final class Pattern implements Serializable {
    * the same thread, so warm DFA state caches and BitState/Nfa scratch buffers persist across the
    * common {@code pattern.matcher(t).find()} idiom.
    *
-   * <p>The cache is held via a {@link SoftReference} (a bootstrap-loaded JDK class) so that when
-   * SafeRE is loaded in a child {@link ClassLoader} and patterns are held in {@code static final}
-   * fields, the {@link ThreadLocal} entry value in long-lived threads does not strongly reference
-   * SafeRE classes and pin the child {@code ClassLoader}.
+   * <p>The first thread to use a pattern keeps its cache in {@code ownerCache}, a field on the
+   * pattern, so a pattern used by one thread never adds an entry to a {@code ThreadLocalMap}. Other
+   * threads keep theirs in {@code otherThreadCaches}. Either way the cache is held via a {@link
+   * SoftReference} (a bootstrap-loaded JDK class), so that when SafeRE is loaded in a child {@link
+   * ClassLoader} and patterns are held in {@code static final} fields, a {@link ThreadLocal} entry
+   * value in a long-lived thread does not strongly reference SafeRE classes and pin the child
+   * {@code ClassLoader}, and memory pressure can still reclaim the cache of a long-lived pattern.
    */
   static final class ThreadCache {
     // Use the ID rather than retaining the Thread and its other thread-local values.
