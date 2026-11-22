@@ -266,10 +266,11 @@ public final class Pattern implements Serializable {
 
   // Each Pattern caches its own DFA/BitState/Nfa state per thread, so warm state caches persist
   // across the common pattern.matcher(t).find() idiom. The first thread to use the pattern keeps
-  // its
-  // cache in ownerCache, so a pattern that is only used by one thread (including one compiled and
-  // discarded per operation) never adds an entry to a ThreadLocalMap. Other threads use
-  // otherThreadCaches, which is created when a second thread first needs a cache.
+  // its cache in ownerCache, so a pattern that is only used by one thread (including one compiled
+  // and discarded per operation) never adds an entry to a ThreadLocalMap. Other threads use
+  // otherThreadCaches, which is created when a second thread first needs a cache. The owner never
+  // changes: if the owner thread exits, its cache stays with the pattern (softly reachable) and
+  // every other thread keeps using otherThreadCaches.
 
   /** The {@link Thread#threadId} of the thread that owns {@link #ownerCache}, or 0 if unclaimed. */
   private transient volatile long ownerThreadId;

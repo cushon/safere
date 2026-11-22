@@ -708,7 +708,7 @@ class DfaTest {
     }
 
     /**
-     * A {@link Dfa} instance lives in a per-{@link Pattern} {@link ThreadLocal}, so an input that
+     * A {@link Dfa} instance lives in a per-{@link Pattern}, per-thread cache, so an input that
      * fills the cache faster than {@code MIN_PROGRESS_PER_CACHED_STATE} positions per state must
      * back off rather than permanently bricking the {@link Dfa} for later searches on the same
      * thread.

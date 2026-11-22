@@ -1035,6 +1035,9 @@ class PatternInternalTest {
                 Pattern.ThreadCache cache = pattern.getOrCreateThreadCache();
                 assertThat(pattern.getOrCreateThreadCache()).isSameAs(cache);
                 assertThat(cache.ownerThreadId).isEqualTo(Thread.currentThread().threadId());
+                // The cache is stored on the path this thread is supposed to use.
+                assertThat(ChildLoaderPatternHolder.threadCacheReference(pattern).get())
+                    .isSameAs(cache);
                 return cache;
               }));
         }
@@ -1046,7 +1049,9 @@ class PatternInternalTest {
           threadIds.add(cache.ownerThreadId);
         }
         assertThat(caches).doesNotHaveDuplicates();
-        assertThat(threadIds).contains(ownerThreadId(pattern));
+        assertThat(threadIds).containsOnlyOnce(ownerThreadId(pattern));
+        // Exactly one thread used the owner slot; the rest went through the ThreadLocal.
+        assertThat(otherThreadCaches(pattern)).isNotNull();
       } finally {
         executor.shutdownNow();
       }

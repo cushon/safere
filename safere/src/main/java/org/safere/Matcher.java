@@ -451,14 +451,14 @@ public final class Matcher implements MatchResult {
   private boolean replacementNeedsCaptures;
 
   /**
-   * Cached DFA references to avoid repeated ThreadLocal lookups in find-all loops. Populated on
-   * first use and reused for subsequent calls within this Matcher's lifetime.
+   * Cached DFA references to avoid repeated per-thread cache lookups in find-all loops. Populated
+   * on first use and reused for subsequent calls within this Matcher's lifetime.
    */
   private Dfa cachedForwardFirstMatchDfa;
 
   /**
    * The parent pattern's per-thread cache, fetched on first use so later lookups by this Matcher
-   * skip the {@link ThreadLocal} and {@link java.lang.ref.SoftReference} dereferences.
+   * skip the owner check, {@link ThreadLocal} and {@link java.lang.ref.SoftReference} dereferences.
    */
   private Pattern.ThreadCache threadCache;
 
