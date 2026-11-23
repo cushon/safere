@@ -1,0 +1,557 @@
+{
+  "schemaVersion": 2,
+  "configuration": {
+    "collection": {
+      "allocationWorkloadPrefixes": []
+    },
+    "investigation": {
+      "consumption": {
+        "FindBounds.digits.early.boolean": {
+          "mode": "BOOLEAN",
+          "group": 0
+        },
+        "FindBounds.digits.early.bounds": {
+          "mode": "BOUNDS",
+          "group": 0
+        },
+        "FindBounds.digits.early.mixed": {
+          "mode": "MIXED",
+          "group": 0
+        },
+        "FindBounds.digits.late.boolean": {
+          "mode": "BOOLEAN",
+          "group": 0
+        },
+        "FindBounds.digits.late.bounds": {
+          "mode": "BOUNDS",
+          "group": 0
+        },
+        "FindBounds.digits.miss": {
+          "mode": "BOOLEAN",
+          "group": 0
+        },
+        "FindBounds.digits.repeated": {
+          "mode": "REPEATED",
+          "group": 0
+        },
+        "FindBounds.digits.tiny": {
+          "mode": "BOOLEAN",
+          "group": 0
+        },
+        "FindBounds.nullable.early.boolean": {
+          "mode": "BOOLEAN",
+          "group": 0
+        },
+        "FindBounds.nullable.early.bounds": {
+          "mode": "BOUNDS",
+          "group": 0
+        },
+        "FindBounds.nullable.early.group": {
+          "mode": "GROUP",
+          "group": 1
+        },
+        "FindBounds.nullable.early.mixed": {
+          "mode": "MIXED",
+          "group": 0
+        },
+        "FindBounds.nullable.late": {
+          "mode": "BOOLEAN",
+          "group": 0
+        },
+        "FindBounds.nullable.miss": {
+          "mode": "BOOLEAN",
+          "group": 0
+        },
+        "FindBounds.nullable.repeated": {
+          "mode": "REPEATED",
+          "group": 0
+        },
+        "FindBounds.greedy.multibyte": {
+          "mode": "BOOLEAN",
+          "group": 0
+        },
+        "FindBounds.literal.control": {
+          "mode": "BOOLEAN",
+          "group": 0
+        }
+      }
+    }
+  },
+  "inputs": [
+    {
+      "id": "digitsEarly",
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx1234",
+        "unit": "x",
+        "suffix": "",
+        "length": 2000
+      },
+      "shared": true
+    },
+    {
+      "id": "digitsLate",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "x",
+        "suffix": "1234xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "length": 2000
+      },
+      "shared": true
+    },
+    {
+      "id": "digitsMiss",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "x1 ",
+        "length": 2000
+      },
+      "shared": true
+    },
+    {
+      "id": "tiny",
+      "recipe": {
+        "kind": "literal",
+        "text": "xxx1234"
+      },
+      "shared": true
+    },
+    {
+      "id": "nullableEarly",
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "aaaaaaaaaaaaaaaay",
+        "unit": "a",
+        "suffix": "",
+        "length": 1024
+      },
+      "shared": true
+    },
+    {
+      "id": "nullableLate",
+      "recipe": {
+        "kind": "suffixToLength",
+        "prefixUnit": "x",
+        "suffix": "aaaaaaaaaaaaaaaay",
+        "length": 1024
+      },
+      "shared": true
+    },
+    {
+      "id": "nullableMiss",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "ax",
+        "length": 1024
+      },
+      "shared": true
+    },
+    {
+      "id": "nullableRepeated",
+      "recipe": {
+        "kind": "repeatToLength",
+        "unit": "aay ",
+        "length": 1024
+      },
+      "shared": true
+    },
+    {
+      "id": "greedy",
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "Az1",
+        "unit": "é",
+        "suffix": "",
+        "length": 4096
+      },
+      "shared": true
+    },
+    {
+      "id": "literal",
+      "recipe": {
+        "kind": "surroundToLength",
+        "prefix": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxneedle",
+        "unit": "x",
+        "suffix": "",
+        "length": 2000
+      },
+      "shared": true
+    }
+  ],
+  "workloads": [
+    {
+      "id": "FindBounds.digits.early.boolean",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{3,}"
+      ],
+      "inputs": [
+        "digitsEarly"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.digits.early.bounds",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{3,}"
+      ],
+      "inputs": [
+        "digitsEarly"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.digits.early.mixed",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{3,}"
+      ],
+      "inputs": [
+        "digitsEarly"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.digits.late.boolean",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{3,}"
+      ],
+      "inputs": [
+        "digitsLate"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.digits.late.bounds",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{3,}"
+      ],
+      "inputs": [
+        "digitsLate"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.digits.miss",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{3,}"
+      ],
+      "inputs": [
+        "digitsMiss"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "id": "FindBounds.digits.repeated",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{3,}"
+      ],
+      "inputs": [
+        "digitsEarly"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.digits.tiny",
+      "operation": "find",
+      "patterns": [
+        "[0-9]{3,}"
+      ],
+      "inputs": [
+        "tiny"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.nullable.early.boolean",
+      "operation": "find",
+      "patterns": [
+        "((a?)*)y"
+      ],
+      "inputs": [
+        "nullableEarly"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.nullable.early.bounds",
+      "operation": "find",
+      "patterns": [
+        "((a?)*)y"
+      ],
+      "inputs": [
+        "nullableEarly"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.nullable.early.group",
+      "operation": "find",
+      "patterns": [
+        "((a?)*)y"
+      ],
+      "inputs": [
+        "nullableEarly"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.nullable.early.mixed",
+      "operation": "find",
+      "patterns": [
+        "((a?)*)y"
+      ],
+      "inputs": [
+        "nullableEarly"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.nullable.late",
+      "operation": "find",
+      "patterns": [
+        "((a?)*)y"
+      ],
+      "inputs": [
+        "nullableLate"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.nullable.miss",
+      "operation": "find",
+      "patterns": [
+        "((a?)*)y"
+      ],
+      "inputs": [
+        "nullableMiss"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "id": "FindBounds.nullable.repeated",
+      "operation": "find",
+      "patterns": [
+        "((a?)*)y"
+      ],
+      "inputs": [
+        "nullableRepeated"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.greedy.multibyte",
+      "operation": "find",
+      "patterns": [
+        "[A-Z][\\p{L}0-9]*[0-9]"
+      ],
+      "inputs": [
+        "greedy"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "id": "FindBounds.literal.control",
+      "operation": "find",
+      "patterns": [
+        "needle"
+      ],
+      "inputs": [
+        "literal"
+      ],
+      "resultConsumption": "boolean",
+      "measurement": {
+        "mode": "averageTime",
+        "timingUnit": "nanoseconds",
+        "constraints": [
+          "prematerializedInput"
+        ]
+      },
+      "expected": {
+        "type": "boolean",
+        "value": true
+      }
+    }
+  ]
+}

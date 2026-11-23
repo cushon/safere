@@ -19,6 +19,14 @@ final class StringRegionInputScanner implements InputScanner, CharSequence {
     this.length = end - start;
   }
 
+  String text() {
+    return text;
+  }
+
+  int offset() {
+    return base;
+  }
+
   @Override
   public char charAt(int index) {
     return text.charAt(base + Objects.checkIndex(index, length));

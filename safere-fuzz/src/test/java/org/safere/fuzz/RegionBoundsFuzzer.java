@@ -245,29 +245,37 @@ public final class RegionBoundsFuzzer {
     compareMixedAssertionModel(data);
     compareGeneratedAssertionComposition(data);
 
-    String regex = data.consumeString(256);
     int flags = FuzzSupport.consumeFlags(data);
-    String input = data.consumeString(2048);
-    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
-    if (pattern == null) {
-      return;
-    }
-
-    FuzzSupport.MatcherPair matcher = pattern.matcher(input);
+    SemanticDomain.Sample sample = SemanticDomain.generate(data, flags);
+    String regex = sample.regex();
+    String input = sample.input(data);
     int[] region = FuzzSupport.consumeRegion(data, input);
-    matcher.region(region[0], region[1]);
-    matcher.useAnchoringBounds(data.consumeBoolean());
-    matcher.useTransparentBounds(data.consumeBoolean());
+    compareRegion(
+        regex, flags, input, region[0], region[1], data.consumeBoolean(), data.consumeBoolean());
+  }
+
+  static void compareRegion(
+      String regex,
+      int flags,
+      String input,
+      int start,
+      int end,
+      boolean anchoring,
+      boolean transparent) {
+    FuzzSupport.MatcherPair matcher = FuzzSupport.compileRequired(regex, flags).matcher(input);
+    matcher.region(start, end);
+    matcher.useAnchoringBounds(anchoring);
+    matcher.useTransparentBounds(transparent);
     matcher.regionStart();
     matcher.regionEnd();
     matcher.hasAnchoringBounds();
     matcher.hasTransparentBounds();
     matcher.find();
     matcher.reset();
-    matcher.region(region[0], region[1]);
+    matcher.region(start, end);
     matcher.matches();
     matcher.reset();
-    matcher.region(region[0], region[1]);
+    matcher.region(start, end);
     matcher.lookingAt();
   }
 

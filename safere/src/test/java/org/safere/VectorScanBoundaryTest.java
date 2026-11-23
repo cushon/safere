@@ -5,7 +5,6 @@
 
 package org.safere;
 
-import static java.nio.charset.StandardCharsets.UTF_16LE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -13,9 +12,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import org.junit.jupiter.api.Test;
 
 /**
- * Exhaustive length/offset/tail boundary tests for {@link ByteVectorScan} and {@link
- * ShortVectorScan}. Multiple SIMD widths are exercised by running the test JVM under {@code
- * -XX:MaxVectorSize} (see the {@code vector-tests} Maven profile).
+ * Exhaustive length/offset/tail boundary tests for {@link ByteVectorScan}. Multiple SIMD widths are
+ * exercised by running the test JVM under {@code -XX:MaxVectorSize} (see the {@code vector-tests}
+ * Maven profile).
  */
 @DisabledForCrosscheck("implementation test invokes package-private Vector API kernels")
 class VectorScanBoundaryTest {
@@ -147,70 +146,6 @@ class VectorScanBoundaryTest {
                   absent, 0, absent.length, prefix, prefixLen, 0, low, high, 0))
           .as("IgnoreCase absent for pad %d", pad)
           .isEqualTo(-1);
-    }
-  }
-
-  @Test
-  void charClassMatchingAcrossLengthsAndStarts() {
-    assumeTrue(VECTOR_AVAILABLE, "Vector API not available on module path");
-    int[] ranges = {'0', '9', 'A', 'Z'};
-    for (int len = 0; len <= 128; len++) {
-      String absent = "a".repeat(len);
-      char[] chars = absent.toCharArray();
-      byte[] utf16 = absent.getBytes(UTF_16LE);
-      for (int start = 0; start <= len; start++) {
-        assertThat(ShortVectorScan.indexOfCharClass(chars, 0, len, ranges, start))
-            .as("Short char[] absent for len %d, start %d", len, start)
-            .isEqualTo(-1);
-        assertThat(ShortVectorScan.indexOfCharClassUtf16(utf16, 0, len, ranges, start))
-            .as("Short UTF-16 absent for len %d, start %d", len, start)
-            .isEqualTo(-1);
-      }
-
-      if (len > 0) {
-        char[] matchEnd = chars.clone();
-        matchEnd[len - 1] = '9';
-        byte[] matchEndUtf16 = new String(matchEnd).getBytes(UTF_16LE);
-        assertThat(ShortVectorScan.indexOfCharClass(matchEnd, 0, len, ranges, 0))
-            .as("Short char[] end match for len %d", len)
-            .isEqualTo(len - 1);
-        assertThat(ShortVectorScan.indexOfCharClassUtf16(matchEndUtf16, 0, len, ranges, 0))
-            .as("Short UTF-16 end match for len %d", len)
-            .isEqualTo(len - 1);
-      }
-    }
-  }
-
-  @Test
-  void shortIgnoreCaseSingleCharMatchingAcrossLengths() {
-    assumeTrue(VECTOR_AVAILABLE, "Vector API not available on module path");
-    for (int len = 0; len <= 128; len++) {
-      String absent = "a".repeat(len);
-      char[] chars = absent.toCharArray();
-      byte[] utf16 = absent.getBytes(UTF_16LE);
-      assertThat(ShortVectorScan.indexOfIgnoreCase(chars, 0, len, "z", 0))
-          .as("Short ignore-case absent char[] for len %d", len)
-          .isEqualTo(-1);
-      assertThat(ShortVectorScan.indexOfIgnoreCaseUtf16(utf16, 0, len, "z", 0))
-          .as("Short ignore-case absent UTF-16 for len %d", len)
-          .isEqualTo(-1);
-
-      if (len > 0) {
-        char[] lowerEnd = chars.clone();
-        lowerEnd[len - 1] = 'z';
-        byte[] lowerEndUtf16 = new String(lowerEnd).getBytes(UTF_16LE);
-        assertThat(ShortVectorScan.indexOfIgnoreCase(lowerEnd, 0, len, "Z", 0)).isEqualTo(len - 1);
-        assertThat(ShortVectorScan.indexOfIgnoreCaseUtf16(lowerEndUtf16, 0, len, "Z", 0))
-            .isEqualTo(len - 1);
-
-        char[] upperMid = chars.clone();
-        int mid = len / 2;
-        upperMid[mid] = 'Z';
-        byte[] upperMidUtf16 = new String(upperMid).getBytes(UTF_16LE);
-        assertThat(ShortVectorScan.indexOfIgnoreCase(upperMid, 0, len, "z", 0)).isEqualTo(mid);
-        assertThat(ShortVectorScan.indexOfIgnoreCaseUtf16(upperMidUtf16, 0, len, "z", 0))
-            .isEqualTo(mid);
-      }
     }
   }
 }

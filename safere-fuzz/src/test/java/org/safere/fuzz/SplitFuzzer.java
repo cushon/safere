@@ -86,6 +86,28 @@ public final class SplitFuzzer {
   }
 
   @FuzzTest(maxDuration = "30s")
+  void nullableDelimiterSplits(FuzzedDataProvider data) {
+    String letter = data.pickValue(List.of("a", "b", "é", "😀"));
+    String quantifier = data.pickValue(List.of("*", "*?", "+", "{1,4}"));
+    String delimiter = "((" + letter + "?)" + quantifier + ")y";
+    // The previous-match assertion affects split dispatch even if its branch cannot match.
+    String unreachable = "\\G[" + letter + "&&[^" + letter + "]]";
+    String regex =
+        data.consumeBoolean() ? delimiter + "|" + unreachable : unreachable + "|" + delimiter;
+    String prefix = data.pickValue(List.of("x", "", "🦊"));
+    String separator = data.pickValue(List.of("z", "!", "é"));
+    String match = letter.repeat(data.consumeInt(0, 4)) + "y";
+    String input = prefix + (match + separator).repeat(data.consumeInt(1, 5)) + match;
+    int limit = data.pickValue(SPLIT_LIMITS);
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, 0);
+    if (pattern == null) {
+      return;
+    }
+    pattern.split(input, limit);
+    pattern.splitWithDelimiters(input, limit);
+  }
+
+  @FuzzTest(maxDuration = "30s")
   void literalPrefixSplits(FuzzedDataProvider data) {
     // Refs #1050. Generate short matching prefixes as well as complete and longer inputs.
     String literal = data.pickValue(List.of("a", "Ab", "a😀b")).repeat(data.consumeInt(1, 16));
@@ -116,15 +138,16 @@ public final class SplitFuzzer {
   }
 
   public static void fuzzerTestOneInput(FuzzedDataProvider data) {
-    String regex = data.consumeString(256);
     int flags = FuzzSupport.consumeFlags(data);
-    String input = data.consumeString(2048);
+    SemanticDomain.Sample sample = SemanticDomain.generate(data, flags);
+    String regex = sample.regex();
+    String input = sample.input(data);
     int limit = data.consumeInt(-16, 16);
-    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
-    if (pattern == null) {
-      return;
-    }
+    compareSplits(regex, flags, input, limit);
+  }
 
+  static void compareSplits(String regex, int flags, String input, int limit) {
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileRequired(regex, flags);
     pattern.split(input);
     pattern.split(input, limit);
     pattern.splitWithDelimiters(input);
@@ -133,6 +156,21 @@ public final class SplitFuzzer {
       pattern.split(input, largeLimit);
       pattern.splitWithDelimiters(input, largeLimit);
     }
+  }
+
+  @Test
+  void previousMatchBoundaryDelimiters() {
+    // Refs #1209. These delimiters came from the old compile findings for \G.
+    String adjacent = "\\G\\x00s.s";
+    String input = "\0sxs\0sys!rest";
+    int flags = Pattern.DOTALL | Pattern.UNICODE_CASE;
+    compareSplits(adjacent, flags, input, -1);
+    assertThat(Pattern.compile(adjacent, flags).split(input, -1)).containsExactly("", "", "!rest");
+
+    String quantified = ".Gaa>\\G*gsZ\\x00";
+    String infixInput = "xGaa>gsZ\0!rest";
+    compareSplits(quantified, 0, infixInput, -1);
+    assertThat(Pattern.compile(quantified).split(infixInput, -1)).containsExactly("", "!rest");
   }
 
   @Test

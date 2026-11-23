@@ -6,68 +6,27 @@
 package org.safere.fuzz;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 final class FuzzSupportTest {
-  @ParameterizedTest
-  @MethodSource("unsupportedPatterns")
-  void unsupportedSyntaxRemainsAnExploratoryFinding(String regex, int flags) {
-    // These documented SafeRE dialect boundaries are accepted syntax in the JDK 26 Pattern API.
-    assertThatThrownBy(() -> org.safere.Pattern.compile(regex, flags))
-        .isInstanceOf(PatternSyntaxException.class);
-    assertThatNoException().isThrownBy(() -> Pattern.compile(regex, flags));
-    assertThatThrownBy(() -> FuzzSupport.compileCompatibleOrSkip(regex, flags))
+  @Test
+  void unrestrictedCompileExplorationStillReportsDialectDifferences() {
+    assertThatThrownBy(() -> FuzzSupport.compileCompatibleOrSkip("(a)\\1", 0))
         .isInstanceOf(AssertionError.class)
         .hasMessageContaining("compile divergence");
   }
 
-  private static Stream<Arguments> unsupportedPatterns() {
-    return Stream.of(
-        Arguments.of("(?=a)a", 0),
-        Arguments.of("(?!b)a", 0),
-        Arguments.of("(?<=a)b", 0),
-        Arguments.of("a(?<!b)", 0),
-        Arguments.of("(a)\\1", 0),
-        // Fixed probes formerly run by EscapeSyntaxFuzzer; the JDK accepts these as references.
-        Arguments.of("\\400", 0),
-        Arguments.of("\\777", 0),
-        Arguments.of("\\123", 0),
-        Arguments.of("\\12*", 0),
-        Arguments.of("\\2222*", 0),
-        Arguments.of("3*\\2222*", 0),
-        Arguments.of("(a)\\12", 0),
-        Arguments.of("(?<item>a)\\k<item>", 0),
-        Arguments.of("a++", 0),
-        Arguments.of("a*+", 0),
-        Arguments.of("a?+", 0),
-        Arguments.of("a{1,2}+", 0),
-        Arguments.of("a+\n+", Pattern.COMMENTS),
-        Arguments.of("a+ #comment\n +", Pattern.COMMENTS),
-        Arguments.of("(?x)a+ #comment\n +", 0),
-        Arguments.of("(?x:a+ #comment\n +)", 0),
-        Arguments.of("(?>a+)", 0));
-  }
-
-  @ParameterizedTest
-  @ValueSource(strings = {"(?=a)", "\\1", "a++", "(?>a)", "\\G"})
-  void syntaxLikeLiteralTextIsStillCompared(String literal) {
-    assertLiteralMatch(Pattern.quote(literal), 0, literal);
-    assertLiteralMatch(literal, Pattern.LITERAL, literal);
-  }
-
-  private static void assertLiteralMatch(String regex, int flags, String input) {
-    var compiled = FuzzSupport.compileCompatibleOrSkip(regex, flags);
-    assertThat(compiled).isNotNull();
-    assertThat(compiled.matcher(input).matches()).isTrue();
+  @Test
+  void rejectionByBothEnginesFailsWhenAcceptanceIsRequired() {
+    assertThatThrownBy(() -> FuzzSupport.compileRequired("[", 0))
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining("expected acceptance");
   }
 
   @ParameterizedTest
@@ -77,5 +36,23 @@ final class FuzzSupportTest {
         .isInstanceOf(PatternSyntaxException.class);
     assertThatThrownBy(() -> Pattern.compile(regex)).isInstanceOf(PatternSyntaxException.class);
     assertThat(FuzzSupport.compileCompatibleOrSkip(regex, 0)).isNull();
+  }
+
+  @Test
+  void appendReplacementReportsMismatchedRejections() {
+    String input = "ax";
+    String regex = "(?<other>x)";
+    var safeRe = org.safere.Pattern.compile(regex).matcher(input);
+    // Give the JDK matcher the named group so it reaches the out-of-range reference.
+    var jdk = Pattern.compile("(?<part>x)").matcher(input);
+    assertThat(safeRe.find()).isTrue();
+    assertThat(jdk.find()).isTrue();
+    var pair = new FuzzSupport.MatcherPair(regex, 0, input, safeRe, jdk);
+
+    assertThatThrownBy(() -> pair.appendReplacement(new StringBuffer(), "lit${part}$9"))
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining("appendReplacement exception category")
+        .hasMessageContaining("IllegalArgumentException")
+        .hasMessageContaining("IndexOutOfBoundsException");
   }
 }

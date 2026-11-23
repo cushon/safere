@@ -401,6 +401,20 @@ class PatternTest {
       assertThat(parts).containsExactly("a", "b", "c");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"\\G[a&&[^a]]|((a?)*)y", "((a?)*)y|\\G[ab&&[^ab]]"})
+    void splitUsesNullableDelimiterBoundsAfterAnUnreachablePreviousMatchBranch(String regex) {
+      Pattern pattern = Pattern.compile(regex);
+      String input = "xaayzaaay";
+
+      assertThat(pattern.split(input)).containsExactly("x", "z");
+      assertThat(pattern.split(input, -1)).containsExactly("x", "z", "");
+      assertThat(pattern.split(input, 2)).containsExactly("x", "zaaay");
+      assertThat(pattern.splitWithDelimiters(input, -1))
+          .containsExactly("x", "aay", "z", "aaay", "");
+      assertThat(pattern.splitAsStream(input)).containsExactly("x", "z");
+    }
+
     @Test
     @DisabledForCrosscheck("GB3 forbids boundaries inside CRLF; the JDK invents a break")
     @DisplayName("split cannot use a delimiter requiring a boundary inside CRLF")

@@ -217,10 +217,13 @@ public final class Pattern implements Serializable {
    * the same thread, so warm DFA state caches and BitState/Nfa scratch buffers persist across the
    * common {@code pattern.matcher(t).find()} idiom.
    *
-   * <p>The cache is held via a {@link SoftReference} (a bootstrap-loaded JDK class) so that when
-   * SafeRE is loaded in a child {@link ClassLoader} and patterns are held in {@code static final}
-   * fields, the {@link ThreadLocal} entry value in long-lived threads does not strongly reference
-   * SafeRE classes and pin the child {@code ClassLoader}.
+   * <p>The first thread to use a pattern keeps its cache in {@code ownerCache}, a field on the
+   * pattern, so a pattern used by one thread never adds an entry to a {@code ThreadLocalMap}. Other
+   * threads keep theirs in {@code otherThreadCaches}. Either way the cache is held via a {@link
+   * SoftReference} (a bootstrap-loaded JDK class), so that when SafeRE is loaded in a child {@link
+   * ClassLoader} and patterns are held in {@code static final} fields, a {@link ThreadLocal} entry
+   * value in a long-lived thread does not strongly reference SafeRE classes and pin the child
+   * {@code ClassLoader}, and memory pressure can still reclaim the cache of a long-lived pattern.
    */
   static final class ThreadCache {
     // Use the ID rather than retaining the Thread and its other thread-local values.
@@ -228,14 +231,60 @@ public final class Pattern implements Serializable {
     BitState bitState;
     Nfa nfa;
     Dfa forwardFirstMatchDfa;
+    Dfa forwardExistenceDfa;
     Dfa forwardLongestMatchDfa;
     Dfa reverseDfa;
+    StartRegisterSearch startRegister;
+    boolean startRegisterLookedUp;
   }
 
-  // Per-Pattern ThreadLocal is intentional: each Pattern caches its own DFA/BitState/Nfa state per
-  // thread, so warm state caches persist across the common pattern.matcher(t).find() idiom.
+  /**
+   * Returns this thread's start-register search, or null when the pattern is not eligible. The
+   * search stands in for the reverse DFA of a capture-free DFA sandwich, so it is only built where
+   * that sandwich would give authoritative group-zero bounds.
+   */
+  StartRegisterSearch startRegisterSearch(ThreadCache cache) {
+    if (!cache.startRegisterLookedUp) {
+      cache.startRegisterLookedUp = true;
+      if (enginePathOptions.startRegister()
+          && enginePathOptions.dfa()
+          && enginePathOptions.reverseDfa()
+          && prog.numCaptures() <= 1
+          && dfaGroupZeroReliable()
+          && forwardDfaSupported()
+          && canUseReverseDfa()
+          // Inner-literal narrowing of the forward DFA is worth more than the reverse pass.
+          && innerLiteralSearch == null) {
+        cache.startRegister =
+            StartRegisterSearch.create(
+                flatDfaProg(),
+                dfaStartAcceleration() ? stringStartAccelerator : null,
+                dfaStartAcceleration() ? utf8StartAccelerator : null);
+      }
+    }
+    return cache.startRegister;
+  }
+
+  // Each Pattern caches its own DFA/BitState/Nfa state per thread, so warm state caches persist
+  // across the common pattern.matcher(t).find() idiom. The first thread to use the pattern keeps
+  // its cache in ownerCache, so a pattern that is only used by one thread (including one compiled
+  // and discarded per operation) never adds an entry to a ThreadLocalMap. Other threads use
+  // otherThreadCaches, which is created when a second thread first needs a cache. The owner never
+  // changes: if the owner thread exits, its cache stays with the pattern (softly reachable) and
+  // every other thread keeps using otherThreadCaches.
+
+  /** The {@link Thread#threadId} of the thread that owns {@link #ownerCache}, or 0 if unclaimed. */
+  private transient volatile long ownerThreadId;
+
+  /** Only accessed by the thread whose ID is {@link #ownerThreadId}. */
+  private transient SoftReference<ThreadCache> ownerCache;
+
+  // Per-Pattern ThreadLocal is intentional, see above.
   @SuppressWarnings("ThreadLocalUsage")
-  private final transient ThreadLocal<SoftReference<ThreadCache>> threadCache = new ThreadLocal<>();
+  private transient volatile ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches;
+
+  // Cache initialization must not compete with callers holding the Pattern monitor.
+  private final transient Object threadCacheLock = new Object();
 
   /** Holder for OnePass analysis results. */
   private record OnePassAnalysis(
@@ -363,7 +412,10 @@ public final class Pattern implements Serializable {
     // prepared program. Only literal runners defer this work; their source has no grapheme or
     // loop-register instructions, and therefore already establishes support.
     Prog forwardProgram = flatDfaProg != null ? flatDfaProg : flatProg != null ? flatProg : prog;
-    this.forwardDfaSupported = enginePathOptions.dfa() && supportsForwardDfa(forwardProgram);
+    this.forwardDfaSupported =
+        enginePathOptions.dfa()
+            && !prog.hasPreviousMatchEnd()
+            && supportsForwardDfa(forwardProgram);
     RejectPrefilter baseFindReject =
         this.innerLiteralSearch == null || !this.forwardDfaSupported ? this.rejectPrefilter : null;
     RejectPrefilter utf8FindReject =
@@ -636,12 +688,13 @@ public final class Pattern implements Serializable {
    * Returns whether the matcher-free existence searches ({@link #find(Utf8Input)} and {@link
    * #asPredicate()}) can answer for this pattern.
    *
-   * <p>Those paths use cheap checks followed by the forward first-match DFA or an end-anchored
-   * reverse search, with exact verification and fallback. Patterns with grapheme semantics or loop
-   * registers use a matcher instead, so they get its full strategy sequence.
+   * <p>Those paths use cheap checks followed by a forward existence DFA or an end-anchored reverse
+   * search, with exact verification and fallback. The flattened forward DFA may prove existence
+   * even when the original program has loop registers. Programs unsupported by the forward DFA
+   * retain the matcher's strategy sequence.
    */
   private boolean canFindWithoutMatcher() {
-    return enginePathOptions.dfa() && supportsForwardDfa(prog);
+    return forwardDfaSupported;
   }
 
   boolean findWithDiagnostics(Utf8InputScanner scanner) {
@@ -736,8 +789,13 @@ public final class Pattern implements Serializable {
     // The forward DFA checks a stripped end anchor itself, as the matcher's DFA pass relies on, so
     // end-anchored programs that the reverse probe could not settle avoid the NFA here too.
     Dfa.SearchResult result =
-        forwardFirstMatchDfa()
-            .doSearch(scanner, searchStart, prog.anchorStart(), false, startPositionPreselected);
+        forwardExistenceDfa()
+            .searchExists(
+                scanner,
+                searchStart,
+                prog.anchorStart(),
+                startPositionPreselected,
+                AdaptiveBackoff.NEUTRAL);
     if (result != null) {
       return result.matched();
     }
@@ -839,8 +897,13 @@ public final class Pattern implements Serializable {
     diagnostics.participate(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
     diagnostics.incrementForwardDfaSearchCount();
     Dfa.SearchResult result =
-        forwardFirstMatchDfa()
-            .doSearch(scanner, searchStart, prog.anchorStart(), false, startPositionPreselected);
+        forwardExistenceDfa()
+            .searchExists(
+                scanner,
+                searchStart,
+                prog.anchorStart(),
+                startPositionPreselected,
+                AdaptiveBackoff.NEUTRAL);
     if (result != null) {
       diagnostics.boundary(MatchStrategy.DFA);
       return result.matched();
@@ -1433,8 +1496,13 @@ public final class Pattern implements Serializable {
     // The forward DFA checks a stripped end anchor itself, as the matcher's DFA pass relies on, so
     // end-anchored programs that the reverse probe could not settle avoid the NFA here too.
     Dfa.SearchResult result =
-        forwardFirstMatchDfa()
-            .doSearch(scanner, searchStart, prog.anchorStart(), false, startPositionPreselected);
+        forwardExistenceDfa()
+            .searchExists(
+                scanner,
+                searchStart,
+                prog.anchorStart(),
+                startPositionPreselected,
+                AdaptiveBackoff.NEUTRAL);
     if (result != null) {
       return result.matched();
     }
@@ -1593,22 +1661,64 @@ public final class Pattern implements Serializable {
   }
 
   private ThreadCache existingThreadCache() {
-    SoftReference<ThreadCache> ref = threadCache.get();
+    SoftReference<ThreadCache> ref;
+    if (ownerThreadId == Thread.currentThread().threadId()) {
+      ref = ownerCache;
+    } else {
+      ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches;
+      ref = caches != null ? caches.get() : null;
+    }
     return ref != null ? ref.get() : null;
   }
 
   /**
    * Returns the current thread's cache, creating it if needed. A {@link Matcher} fetches this once
-   * and passes it to the cache accessors, so each lookup does not repeat the {@link ThreadLocal}
-   * and {@link SoftReference} dereferences.
+   * and passes it to the cache accessors, so each lookup does not repeat the thread check and
+   * {@link SoftReference} dereference.
    */
   ThreadCache getOrCreateThreadCache() {
-    ThreadCache cache = existingThreadCache();
+    long threadId = Thread.currentThread().threadId();
+    long owner = ownerThreadId;
+    if (owner == 0) {
+      synchronized (threadCacheLock) {
+        owner = ownerThreadId;
+        if (owner == 0) {
+          owner = threadId;
+          ownerThreadId = owner;
+        }
+      }
+    }
+    if (owner == threadId) {
+      SoftReference<ThreadCache> ref = ownerCache;
+      ThreadCache cache = ref != null ? ref.get() : null;
+      if (cache == null) {
+        cache = new ThreadCache();
+        ownerCache = new SoftReference<>(cache);
+      }
+      return cache;
+    }
+    ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches();
+    SoftReference<ThreadCache> ref = caches.get();
+    ThreadCache cache = ref != null ? ref.get() : null;
     if (cache == null) {
       cache = new ThreadCache();
-      threadCache.set(new SoftReference<>(cache));
+      caches.set(new SoftReference<>(cache));
     }
     return cache;
+  }
+
+  private ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches() {
+    ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches;
+    if (caches == null) {
+      synchronized (threadCacheLock) {
+        caches = otherThreadCaches;
+        if (caches == null) {
+          caches = new ThreadLocal<>();
+          otherThreadCaches = caches;
+        }
+      }
+    }
+    return caches;
   }
 
   /** Returns the thread-local cached BitState, or null if none has been cached yet. */
@@ -1718,6 +1828,25 @@ public final class Pattern implements Serializable {
         && !p.hasGraphemeSemantics()
         && !p.hasPreviousMatchEnd()
         && p.numLoopRegs() == 0;
+  }
+
+  Dfa forwardExistenceDfa() {
+    ThreadCache cache = getOrCreateThreadCache();
+    Dfa dfa = cache.forwardExistenceDfa;
+    if (dfa == null) {
+      dfa =
+          new Dfa(
+              flatDfaProg(),
+              MAX_DFA_STATES,
+              forwardDfaSetup(),
+              false,
+              dfaStartAcceleration() ? utf8StartAccelerator : null,
+              dfaStartAcceleration() ? stringStartAccelerator : null,
+              innerLiteralSearch,
+              true);
+      cache.forwardExistenceDfa = dfa;
+    }
+    return dfa;
   }
 
   Dfa forwardFirstMatchDfa() {

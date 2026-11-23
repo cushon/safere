@@ -142,6 +142,53 @@ class LiteralAlternationTest {
   }
 
   @Test
+  void manyInitialsInRegionsPreserveBoundsLeftmostMatchAndAlternativePriority() {
+    String outsidePrefix = "backtrack!";
+    for (String regex :
+        List.of(
+            "backtrack|north|south|east|west|back",
+            "back|north|south|east|west|backtrack",
+            "backtrack|north|south|east|west")) {
+      Pattern pattern = Pattern.compile(regex);
+      assertThat(pattern.preparedMatchRunner(false))
+          .isInstanceOf(Matcher.LiteralAlternationPreparedRunner.class);
+      java.util.regex.Pattern jdkPattern = java.util.regex.Pattern.compile(regex);
+      // Cover sparse Latin-1 and UTF-16 input, immediate density, and density after several hops.
+      for (String filler : List.of("x", "日", "n", "nxx")) {
+        for (int offset : new int[] {255, 256, 4_096}) {
+          String prefix = outsidePrefix + filler.repeat(offset);
+          String text = prefix + "backtrack north!";
+          int candidate = prefix.length();
+          for (int end : new int[] {candidate, candidate + 4, candidate + 9, text.length() - 1}) {
+            compareFinds(
+                pattern.matcher(text).region(outsidePrefix.length(), end),
+                jdkPattern.matcher(text).region(outsidePrefix.length(), end));
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  void regionSkipsPreserveMatchesAcrossWindowEdgesAndAfterFalseStarts() {
+    String regex = "backtrack|north|south|east|west|back";
+    Pattern pattern = Pattern.compile(regex);
+    java.util.regex.Pattern jdkPattern = java.util.regex.Pattern.compile(regex);
+    String outside = "north!";
+    for (String falseStarts : List.of("x".repeat(4_096) + "b!", "nxx".repeat(3_000))) {
+      for (int gap : new int[] {253, 254, 255, 8_192}) {
+        String prefix = outside + falseStarts + "x".repeat(gap);
+        String text = prefix + "backtrack west!";
+        for (int end : new int[] {prefix.length() + 4, text.length() - 1}) {
+          compareFinds(
+              pattern.matcher(text).region(outside.length(), end),
+              jdkPattern.matcher(text).region(outside.length(), end));
+        }
+      }
+    }
+  }
+
+  @Test
   void growingWindowBoundariesPreserveLeftmostMatchAndAlternativePriority() {
     for (String regex :
         List.of(

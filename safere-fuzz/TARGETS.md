@@ -2,7 +2,7 @@
 
 [targets.json](targets.json) is the authoritative inventory. Every source target
 must be listed; adding a class does not enroll it in OSS-Fuzz. The validator
-rejects broad differential enrollment, missing entry points, invalid seed paths,
+rejects exploratory differential enrollment, missing entry points, invalid seed paths,
 and duplicate names. The local runner defaults to the enrolled selection. The
 [assertion and exclusion audit](TARGET_AUDIT.md) records method coverage, shared
 oracle limitations and exhaustive-suite exclusions.
@@ -11,7 +11,8 @@ oracle limitations and exhaustive-suite exclusions.
 
 | Category | Oracle and failure policy | Continuous enrollment |
 | --- | --- | --- |
-| Broad differential | Explore a wide input space against `java.util.regex`. Intentional differences remain findings for review. | Separate exploratory workflow; no automatic issue filing. |
+| Broad differential | Compare matching and API behavior against `java.util.regex` using supported syntax, or explore specific parser and dialect edges. Remaining differences are findings for review. | Separate exploratory workflow. |
+| Unrestricted acceptance | Compare compilation of arbitrary pattern text and flags against `java.util.regex`. Expected dialect differences can still appear in these reports. | Opt-in `--suite acceptance`; outside scheduled semantic discovery. |
 | Strict differential | Require JDK agreement within explicitly generated, reviewed domains, without semantic waivers. | Explicit OSS-Fuzz enrollment after validation. |
 | Property/model | Check engine/representation relationships and explicit SafeRE expectations, including intentional JDK differences. | Explicit OSS-Fuzz enrollment after validation. |
 | Robustness | Check rejection, crashes, stack safety, bounds, progress and instrumented work limits without requiring JDK agreement. | Ordinary targets eligible; instrumented targets require a separate build. |
@@ -60,20 +61,40 @@ bounds for other engines or repeated-find workloads.
 
 ## Existing targets retained for exploration
 
-These targets keep their input decoding and saved seeds. Mixed checks remain
-callable there to preserve seed meaning; the extracted property entry points
-reuse the same assertions without invoking the broad differential paths.
+The general-purpose branches of the match, find, replacement, split, region and
+Unicode targets generate patterns from `SemanticDomain`. The grammar supplies
+literal-mode text, captures, assertions including `\G`, and grouped repeats.
+It also supplies witness-based subjects alongside arbitrary and Unicode-heavy
+subjects. Both engines must compile those patterns. The focused branches still
+exercise their own domains.
+
+`CaptureSemanticsFuzzer` tracks whether each immediate operand can consume.
+A wrapped zero-count repetition is zero-width even when its child can consume.
+A directly quantified consuming operand takes an ordinary modifier. A counted
+repeat following a quantifier has a separate implicit empty operand.
+
+`UnsupportedSyntaxTest` enumerates lookaround, atomic groups, backreferences,
+consuming possessive quantifiers and `\C` in composed patterns. It checks the
+`PatternSyntaxException` diagnostic and runs quoted, literal-mode and
+comment-hidden controls with ASCII, BMP and supplementary prefixes.
+
+`RobustnessFuzzer` retains arbitrary pattern text without comparing JDK outcomes.
+
+`CompileFuzzer` retains its decoding and corpus. Its opt-in acceptance report
+includes expected SafeRE/JDK dialect differences. An individual unsupported
+construct reaches that report only through unrestricted exploration. There is
+no pattern-based waiver in the comparison code.
 
 | Target | Generated surface / oracle | Disposition |
 | --- | --- | --- |
-| `CompileFuzzer` | Arbitrary syntax and flags; JDK compile acceptance | Broad |
+| `CompileFuzzer` | Arbitrary syntax and flags; JDK compile acceptance | Opt-in acceptance |
 | `ParserCompatibilityFuzzer` | Grammar-biased syntax and membership | Broad |
 | `CharacterClassExpressionFuzzer` | Class/intersection grammar and membership, plus an explicit range-trivia model against unspaced references | Mixed, conservatively broad |
 | `EscapeSyntaxFuzzer` | Escape syntax and membership | Broad |
 | `DialectSyntaxFuzzer` | Dialect boundaries, plus explicit SafeRE extension checks | Mixed, conservatively broad |
 | `ParserStackSafetyFuzzer` | Nested syntax plus JDK matching/captures | Broad; SafeRE-only nesting also exercised by `RobustnessFuzzer` |
 | `CaptureSemanticsFuzzer` | Quantified captures and replacements | Broad; known residue remains a finding |
-| `MatchFuzzer` | Arbitrary patterns, focused JDK families, case-family model | Mixed, conservatively broad; model checks separately enrolled |
+| `MatchFuzzer` | Supported grammar, focused JDK families, case-family model | Mixed, conservatively broad; model checks separately enrolled |
 | `FindSequenceFuzzer` | Stateful matching sequences and focused regressions | Broad |
 | `ReplacementFuzzer` | Replacement APIs and capture observations | Broad |
 | `SplitFuzzer` | Split APIs | Broad |
@@ -82,10 +103,9 @@ reuse the same assertions without invoking the broad differential paths.
 | `UnicodeFuzzer` | Unicode-biased patterns and subjects | Broad |
 | `Utf8InputFuzzer` | Focused JDK comparisons, representation properties, arbitrary byte windows | Mixed, conservatively broad; property and robustness checks separately enrolled |
 
-Capture and replacement-output waivers have been removed. Parser-marked
-intentional class-syntax rejection and unsupported-feature rejection are also
-reported as findings. No pattern-text recognizer suppresses unsupported syntax.
-Compiler-budget compile exclusions remain confined to exploratory `FuzzSupport`.
+Capture and replacement-output differences remain findings, as do intentional
+class-syntax differences in the parser exploration. The compiler-budget
+exclusion applies only to compile comparisons that allow rejection.
 The whole-input grapheme waiver is also removed. The #931/#933 exhausted-state
 oracle exception remains with an observed-state predicate and a change-detecting
 canary; it never exempts replacement output. Neither compiler-budget handling
@@ -129,10 +149,13 @@ these remain generated exploratory findings but are not unconditional agreement
 probes run for every input. Compatible spellings remain fixed differential probes.
 `IntentionalReproductionTest` replays it independently and requires review when
 outcomes change. These are not passing fuzz seeds and never suppress other inputs.
-`FuzzSupportTest` pins rejection and visible findings for unsupported syntax,
-including comments-separated possessive modifiers and the numeric backreference
-spellings formerly run as fixed agreement probes. Quoted and literal-mode controls
-still compile and compare normally.
+`UnsupportedSyntaxTest` checks rejection across features, contexts and trivia.
+It also verifies that a rejection check fails when SafeRE accepts the pattern.
+`FuzzSupportTest` verifies that unrestricted acceptance still reports compile
+differences.
+`SemanticDomainTest` checks generated compilation and exercises successful
+capture, replacement, split and `\G` comparisons. `SplitFuzzer` also replays
+representative delimiters from the previous-match boundary findings in #1209.
 
 ## Graduation and retained coverage
 
@@ -148,9 +171,13 @@ alternation priority and greedy/lazy whole-match selection (`a+?b?`,
 a harness test verifies it is reported when passed to the strict comparator.
 Grapheme, arbitrary flags and unrestricted capture/state combinations remain
 exploratory or model domains. Unicode subjects and selected regions/state sequences
-now have strict coverage; that does not graduate all Unicode or region behavior. Existing regression
-seeds retain their original target and decoding. New targets have separate
-corpora and identities.
+now have strict coverage; that does not graduate all Unicode or region behavior.
+The former newline-separated examples for the changed semantic decoders now
+run as explicit cases in `SemanticDomainTest`. These files contained pattern,
+subject and replacement text rather than encoded provider choices. Replay old
+external raw inputs at the commit in the original run metadata, and use the
+decoded context to move an example to the current domain. Other checked-in
+corpora keep their original decoders.
 
 No claim is made that the smaller hosted differential domain retains all prior
 bug detection or code coverage. Deterministic enumeration and controlled

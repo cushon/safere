@@ -19,6 +19,8 @@ final class WorkCounter {
     private long startSkippedUnits;
     private long quarantineCount;
     private int largestQuarantine;
+    private long startRegisterRankLookups;
+    private long startRegisterStackSlots;
   }
 
   record StartAccelerationWork(
@@ -62,6 +64,28 @@ final class WorkCounter {
         counter.startSkippedUnits,
         counter.quarantineCount,
         counter.largestQuarantine);
+  }
+
+  static long countStartRegisterRankLookupsForTesting(Runnable task) {
+    return count(task).startRegisterRankLookups;
+  }
+
+  static void recordStartRegisterRankLookups(long lookups) {
+    Counter counter = COUNTER.get();
+    if (counter != null) {
+      counter.startRegisterRankLookups += lookups;
+    }
+  }
+
+  static long countStartRegisterStackSlotsForTesting(Runnable task) {
+    return count(task).startRegisterStackSlots;
+  }
+
+  static void recordStartRegisterStackSlots(long slots) {
+    Counter counter = COUNTER.get();
+    if (counter != null) {
+      counter.startRegisterStackSlots += slots;
+    }
   }
 
   private static Counter count(Runnable task) {

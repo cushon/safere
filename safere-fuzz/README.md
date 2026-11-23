@@ -23,7 +23,7 @@ robustness targets. `WorkBoundFuzzer` uses a separate instrumented build and is
 not enrolled in the ordinary hosted build.
 The existing targets below remain available for exploratory differential work:
 
-- `CompileFuzzer` fuzzes compile/reject behavior.
+- `CompileFuzzer` compares arbitrary pattern acceptance in the opt-in acceptance suite.
 - `ParserCompatibilityFuzzer` fuzzes grammar-biased compile and membership compatibility.
 - `CharacterClassExpressionFuzzer` fuzzes JDK character-class expression syntax.
 - `EscapeSyntaxFuzzer` fuzzes escape syntax and escaped literal compatibility.
@@ -46,6 +46,9 @@ The existing targets below remain available for exploratory differential work:
 - `Utf8InputFuzzer` mixes focused JDK comparisons, representation checks, and byte-window robustness.
 
 ## Regression Mode
+
+`UnsupportedSyntaxTest` enumerates rejected syntax and supported controls as
+ordinary JUnit tests.
 
 Without `JAZZER_FUZZ`, Jazzer runs each target as a JUnit parameterized test
 over the empty input and the checked-in seed corpus. Seed inputs live under
@@ -106,8 +109,10 @@ multiple fuzz targets sequentially:
 ```bash
 # Default: explicitly enrolled targets only.
 safere-fuzz/scripts/run-fuzz-test.sh
-# Broad discovery must be selected explicitly.
+# Broad semantic and targeted parser discovery.
 safere-fuzz/scripts/run-fuzz-test.sh --suite broad
+# Unrestricted compile acceptance, including expected dialect differences.
+safere-fuzz/scripts/run-fuzz-test.sh --suite acceptance
 safere-fuzz/scripts/run-fuzz-test.sh CharacterClassExpressionFuzzer MatchFuzzer
 safere-fuzz/scripts/run-fuzz-test.sh --max-duration 10m --keep-going 5 MatchFuzzer
 ```
@@ -216,8 +221,9 @@ mvn -pl safere-fuzz -am -Pwork-counters \
   -Dsafere.fuzz.workCounters=true -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-The exploratory workflow schedules weekly broad runs. Dispatch it
+The exploratory workflow schedules weekly broad differential runs. Dispatch it
 before each release, or run `scripts/run-fuzz-test.sh --suite broad` locally.
+Unrestricted acceptance discovery is opt-in and writes its own run report.
 Review the archived findings manually; no automated issue filing is configured.
 Execution signals in finding JSON help identify exercised intentional paths but
 never classify or suppress a failure on their own.

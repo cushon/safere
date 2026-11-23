@@ -202,6 +202,7 @@ final class Dfa {
   private final Prog prog;
   private final int maxStates;
   private final boolean longest;
+  private final boolean anyMatch;
   private final boolean hasGraphemeSemantics;
 
   /** Whether consuming transitions can depend on the absolute input position. */
@@ -440,6 +441,27 @@ final class Dfa {
       Utf8StartAccelerator utf8StartAccelerator,
       StringStartAccelerator stringStartAccelerator,
       InnerLiteralSearch innerLiteralSearch) {
+    this(
+        prog,
+        maxStates,
+        setup,
+        longest,
+        utf8StartAccelerator,
+        stringStartAccelerator,
+        innerLiteralSearch,
+        false);
+  }
+
+  Dfa(
+      Prog prog,
+      int maxStates,
+      Setup setup,
+      boolean longest,
+      Utf8StartAccelerator utf8StartAccelerator,
+      StringStartAccelerator stringStartAccelerator,
+      InnerLiteralSearch innerLiteralSearch,
+      boolean anyMatch) {
+    this.anyMatch = anyMatch;
     this.prog = prog;
     this.maxStates = maxStates;
     this.longest = longest;
@@ -553,7 +575,7 @@ final class Dfa {
    * DFA caches transitions per (state, class) and the word-boundary computation depends on whether
    * the current character is a word character.
    */
-  private static int[] buildBoundaries(Prog prog) {
+  static int[] buildBoundaries(Prog prog) {
     IntArrayList bounds = new IntArrayList();
     bounds.add(0);
     bounds.add(Utils.MAX_RUNE + 1);
@@ -923,7 +945,8 @@ final class Dfa {
       return null;
     }
     boolean isHighestPriorityMatch =
-        insts.length > 0 && prog.inst(insts[0]).opCode == InstOp.OP_MATCH;
+        (anyMatch && (flags & FLAG_MATCH) != 0)
+            || (insts.length > 0 && prog.inst(insts[0]).opCode == InstOp.OP_MATCH);
     StateAccelerator accelerator = analyzeStateAcceleration(insts, flags, isHighestPriorityMatch);
     if (acceptsAnyRemainingPrefix(insts, flags)) {
       flags |= FLAG_UNIVERSAL_PREFIX;
@@ -2095,6 +2118,15 @@ final class Dfa {
     return doSearchInternal(text, startPos, anchored, longest, false, AdaptiveBackoff.NEUTRAL);
   }
 
+  /** Returns an accepting witness, without selecting prioritized match bounds. */
+  SearchResult searchExists(
+      InputScanner text, int startPos, boolean anchored, boolean preselected, long backoff) {
+    if (!anyMatch) {
+      throw new IllegalStateException("existence search requires an existence DFA");
+    }
+    return doSearchInternal(text, startPos, anchored, false, preselected, backoff);
+  }
+
   private SearchResult doSearchInternal(
       InputScanner text,
       int startPos,
@@ -3121,6 +3153,9 @@ final class Dfa {
   private boolean canStopAtFirstMatch(State s, InputScanner text, int pos, boolean needEndMatch) {
     if (!needEndMatch) {
       return s.isHighestPriorityMatch;
+    }
+    if (anyMatch) {
+      return true;
     }
     int cp = codePointAt(text, pos);
     for (int id : s.insts) {

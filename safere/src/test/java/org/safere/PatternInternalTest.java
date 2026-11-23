@@ -18,6 +18,7 @@ import java.net.URLClassLoader;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -976,20 +977,123 @@ class PatternInternalTest {
 
   private static void clearThreadCacheReference(Pattern pattern)
       throws ReflectiveOperationException {
-    Field threadCacheField = Pattern.class.getDeclaredField("threadCache");
-    threadCacheField.setAccessible(true);
-    SoftReference<?> ref =
-        (SoftReference<?>) ((ThreadLocal<?>) threadCacheField.get(pattern)).get();
+    SoftReference<?> ref = ChildLoaderPatternHolder.threadCacheReference(pattern);
     assertThat(ref).isNotNull();
     ref.clear();
   }
 
   @Test
+  void singleThreadUseKeepsTheCacheOutOfThreadLocals() throws ReflectiveOperationException {
+    Pattern pattern = Pattern.compile("([a-z]+)[0-9]+");
+    assertThat(pattern.matcher("abc123").find()).isTrue();
+    assertThat(ownerThreadId(pattern)).isEqualTo(Thread.currentThread().threadId());
+    assertThat(otherThreadCaches(pattern)).isNull();
+    assertThat(pattern.getOrCreateThreadCache()).isSameAs(pattern.getOrCreateThreadCache());
+  }
+
+  @Test
+  void firstThreadToUseThePatternOwnsTheCache() throws Exception {
+    Pattern pattern = onNewThread(() -> Pattern.compile("([a-z]+)[0-9]+"));
+    assertThat(ownerThreadId(pattern)).isZero();
+    assertThat(pattern.matcher("abc123").find()).isTrue();
+    assertThat(ownerThreadId(pattern)).isEqualTo(Thread.currentThread().threadId());
+    assertThat(otherThreadCaches(pattern)).isNull();
+  }
+
+  @Test
+  void otherThreadsGetTheirOwnCaches() throws Exception {
+    Pattern pattern = Pattern.compile("([a-z]+)[0-9]+");
+    Pattern.ThreadCache ownerCache = pattern.getOrCreateThreadCache();
+    Dfa ownerDfa = pattern.forwardFirstMatchDfa();
+    Object[] other =
+        onNewThread(() -> {
+          Pattern.ThreadCache cache = pattern.getOrCreateThreadCache();
+          assertThat(pattern.getOrCreateThreadCache()).isSameAs(cache);
+          return new Object[] {cache, pattern.forwardFirstMatchDfa()};
+        });
+    assertThat(other[0]).isNotSameAs(ownerCache);
+    assertThat(other[1]).isNotNull().isNotSameAs(ownerDfa);
+    assertThat(otherThreadCaches(pattern)).isNotNull();
+    assertThat(pattern.getOrCreateThreadCache()).isSameAs(ownerCache);
+    assertThat(pattern.forwardFirstMatchDfa()).isSameAs(ownerDfa);
+  }
+
+  @Test
   @Timeout(10)
-  void isolatedClassLoaderIsNotStronglyRetainedByThreadLocalCache() throws Exception {
-    // Clears the soft references explicitly: System.gc() does not clear recently used soft
-    // references, so this verifies that nothing but the soft referents retains the loader.
-    WeakReference<ClassLoader> loaderRef = createIsolatedLoaderAndPopulateCaches();
+  void concurrentFirstUseClaimsOneOwnerAndGivesEachThreadItsOwnCache() throws Exception {
+    int threads = 8;
+    for (int round = 0; round < 20; round++) {
+      Pattern pattern = Pattern.compile("([a-z]+)[0-9]+");
+      CyclicBarrier barrier = new CyclicBarrier(threads);
+      var executor = Executors.newFixedThreadPool(threads);
+      try {
+        List<Future<Pattern.ThreadCache>> futures = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+          futures.add(
+              executor.submit(() -> {
+                barrier.await();
+                Pattern.ThreadCache cache = pattern.getOrCreateThreadCache();
+                assertThat(pattern.getOrCreateThreadCache()).isSameAs(cache);
+                assertThat(cache.ownerThreadId).isEqualTo(Thread.currentThread().threadId());
+                // The cache is stored on the path this thread is supposed to use.
+                assertThat(ChildLoaderPatternHolder.threadCacheReference(pattern).get())
+                    .isSameAs(cache);
+                return cache;
+              }));
+        }
+        List<Pattern.ThreadCache> caches = new ArrayList<>();
+        List<Long> threadIds = new ArrayList<>();
+        for (Future<Pattern.ThreadCache> future : futures) {
+          Pattern.ThreadCache cache = future.get();
+          caches.add(cache);
+          threadIds.add(cache.ownerThreadId);
+        }
+        assertThat(caches).doesNotHaveDuplicates();
+        assertThat(threadIds).containsOnlyOnce(ownerThreadId(pattern));
+        // Exactly one thread used the owner slot; the rest went through the ThreadLocal.
+        assertThat(otherThreadCaches(pattern)).isNotNull();
+      } finally {
+        executor.shutdownNow();
+      }
+    }
+  }
+
+  @Test
+  void otherThreadCacheRebuildsAfterSoftReferenceIsCleared() throws Exception {
+    Pattern pattern = Pattern.compile("([a-z]+)[0-9]+");
+    onNewThread(() -> pattern.forwardFirstMatchDfa());
+    assertThat(ownerThreadId(pattern)).isNotEqualTo(Thread.currentThread().threadId());
+    Dfa firstDfa = pattern.forwardFirstMatchDfa();
+    assertThat(pattern.forwardFirstMatchDfa()).isSameAs(firstDfa);
+
+    clearThreadCacheReference(pattern);
+
+    assertThat(pattern.cachedForwardFirstMatchDfa()).isNull();
+    assertThat(pattern.forwardFirstMatchDfa()).isNotNull().isNotSameAs(firstDfa);
+  }
+
+  private static long ownerThreadId(Pattern pattern) throws ReflectiveOperationException {
+    return (long) ChildLoaderPatternHolder.field("ownerThreadId").get(pattern);
+  }
+
+  private static Object otherThreadCaches(Pattern pattern) throws ReflectiveOperationException {
+    return ChildLoaderPatternHolder.field("otherThreadCaches").get(pattern);
+  }
+
+  private static <T> T onNewThread(Callable<T> task) throws Exception {
+    FutureTask<T> future = new FutureTask<>(task);
+    Thread thread = new Thread(future);
+    thread.start();
+    thread.join();
+    return future.get();
+  }
+
+  @Test
+  @Timeout(10)
+  void isolatedClassLoaderIsNotRetainedByOwnerCache() throws Exception {
+    // The owner's cache is only reachable from the Pattern, so the loader can be collected without
+    // clearing any soft references.
+    WeakReference<ClassLoader> loaderRef = createIsolatedLoaderAndPopulateCaches(false);
     for (int i = 0; i < 50 && loaderRef.get() != null; i++) {
       System.gc();
       Thread.sleep(10);
@@ -997,8 +1101,22 @@ class PatternInternalTest {
     assertThat(loaderRef.get()).isNull();
   }
 
-  private static WeakReference<ClassLoader> createIsolatedLoaderAndPopulateCaches()
-      throws Exception {
+  @Test
+  @Timeout(10)
+  void isolatedClassLoaderIsNotStronglyRetainedByThreadLocalCache() throws Exception {
+    // Another thread owns the patterns, so this thread's caches are in ThreadLocals. Clears the
+    // soft references explicitly: System.gc() does not clear recently used soft references, so this
+    // verifies that nothing but the soft referents retains the loader.
+    WeakReference<ClassLoader> loaderRef = createIsolatedLoaderAndPopulateCaches(true);
+    for (int i = 0; i < 50 && loaderRef.get() != null; i++) {
+      System.gc();
+      Thread.sleep(10);
+    }
+    assertThat(loaderRef.get()).isNull();
+  }
+
+  private static WeakReference<ClassLoader> createIsolatedLoaderAndPopulateCaches(
+      boolean otherThreadOwnsPatterns) throws Exception {
     URL[] urls = {
       Pattern.class.getProtectionDomain().getCodeSource().getLocation(),
       PatternInternalTest.class.getProtectionDomain().getCodeSource().getLocation(),
@@ -1025,7 +1143,11 @@ class PatternInternalTest {
       Class<?> holderClass = loader.loadClass(ChildLoaderPatternHolder.class.getName());
       assertThat(holderClass.getClassLoader()).isSameAs(loader);
       // populateThreadCaches() returns List<SoftReference<?>>.
-      List<?> refs = (List<?>) holderClass.getMethod("populateThreadCaches").invoke(null);
+      List<?> refs =
+          (List<?>)
+              holderClass
+                  .getMethod("populateThreadCaches", boolean.class)
+                  .invoke(null, otherThreadOwnsPatterns);
       assertThat(refs).hasSize(3);
       for (Object value : refs) {
         assertThat(value).isInstanceOf(SoftReference.class);
@@ -1034,7 +1156,9 @@ class PatternInternalTest {
         Object cache = ref.get();
         assertThat(cache).isNotNull();
         assertThat(cache.getClass().getClassLoader()).isSameAs(loader);
-        ref.clear();
+        if (otherThreadOwnsPatterns) {
+          ref.clear();
+        }
       }
       return new WeakReference<>(loader);
     }
@@ -1053,8 +1177,14 @@ class PatternInternalTest {
 
     private ChildLoaderPatternHolder() {}
 
-    public static List<SoftReference<?>> populateThreadCaches()
-        throws ReflectiveOperationException {
+    public static List<SoftReference<?>> populateThreadCaches(boolean otherThreadOwnsPatterns)
+        throws Exception {
+      List<Pattern> patterns = List.of(DFA_PATTERN, BITSTATE_PATTERN, NFA_PATTERN);
+      if (otherThreadOwnsPatterns) {
+        Thread owner = new Thread(() -> patterns.forEach(Pattern::getOrCreateThreadCache));
+        owner.start();
+        owner.join();
+      }
       if (DFA_PATTERN.forwardFirstMatchDfa() == null
           || DFA_PATTERN.forwardLongestMatchDfa() == null
           || DFA_PATTERN.reverseDfa() == null) {
@@ -1063,12 +1193,32 @@ class PatternInternalTest {
       if (!BITSTATE_PATTERN.matcher("abc123").find() || !NFA_PATTERN.matcher("abc123").find()) {
         throw new AssertionError("Expected matches to succeed");
       }
-      Field field = Pattern.class.getDeclaredField("threadCache");
+      List<SoftReference<?>> refs = new ArrayList<>();
+      for (Pattern pattern : patterns) {
+        boolean owned =
+            (long) field("ownerThreadId").get(pattern) == Thread.currentThread().threadId();
+        if (owned == otherThreadOwnsPatterns) {
+          throw new AssertionError("Unexpected cache owner");
+        }
+        refs.add(threadCacheReference(pattern));
+      }
+      return refs;
+    }
+
+    /** Returns the current thread's cache reference for {@code pattern}, or null. */
+    static SoftReference<?> threadCacheReference(Pattern pattern)
+        throws ReflectiveOperationException {
+      if ((long) field("ownerThreadId").get(pattern) == Thread.currentThread().threadId()) {
+        return (SoftReference<?>) field("ownerCache").get(pattern);
+      }
+      ThreadLocal<?> caches = (ThreadLocal<?>) field("otherThreadCaches").get(pattern);
+      return caches != null ? (SoftReference<?>) caches.get() : null;
+    }
+
+    static Field field(String name) throws ReflectiveOperationException {
+      Field field = Pattern.class.getDeclaredField(name);
       field.setAccessible(true);
-      return List.of(
-          (SoftReference<?>) ((ThreadLocal<?>) field.get(DFA_PATTERN)).get(),
-          (SoftReference<?>) ((ThreadLocal<?>) field.get(BITSTATE_PATTERN)).get(),
-          (SoftReference<?>) ((ThreadLocal<?>) field.get(NFA_PATTERN)).get());
+      return field;
     }
   }
 }

@@ -88,26 +88,27 @@ public final class MatchFuzzer {
       flags = 0;
       input = data.consumeBoolean() ? atom.repeat(repetitions) : data.consumeString(512);
     } else {
-      regex = data.consumeString(256);
       flags = FuzzSupport.consumeFlags(data);
-      input = data.consumeString(2048);
+      SemanticDomain.Sample sample = SemanticDomain.generate(data, flags);
+      regex = sample.regex();
+      input = sample.input(data);
     }
-    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
-    if (pattern != null) {
-      FuzzSupport.MatcherPair matcher = pattern.matcher(input);
-      matcher.matches();
-      matcher.reset();
-      matcher.lookingAt();
-      matcher.reset();
-      matcher.find();
-      matcher.reset();
-      matcher.find(FuzzSupport.consumeIndex(data, input));
-    }
-    // Append new consumers so existing corpus inputs retain their original interpretation.
+    compareMatchOperations(regex, flags, input, FuzzSupport.consumeIndex(data, input));
     assertNullableFindInsideSurrogatePairMatchesJdk(data);
     assertUnicodeIPrefixFindsMatchJdk(data);
     assertNestedNullableLoopEntriesMatchJdk(data);
     assertImpossibleCaptureAlternativesMatchJdk(data);
+  }
+
+  static void compareMatchOperations(String regex, int flags, String input, int start) {
+    FuzzSupport.MatcherPair matcher = FuzzSupport.compileRequired(regex, flags).matcher(input);
+    matcher.matches();
+    matcher.reset();
+    matcher.lookingAt();
+    matcher.reset();
+    matcher.find();
+    matcher.reset();
+    matcher.find(start);
   }
 
   private static void assertImpossibleCaptureAlternativesMatchJdk(FuzzedDataProvider data) {

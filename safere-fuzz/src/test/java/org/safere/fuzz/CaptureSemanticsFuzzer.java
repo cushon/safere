@@ -7,40 +7,72 @@ package org.safere.fuzz;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.safere.fuzz.RegexFragment.consuming;
+import static org.safere.fuzz.RegexFragment.zeroWidth;
 
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
+import java.util.function.IntUnaryOperator;
 import org.safere.Pattern;
 import org.safere.Utf8Input;
 
 public final class CaptureSemanticsFuzzer {
-  private static final String[] ATOMS = {
-    "()",
-    "(a)",
-    "(a?)",
-    "(a)?",
-    "(\\b)",
-    "(a|aa)",
-    "()|\\W+",
-    "(a)|b",
-    "b|(a)",
-    "a|(b)|()",
-    "a|(){2}",
-    "a|(?:()){2}",
-    ".|(){2}",
-    "((a))",
-    "(?:|(a))",
-    "(?:a(b)?){1,2}",
-    "(ab?)+(a){0,2}",
-    "(?<word>a)",
-    "(?<word>a|aa)"
+  private static final RegexFragment[] ATOMS = {
+    zeroWidth("()"),
+    consuming("(a)"),
+    consuming("(a?)"),
+    consuming("(a)?"),
+    zeroWidth("(\\b)"),
+    consuming("(a|aa)"),
+    consuming("()|\\W+"),
+    consuming("(a)|b"),
+    consuming("b|(a)"),
+    consuming("a|(b)|()"),
+    consuming("a|(){2}"),
+    consuming("a|(?:()){2}"),
+    consuming(".|(){2}"),
+    consuming("((a))"),
+    consuming("(?:|(a))"),
+    consuming("(?:a(b)?){1,2}"),
+    consuming("(ab?)+(a){0,2}"),
+    consuming("(?<word>a)"),
+    consuming("(?<word>a|aa)")
   };
-  private static final String[] QUANTIFIERS = {
-    "*", "+", "?", "{0,2}", "{1,2}", "*?", "+?", "??", "{0,2}?", "{1,2}?", "*+", "?+", "{0,2}+"
+  private static final RegexFragment[] NAMED_ATOMS = {
+    consuming("(?<word>a)"), consuming("(?<word>a|aa)")
   };
-  private static final String[] CHAINED_QUANTIFIERS = {
-    "{0}", "{1}", "{0,2}", "{1}?", "{0}?", "{0}+", "{1}+", "{0,2}+"
+  private static final Repeat[] QUANTIFIERS = {
+    new Repeat("*", -1, ""),
+    new Repeat("+", -1, ""),
+    new Repeat("?", 1, ""),
+    new Repeat("{0,2}", 2, ""),
+    new Repeat("{1,2}", 2, ""),
+    new Repeat("*", -1, "?"),
+    new Repeat("+", -1, "?"),
+    new Repeat("?", 1, "?"),
+    new Repeat("{0,2}", 2, "?"),
+    new Repeat("{1,2}", 2, "?"),
+    new Repeat("*", -1, "+"),
+    new Repeat("?", 1, "+"),
+    new Repeat("{0,2}", 2, "+")
   };
+  private static final Repeat[] CHAINED_QUANTIFIERS = {
+    new Repeat("{0}", 0, ""),
+    new Repeat("{1}", 1, ""),
+    new Repeat("{0,2}", 2, ""),
+    new Repeat("{1}", 1, "?"),
+    new Repeat("{0}", 0, "?"),
+    new Repeat("{0}", 0, "+"),
+    new Repeat("{1}", 1, "+"),
+    new Repeat("{0,2}", 2, "+")
+  };
+
+  private record Repeat(String count, int maximum, String mode) {
+    RegexFragment apply(RegexFragment operand) {
+      return operand.repeat(count + operand.modifier(mode), maximum);
+    }
+  }
+
   private static final String[] PREFIXES = {"", "x", "(?:x)?"};
   private static final String[] SUFFIXES = {"", "y", "c?"};
 
@@ -348,62 +380,61 @@ public final class CaptureSemanticsFuzzer {
 
   public static void fuzzerTestOneInput(FuzzedDataProvider data) {
     boolean named = data.consumeBoolean();
-    String regex = consumeRegex(data, named);
+    String regex = generateRegex(bound -> data.consumeInt(0, bound - 1), named);
     String input = consumeCaptureInput(data);
-    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, 0);
-    if (pattern == null) {
-      return;
-    }
-
-    assertMatchOperations(pattern, input, named);
-    assertReplacementOperations(pattern, input, named);
+    compareCaptures(regex, input, named);
     assertZeroCountPossessive(data);
   }
 
+  static void compareCaptures(String regex, String input, boolean named) {
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileRequired(regex, 0);
+    assertMatchOperations(pattern, input, named);
+    assertReplacementOperations(pattern, input, named);
+  }
+
   private static void assertZeroCountPossessive(FuzzedDataProvider data) {
-    // Keep zero-count operands as a separate axis so existing corpus inputs retain their decoding.
     // Refs #1130: descendants below {0} cannot consume, even if they contain consuming branches.
     boolean named = data.consumeBoolean();
-    String atom = named ? pick(data, "(?<word>a)", "(?<word>a|aa)") : pick(data, ATOMS);
-    String zero = "(?:" + atom + ")" + pick(data, "{0}", "{0,0}", "{0}?", "{0,0}?");
-    String operand =
+    RegexFragment atom = data.pickValue(named ? NAMED_ATOMS : ATOMS);
+    RegexFragment zero = atom.group("(?:").repeat(pick(data, "{0}", "{0,0}", "{0}?", "{0,0}?"), 0);
+    RegexFragment other = consuming("(b)").repeat("{0}", 0);
+    RegexFragment operand =
         switch (data.consumeInt(0, 5)) {
           case 0 -> zero;
-          case 1 -> "(" + zero + ")";
-          case 2 -> zero + "(b){0}";
-          case 3 -> zero + "|(b){0}";
-          case 4 -> "(?:" + zero + "){2}";
-          case 5 -> "(?:" + zero + ")*";
+          case 1 -> zero.group("(");
+          case 2 -> zero.then(other);
+          case 3 -> zero.or(other);
+          case 4 -> zero.group("(?:").repeat("{2}", 2);
+          case 5 -> zero.group("(?:").repeat("*", -1);
           default -> throw new AssertionError();
         };
     String regex =
         pick(data, PREFIXES)
-            + "(?:"
-            + operand
-            + ")"
+            + operand.group("(?:").regex()
             + pick(data, "*+", "?+", "++", "{0}+", "{1}+", "{2}+", "{0,2}+", "{1,}+")
             + pick(data, SUFFIXES);
-    String input = consumeCaptureInput(data);
-    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, 0);
-    if (pattern != null) {
-      assertMatchOperations(pattern, input, named);
-      assertReplacementOperations(pattern, input, named);
-    }
+    compareCaptures(regex, consumeCaptureInput(data), named);
   }
 
-  private static String consumeRegex(FuzzedDataProvider data, boolean named) {
-    String atom = named ? pick(data, "(?<word>a)", "(?<word>a|aa)") : pick(data, ATOMS);
-    String regex = "(?:" + atom + ")";
-    if (!data.consumeBoolean()) {
-      regex += pick(data, QUANTIFIERS);
+  static String generateRegex(IntUnaryOperator choice, boolean named) {
+    RegexFragment regex = pick(choice, named ? NAMED_ATOMS : ATOMS).group("(?:");
+    boolean repeated = choice.applyAsInt(2) == 0;
+    if (repeated) {
+      regex = pick(choice, QUANTIFIERS).apply(regex);
     }
-    if (data.consumeBoolean()) {
-      regex += pick(data, CHAINED_QUANTIFIERS);
+    if (choice.applyAsInt(2) != 0) {
+      Repeat count = pick(choice, CHAINED_QUANTIFIERS);
+      // A counted repeat after a quantifier has its own implicit empty operand.
+      regex = repeated ? regex.then(count.apply(zeroWidth(""))) : count.apply(regex);
     }
-    if (data.consumeBoolean()) {
-      regex = "(?:" + regex + ")" + pick(data, QUANTIFIERS);
+    if (choice.applyAsInt(2) != 0) {
+      regex = pick(choice, QUANTIFIERS).apply(regex.group("(?:"));
     }
-    return pick(data, PREFIXES) + regex + pick(data, SUFFIXES);
+    return pick(choice, PREFIXES) + regex.regex() + pick(choice, SUFFIXES);
+  }
+
+  private static <T> T pick(IntUnaryOperator choice, T[] values) {
+    return values[choice.applyAsInt(values.length)];
   }
 
   private static String consumeCaptureInput(FuzzedDataProvider data) {

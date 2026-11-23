@@ -20,9 +20,9 @@ public final class EscapeSyntaxFuzzer {
     "\\08",
     "\\077",
     "\\078",
-    "\\123",
-    "\\400",
-    "\\777",
+    "\\0123",
+    "\\040",
+    "\\0777",
     "\\u0041",
     "\\u{41}",
     "\\x41",
@@ -73,9 +73,8 @@ public final class EscapeSyntaxFuzzer {
       List.of(
           "", "a", "A", "0", "7", "@", "\u001b", "&", "-", "©", "Ā", "é", "☃", "😀", "𠀀", "🙀",
           "\u0000", "\u0140", "\uD800", "\uD840", "\uf57f");
-  // Reviewed intentional differences have separate expected-outcome tests, not fixed agreement
-  // probes. FuzzSupportTest pins unsupported backreference outcomes. Prefix/escape/suffix
-  // generation still explores those spellings and the ambiguous class-range spellings.
+  // Unsupported numeric references are tested by UnsupportedSyntaxTest. The octal neighbors
+  // and the ambiguous class-range spellings still take part in differential generation.
   private static final String[] REGRESSION_REGEXES = {
     "^\\©",
     "[\\©]",

@@ -5,64 +5,10 @@
 
 package org.safere;
 
-import static org.safere.Ascii.equalsIgnoreCase;
-import static org.safere.Ascii.ignoreCaseFailure;
-
-/** UTF-16 code unit traversal and search utilities. */
+/** Unicode case-insensitive search over UTF-16 text. */
 final class Utf16 {
 
   private Utf16() {}
-
-  /** Returns the UTF-16 code unit at {@code index} in little-endian byte representation. */
-  static char getChar(byte[] bytes, int offset, int index) {
-    int byteIndex = offset + (index << 1);
-    return (char) ((bytes[byteIndex] & 0xFF) | ((bytes[byteIndex + 1] & 0xFF) << 8));
-  }
-
-  /** Finds an ASCII prefix in UTF-16 code units in linear time. */
-  static int indexOfIgnoreCase(char[] input, int offset, int length, String pattern, int start) {
-    if (pattern.isEmpty()) {
-      return Math.min(Math.max(0, start), length);
-    }
-    int[] failure = ignoreCaseFailure(pattern);
-    int matched = 0;
-    for (int i = Math.max(0, start); i < length; i++) {
-      char ch = input[offset + i];
-      while (matched > 0 && !equalsIgnoreCase(ch, pattern.charAt(matched))) {
-        matched = failure[matched - 1];
-      }
-      if (equalsIgnoreCase(ch, pattern.charAt(matched))) {
-        matched++;
-        if (matched == pattern.length()) {
-          return i - pattern.length() + 1;
-        }
-      }
-    }
-    return -1;
-  }
-
-  /** Finds an ASCII prefix in little-endian UTF-16 bytes in linear time. */
-  static int indexOfIgnoreCaseUtf16(
-      byte[] input, int offset, int length, String pattern, int start) {
-    if (pattern.isEmpty()) {
-      return Math.min(Math.max(0, start), length);
-    }
-    int[] failure = ignoreCaseFailure(pattern);
-    int matched = 0;
-    for (int i = Math.max(0, start); i < length; i++) {
-      char ch = getChar(input, offset, i);
-      while (matched > 0 && !equalsIgnoreCase(ch, pattern.charAt(matched))) {
-        matched = failure[matched - 1];
-      }
-      if (equalsIgnoreCase(ch, pattern.charAt(matched))) {
-        matched++;
-        if (matched == pattern.length()) {
-          return i - pattern.length() + 1;
-        }
-      }
-    }
-    return -1;
-  }
 
   /** Finds a Unicode simple-folded prefix in a String in linear time. */
   static int indexOfUnicodeIgnoreCase(CharSequence input, String pattern, int start) {
@@ -134,30 +80,5 @@ final class Utf16 {
       folded = Inst.simpleFold(folded);
     }
     return false;
-  }
-
-  /** Returns whether a character sequence matches a pattern prefix ignoring ASCII case. */
-  static boolean regionMatchesIgnoreCase(char[] chars, int offset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
-      if (!equalsIgnoreCase(chars[offset + i], prefix.charAt(i))) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /** Returns whether little-endian UTF-16 bytes match a pattern prefix ignoring ASCII case. */
-  static boolean regionMatchesIgnoreCaseUtf16(
-      byte[] bytes, int byteOffset, String prefix, int prefixLen) {
-    for (int i = 0; i < prefixLen; i++) {
-      char c =
-          (char)
-              ((bytes[byteOffset + (i << 1)] & 0xFF)
-                  | ((bytes[byteOffset + (i << 1) + 1] & 0xFF) << 8));
-      if (!equalsIgnoreCase(c, prefix.charAt(i))) {
-        return false;
-      }
-    }
-    return true;
   }
 }

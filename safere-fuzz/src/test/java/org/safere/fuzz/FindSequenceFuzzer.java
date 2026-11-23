@@ -428,9 +428,11 @@ public final class FindSequenceFuzzer {
         input = data.consumeBoolean() ? "Foo '{0}' Bar: {0}" : "prefix 'not END' suffix END";
       }
       case 2 -> {
-        regex = data.consumeString(256);
         flags = FuzzSupport.consumeFlags(data);
-        input = data.consumeString(2048);
+        SemanticDomain.Sample sample = SemanticDomain.generate(data, flags);
+        regex = sample.regex();
+        previousMatchGrammar = sample.usesPreviousMatchBoundary();
+        input = sample.input(data);
       }
       case 3 -> {
         regex = "$";
@@ -643,10 +645,7 @@ public final class FindSequenceFuzzer {
       }
       default -> throw new AssertionError();
     }
-    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
-    if (pattern == null) {
-      return;
-    }
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileRequired(regex, flags);
     if (warmLineEndCache) {
       FuzzSupport.MatcherPair warmup = pattern.matcher(data.consumeBoolean() ? "\r\na" : "a\na");
       while (warmup.find()) {
