@@ -14,7 +14,9 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.regex.MatchResult;
 import org.openjdk.jmh.infra.Blackhole;
 import org.safere.Utf8Sink;
@@ -30,6 +32,13 @@ enum RegexEngineVariant {
         @Override
         public boolean find(RegexInput input) {
           return pattern.matcher(string(input)).find();
+        }
+
+        @Override
+        public BooleanSupplier bindExists(RegexInput input) {
+          Predicate<String> predicate = pattern.asPredicate();
+          String text = string(input);
+          return () -> predicate.test(text);
         }
 
         @Override
@@ -132,7 +141,8 @@ enum RegexEngineVariant {
           EngineCapability.REPLACE,
           EngineCapability.APPEND_REPLACEMENT,
           EngineCapability.MATCHER_RESET,
-          EngineCapability.REGIONS)) {
+          EngineCapability.REGIONS,
+          EngineCapability.EXISTENCE_PREDICATE)) {
     @Override
     CompiledRegex compile(String regex) {
       org.safere.Pattern pattern = org.safere.Pattern.compile(regex);
@@ -140,6 +150,12 @@ enum RegexEngineVariant {
         @Override
         public boolean find(RegexInput input) {
           return pattern.find(utf8(input));
+        }
+
+        @Override
+        public BooleanSupplier bindExists(RegexInput input) {
+          org.safere.Utf8Input text = utf8(input);
+          return () -> pattern.find(text);
         }
 
         @Override
@@ -243,6 +259,13 @@ enum RegexEngineVariant {
         @Override
         public boolean find(RegexInput input) {
           return pattern.matcher(string(input)).find();
+        }
+
+        @Override
+        public BooleanSupplier bindExists(RegexInput input) {
+          Predicate<String> predicate = pattern.asPredicate();
+          String text = string(input);
+          return () -> predicate.test(text);
         }
 
         @Override
@@ -605,6 +628,8 @@ enum RegexEngineVariant {
           features.add(DeclarativeBenchmarkPlan.Feature.MATCHER_STATE);
           features.add(DeclarativeBenchmarkPlan.Feature.REGIONS);
         }
+        case EXISTENCE_PREDICATE ->
+            features.add(DeclarativeBenchmarkPlan.Feature.EXISTENCE_PREDICATE);
       }
     }
     switch (this) {
@@ -736,6 +761,8 @@ enum RegexEngineVariant {
     EnumSet<EngineCapability> capabilities = allCapabilities();
     capabilities.remove(EngineCapability.REGIONS);
     capabilities.remove(EngineCapability.FUNCTIONAL_REPLACEMENT);
+    // RE2/J has no matcher-free existence predicate.
+    capabilities.remove(EngineCapability.EXISTENCE_PREDICATE);
     return capabilities;
   }
 
@@ -906,6 +933,15 @@ enum RegexEngineVariant {
 
   interface CompiledRegex extends AutoCloseable {
     default boolean find(RegexInput input) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Binds the input and prepares the engine's existence API outside timing. The returned check
+     * invokes {@code Pattern.asPredicate().test} for String input or SafeRE's {@code
+     * Pattern.find(Utf8Input)} for UTF-8 input.
+     */
+    default BooleanSupplier bindExists(RegexInput input) {
       throw new UnsupportedOperationException();
     }
 

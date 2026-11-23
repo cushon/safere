@@ -1179,6 +1179,74 @@ class CrossEngineBenchmarkPlanTest {
   }
 
   @Test
+  void existsUsesEachEnginesMatcherFreeExistencePredicate() {
+    List<String> safereFrames = new ArrayList<>();
+    SafeReMatchDiagnostics previous = Pattern.diagnostics();
+    // With diagnostics enabled, SafeRE's predicate and Pattern.find(Utf8Input) still report an
+    // operation, so the listener sees which entry point the adapter called.
+    Pattern.setDiagnostics(
+        new SafeReMatchDiagnostics() {
+          @Override
+          public void onOperationCompleted(OperationDiagnostics event) {
+            StackWalker.getInstance()
+                .forEach(
+                    frame -> safereFrames.add(frame.getClassName() + "." + frame.getMethodName()));
+          }
+        });
+    try {
+      for (RegexEngineVariant variant :
+          List.of(
+              RegexEngineVariant.SAFERE_STRING,
+              RegexEngineVariant.SAFERE_UTF8,
+              RegexEngineVariant.JDK_STRING)) {
+        try (RegexEngineVariant.CompiledRegex pattern = variant.compile(".*error: \\w+")) {
+          for (String text : List.of("2026-11-20 WARN error: disk", "2026-11-20 INFO ok")) {
+            RegexEngineVariant.RegexInput input =
+                variant == RegexEngineVariant.SAFERE_UTF8
+                    ? RegexEngineVariant.utf8Input(text.getBytes(StandardCharsets.UTF_8))
+                    : new RegexEngineVariant.StringRegexInput(text);
+            boolean expected = text.contains("error");
+            safereFrames.clear();
+            assertThat(pattern.bindExists(input).getAsBoolean())
+                .as("%s on %s", variant, text)
+                .isEqualTo(expected);
+            switch (variant) {
+              case SAFERE_STRING ->
+                  assertThat(safereFrames).contains("org.safere.Pattern.findInString");
+              case SAFERE_UTF8 ->
+                  assertThat(safereFrames)
+                      .contains("org.safere.Pattern.find")
+                      .doesNotContain("org.safere.Utf8Matcher.find");
+              default -> assertThat(safereFrames).isEmpty();
+            }
+            safereFrames.clear();
+            assertThat(pattern.find(input)).isEqualTo(expected);
+            if (variant == RegexEngineVariant.SAFERE_STRING) {
+              assertThat(safereFrames).doesNotContain("org.safere.Pattern.findInString");
+            }
+          }
+        }
+      }
+    } finally {
+      Pattern.setDiagnostics(previous);
+    }
+  }
+
+  @Test
+  void existsRunsOnlyOnEnginesWithAnExistencePredicate() {
+    CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
+    String id = "ExistenceStartBenchmark.wide.singleLine.768";
+    assertThat(
+            plan.trials(CrossEngineWorkload.TimingGroup.NANOSECONDS).stream()
+                .filter(trial -> trial.workload().id().equals(id))
+                .map(trial -> trial.variant().id()))
+        .containsExactlyInAnyOrder(
+            "safere-string", "safere-utf8", "safere-utf8-vector", "jdk-string");
+    assertThat(plan.resolve(id + "@safere-string").workload().operation())
+        .isEqualTo(BenchmarkOperation.EXISTS);
+  }
+
+  @Test
   void coldValidationChecksTheMeasuredResultAfterTheOperationReturns() {
     CrossEngineWorkload workload =
         coldFirstUseWorkload(BenchmarkOperation.FIND_GROUP_PRESENT, "(z)");
@@ -1612,9 +1680,10 @@ class CrossEngineBenchmarkPlanTest {
   }
 
   @Test
-  void reverseDfaProseWorkloadRecoversEveryMatchStartWithTheReverseDfa() {
-    // The workload exists to measure repeated reverse-DFA start recovery. If a faster path takes
-    // over, this fails so the workload can be retargeted instead of silently measuring that path.
+  void reverseDfaProseWorkloadRecoversEveryMatchStartInTheForwardPass() {
+    // The workload measures repeated match-start recovery, which the start-register search does in
+    // the forward DFA pass instead of a reverse DFA pass. If another path takes over, this fails so
+    // the workload can be retargeted instead of silently measuring that path.
     String workloadId = "ReverseDfaFindBenchmark.wordProse.32768";
     CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
     BenchmarkData data = BenchmarkData.get();
@@ -1642,7 +1711,50 @@ class CrossEngineBenchmarkPlanTest {
           assertThat(events).as(variant.id()).hasSize(matches + 1);
           assertThat(events.stream().mapToInt(OperationDiagnostics::reverseDfaSearchCount).sum())
               .as(variant.id())
-              .isEqualTo(matches);
+              .isZero();
+          assertThat(events.subList(0, matches))
+              .as(variant.id())
+              .allSatisfy(event -> {
+                assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
+                assertThat(event.forwardDfaSearchCount()).isEqualTo(1);
+              });
+        }
+      }
+    } finally {
+      Pattern.setDiagnostics(SafeReMatchDiagnostics.NONE);
+    }
+  }
+
+  @Test
+  void reverseDfaProseLinesWorkloadRecoversEveryMatchStartWithTheReverseDfa() {
+    // The start-register search doesn't handle line anchors, so each match start here comes from a
+    // reverse DFA pass. If another path takes over, this fails so the workload can be retargeted
+    // instead of silently measuring that path.
+    String workloadId = "ReverseDfaFindBenchmark.proseLines.32768";
+    CrossEngineBenchmarkPlan plan = CrossEngineBenchmarkPlan.load();
+    BenchmarkData data = BenchmarkData.get();
+    List<OperationDiagnostics> events = new ArrayList<>();
+    Pattern.setDiagnostics(
+        new SafeReMatchDiagnostics() {
+          @Override
+          public void onOperationCompleted(OperationDiagnostics event) {
+            events.add(event);
+          }
+        });
+    try {
+      for (RegexEngineVariant variant :
+          List.of(RegexEngineVariant.SAFERE_STRING, RegexEngineVariant.SAFERE_UTF8)) {
+        CrossEngineWorkload workload = plan.resolve(workloadId + "@" + variant.id()).workload();
+        var inputs = variant.prepareInputs(data, workload.inputKeys());
+        try (var compiled = variant.compile(workload.patterns().getFirst())) {
+          events.clear();
+          var matcher = compiled.matcher(inputs.getFirst());
+          int matches = 0;
+          while (matcher.find()) {
+            matches++;
+          }
+          assertThat(matches).as(variant.id()).isEqualTo(768);
+          assertThat(events).as(variant.id()).hasSize(matches + 1);
           assertThat(events.subList(0, matches))
               .as(variant.id())
               .allSatisfy(event -> {

@@ -10,6 +10,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
@@ -150,6 +153,50 @@ class StringVectorScanTest {
     }
   }
 
+  /**
+   * Checks the match kernel, {@code StringVectorScan.matches(ShortVector, int[])}, lane by lane
+   * against {@link #inRanges}, including ranges that cross {@code 0x8000}. It is called
+   * reflectively because test sources are compiled without {@code jdk.incubator.vector}.
+   */
+  @Test
+  void kernelMatchesEveryLaneLikeScalar() throws ReflectiveOperationException {
+    assumeTrue(VECTOR_MODULE, "needs --add-modules jdk.incubator.vector");
+    Class<?> shortVector = Class.forName("jdk.incubator.vector.ShortVector");
+    Class<?> speciesClass = Class.forName("jdk.incubator.vector.VectorSpecies");
+    Object species = shortVector.getField("SPECIES_PREFERRED").get(null);
+    Method fromCharArray =
+        shortVector.getMethod("fromCharArray", speciesClass, char[].class, int.class);
+    Method matches = StringVectorScan.class.getDeclaredMethod("matches", shortVector, int[].class);
+    matches.setAccessible(true);
+    Method toLong = Class.forName("jdk.incubator.vector.VectorMask").getMethod("toLong");
+    int lanes = (int) speciesClass.getMethod("length").invoke(species);
+
+    List<int[]> rangeSets = new ArrayList<>(RANGES);
+    rangeSets.add(new int[] {0x7000, 0x9000});
+    rangeSets.add(new int[] {0x7000, 0x7FFF, 0x8000, 0xFFFF});
+    rangeSets.add(new int[] {0, 0, 0xFFFF, 0xFFFF});
+    char[] chars = new char[256];
+    Random random = new Random(7);
+    for (int i = 0; i < chars.length; i++) {
+      chars[i] = (char) random.nextInt(0x10000);
+    }
+    char[] edges = {0, '0', '9', '/', ':', 'A', 'Z', 'a', 'z', 0x6FFF, 0x7000, 0x7FFF, 0x8000};
+    System.arraycopy(edges, 0, chars, 0, edges.length);
+    chars[chars.length - 1] = 0xFFFF;
+    for (int[] ranges : rangeSets) {
+      for (int offset = 0; offset <= chars.length - lanes; offset++) {
+        Object vector = fromCharArray.invoke(null, species, chars, offset);
+        long mask = (long) toLong.invoke(matches.invoke(null, vector, ranges));
+        for (int lane = 0; lane < lanes; lane++) {
+          char ch = chars[offset + lane];
+          assertThat((mask & (1L << lane)) != 0)
+              .as("ranges %s, char %04x", Arrays.toString(ranges), (int) ch)
+              .isEqualTo(inRanges(ch, ranges));
+        }
+      }
+    }
+  }
+
   @Test
   void shortRemaindersStayScalar() {
     String text = "x".repeat(StringVectorLoads.MINIMUM_REMAINING_LENGTH + 10);
@@ -247,13 +294,19 @@ class StringVectorScanTest {
 
   private static int reference(String text, int[] ranges, int start) {
     for (int i = Math.max(0, start); i < text.length(); i++) {
-      char ch = text.charAt(i);
-      for (int r = 0; r < ranges.length; r += 2) {
-        if (ch >= ranges[r] && ch <= ranges[r + 1]) {
-          return i;
-        }
+      if (inRanges(text.charAt(i), ranges)) {
+        return i;
       }
     }
     return -1;
+  }
+
+  private static boolean inRanges(char ch, int[] ranges) {
+    for (int r = 0; r < ranges.length; r += 2) {
+      if (ch >= ranges[r] && ch <= ranges[r + 1]) {
+        return true;
+      }
+    }
+    return false;
   }
 }

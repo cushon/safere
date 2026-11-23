@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Field;
@@ -24,7 +25,9 @@ class MatcherThreadHandoffTest {
 
   @Test
   void handoffUsesExecutingThreadsForwardAndReverseDfas() throws Exception {
-    Pattern pattern = Pattern.compile("[a-q][^u-z]{3}x");
+    Pattern pattern =
+        Pattern.compile(
+            "[a-q][^u-z]{3}x", 0, EnginePathOptions.builder().startRegister(false).build());
     Matcher transferred = pattern.matcher("zz abcdx zz bcdex");
     assertThat(transferred.find()).isTrue();
     Dfa originalForward = (Dfa) field("cachedForwardFirstMatchDfa").get(transferred);
@@ -45,6 +48,44 @@ class MatcherThreadHandoffTest {
         });
     assertThat(worker[0]).isNotSameAs(originalForward).isSameAs(worker[2]);
     assertThat(worker[1]).isNotSameAs(originalReverse).isSameAs(worker[3]);
+  }
+
+  @Test
+  void handoffUsesExecutingThreadsStartRegisterSearch() throws Exception {
+    Pattern pattern = Pattern.compile("[a-q][^u-z]{3}x");
+    Matcher transferred = pattern.matcher("zz abcdx zz bcdex");
+    assertThat(transferred.find()).isTrue();
+    StartRegisterSearch original =
+        (StartRegisterSearch) field("cachedStartRegister").get(transferred);
+    assertThat(original)
+        .isNotNull()
+        .isSameAs(pattern.startRegisterSearch(pattern.getOrCreateThreadCache()));
+
+    StartRegisterSearch[] worker =
+        onWorker(() -> {
+          assertThat(transferred.find()).isTrue();
+          assertThat(transferred.group()).isEqualTo("bcdex");
+          return new StartRegisterSearch[] {
+            (StartRegisterSearch) field("cachedStartRegister").get(transferred),
+            pattern.startRegisterSearch(pattern.getOrCreateThreadCache()),
+          };
+        });
+    assertThat(worker[0]).isNotSameAs(original).isSameAs(worker[1]);
+  }
+
+  @Test
+  void warmedPatternCanMatchOnAnotherThreadWhileItsMonitorIsHeld() throws Exception {
+    Pattern pattern = Pattern.compile("[a-q][^u-z]{3}x");
+    String input = "zz abcdx zz bcdex";
+    Matcher warmup = pattern.matcher(input);
+    assertThat(warmup.find()).isTrue();
+    assertThat(field("cachedStartRegister").get(warmup)).isNotNull();
+
+    try (ExecutorService worker = Executors.newSingleThreadExecutor()) {
+      synchronized (pattern) {
+        assertThat(worker.submit(() -> pattern.matcher(input).find()).get(5, SECONDS)).isTrue();
+      }
+    }
   }
 
   @ParameterizedTest

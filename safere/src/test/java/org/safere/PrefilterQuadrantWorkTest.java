@@ -38,7 +38,7 @@ class PrefilterQuadrantWorkTest {
   private static final int[] SIZES = {64, 400, 16_384};
 
   /** Inputs shorter than this may scan for a competitive start literal first. */
-  private static final int START_FIRST_LIMIT = Pattern.MAX_LITERAL_START_FIRST_LENGTH;
+  private static final int START_FIRST_LIMIT = FindPlan.MAX_LITERAL_START_FIRST_LENGTH;
 
   /** Allowance for verifying candidates and for the scans' fixed costs. */
   private static final int SLACK = 32;

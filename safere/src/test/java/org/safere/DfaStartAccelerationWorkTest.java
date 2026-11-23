@@ -174,17 +174,44 @@ class DfaStartAccelerationWorkTest {
     return findWork(REGEX, MATCH, input, utf8);
   }
 
+  /**
+   * Returns the start-acceleration work of one find() through the forward and reverse DFA. The same
+   * find() with the default engine paths, which may use the start-register search instead, must
+   * find the same match with at most about the same work.
+   */
   private static WorkCounter.StartAccelerationWork findWork(
       String regex, String match, String input, boolean utf8) {
     // Exercise DFA backoff independently of literal-guided narrowing before the engine search.
-    Pattern pattern =
-        Pattern.compile(regex, 0, EnginePathOptions.builder().literalFastPaths(false).build());
+    EnginePathOptions.Builder options = EnginePathOptions.builder().literalFastPaths(false);
+    Pattern dfaPattern = Pattern.compile(regex, 0, options.startRegister(false).build());
+    Pattern defaultPattern = Pattern.compile(regex, 0, options.startRegister(true).build());
+    // Otherwise the comparison below runs the forward and reverse DFA twice.
+    assertThat(defaultPattern.startRegisterSearch(new Pattern.ThreadCache()))
+        .as("start-register search for %s", regex)
+        .isNotNull();
     java.util.regex.Matcher jdk = java.util.regex.Pattern.compile(regex).matcher(input);
     assertThat(jdk.find()).isTrue();
     assertThat(jdk.group()).isEqualTo(match);
+    long[] dfaTotal = new long[1];
+    WorkCounter.StartAccelerationWork work = findWork(dfaPattern, input, utf8, jdk, dfaTotal);
+    long[] defaultTotal = new long[1];
+    findWork(defaultPattern, input, utf8, jdk, defaultTotal);
+    // The start-register search makes the same accelerator calls under the same backoff, but may
+    // charge them from a different position than the DFA, so allow a small difference.
+    assertThat(defaultTotal[0])
+        .as("default engine work for %s", regex)
+        .isLessThanOrEqualTo(dfaTotal[0] + dfaTotal[0] / 100 + 64);
+    return work;
+  }
+
+  private static WorkCounter.StartAccelerationWork findWork(
+      Pattern pattern, String input, boolean utf8, java.util.regex.Matcher jdk, long[] totalWork) {
     if (utf8) {
       Utf8Matcher matcher = pattern.matcher(Utf8Input.validated(input.getBytes(UTF_8)));
       assertThat(matcher.find()).isTrue();
+      matcher.reset();
+      totalWork[0] =
+          WorkCounter.countWithForwardDfaStepsForTesting(() -> assertThat(matcher.find()).isTrue());
       matcher.reset();
       WorkCounter.StartAccelerationWork work =
           WorkCounter.countStartAccelerationForTesting(() -> assertThat(matcher.find()).isTrue());
@@ -194,6 +221,9 @@ class DfaStartAccelerationWorkTest {
     }
     Matcher matcher = pattern.matcher(input);
     assertThat(matcher.find()).isTrue();
+    matcher.reset();
+    totalWork[0] =
+        WorkCounter.countWithForwardDfaStepsForTesting(() -> assertThat(matcher.find()).isTrue());
     matcher.reset();
     WorkCounter.StartAccelerationWork work =
         WorkCounter.countStartAccelerationForTesting(() -> assertThat(matcher.find()).isTrue());

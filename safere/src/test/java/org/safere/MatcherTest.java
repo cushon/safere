@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /** Tests for {@link Matcher}. */
@@ -2014,6 +2015,70 @@ class MatcherTest {
       StringBuilder sb = new StringBuilder();
       assertThatThrownBy(() -> m.appendReplacement(sb, "${name"))
           .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // As in java.util.regex, a malformed replacement (IllegalArgumentException) must not append
+    // the intervening input or a partial expansion, and must not advance the append position.
+    @ParameterizedTest
+    @ValueSource(strings = {"lit\\", "lit$", "lit$x", "lit${g", "lit${}", "lit${nope}", "$1$x"})
+    void malformedAppendReplacementLeavesStringBuilderUnchanged(String replacement) {
+      Matcher m = Pattern.compile("(?<g>b)").matcher("abc");
+      assertThat(m.find()).isTrue();
+      StringBuilder sb = new StringBuilder("X");
+      assertThatThrownBy(() -> m.appendReplacement(sb, replacement))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThat(sb.toString()).isEqualTo("X");
+
+      m.appendReplacement(sb, "[$1]");
+      m.appendTail(sb);
+      assertThat(sb.toString()).isEqualTo("Xa[b]c");
+    }
+
+    // OpenJDK rolls back only IllegalArgumentException. A reference to a missing group number
+    // throws IndexOutOfBoundsException and keeps the intervening input and the partial expansion.
+    @DisabledForCrosscheck(
+        "crosscheck facade appends to the caller's builder only after appendReplacement succeeds")
+    @ParameterizedTest
+    @CsvSource({"lit$9, Xalit", "$1$9, Xab", "$9, Xa"})
+    void appendReplacementWithMissingGroupKeepsPartialStringBuilderOutput(
+        String replacement, String expected) {
+      Matcher m = Pattern.compile("(?<g>b)").matcher("abc");
+      assertThat(m.find()).isTrue();
+      StringBuilder sb = new StringBuilder("X");
+      assertThatThrownBy(() -> m.appendReplacement(sb, replacement))
+          .isInstanceOf(IndexOutOfBoundsException.class);
+      assertThat(sb.toString()).isEqualTo(expected);
+    }
+
+    // OpenJDK does not roll back a NullPointerException, so the intervening input remains.
+    @DisabledForCrosscheck(
+        "crosscheck facade appends to the caller's builder only after appendReplacement succeeds")
+    @Test
+    void appendReplacementWithNullReplacementKeepsPrecedingStringBuilderText() {
+      Matcher m = Pattern.compile("(?<g>b)").matcher("abc");
+      assertThat(m.find()).isTrue();
+      StringBuilder sb = new StringBuilder("X");
+      assertThatThrownBy(() -> m.appendReplacement(sb, null))
+          .isInstanceOf(NullPointerException.class);
+      assertThat(sb.toString()).isEqualTo("Xa");
+    }
+
+    // The IndexOutOfBoundsException outcome of the StringBuffer overload differs from OpenJDK,
+    // which keeps the partial output there too; only the IllegalArgumentException rollback is
+    // pinned here.
+    @ParameterizedTest
+    @ValueSource(strings = {"lit\\", "lit$", "lit$x", "lit${g", "lit${}", "lit${nope}", "$1$x"})
+    void malformedAppendReplacementLeavesStringBufferUnchanged(String replacement) {
+      Matcher m = Pattern.compile("(?<g>b)").matcher("abc");
+      assertThat(m.find()).isTrue();
+      StringBuffer sb = new StringBuffer("X");
+      assertThatThrownBy(() -> m.appendReplacement(sb, replacement))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThat(sb.toString()).isEqualTo("X");
+
+      m.appendReplacement(sb, "[$1]");
+      m.appendTail(sb);
+      assertThat(sb.toString()).isEqualTo("Xa[b]c");
     }
 
     // Only the ASCII digits '0'-'9' can start or continue a numeric group reference, as in

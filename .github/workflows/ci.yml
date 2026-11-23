@@ -102,6 +102,21 @@ jobs:
           -DskipTests
           --batch-mode --no-transfer-progress
 
+      - name: Resolve Vector benchmark plugins
+        # The Vector benchmark module builds outside the main Maven reactor.
+        run: >
+          mvn -f safere-vector-benchmarks/pom.xml dependency:resolve-plugins
+          --batch-mode --no-transfer-progress
+
+      - name: Seed Google Java Format
+        # Spotless resolves the formatter when it runs, so go-offline misses it.
+        run: |
+          mvn -N help:evaluate -Dexpression=google-java-format.version \
+            -Doutput="$RUNNER_TEMP/google-java-format-version" --batch-mode --no-transfer-progress
+          VERSION=$(cat "$RUNNER_TEMP/google-java-format-version")
+          mvn -N dependency:get -Dartifact="com.google.googlejavaformat:google-java-format:$VERSION" \
+            --batch-mode --no-transfer-progress
+
       - name: Seed Surefire test provider
         # Surefire selects surefire-junit-platform when tests run; go-offline misses it.
         # Run one focused test here so the provider is cached before the JDK matrix fans out.
@@ -109,6 +124,10 @@ jobs:
           mvn test -pl safere
           -Dtest=StringLiteralSearchTest
           --batch-mode --no-transfer-progress
+
+      - name: Seed PMD dependencies
+        # Generating the report resolves the configured PMD version and the report skin.
+        run: mvn -pl safere pmd:pmd --batch-mode --no-transfer-progress
 
   build:
     needs: [changes, prepare-maven-cache]

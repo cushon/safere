@@ -7,6 +7,7 @@ package org.safere;
 
 import static java.nio.ByteOrder.BIG_ENDIAN;
 import static java.nio.ByteOrder.nativeOrder;
+import static jdk.incubator.vector.VectorOperators.LE;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -37,6 +38,9 @@ final class StringVectorScan {
   private static final VectorSpecies<Byte> LATIN1_SPECIES = latin1Species(SPECIES);
   private static final VectorSpecies<Byte> UTF16_SPECIES = SPECIES.withLanes(byte.class);
   private static final boolean NATIVE_BIG_ENDIAN = nativeOrder() == BIG_ENDIAN;
+
+  /** The most ranges {@link #matches(ShortVector, int[])} accepts. */
+  private static final int MAXIMUM_RANGES = 8;
 
   /**
    * {@code ShortVector.fromString(VectorSpecies<Short>, String, int)}, or {@code null} when the
@@ -88,7 +92,7 @@ final class StringVectorScan {
    * StringVectorLoads#indexOfCharClass}. Tests call this directly to force a mode.
    */
   static int indexOfCharClass(Mode mode, String text, int[] ranges, int start) {
-    if (!Swar.supportsBmpCodeUnitRanges(ranges, ShortVectorScan.MAXIMUM_RANGES)) {
+    if (!supportsBmpCodeUnitRanges(ranges)) {
       return VectorScanProvider.UNSUPPORTED;
     }
     int from = Math.max(0, start);
@@ -110,19 +114,19 @@ final class StringVectorScan {
    * For tests, so that the kernel is covered on JVMs where no String load is available.
    */
   static int indexOfCharClass(char[] chars, int[] ranges, int start) {
-    if (!Swar.supportsBmpCodeUnitRanges(ranges, ShortVectorScan.MAXIMUM_RANGES)) {
+    if (!supportsBmpCodeUnitRanges(ranges)) {
       return VectorScanProvider.UNSUPPORTED;
     }
     int position = Math.max(0, start);
     for (; position <= chars.length - LANES; position += LANES) {
       VectorMask<Short> matches =
-          ShortVectorScan.matches(ShortVector.fromCharArray(SPECIES, chars, position), ranges);
+          matches(ShortVector.fromCharArray(SPECIES, chars, position), ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
       }
     }
     for (; position < chars.length; position++) {
-      if (ShortVectorScan.matches(chars[position], ranges)) {
+      if (matches(chars[position], ranges)) {
         return position;
       }
     }
@@ -133,7 +137,7 @@ final class StringVectorScan {
     int length = text.length();
     int position = start;
     for (; position <= length - LANES; position += LANES) {
-      VectorMask<Short> matches = ShortVectorScan.matches(fromString(text, position), ranges);
+      VectorMask<Short> matches = matches(fromString(text, position), ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
       }
@@ -169,7 +173,7 @@ final class StringVectorScan {
           (ShortVector)
               ByteVector.fromArray(LATIN1_SPECIES, value, position)
                   .convertShape(VectorOperators.ZERO_EXTEND_B2S, SPECIES, 0);
-      VectorMask<Short> matches = ShortVectorScan.matches(values, ranges);
+      VectorMask<Short> matches = matches(values, ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
       }
@@ -187,7 +191,7 @@ final class StringVectorScan {
       if (NATIVE_BIG_ENDIAN) {
         values = values.lanewise(VectorOperators.REVERSE_BYTES);
       }
-      VectorMask<Short> matches = ShortVectorScan.matches(values, ranges);
+      VectorMask<Short> matches = matches(values, ranges);
       if (matches.anyTrue()) {
         return position + matches.firstTrue();
       }
@@ -197,11 +201,78 @@ final class StringVectorScan {
 
   private static int indexOfCharClassScalar(String text, int[] ranges, int start) {
     for (int position = start; position < text.length(); position++) {
-      if (ShortVectorScan.matches(text.charAt(position), ranges)) {
+      if (matches(text.charAt(position), ranges)) {
         return position;
       }
     }
     return -1;
+  }
+
+  /** Returns whether the ranges can be matched one UTF-16 code unit at a time. */
+  private static boolean supportsBmpCodeUnitRanges(int[] ranges) {
+    if (ranges.length < 2 || ranges.length > MAXIMUM_RANGES * 2 || (ranges.length & 1) != 0) {
+      return false;
+    }
+    for (int i = 0; i < ranges.length; i += 2) {
+      int low = ranges[i];
+      int high = ranges[i + 1];
+      if (low < 0
+          || high > Character.MAX_VALUE
+          || low > high
+          || (low <= Character.MAX_SURROGATE && high >= Character.MIN_SURROGATE)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Returns the lanes of {@code values} inside one of up to {@link #MAXIMUM_RANGES} BMP code unit
+   * ranges.
+   *
+   * <p>The vector code must inline into the scan loop: a call that C2 does not inline boxes its
+   * vector arguments and result. So the work is split into methods under C1's and C2's inlining
+   * size limit ({@code MaxInlineSize}, 35 bytecodes), which inline everywhere and are never hot
+   * enough to be compiled on their own into a body too big to inline later. Ranges are combined
+   * without loops so that no mask flows through a loop phi.
+   */
+  private static VectorMask<Short> matches(ShortVector values, int[] ranges) {
+    VectorMask<Short> low = matchesUpTo4(values, ranges, 0);
+    return ranges.length <= 8 ? low : low.or(matchesUpTo4(values, ranges, 8));
+  }
+
+  /** Matches the up to four ranges starting at {@code ranges[from]}. */
+  private static VectorMask<Short> matchesUpTo4(ShortVector values, int[] ranges, int from) {
+    VectorMask<Short> low = matchesUpTo2(values, ranges, from);
+    return ranges.length <= from + 4 ? low : low.or(matchesUpTo2(values, ranges, from + 4));
+  }
+
+  /** Matches the one or two ranges starting at {@code ranges[from]}. */
+  private static VectorMask<Short> matchesUpTo2(ShortVector values, int[] ranges, int from) {
+    VectorMask<Short> low = inRange(values, ranges, from);
+    return ranges.length <= from + 2 ? low : low.or(inRange(values, ranges, from + 2));
+  }
+
+  /**
+   * Matches {@code [ranges[index], ranges[index + 1]]} with one subtraction and one comparison:
+   * {@code low <= v <= high} exactly when {@code v - low}, as an unsigned 16-bit value, is at most
+   * {@code high - low}. Flipping the sign bit of both sides turns that into a signed comparison,
+   * and subtracting {@code low ^ 0x8000} computes {@code (v - low) ^ 0x8000}.
+   */
+  private static VectorMask<Short> inRange(ShortVector values, int[] ranges, int index) {
+    int low = ranges[index];
+    return values
+        .sub((short) (low ^ 0x8000))
+        .compare(LE, (short) ((ranges[index + 1] - low) ^ 0x8000));
+  }
+
+  private static boolean matches(char value, int[] ranges) {
+    for (int index = 0; index < ranges.length; index += 2) {
+      if (value >= ranges[index] && value <= ranges[index + 1]) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

@@ -1586,6 +1586,7 @@ final class DeclarativeBenchmarkPlan {
   enum Operation implements JsonNamed {
     MATCHES("matches", false, true, Feature.MATCHES),
     FIND("find", false, true, Feature.FIND),
+    EXISTS("exists", false, true, Feature.FIND, Feature.EXISTENCE_PREDICATE),
     LOOKING_AT("lookingAt", true, true, Feature.LOOKING_AT),
     FIND_ALL_COUNT("findAllCount", false, true, Feature.FIND),
     FIND_ALL_LENGTH_SUM("findAllLengthSum", false, true, Feature.FIND, Feature.CAPTURE_TEXT),
@@ -1750,6 +1751,7 @@ final class DeclarativeBenchmarkPlan {
       return switch (this) {
         case MATCHES,
             FIND,
+            EXISTS,
             LOOKING_AT,
             FIND_GROUP_PRESENT,
             FIND_SAMPLED_GROUP,
@@ -1956,6 +1958,7 @@ final class DeclarativeBenchmarkPlan {
 
   enum Feature implements JsonNamed {
     FIND("find"),
+    EXISTENCE_PREDICATE("existencePredicate"),
     MATCHES("matches"),
     LOOKING_AT("lookingAt"),
     CAPTURE_PARTICIPATION("captureParticipation"),

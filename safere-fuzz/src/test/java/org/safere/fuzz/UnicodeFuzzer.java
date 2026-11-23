@@ -84,13 +84,14 @@ public final class UnicodeFuzzer {
         FuzzSupport.compileOrSkip("\\Xz$", 0).matcher("a".repeat(2_048) + "z");
     anchoredSuffix.find();
 
-    String regex = data.consumeString(256);
     int flags = FuzzSupport.consumeFlags(data);
-    String input = FuzzSupport.consumeUnicodeHeavyString(data, 512);
-    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileOrSkip(regex, flags);
-    if (pattern == null) {
-      return;
-    }
+    SemanticDomain.Sample sample = SemanticDomain.generate(data, flags);
+    String regex = sample.regex();
+    String input =
+        data.consumeBoolean()
+            ? sample.input(data)
+            : FuzzSupport.consumeUnicodeHeavyString(data, 512);
+    FuzzSupport.CompiledPattern pattern = FuzzSupport.compileRequired(regex, flags);
 
     FuzzSupport.MatcherPair matcher = pattern.matcher(input);
     matcher.find();

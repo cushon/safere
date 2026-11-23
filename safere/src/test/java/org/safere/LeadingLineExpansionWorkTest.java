@@ -8,6 +8,7 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -74,6 +75,68 @@ class LeadingLineExpansionWorkTest {
             .isLessThan(4L * suffix.length());
       }
     }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {".*error: \\w+", ".*?error: \\w+", "[^;]*error: \\w+", "(.*)error: \\w+"})
+  void stringPredicateDoesNotTraverseTheLeadingRunInTheDfa(String regex) {
+    Pattern pattern = Pattern.compile(regex);
+    String suffix = " error: disk";
+    for (int repetitions : new int[] {64, 512}) {
+      String input = "abcdefghijklmnopqrstuvwxyz".repeat(repetitions) + suffix;
+      long steps =
+          WorkCounter.countForwardDfaStepsForTesting(
+              () -> assertThat(pattern.asPredicate().test(input)).isTrue());
+      // Only the literal and its tail need DFA verification for an existence-only search.
+      assertThat(steps).as(regex).isLessThan(4L * suffix.length());
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {".*X![0-9]", ".*?X![0-9]", "[^;]*X![0-9]", "(.*)X![0-9]"})
+  void tinyStringPredicateDoesNotAddScanningToNativeVerification(String regex) {
+    Pattern pattern = Pattern.compile(regex);
+    for (boolean expected : new boolean[] {false, true}) {
+      String input = expected ? "X!7" : "X!-7";
+      long nativeWork =
+          WorkCounter.countWithForwardDfaStepsForTesting(() -> {
+            Dfa.SearchResult result =
+                pattern
+                    .forwardFirstMatchDfa()
+                    .doSearch(new StringInputScanner(input), 0, false, false, true);
+            assertThat(result).isNotNull();
+            assertThat(result.matched()).isEqualTo(expected);
+          });
+      long work =
+          WorkCounter.countWithForwardDfaStepsForTesting(
+              () -> assertThat(pattern.asPredicate().test(input)).isEqualTo(expected));
+      assertThat(work).as("%s expected=%s", regex, expected).isLessThanOrEqualTo(nativeWork);
+    }
+  }
+
+  /**
+   * A narrow leading class used to verify at the inner candidate and, when that succeeded, walk
+   * back and search again over the leading run. Existence searches now search once from there.
+   */
+  @ParameterizedTest
+  @ValueSource(strings = {"\\s*# noqa[0-9]", "\\s*?# noqa[0-9]", "( *)# noqa[0-9]"})
+  void narrowExistenceSearchesDoNotRescanTheLeadingRun(String regex) {
+    Pattern pattern = Pattern.compile(regex);
+    String suffix = "# noqa1";
+    String input = "x" + " ".repeat(20_000) + suffix;
+    byte[] bytes = input.getBytes(UTF_8);
+    long predicate =
+        WorkCounter.countForwardDfaStepsForTesting(
+            () -> assertThat(pattern.asPredicate().test(input)).isTrue());
+    long utf8 =
+        WorkCounter.countForwardDfaStepsForTesting(
+            () -> assertThat(pattern.find(Utf8Input.trusted(bytes))).isTrue());
+    long utf8Diagnostics =
+        WorkCounter.countForwardDfaStepsForTesting(
+            () -> assertThat(pattern.findWithDiagnostics(new Utf8InputScanner(bytes))).isTrue());
+    assertThat(List.of(predicate, utf8, utf8Diagnostics))
+        .as(regex)
+        .allSatisfy(steps -> assertThat(steps).isLessThan(4L * suffix.length()));
   }
 
   @Test

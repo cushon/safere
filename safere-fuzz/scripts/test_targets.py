@@ -11,7 +11,7 @@ class TargetManifestTest(unittest.TestCase):
     def test_repository_inventory(self):
         targets = read_targets()
         self.assertTrue(any(t['oss_fuzz'] for t in targets))
-        self.assertFalse(any(t['oss_fuzz'] and t['kind'] == 'broad' for t in targets))
+        self.assertFalse(any(t['oss_fuzz'] and t['kind'] in {'acceptance', 'broad'} for t in targets))
 
     def fixture(self, entries):
         temp = tempfile.TemporaryDirectory()
@@ -28,10 +28,20 @@ class TargetManifestTest(unittest.TestCase):
         return dict({'class': 'org.safere.fuzz.ExampleFuzzer', 'kind': 'strict',
                      'oss_fuzz': True, 'seeds': None, 'methods': ['fuzz']}, **changes)
 
-    def test_broad_enrollment_rejected(self):
-        root = self.fixture([self.entry(kind='broad')])
-        with self.assertRaisesRegex(ValueError, 'cannot enroll'):
-            read_targets(root)
+    def test_exploratory_enrollment_rejected(self):
+        for kind in ('broad', 'acceptance'):
+            with self.subTest(kind=kind):
+                root = self.fixture([self.entry(kind=kind)])
+                with self.assertRaisesRegex(ValueError, 'cannot enroll'):
+                    read_targets(root)
+
+    def test_unrestricted_acceptance_is_selected_separately(self):
+        import subprocess
+        command = ['python3', str(ROOT / 'scripts/targets.py'), '--suite']
+        acceptance = subprocess.check_output([*command, 'acceptance'], text=True)
+        self.assertEqual(acceptance.splitlines(), ['CompileFuzzer'])
+        broad = subprocess.check_output([*command, 'broad'], text=True)
+        self.assertNotIn('CompileFuzzer', broad.splitlines())
 
     def test_duplicate_rejected(self):
         root = self.fixture([self.entry(), self.entry()])
@@ -67,6 +77,7 @@ class TargetManifestTest(unittest.TestCase):
             ['python3', str(ROOT / 'scripts/targets.py'), '--select', 'SplitFuzzer'], text=True)
         self.assertEqual(set(selected.splitlines()),
                          {'SplitFuzzer#split', 'SplitFuzzer#repeatedClassSplits',
+                          'SplitFuzzer#nullableDelimiterSplits',
                           'SplitFuzzer#unassignedControlSplits', 'SplitFuzzer#literalPrefixSplits'})
         result = subprocess.run(
             ['python3', str(ROOT / 'scripts/targets.py'), '--select', 'SplitFuzzer#missing'],

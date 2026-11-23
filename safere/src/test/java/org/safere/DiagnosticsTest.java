@@ -46,6 +46,23 @@ class DiagnosticsTest {
   }
 
   @Test
+  void continuingAnUnreadFindAttributesOnlyTheNewSearchToDiagnostics() {
+    Pattern pattern = Pattern.compile("((a?)*)y");
+    Matcher matcher = pattern.matcher("aay");
+    assertThat(matcher.find()).isTrue();
+
+    Pattern.setDiagnostics(diagnostics);
+    assertThat(matcher.find()).isFalse();
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(event -> {
+          assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.LENGTH);
+          assertThat(event.captureStrategy()).isEqualTo(MatchStrategy.NONE);
+          assertThat(event.forwardDfaSearchCount()).isZero();
+        });
+  }
+
+  @Test
   void anchoredOnePassUsesTerminalRejectionBeforeScanning() {
     Pattern.setDiagnostics(diagnostics);
     String input = "a".repeat(4096) + "c";
@@ -703,7 +720,8 @@ class DiagnosticsTest {
   @Test
   void dfaSandwichReportsForwardAndReverseSearchCounts() {
     Pattern.setDiagnostics(diagnostics);
-    Pattern pattern = Pattern.compile("[ab]+c");
+    Pattern pattern =
+        Pattern.compile("[ab]+c", 0, EnginePathOptions.builder().startRegister(false).build());
 
     assertThat(pattern.matcher("xxabc").find()).isTrue();
 
@@ -712,6 +730,49 @@ class DiagnosticsTest {
         .satisfies(event -> {
           assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
           assertThat(event.forwardDfaSearchCount()).isEqualTo(1);
+          assertThat(event.reverseDfaSearchCount()).isEqualTo(1);
+        });
+  }
+
+  @Test
+  void startRegisterReportsOneForwardSearchAndNoReverseSearch() {
+    Pattern.setDiagnostics(diagnostics);
+    Pattern pattern = Pattern.compile("[ab]+c");
+
+    Matcher matcher = pattern.matcher("xxabc");
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isEqualTo(2);
+
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(event -> {
+          assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
+          assertThat(event.forwardDfaSearchCount()).isEqualTo(1);
+          assertThat(event.reverseDfaSearchCount()).isZero();
+          assertThat(event.auxiliaryStrategies())
+              .contains(new StrategyParticipation(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER))
+              .doesNotContain(
+                  new StrategyParticipation(
+                      MatchStrategy.DFA, StrategyRole.CANDIDATE_VERIFICATION));
+        });
+  }
+
+  @Test
+  void startRegisterFallbackReportsBothForwardSearchesAndTheReverseSearch() {
+    Pattern.setDiagnostics(diagnostics);
+    // The match belongs to the third live attempt, which has no register, so the start-register
+    // search falls back to the forward and reverse DFA.
+    Pattern pattern = Pattern.compile("\\w{2,5}\\b");
+
+    Matcher matcher = pattern.matcher("abcdefg");
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.group()).isEqualTo("cdefg");
+
+    assertThat(operationsFor(pattern))
+        .singleElement()
+        .satisfies(event -> {
+          assertThat(event.boundaryStrategy()).isEqualTo(MatchStrategy.DFA);
+          assertThat(event.forwardDfaSearchCount()).isEqualTo(2);
           assertThat(event.reverseDfaSearchCount()).isEqualTo(1);
         });
   }

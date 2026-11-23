@@ -58,13 +58,6 @@ public final class Pattern implements Serializable {
 
   // Avoid another DFA setup for tiny unproved candidates; longer ones benefit from its scan.
   private static final int MIN_DFA_END_VERIFICATION_UNITS = 64;
-  // A competitive literal start accelerator runs before the find reject prefilter only on inputs
-  // shorter than this, where the separate prefilter call dominates. Longer inputs keep the
-  // single-pass reject prefilter first.
-  static final int MAX_LITERAL_START_FIRST_LENGTH = 512;
-  // After a short-input start scan, the reject prefilter re-runs from the start candidate only when
-  // at least this many units remain. On a shorter tail the DFA's check costs less than the call.
-  static final int MIN_REJECT_AFTER_START_REMAINING = 64;
   private static final AtomicLong NEXT_PATTERN_ID = new AtomicLong(1);
   private static final MethodType DIAGNOSTICS_TYPE =
       MethodType.methodType(SafeReMatchDiagnostics.class);
@@ -177,11 +170,8 @@ public final class Pattern implements Serializable {
    */
   private final transient RejectPrefilter rejectPrefilter;
 
-  private final transient RejectPrefilter utf8FindRejectPrefilter;
-
-  private final boolean startPrecedesFindReject;
-  private final boolean dfaStartAcceleration;
-  private final boolean startSubsumesFindReject;
+  /** Find decisions shared by the matcher and the matcher-free existence searches. */
+  private final transient FindPlan findPlan;
 
   /**
    * OnePass analysis results, computed during construction when eligible analysis can support
@@ -207,13 +197,10 @@ public final class Pattern implements Serializable {
   private transient volatile Dfa.Setup forwardDfaSetup;
 
   /**
-   * Reverse-compiled program for backward DFA matching. Computed on first use: only unanchored
-   * {@code find()} operations whose forward DFA search finds a match, and end-anchored searches
-   * over long inputs, need it.
+   * Flattened program for backward DFA matching. Computed on first use: only unanchored {@code
+   * find()} operations whose forward DFA search finds a match, and end-anchored searches over long
+   * inputs, need it.
    */
-  private transient volatile Prog reverseProg;
-
-  private transient volatile Prog flatReverseProg;
   private transient volatile Prog flatReverseDfaProg;
 
   /**
@@ -230,10 +217,13 @@ public final class Pattern implements Serializable {
    * the same thread, so warm DFA state caches and BitState/Nfa scratch buffers persist across the
    * common {@code pattern.matcher(t).find()} idiom.
    *
-   * <p>The cache is held via a {@link SoftReference} (a bootstrap-loaded JDK class) so that when
-   * SafeRE is loaded in a child {@link ClassLoader} and patterns are held in {@code static final}
-   * fields, the {@link ThreadLocal} entry value in long-lived threads does not strongly reference
-   * SafeRE classes and pin the child {@code ClassLoader}.
+   * <p>The first thread to use a pattern keeps its cache in {@code ownerCache}, a field on the
+   * pattern, so a pattern used by one thread never adds an entry to a {@code ThreadLocalMap}. Other
+   * threads keep theirs in {@code otherThreadCaches}. Either way the cache is held via a {@link
+   * SoftReference} (a bootstrap-loaded JDK class), so that when SafeRE is loaded in a child {@link
+   * ClassLoader} and patterns are held in {@code static final} fields, a {@link ThreadLocal} entry
+   * value in a long-lived thread does not strongly reference SafeRE classes and pin the child
+   * {@code ClassLoader}, and memory pressure can still reclaim the cache of a long-lived pattern.
    */
   static final class ThreadCache {
     // Use the ID rather than retaining the Thread and its other thread-local values.
@@ -241,14 +231,60 @@ public final class Pattern implements Serializable {
     BitState bitState;
     Nfa nfa;
     Dfa forwardFirstMatchDfa;
+    Dfa forwardExistenceDfa;
     Dfa forwardLongestMatchDfa;
     Dfa reverseDfa;
+    StartRegisterSearch startRegister;
+    boolean startRegisterLookedUp;
   }
 
-  // Per-Pattern ThreadLocal is intentional: each Pattern caches its own DFA/BitState/Nfa state per
-  // thread, so warm state caches persist across the common pattern.matcher(t).find() idiom.
+  /**
+   * Returns this thread's start-register search, or null when the pattern is not eligible. The
+   * search stands in for the reverse DFA of a capture-free DFA sandwich, so it is only built where
+   * that sandwich would give authoritative group-zero bounds.
+   */
+  StartRegisterSearch startRegisterSearch(ThreadCache cache) {
+    if (!cache.startRegisterLookedUp) {
+      cache.startRegisterLookedUp = true;
+      if (enginePathOptions.startRegister()
+          && enginePathOptions.dfa()
+          && enginePathOptions.reverseDfa()
+          && prog.numCaptures() <= 1
+          && dfaGroupZeroReliable()
+          && forwardDfaSupported()
+          && canUseReverseDfa()
+          // Inner-literal narrowing of the forward DFA is worth more than the reverse pass.
+          && innerLiteralSearch == null) {
+        cache.startRegister =
+            StartRegisterSearch.create(
+                flatDfaProg(),
+                dfaStartAcceleration() ? stringStartAccelerator : null,
+                dfaStartAcceleration() ? utf8StartAccelerator : null);
+      }
+    }
+    return cache.startRegister;
+  }
+
+  // Each Pattern caches its own DFA/BitState/Nfa state per thread, so warm state caches persist
+  // across the common pattern.matcher(t).find() idiom. The first thread to use the pattern keeps
+  // its cache in ownerCache, so a pattern that is only used by one thread (including one compiled
+  // and discarded per operation) never adds an entry to a ThreadLocalMap. Other threads use
+  // otherThreadCaches, which is created when a second thread first needs a cache. The owner never
+  // changes: if the owner thread exits, its cache stays with the pattern (softly reachable) and
+  // every other thread keeps using otherThreadCaches.
+
+  /** The {@link Thread#threadId} of the thread that owns {@link #ownerCache}, or 0 if unclaimed. */
+  private transient volatile long ownerThreadId;
+
+  /** Only accessed by the thread whose ID is {@link #ownerThreadId}. */
+  private transient SoftReference<ThreadCache> ownerCache;
+
+  // Per-Pattern ThreadLocal is intentional, see above.
   @SuppressWarnings("ThreadLocalUsage")
-  private final transient ThreadLocal<SoftReference<ThreadCache>> threadCache = new ThreadLocal<>();
+  private transient volatile ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches;
+
+  // Cache initialization must not compete with callers holding the Pattern monitor.
+  private final transient Object threadCacheLock = new Object();
 
   /** Holder for OnePass analysis results. */
   private record OnePassAnalysis(
@@ -331,19 +367,8 @@ public final class Pattern implements Serializable {
         wideLeadingExpansion && prog.hasGraphemeClusterInstruction()
             ? null
             : StringStartAccelerator.create(this.multiAnchor, prog.hasWordBoundary());
-    // The wide expansion can walk backward over an entire line. Keep it out of the DFA loop,
-    // which could otherwise repeat that walk at each position before the same inner hit.
-    this.dfaStartAcceleration = !wideLeadingExpansion;
     this.enginePathOptions = enginePathOptions;
     this.rejectPrefilter = RejectPrefilter.create(this.multiAnchor);
-    // When find() runs a wide-class leading expansion, its inner literal search fails exactly when
-    // the reject prefilter would reject, so the prefilter's scan would only repeat it.
-    this.startSubsumesFindReject =
-        enginePathOptions.startAcceleration()
-            && !prog.anchorStart()
-            && stringStartAccelerator != null
-            && utf8StartAccelerator != null
-            && this.multiAnchor.startSubsumesFindReject();
     this.innerLiteralSearch =
         enginePathOptions.startAcceleration()
                 && enginePathOptions.literalFastPaths()
@@ -354,13 +379,6 @@ public final class Pattern implements Serializable {
                 && !lit.foldCase()
             ? InnerLiteralSearch.compile(ast, rejectPrefilter)
             : null;
-    this.startPrecedesFindReject =
-        enginePathOptions.startAcceleration()
-            && !prog.anchorStart()
-            && findRejectPrefilter() != null
-            && stringStartAccelerator != null
-            && utf8StartAccelerator != null
-            && this.multiAnchor.startPrecedesFindReject();
     // The literal-alternation runner skips canReject on its initial String find().
     // The filter's type still selects its window policy; fallback operations retain the filter.
     this.literalAlternation =
@@ -394,16 +412,28 @@ public final class Pattern implements Serializable {
     // prepared program. Only literal runners defer this work; their source has no grapheme or
     // loop-register instructions, and therefore already establishes support.
     Prog forwardProgram = flatDfaProg != null ? flatDfaProg : flatProg != null ? flatProg : prog;
-    this.forwardDfaSupported = enginePathOptions.dfa() && supportsForwardDfa(forwardProgram);
+    this.forwardDfaSupported =
+        enginePathOptions.dfa()
+            && !prog.hasPreviousMatchEnd()
+            && supportsForwardDfa(forwardProgram);
     RejectPrefilter baseFindReject =
         this.innerLiteralSearch == null || !this.forwardDfaSupported ? this.rejectPrefilter : null;
-    this.utf8FindRejectPrefilter =
+    RejectPrefilter utf8FindReject =
         baseFindReject != null
                 && enginePathOptions.startAcceleration()
                 && this.utf8StartAccelerator != null
                 && !prog.anchorStart()
             ? RejectPrefilter.withoutDisjointLiterals(baseFindReject)
             : baseFindReject;
+    this.findPlan =
+        FindPlan.create(
+            this.multiAnchor,
+            baseFindReject,
+            utf8FindReject,
+            enginePathOptions.startAcceleration()
+                && !prog.anchorStart()
+                && stringStartAccelerator != null
+                && utf8StartAccelerator != null);
 
     SafeReMatchDiagnostics listener = diagnostics();
     if (SafeReMatchDiagnostics.isEnabled(listener)) {
@@ -658,12 +688,13 @@ public final class Pattern implements Serializable {
    * Returns whether the matcher-free existence searches ({@link #find(Utf8Input)} and {@link
    * #asPredicate()}) can answer for this pattern.
    *
-   * <p>Those paths use cheap checks followed by the forward first-match DFA or an end-anchored
-   * reverse search, with exact verification and fallback. Patterns with grapheme semantics or loop
-   * registers use a matcher instead, so they get its full strategy sequence.
+   * <p>Those paths use cheap checks followed by a forward existence DFA or an end-anchored reverse
+   * search, with exact verification and fallback. The flattened forward DFA may prove existence
+   * even when the original program has loop registers. Programs unsupported by the forward DFA
+   * retain the matcher's strategy sequence.
    */
   private boolean canFindWithoutMatcher() {
-    return enginePathOptions.dfa() && supportsForwardDfa(prog);
+    return forwardDfaSupported;
   }
 
   boolean findWithDiagnostics(Utf8InputScanner scanner) {
@@ -726,14 +757,9 @@ public final class Pattern implements Serializable {
     if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart)) {
       return true;
     }
-    RejectPrefilter findRejectPrefilter = utf8FindRejectPrefilter();
-    boolean rejectAfterStart =
-        findRejectPrefilter != null
-            && startPrecedesFindReject
-            && length < MAX_LITERAL_START_FIRST_LENGTH;
-    if (findRejectPrefilter != null
-        && !rejectAfterStart
-        && !startSubsumesFindReject
+    RejectPrefilter findRejectPrefilter = findPlan.utf8Reject();
+    int rejectMode = findPlan.rejectMode(findRejectPrefilter, length, true);
+    if (rejectMode == FindPlan.REJECT_FIRST
         && findRejectPrefilter.canReject(null, scanner, 0, enginePathOptions)) {
       return false;
     }
@@ -744,8 +770,7 @@ public final class Pattern implements Serializable {
         && !prog.anchorStart()) {
       searchStart = findNextUtf8StartCandidate(scanner, null);
       if (searchStart < 0
-          || (rejectAfterStart
-              && length - searchStart >= MIN_REJECT_AFTER_START_REMAINING
+          || (FindPlan.rejectsTail(rejectMode, length - searchStart)
               && findRejectPrefilter.canRejectTail(
                   null, scanner, searchStart, enginePathOptions))) {
         return false;
@@ -764,8 +789,13 @@ public final class Pattern implements Serializable {
     // The forward DFA checks a stripped end anchor itself, as the matcher's DFA pass relies on, so
     // end-anchored programs that the reverse probe could not settle avoid the NFA here too.
     Dfa.SearchResult result =
-        forwardFirstMatchDfa()
-            .doSearch(scanner, searchStart, prog.anchorStart(), false, startPositionPreselected);
+        forwardExistenceDfa()
+            .searchExists(
+                scanner,
+                searchStart,
+                prog.anchorStart(),
+                startPositionPreselected,
+                AdaptiveBackoff.NEUTRAL);
     if (result != null) {
       return result.matched();
     }
@@ -835,14 +865,9 @@ public final class Pattern implements Serializable {
     if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart, diagnostics)) {
       return true;
     }
-    RejectPrefilter findRejectPrefilter = utf8FindRejectPrefilter();
-    boolean rejectAfterStart =
-        findRejectPrefilter != null
-            && startPrecedesFindReject
-            && length < MAX_LITERAL_START_FIRST_LENGTH;
-    if (findRejectPrefilter != null
-        && !rejectAfterStart
-        && !startSubsumesFindReject
+    RejectPrefilter findRejectPrefilter = findPlan.utf8Reject();
+    int rejectMode = findPlan.rejectMode(findRejectPrefilter, length, true);
+    if (rejectMode == FindPlan.REJECT_FIRST
         && rejectsWithDiagnostics(findRejectPrefilter, scanner, 0, diagnostics)) {
       return false;
     }
@@ -853,8 +878,7 @@ public final class Pattern implements Serializable {
         && !prog.anchorStart()) {
       searchStart = findNextUtf8StartCandidate(scanner, diagnostics);
       if (searchStart < 0
-          || (rejectAfterStart
-              && length - searchStart >= MIN_REJECT_AFTER_START_REMAINING
+          || (FindPlan.rejectsTail(rejectMode, length - searchStart)
               && rejectsTailWithDiagnostics(
                   findRejectPrefilter, scanner, searchStart, diagnostics))) {
         return false;
@@ -873,8 +897,13 @@ public final class Pattern implements Serializable {
     diagnostics.participate(MatchStrategy.DFA, StrategyRole.REJECT_PREFILTER);
     diagnostics.incrementForwardDfaSearchCount();
     Dfa.SearchResult result =
-        forwardFirstMatchDfa()
-            .doSearch(scanner, searchStart, prog.anchorStart(), false, startPositionPreselected);
+        forwardExistenceDfa()
+            .searchExists(
+                scanner,
+                searchStart,
+                prog.anchorStart(),
+                startPositionPreselected,
+                AdaptiveBackoff.NEUTRAL);
     if (result != null) {
       diagnostics.boundary(MatchStrategy.DFA);
       return result.matched();
@@ -905,48 +934,17 @@ public final class Pattern implements Serializable {
     if (diagnostics != null && strategy != null) {
       diagnostics.participate(strategy, StrategyRole.START_ACCELERATION);
     }
-    if (utf8StartAccelerator instanceof Utf8StartAccelerator.LeadingExpansion le
-        && le.wideLeadingClass()
-        && le.minRepetition() == 0
-        && !le.hasLeadingAssertions()
-        && le.inner() instanceof Utf8StartAccelerator.Literal) {
-      // Preserve the wide expansion's short-input decline to avoid adding literal-scan setup
-      // to native verification. Nearby hits below retain its minimum profitable skip too.
-      if (scanner.length() < MultiAnchorCompiler.MIN_WIDE_LEADING_SKIP) {
+    if (findPlan.existenceStartsAtInner()
+        && utf8StartAccelerator instanceof Utf8StartAccelerator.LeadingExpansion le) {
+      // Existence does not need the expanded match start (see FindPlan#existenceStartsAtInner).
+      // One ordinary search from the inner candidate verifies the tail and handles later
+      // candidates, so no probe, walk back or second search is needed.
+      if (findPlan.skipsExistenceScan(scanner.length())) {
         return 0;
       }
-      // Existence does not need the expanded match start. Every match has a suffix at or after
-      // the first inner literal, and that suffix is itself a match with zero leading repetitions.
-      // Keep the full scanner so assertions retain their input context. One ordinary search from
-      // this candidate verifies the tail and handles later candidates without repeated probes.
       int candidate = le.findInnerCandidate(scanner, 0);
       if (candidate >= 0) {
-        // Leave nearby hits to the forward search, as in wide leading expansion.
-        return candidate < MultiAnchorCompiler.MIN_WIDE_LEADING_SKIP ? 0 : candidate;
-      }
-    } else if (utf8StartAccelerator instanceof Utf8StartAccelerator.LeadingExpansion le
-        && le.canVerifyAtInner()) {
-      int innerMatch = le.findInnerCandidate(scanner, 0);
-      if (innerMatch >= 0) {
-        // With zero repetitions and no leading assertions, an unanchored rejection from the
-        // inner candidate also rejects every expanded start. Do this before walking backward.
-        if (diagnostics != null) {
-          diagnostics.participate(MatchStrategy.DFA, StrategyRole.CANDIDATE_VERIFICATION);
-          diagnostics.incrementForwardDfaSearchCount();
-        }
-        Dfa.SearchResult result =
-            forwardFirstMatchDfa().doSearch(scanner, innerMatch, false, false, true);
-        if (result != null && !result.matched()) {
-          if (diagnostics != null) {
-            diagnostics.boundary(MatchStrategy.DFA);
-          }
-          return -1;
-        }
-        if (result == null && diagnostics != null) {
-          diagnostics.decision(
-              MatchStrategy.DFA, StrategyDisposition.FALLBACK, StrategyReason.DFA_BUDGET_EXCEEDED);
-        }
-        return le.expandBackward(scanner, innerMatch, 0);
+        return findPlan.existenceStart(candidate);
       }
     } else {
       int candidate = Utf8StartAccelerator.findNextCandidate(utf8StartAccelerator, scanner, 0);
@@ -1467,14 +1465,9 @@ public final class Pattern implements Serializable {
     if (endAnchoredStart >= 0 && findAt(scanner, endAnchoredStart)) {
       return true;
     }
-    RejectPrefilter findRejectPrefilter = findRejectPrefilter();
-    boolean rejectAfterStart =
-        findRejectPrefilter != null
-            && startPrecedesFindReject
-            && length < MAX_LITERAL_START_FIRST_LENGTH;
-    if (findRejectPrefilter != null
-        && !rejectAfterStart
-        && !startSubsumesFindReject
+    RejectPrefilter findRejectPrefilter = findPlan.stringReject();
+    int rejectMode = findPlan.rejectMode(findRejectPrefilter, length, true);
+    if (rejectMode == FindPlan.REJECT_FIRST
         && findRejectPrefilter.canReject(input, null, 0, enginePathOptions)) {
       return false;
     }
@@ -1485,8 +1478,7 @@ public final class Pattern implements Serializable {
         && !prog.anchorStart()) {
       searchStart = findNextStringStartCandidate(scanner, input);
       if (searchStart < 0
-          || (rejectAfterStart
-              && length - searchStart >= MIN_REJECT_AFTER_START_REMAINING
+          || (FindPlan.rejectsTail(rejectMode, length - searchStart)
               && findRejectPrefilter.canRejectTail(input, null, searchStart, enginePathOptions))) {
         return false;
       }
@@ -1504,8 +1496,13 @@ public final class Pattern implements Serializable {
     // The forward DFA checks a stripped end anchor itself, as the matcher's DFA pass relies on, so
     // end-anchored programs that the reverse probe could not settle avoid the NFA here too.
     Dfa.SearchResult result =
-        forwardFirstMatchDfa()
-            .doSearch(scanner, searchStart, prog.anchorStart(), false, startPositionPreselected);
+        forwardExistenceDfa()
+            .searchExists(
+                scanner,
+                searchStart,
+                prog.anchorStart(),
+                startPositionPreselected,
+                AdaptiveBackoff.NEUTRAL);
     if (result != null) {
       return result.matched();
     }
@@ -1525,29 +1522,21 @@ public final class Pattern implements Serializable {
 
   /**
    * Selects the first String start candidate for {@link #findInString}. Literal scans use UTF-16
-   * indices, so candidates inside a surrogate pair are skipped, as in the matcher. A nullable
-   * leading expansion is first verified at its inner candidate, as in {@link
-   * #findNextUtf8StartCandidate}.
+   * indices, so candidates inside a surrogate pair are skipped, as in the matcher. An eligible
+   * leading expansion starts at its inner candidate, as in {@link #findNextUtf8StartCandidate}.
    */
   private int findNextStringStartCandidate(StringInputScanner scanner, String text) {
     boolean unixLines = prog.lineStartUnixLines();
-    if (stringStartAccelerator instanceof StringStartAccelerator.LeadingExpansion le
-        && le.canVerifyAtInner()) {
+    if (findPlan.existenceStartsAtInner()
+        && stringStartAccelerator instanceof StringStartAccelerator.LeadingExpansion le) {
+      if (findPlan.skipsExistenceScan(text.length())) {
+        return 0;
+      }
       int innerMatch = le.findInnerCandidate(text, 0, unixLines);
       while (innerMatch > 0 && !scanner.isCodePointBoundary(innerMatch)) {
         innerMatch = le.findInnerCandidate(text, innerMatch + 1, unixLines);
       }
-      if (innerMatch < 0) {
-        return -1;
-      }
-      // With zero repetitions and no leading assertions, an unanchored rejection from the inner
-      // candidate also rejects every expanded start.
-      Dfa.SearchResult result =
-          forwardFirstMatchDfa().doSearch(scanner, innerMatch, false, false, true);
-      if (result != null && !result.matched()) {
-        return -1;
-      }
-      return le.expandBackward(text, innerMatch, 0);
+      return innerMatch < 0 ? -1 : findPlan.existenceStart(innerMatch);
     }
     int candidate =
         StringStartAccelerator.findNextCandidate(stringStartAccelerator, text, 0, unixLines);
@@ -1672,22 +1661,64 @@ public final class Pattern implements Serializable {
   }
 
   private ThreadCache existingThreadCache() {
-    SoftReference<ThreadCache> ref = threadCache.get();
+    SoftReference<ThreadCache> ref;
+    if (ownerThreadId == Thread.currentThread().threadId()) {
+      ref = ownerCache;
+    } else {
+      ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches;
+      ref = caches != null ? caches.get() : null;
+    }
     return ref != null ? ref.get() : null;
   }
 
   /**
    * Returns the current thread's cache, creating it if needed. A {@link Matcher} fetches this once
-   * and passes it to the cache accessors, so each lookup does not repeat the {@link ThreadLocal}
-   * and {@link SoftReference} dereferences.
+   * and passes it to the cache accessors, so each lookup does not repeat the thread check and
+   * {@link SoftReference} dereference.
    */
   ThreadCache getOrCreateThreadCache() {
-    ThreadCache cache = existingThreadCache();
+    long threadId = Thread.currentThread().threadId();
+    long owner = ownerThreadId;
+    if (owner == 0) {
+      synchronized (threadCacheLock) {
+        owner = ownerThreadId;
+        if (owner == 0) {
+          owner = threadId;
+          ownerThreadId = owner;
+        }
+      }
+    }
+    if (owner == threadId) {
+      SoftReference<ThreadCache> ref = ownerCache;
+      ThreadCache cache = ref != null ? ref.get() : null;
+      if (cache == null) {
+        cache = new ThreadCache();
+        ownerCache = new SoftReference<>(cache);
+      }
+      return cache;
+    }
+    ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches();
+    SoftReference<ThreadCache> ref = caches.get();
+    ThreadCache cache = ref != null ? ref.get() : null;
     if (cache == null) {
       cache = new ThreadCache();
-      threadCache.set(new SoftReference<>(cache));
+      caches.set(new SoftReference<>(cache));
     }
     return cache;
+  }
+
+  private ThreadLocal<SoftReference<ThreadCache>> otherThreadCaches() {
+    ThreadLocal<SoftReference<ThreadCache>> caches = otherThreadCaches;
+    if (caches == null) {
+      synchronized (threadCacheLock) {
+        caches = otherThreadCaches;
+        if (caches == null) {
+          caches = new ThreadLocal<>();
+          otherThreadCaches = caches;
+        }
+      }
+    }
+    return caches;
   }
 
   /** Returns the thread-local cached BitState, or null if none has been cached yet. */
@@ -1784,7 +1815,7 @@ public final class Pattern implements Serializable {
   }
 
   private boolean dfaStartAcceleration() {
-    return enginePathOptions.startAcceleration() && dfaStartAcceleration;
+    return enginePathOptions.startAcceleration() && findPlan.dfaStartAcceleration();
   }
 
   /** Returns whether DFA paths implement every instruction in {@link #flatDfaProg()}. */
@@ -1797,6 +1828,25 @@ public final class Pattern implements Serializable {
         && !p.hasGraphemeSemantics()
         && !p.hasPreviousMatchEnd()
         && p.numLoopRegs() == 0;
+  }
+
+  Dfa forwardExistenceDfa() {
+    ThreadCache cache = getOrCreateThreadCache();
+    Dfa dfa = cache.forwardExistenceDfa;
+    if (dfa == null) {
+      dfa =
+          new Dfa(
+              flatDfaProg(),
+              MAX_DFA_STATES,
+              forwardDfaSetup(),
+              false,
+              dfaStartAcceleration() ? utf8StartAccelerator : null,
+              dfaStartAcceleration() ? stringStartAccelerator : null,
+              innerLiteralSearch,
+              true);
+      cache.forwardExistenceDfa = dfa;
+    }
+    return dfa;
   }
 
   Dfa forwardFirstMatchDfa() {
@@ -2179,67 +2229,21 @@ public final class Pattern implements Serializable {
     return true;
   }
 
-  /** Forward DFA narrowing checks the suffix after failure; avoid an eager duplicate scan. */
-  RejectPrefilter findRejectPrefilter() {
-    return innerLiteralSearch == null || !forwardDfaSupported ? rejectPrefilter : null;
-  }
-
   /**
-   * UTF-8 {@code find()} counterpart to {@link #findRejectPrefilter()}: also omits {@link
-   * RejectPrefilter.DisjointLiterals} when UTF-8 start acceleration already covers the search.
+   * Returns the String find reject prefilter. Forward DFA narrowing checks the suffix after
+   * failure, so patterns with an inner literal search have none, avoiding an eager duplicate scan.
    */
-  RejectPrefilter utf8FindRejectPrefilter() {
-    return utf8FindRejectPrefilter;
+  RejectPrefilter findRejectPrefilter() {
+    return findPlan.stringReject();
   }
 
-  boolean startPrecedesFindReject() {
-    return startPrecedesFindReject;
-  }
-
-  /** Returns whether find() skips the reject prefilter in favor of the start accelerator. */
-  boolean startSubsumesFindReject() {
-    return startSubsumesFindReject;
+  /** Returns the find decisions shared by every find entry point. */
+  FindPlan findPlan() {
+    return findPlan;
   }
 
   MultiAnchorDescriptor multiAnchor() {
     return multiAnchor;
-  }
-
-  /**
-   * Returns the reverse-compiled program for backward DFA matching, compiling it on first access.
-   *
-   * <p>Like the other lazily built artifacts, the volatile fast path serves initialized readers and
-   * the synchronized slow path builds the program once under concurrent first use.
-   */
-  Prog reverseProg() {
-    Prog rp = reverseProg;
-    if (rp == null) {
-      synchronized (this) {
-        rp = reverseProg;
-        if (rp == null) {
-          rp = Compiler.compile(ast, true);
-          reverseProg = rp;
-        }
-      }
-    }
-    return rp;
-  }
-
-  Prog flatReverseProg() {
-    Prog frp = flatReverseProg;
-    if (frp == null) {
-      synchronized (this) {
-        frp = flatReverseProg;
-        if (frp == null) {
-          Prog rp = reverseProg();
-          if (rp != null) {
-            frp = rp.flattenedCopy();
-            flatReverseProg = frp;
-          }
-        }
-      }
-    }
-    return frp;
   }
 
   Prog flatReverseDfaProg() {
@@ -2249,24 +2253,17 @@ public final class Pattern implements Serializable {
       synchronized (this) {
         frp = flatReverseDfaProg;
         if (frp == null) {
-          // Prepare once under the lock rather than retaining the tree after construction.
           Compiler.Prepared prepared = Compiler.prepare(ast);
-          Prog rp = reverseProg;
-          if (rp == null) {
-            rp = Compiler.compile(prepared, true);
-            reverseProg = rp;
-          }
-          if (rp != null) {
-            if (rp.numLoopRegs() > 0) {
-              Prog dfaRp = Compiler.compileForDfa(prepared, true);
-              if (dfaRp != null) {
-                frp = dfaRp.flattenedCopy();
-              } else {
-                frp = flatReverseProg();
+          Prog graph = Compiler.compile(prepared, true);
+          if (graph != null) {
+            if (graph.numLoopRegs() > 0) {
+              Prog dfaGraph = Compiler.compileForDfa(prepared, true);
+              if (dfaGraph != null) {
+                graph = dfaGraph;
               }
-            } else {
-              frp = flatReverseProg();
             }
+            // The reverse DFA executes only the flattened program.
+            frp = graph.flattenedCopy();
             reverseDfaSetup = Dfa.buildSetup(frp);
             contextFreeReverseLanguage =
                 hasContextFreeLanguage(prog) && hasContextFreeLanguage(frp);

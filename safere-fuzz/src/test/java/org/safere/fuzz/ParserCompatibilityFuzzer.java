@@ -5,53 +5,58 @@
 
 package org.safere.fuzz;
 
+import static org.safere.fuzz.RegexFragment.consuming;
+import static org.safere.fuzz.RegexFragment.zeroWidth;
+
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import java.util.List;
 import java.util.Objects;
+import org.junit.jupiter.api.Test;
 import org.safere.Matcher;
 import org.safere.Pattern;
 
 public final class ParserCompatibilityFuzzer {
 
-  private static final String[] ATOMS = {
-    "",
-    "a",
-    ".",
-    "\\d",
-    "\\D",
-    "\\w",
-    "\\W",
-    "\\s",
-    "\\S",
-    "\\p{Lower}",
-    "\\P{Lower}",
-    "\\Q\\E",
-    "\\Q\\E\\Q\\E",
-    "\\Q*\\E",
-    "^",
-    "$",
-    "\\b",
-    "\\B",
-    "\\b{g}",
-    "a\\Q\\E",
-    "[a]",
-    "[^a]",
-    "[a-z]",
-    "[a-z&&[def]]",
-    "()",
-    "(?)",
-    "(a)",
-    "(?:a)",
-    "(?<name>a)",
-    "a\u001C\\^]",
-    "a\u001D\\^]",
-    "a\u001E\\^]",
-    "a\u001F\\^]",
-    "[a\u001Cb]",
-    "[a\u001Db]",
-    "[a\u001Eb]",
-    "[a\u001Fb]"
+  private static final RegexFragment[] ATOMS = {
+    zeroWidth(""),
+    consuming("a"),
+    consuming("."),
+    consuming("\\d"),
+    consuming("\\D"),
+    consuming("\\w"),
+    consuming("\\W"),
+    consuming("\\s"),
+    consuming("\\S"),
+    consuming("\\p{Lower}"),
+    consuming("\\P{Lower}"),
+    zeroWidth("\\Q\\E"),
+    zeroWidth("\\Q\\E\\Q\\E"),
+    consuming("\\Q*\\E"),
+    zeroWidth("^"),
+    zeroWidth("$"),
+    zeroWidth("\\b"),
+    zeroWidth("\\B"),
+    zeroWidth("\\G"),
+    zeroWidth("\\b{g}"),
+    consuming("a\\Q\\E"),
+    consuming("[a]"),
+    consuming("[^a]"),
+    consuming("[a-z]"),
+    consuming("[a-z&&[def]]"),
+    zeroWidth("()"),
+    zeroWidth("(?)"),
+    consuming("(a)"),
+    consuming("(?:a)"),
+    consuming("(?<name>a)"),
+    consuming("a\u001C\\^]"),
+    consuming("a\u001D\\^]"),
+    consuming("a\u001E\\^]"),
+    consuming("a\u001F\\^]"),
+    consuming("[a\u001Cb]"),
+    consuming("[a\u001Db]"),
+    consuming("[a\u001Eb]"),
+    consuming("[a\u001Fb]")
   };
   private static final String[] PREFIXES = {"", "^", "(?i)", "(?x)", "(?m)", "(?s)"};
   private static final String[] CONNECTORS = {
@@ -63,24 +68,16 @@ public final class ParserCompatibilityFuzzer {
     "*",
     "*?",
     "* #q\n ?",
-    "* #q\n +",
-    "* #q\n + +",
     "+",
     "+?",
     "+ #q\n ?",
-    "+ #q\n +",
-    "+ #q\n + +",
     "{0}",
     "{00}",
     "{1,3}",
     "{01,03}",
     "{1}",
     "{01}",
-    "{2}+",
-    "{0,2}+",
     "{1} #q\n ?",
-    "{1} #q\n +",
-    "{1} #q\n + +",
     "??{1,3}",
     "??{01,03}",
     "?{1,3}",
@@ -91,11 +88,22 @@ public final class ParserCompatibilityFuzzer {
     "+{0}?+",
     "+{0}?+{1}",
     "+{1}{0}?+?",
-    "+++",
-    "++?{0,2}?",
     "+{01,03}",
     "{1,3}{1,3}",
     "{01,03}{02}"
+  };
+  // These connectors can attach a possessive modifier to the first atom.
+  private static final String[] ZERO_WIDTH_CONNECTORS = {
+    "* #q\n +",
+    "* #q\n + +",
+    "+ #q\n +",
+    "+ #q\n + +",
+    "{2}+",
+    "{0,2}+",
+    "{1} #q\n +",
+    "{1} #q\n + +",
+    "+++",
+    "++?{0,2}?"
   };
   private static final String[] SUFFIXES = {"", "$", "?", "*", "+", "{2}", "{02}", "{1,3}"};
   private static final String[] LEADING_COUNTED_REPEATS = {
@@ -159,18 +167,64 @@ public final class ParserCompatibilityFuzzer {
     } else if (data.consumeBoolean()) {
       regex = data.pickValue(PREFIXES) + data.pickValue(LEADING_COUNTED_REPEATS);
     } else {
+      String prefix = data.pickValue(PREFIXES);
+      RegexFragment first = data.pickValue(ATOMS);
+      String connector = pickConnector(data, first);
       regex =
-          data.pickValue(PREFIXES)
-              + data.pickValue(ATOMS)
-              + data.pickValue(CONNECTORS)
-              + data.pickValue(ATOMS)
-              + data.pickValue(SUFFIXES);
+          compoundPattern(
+              prefix, first, connector, data.pickValue(ATOMS), data.pickValue(SUFFIXES));
     }
     FuzzSupport.assertFullMatchesJdk(regex, flags, INPUTS);
-    // Append consumers to preserve the interpretation of the existing corpus.
     assertOperandFreePossessiveCountedRepeatMatchesJdk(data);
     assertQuantifierBoundaryFindsMatchJdk(data);
     assertCountedRepeatQuoteGapsMatchJdk(data);
+    assertZeroWidthPossessiveMatchesJdk(data);
+  }
+
+  private static String pickConnector(FuzzedDataProvider data, RegexFragment first) {
+    if (first.canConsume()) {
+      return data.pickValue(CONNECTORS);
+    }
+    int index = data.consumeInt(0, CONNECTORS.length + ZERO_WIDTH_CONNECTORS.length - 1);
+    return index < CONNECTORS.length
+        ? CONNECTORS[index]
+        : ZERO_WIDTH_CONNECTORS[index - CONNECTORS.length];
+  }
+
+  private static String compoundPattern(
+      String prefix, RegexFragment first, String connector, RegexFragment second, String suffix) {
+    return prefix + first.regex() + connector + second.group("(?:").regex() + suffix;
+  }
+
+  @Test
+  void quotedEmptyOperandsRetainPossessiveConnectorsInCompoundPatterns() {
+    RegexFragment first = zeroWidth("\\Q\\E\\Q\\E");
+    RegexFragment second = consuming("\\P{Lower}");
+    for (String prefix : List.of("", "^", "(?i)", "(?x)")) {
+      for (String suffix : List.of("", "$", "?", "{2}")) {
+        String regex = compoundPattern(prefix, first, "{1} #q\n +", second, suffix);
+        var pattern = FuzzSupport.compileRequired(regex, Pattern.COMMENTS);
+        for (String input : INPUTS) {
+          pattern.matcher(input).matches();
+        }
+      }
+    }
+  }
+
+  private static void assertZeroWidthPossessiveMatchesJdk(FuzzedDataProvider data) {
+    RegexFragment operand =
+        data.consumeBoolean()
+            ? RegexFragment.zeroWidth(data.pickValue(List.of("", "^", "$", "\\b", "\\G")))
+            : RegexFragment.consuming(data.pickValue(List.of("a", "[ab]", "a|b")))
+                .group("(?:")
+                .repeat("{0}", 0);
+    String count = data.pickValue(List.of("*", "+", "?", "{2}", "{0,2}"));
+    String gap = data.pickValue(List.of("", " #q\n ", " ", "\\Q\\E"));
+    String regex = operand.group("(?:").regex() + count + gap + "+";
+    var pattern = FuzzSupport.compileRequired(regex, Pattern.COMMENTS);
+    for (String input : INPUTS) {
+      pattern.matcher(input).matches();
+    }
   }
 
   private static void assertCountedRepeatQuoteGapsMatchJdk(FuzzedDataProvider data) {

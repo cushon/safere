@@ -14,30 +14,33 @@ comparisons use `FuzzSupport` and inherit its limitations listed below.
 
 | Target | Generated domain and assertions | Extraction disposition |
 | --- | --- | --- |
-| CompileFuzzer | Arbitrary pattern text up to 2048 characters and sampled flags; compilation acceptance. | Unsupported syntax and arbitrary flags prevent strict enrollment. |
+| CompileFuzzer | Arbitrary pattern text up to 2048 characters and sampled flags; compilation acceptance. | Opt-in acceptance suite. Expected dialect differences remain visible here. |
 | ParserCompatibilityFuzzer | Atoms, prefixes, connectors, suffixes, leading counted repeats, comment terminators and malformed groups; parser flags; acceptance and fixed membership subjects. | Grammar includes intentional syntax differences. |
 | CharacterClassExpressionFuzzer | Fixed regressions and composed base/ampersand/trailing/right pieces, intersections and comment separators; acceptance and membership. | Trivia selection avoids invalid separators; intentional class rules need model coverage, not JDK enrollment. |
 | EscapeSyntaxFuzzer | Fixed regressions and composed prefix/escape/suffix families; acceptance and membership with parser flags. | Keep broad pending a separate escape-domain proposal. |
 | DialectSyntaxFuzzer | Dialect fragments and group/class contexts; acceptance and membership, plus explicit SafeRE Python-style named-group expectations. | Mixed model and differential checks; extension assertions are not JDK comparisons. |
 | ParserStackSafetyFuzzer | Fixed and sampled nesting through depth 512, classes/groups/captures/count repeats, nested quantifiers and gaps; compilation, matches and captures on small subjects. | Robustness extracts SafeRE-only bounded nesting; existing richer JDK domain remains broad. |
 | CaptureSemanticsFuzzer | Empty, nullable, named and boundary captures; chained quantifiers; bounded subjects/find sequences; group text/bounds/count, snapshots, numeric/named/function replacements and append APIs. | Failed-path capture and dependent replacement differences remain visible findings. |
-| MatchFuzzer | Arbitrary patterns/flags/subjects; matches, lookingAt, find and find(start). Focused families cover accelerated restart growth, Unicode boundary caches, leading classes, factored/scoped case flags, line terminators/start anchors, zero-width priority/capture retention, sandwich searches, Unicode casefolding and UTF-8 literals, multi-anchor gaps, and priority selection. Explicit casefold regression/model tables also run. | Shared CaseFamilyChecks extracted; finite PriorityCases graduated separately. Unicode, anchor, flag and capture interactions remain exploratory. |
-| FindSequenceFuzzer | Arbitrary and focused delimiter/capture/anchor/CRLF/supplementary patterns; warmup reuse, repeated finds and bounded sequences of match/find/reset/new input/group/region/bounds/snapshot state operations. | Stateful and zero-width continuation expectations require their own domain review. |
-| ReplacementFuzzer | Arbitrary patterns/flags/input/replacement or Unicode casefold suffix families; replaceAll/First, matcher state, appendReplacement/Tail with builders and buffers. | Invalid replacement handling and capture semantics keep this broad. |
-| SplitFuzzer | `split`: arbitrary patterns/flags, inputs, signed and very large limits. A separate Unicode-model regression checks that explicit boundary delimiters cannot split CRLF. `unassignedControlSplits`: default-ignorable grapheme controls. `repeatedClassSplits`: repeated classes over binary/ASCII/NUL/supplementary alphabets, optional captures, repeated delimiters. `literalPrefixSplits`: short and complete literal prefixes, anchors, and case flags. These generators check split and splitWithDelimiters variants. | Fuzz methods remain discoverable through the runner; fixed Unicode-model regressions do not impose JDK compatibility. |
+| MatchFuzzer | Supported pattern grammar with sampled flags and subjects; matches, lookingAt, find and find(start). Focused families cover accelerated restart growth, Unicode boundary caches, leading classes, factored/scoped case flags, line terminators/start anchors, zero-width priority/capture retention, sandwich searches, Unicode casefolding and UTF-8 literals, multi-anchor gaps, and priority selection. Explicit casefold regression/model tables also run. | Shared CaseFamilyChecks extracted; finite PriorityCases graduated separately. Unicode, anchor, flag and capture interactions remain exploratory. |
+| FindSequenceFuzzer | Supported grammar and focused delimiter/capture/anchor/CRLF/supplementary patterns; warmup reuse, repeated finds and bounded sequences of match/find/reset/new input/group/region/bounds/snapshot state operations. | Stateful and zero-width continuation expectations require their own domain review. |
+| ReplacementFuzzer | Supported pattern grammar with sampled flags, subjects and replacements, plus focused families; replaceAll/First, matcher state, appendReplacement/Tail with builders and buffers. | Invalid replacement handling and capture semantics keep this broad. |
+| SplitFuzzer | `split`: supported pattern grammar, sampled flags and subjects, signed and very large limits. A separate Unicode-model regression checks that explicit boundary delimiters cannot split CRLF. `unassignedControlSplits`: default-ignorable grapheme controls. `repeatedClassSplits`: repeated classes over binary/ASCII/NUL/supplementary alphabets, optional captures, repeated delimiters. `literalPrefixSplits`: short and complete literal prefixes, anchors, and case flags. These generators check split and splitWithDelimiters variants. | Fuzz methods remain discoverable through the runner; fixed Unicode-model regressions do not impose JDK compatibility. |
 | RegionBoundsFuzzer | Arbitrary regions and bounds plus fixed grapheme/surrogate/CRLF matrices; getters, find, matches and lookingAt. `assertionComposition` generates atom/assertion/atom patterns, captures, both orders of unreachable grapheme alternatives, Unicode fragments and regions including sliced CRLF. `opaqueSubstring` compares generated opaque regions with independent substrings, including captures, find sequences, and anchoring modes where equivalent. | Opaque matching uses the substring oracle. JDK observations remain separate where behavior is comparable; transparent split-end cases check confinement rather than reproducing JDK-8394894 overruns. See the opaque-region contract. |
 | DeferredRegionCaptureFuzzer | Package-private forced deferred execution, disabled one-pass/bit-state paths; anchored/boundary/optional captures, BMP/supplementary subjects, reset/reuse and region/bounds combinations. Direct JDK success/capture/find assertions. | Inventoried despite its package; focused but complex, with an unbudgeted direct oracle. No graduation claimed. |
-| UnicodeFuzzer | Fixed grapheme/Indic matrices, anchored long grapheme subjects, arbitrary patterns and Unicode-heavy inputs; finds/captures, matches and lookingAt. | Unicode and grapheme boundaries include intentional differences. |
+| UnicodeFuzzer | Fixed grapheme/Indic matrices, anchored long grapheme subjects, supported pattern grammar and Unicode-heavy inputs; finds/captures, matches and lookingAt. | Unicode and grapheme boundaries include intentional differences. |
 | Utf8InputFuzzer | Literal/keyword/fixed-offset/grapheme/multi-anchor representation checks; direct JDK prefix-slice, boundary-region, start-anchor, final-terminator, position-dependent and multi-offset comparisons; random repeated literal and arbitrary pattern/byte windows, strict UTF-8 validation, bounds/progress. | RepresentationChecks and Utf8RobustnessChecks are shared with independent targets. Direct JDK families remain broad. Valid representation inputs exclude lossy surrogate conversion. |
 
 ## Shared exploratory comparator boundaries
 
-- Both engines rejecting syntax ends the comparison. SafeRE compiler-size
-  rejection remains excluded as a workload limit. Other one-sided rejections,
-  including unsupported syntax, are findings; no lexical recognizer suppresses
-  lookaround, backreferences, possessive quantifiers, atomic groups or `\G`.
-  Strict generators do not use the compiler-size exclusion; their valid patterns
-  must compile in both engines.
+`UnsupportedSyntaxTest` enumerates rejection cases and checks supported controls
+with both engines during the regular test build.
+
+- Both engines rejecting syntax ends a comparison that allows rejection.
+  Those comparisons exclude SafeRE compiler-size rejection as a workload limit.
+  Other one-sided rejections remain visible in the unrestricted acceptance
+  suite and targeted parser exploration. Strict generators and the supported
+  semantic branches require both engines to compile, including zero-width
+  possessives and `\G` where generated.
 - The old capture, dependent replacement, and parser-marked intentional class
   rejection waivers are removed. Exact reviewed outcomes are replayed separately;
   arbitrary related failures are still findings.

@@ -5,6 +5,7 @@
 
 package org.safere;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Field;
@@ -131,7 +132,8 @@ class CompilerPreparationTest {
   })
   void reverseDfaProgramIsBuiltOnFirstUse(String regex, String text, int start, int end)
       throws ReflectiveOperationException {
-    Pattern pattern = Pattern.compile(regex);
+    // The start-register search stands in for the reverse DFA where it applies.
+    Pattern pattern = Pattern.compile(regex, 0, WITHOUT_START_REGISTER);
     assertThat(pattern.canUseReverseDfa()).isTrue();
     assertReverseDfaPrepared(pattern, regex, false);
 
@@ -147,10 +149,65 @@ class CompilerPreparationTest {
     assertReverseDfaPrepared(pattern, regex, true);
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "'\\w+z', 'hello abcz', 6, 10",
+    "'[a-z]+ing\\b', 'the running dog', 4, 11",
+    "'\\d+\\.\\d+', 'pi is 3.14 ok', 6, 10"
+  })
+  void startRegisterFindDoesNotBuildTheReverseDfaProgram(
+      String regex, String text, int start, int end) throws ReflectiveOperationException {
+    Pattern pattern = Pattern.compile(regex);
+    assertThat(pattern.canUseReverseDfa()).isTrue();
+
+    Matcher matcher = pattern.matcher(text);
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isEqualTo(start);
+    assertThat(matcher.end()).isEqualTo(end);
+    assertThat(pattern.startRegisterSearch(new Pattern.ThreadCache())).isNotNull();
+    assertReverseDfaPrepared(pattern, regex, false);
+  }
+
+  @Test
+  void capturingPatternsStillBuildTheReverseDfaProgram() throws ReflectiveOperationException {
+    String regex = "((a)+){2}b";
+    Pattern pattern = Pattern.compile(regex);
+    Matcher matcher = pattern.matcher("xxaab");
+    assertThat(matcher.find()).isTrue();
+    assertThat(matcher.start()).isEqualTo(2);
+    assertThat(pattern.startRegisterSearch(new Pattern.ThreadCache())).isNull();
+    assertReverseDfaPrepared(pattern, regex, true);
+  }
+
+  @Test
+  void reverseDfaFirstUsePreservesCaptureBoundsInBothRepresentations() throws Exception {
+    String regex = "([a-z]+)ing\\b";
+    Pattern stringPattern = Pattern.compile(regex);
+    Pattern utf8Pattern = Pattern.compile(regex);
+    String input = "élan running today";
+
+    Matcher stringMatcher = stringPattern.matcher(input);
+    assertThat(stringMatcher.find()).isTrue();
+    assertThat(stringMatcher.group()).isEqualTo("running");
+    assertThat(stringMatcher.group(1)).isEqualTo("runn");
+    assertThat(stringMatcher.start(1)).isEqualTo(5);
+    assertThat(stringMatcher.end(1)).isEqualTo(9);
+    assertReverseDfaPrepared(stringPattern, regex, true);
+
+    Utf8Matcher utf8Matcher = utf8Pattern.matcher(Utf8Input.validated(input.getBytes(UTF_8)));
+    assertThat(utf8Matcher.find()).isTrue();
+    assertThat(utf8Matcher.start()).isEqualTo(6);
+    assertThat(utf8Matcher.end()).isEqualTo(13);
+    assertThat(utf8Matcher.start(1)).isEqualTo(6);
+    assertThat(utf8Matcher.end(1)).isEqualTo(10);
+    assertReverseDfaPrepared(utf8Pattern, regex, true);
+  }
+
   /**
    * The {@code CompileBenchmark.compileAndFind{WordZ,Ing,Decimal}{Match,NoMatch}} workloads in
    * {@code benchmark-data.json} measure both sides of building the reverse DFA program on first
    * use: the matching inputs need it to recover the match start, and the others never reach it.
+   * With the start-register search, which recovers the start in the forward pass, neither does.
    */
   @ParameterizedTest
   @CsvSource({
@@ -163,15 +220,22 @@ class CompilerPreparationTest {
   })
   void compileAndFindBenchmarkInputsCoverBothReverseDfaOutcomes(
       String regex, String text, boolean match) throws ReflectiveOperationException {
-    Pattern pattern = Pattern.compile(regex);
+    Pattern pattern = Pattern.compile(regex, 0, WITHOUT_START_REGISTER);
     assertThat(pattern.canUseReverseDfa()).isTrue();
     assertThat(pattern.matcher(text).find()).isEqualTo(match);
     assertReverseDfaPrepared(pattern, regex, match);
+
+    Pattern withRegister = Pattern.compile(regex);
+    assertThat(withRegister.matcher(text).find()).isEqualTo(match);
+    assertReverseDfaPrepared(withRegister, regex, false);
   }
+
+  private static final EnginePathOptions WITHOUT_START_REGISTER =
+      EnginePathOptions.builder().startRegister(false).build();
 
   private static void assertReverseDfaPrepared(Pattern pattern, String regex, boolean prepared)
       throws ReflectiveOperationException {
-    for (String name : new String[] {"reverseProg", "flatReverseDfaProg", "reverseDfaSetup"}) {
+    for (String name : new String[] {"flatReverseDfaProg", "reverseDfaSetup"}) {
       assertThat(field(pattern, name) != null).as("%s for %s", name, regex).isEqualTo(prepared);
     }
   }
@@ -189,7 +253,7 @@ class CompilerPreparationTest {
     Prog dfa = pattern.flatReverseDfaProg();
     Dfa.Setup setup = pattern.reverseDfaSetup();
     assertThat(dfa.numLoopRegs()).isZero();
-    assertThat(pattern.flatReverseProg().numLoopRegs()).isPositive();
+    assertThat(Compiler.compile(pattern.ast(), true).numLoopRegs()).isPositive();
     assertThat(pattern.reverseDfaSetup()).isSameAs(setup);
     Dfa.Setup expected = Dfa.buildSetup(dfa);
     assertThat(setup.boundaries()).containsExactly(expected.boundaries());

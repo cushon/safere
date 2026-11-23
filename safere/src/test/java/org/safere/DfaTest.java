@@ -168,7 +168,7 @@ class DfaTest {
       InputScanner scanner = new StringInputScanner(unit.repeat(64));
       for (int operation = 0; operation < 3; operation++) {
         boolean reverse = operation == 1;
-        Prog prog = reverse ? pattern.reverseProg() : pattern.prog();
+        Prog prog = reverse ? Compiler.compile(pattern.ast(), true) : pattern.prog();
         Dfa dfa = new Dfa(prog, 10000, Dfa.buildSetup(prog), false);
         Dfa.State start = dfa.startState(scanner, reverse ? scanner.length() : 0, false, reverse);
         boolean matched =
@@ -239,7 +239,7 @@ class DfaTest {
     cache.setAccessible(true);
     for (String regex : List.of("a+b", "(?m)^a+$", "(?-d:(?m:$))(?dm:$)", "\\b{g}a")) {
       Pattern pattern = Pattern.compile(regex);
-      for (Prog prog : List.of(pattern.prog(), pattern.reverseProg())) {
+      for (Prog prog : List.of(pattern.prog(), Compiler.compile(pattern.ast(), true))) {
         Dfa dfa = new Dfa(prog, 10000, Dfa.buildSetup(prog), false);
         assertThat(Array.getLength(cache.get(dfa))).as(regex).isLessThanOrEqualTo(256);
       }
@@ -250,7 +250,7 @@ class DfaTest {
   void startCacheRetainsCompleteContextAcrossReplacements() {
     for (String regex : List.of("a+b", "(?m)^a+$", "(?-d:(?m:$))(?dm:$)", "\\b{g}a")) {
       Pattern pattern = Pattern.compile(regex);
-      for (Prog prog : List.of(pattern.prog(), pattern.reverseProg())) {
+      for (Prog prog : List.of(pattern.prog(), Compiler.compile(pattern.ast(), true))) {
         Dfa cached = new Dfa(prog, 10000, Dfa.buildSetup(prog), false);
         List<String> inputs = List.of("a\r\na\na", "a\ra", "é a\u0301\na", "", "a\u2028b");
         for (int pass = 0; pass < 2; pass++) {
@@ -708,7 +708,7 @@ class DfaTest {
     }
 
     /**
-     * A {@link Dfa} instance lives in a per-{@link Pattern} {@link ThreadLocal}, so an input that
+     * A {@link Dfa} instance lives in a per-{@link Pattern}, per-thread cache, so an input that
      * fills the cache faster than {@code MIN_PROGRESS_PER_CACHED_STATE} positions per state must
      * back off rather than permanently bricking the {@link Dfa} for later searches on the same
      * thread.

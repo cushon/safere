@@ -24,6 +24,7 @@ record EnginePathOptions(
     boolean onePass,
     boolean dfa,
     boolean reverseDfa,
+    boolean startRegister,
     boolean bitState,
     boolean lazyCaptureExtraction) {
 
@@ -57,6 +58,7 @@ record EnginePathOptions(
     accessors.put(EnginePath.ONE_PASS, EnginePathOptions::onePass);
     accessors.put(EnginePath.DFA, EnginePathOptions::dfa);
     accessors.put(EnginePath.REVERSE_DFA, EnginePathOptions::reverseDfa);
+    accessors.put(EnginePath.START_REGISTER, EnginePathOptions::startRegister);
     accessors.put(EnginePath.BIT_STATE, EnginePathOptions::bitState);
     accessors.put(EnginePath.LAZY_CAPTURE_EXTRACTION, EnginePathOptions::lazyCaptureExtraction);
     return Map.copyOf(accessors);
@@ -76,6 +78,7 @@ record EnginePathOptions(
     private boolean onePass = true;
     private boolean dfa = true;
     private boolean reverseDfa = true;
+    private boolean startRegister = true;
     private boolean bitState = true;
     private boolean lazyCaptureExtraction = true;
 
@@ -124,6 +127,11 @@ record EnginePathOptions(
       return this;
     }
 
+    Builder startRegister(boolean enabled) {
+      startRegister = enabled;
+      return this;
+    }
+
     Builder bitState(boolean enabled) {
       bitState = enabled;
       return this;
@@ -145,6 +153,7 @@ record EnginePathOptions(
           onePass,
           dfa,
           reverseDfa,
+          startRegister,
           bitState,
           lazyCaptureExtraction);
     }

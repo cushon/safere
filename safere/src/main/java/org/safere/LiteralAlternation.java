@@ -13,8 +13,9 @@ import java.util.Arrays;
  * Complete, ordered literal alternatives for a bounded String and UTF-8 search fast path.
  *
  * <p>String searches with up to three distinct initial characters use per-literal windows. With
- * more initials, whole-input searches hop between candidates after the first window and return to
- * windowed search for dense candidates. Region searches always use per-literal windows.
+ * more initials, whole-String searches hop between candidates after the first window and return to
+ * windowed search for dense candidates. String regions use the first-character scan to skip
+ * candidate-free stretches and verify matches in short per-literal windows.
  *
  * <p>UTF-8 searches use an exact first-byte accelerator when one is available. The default provider
  * can also scan a compact enclosing range on longer inputs. Dense range candidates near the start
@@ -27,6 +28,7 @@ final class LiteralAlternation {
   private static final int MAX_ALTERNATIVES = 8;
   private static final int WINDOW_LENGTH = 256;
   private static final int MAX_LITERAL_LENGTH = 12;
+  private static final int REGION_PROBE_DELAY = 2 * WINDOW_LENGTH;
   // Searches verify first-byte candidates one at a time until they see this many within
   // DENSE_CANDIDATE_SPAN bytes, then switch to one bounded scan per literal.
   private static final int DENSE_CANDIDATES = 8;
@@ -119,35 +121,93 @@ final class LiteralAlternation {
     if (from != 0) {
       return FALLBACK;
     }
-    int length = text.length();
+    int end = text.length();
     if (firstChars.length > 3) {
-      // Keep early hits on the existing short-window path. Beyond it, character searches use
-      // the JVM's single-character intrinsics instead of one substring scan per alternative.
-      int limit = Math.min(WINDOW_LENGTH, length);
-      long match = search(text, 0, limit);
-      return match >= 0 || limit == length ? match : searchCandidates(text, limit);
+      int limit = Math.min(WINDOW_LENGTH, end);
+      long match = search(text, 0, limit, end);
+      return match >= 0 || limit == end ? match : searchCandidates(text, limit);
     }
     if (!wholeInputRejection) {
-      // Preserve locality for patterns that did not already scan the whole input for rejection.
-      for (int start = 0; start < length; ) {
-        int limit = start + Math.min(WINDOW_LENGTH, length - start);
-        long match = search(text, start, limit);
-        if (match >= 0) {
-          return match;
-        }
-        start = limit;
-      }
-      return NO_MATCH;
+      return searchFixedWindows(text, 0, end);
     }
-    if (length <= PROBE_LENGTH * 4) {
-      return search(text, from, length);
+    if (end <= PROBE_LENGTH * 4) {
+      return search(text, 0, end, end);
     }
-    long match = search(text, from, PROBE_LENGTH);
-    return match >= 0 ? match : searchGrowingWindows(text, PROBE_LENGTH, PROBE_LENGTH * 2);
+    long match = search(text, 0, PROBE_LENGTH, end);
+    return match >= 0 ? match : searchGrowingWindows(text, PROBE_LENGTH, end, PROBE_LENGTH * 2);
   }
 
-  /** Candidate starts advance monotonically; only a bounded prefix is retried on dense input. */
+  /** Searches an opaque String region and returns region-relative bounds. */
+  long find(StringRegionInputScanner region, int from) {
+    if (from != 0) {
+      return FALLBACK;
+    }
+    int start = region.offset();
+    int end = start + region.length();
+    long match =
+        firstChars.length > 3
+            ? searchRegionWithSkips(region.text(), start, end)
+            : searchFixedWindows(region.text(), start, end);
+    if (match < 0) {
+      return match;
+    }
+    int matchStart = (int) (match >>> 32) - start;
+    int matchEnd = (int) match - start;
+    return ((long) matchStart << 32) | matchEnd;
+  }
+
+  private long searchFixedWindows(String text, int start, int end) {
+    while (start < end) {
+      int limit = start + Math.min(WINDOW_LENGTH, end - start);
+      long match = search(text, start, limit, end);
+      if (match >= 0) {
+        return match;
+      }
+      start = limit;
+    }
+    return NO_MATCH;
+  }
+
+  /**
+   * Uses the character scan to skip candidate-free stretches, leaving verification to the regular
+   * short windows. If two probes in a row find a nearby candidate, finish with the ordinary
+   * windowed search. A distant candidate pays for another probe, so check only that start.
+   */
+  private long searchRegionWithSkips(String text, int start, int end) {
+    // Favor nearby matches with two ordinary windows before sampling the region.
+    int nextProbe = start + Math.min(REGION_PROBE_DELAY, end - start);
+    boolean previousCandidateNearby = false;
+    while (start < end) {
+      if (start == nextProbe) {
+        if (end - start < WINDOW_LENGTH) {
+          return searchFixedWindows(text, start, end);
+        }
+        int candidate = StringInputScanner.indexOfSmallSet(text, firstChars, start, end);
+        if (candidate < 0) {
+          return NO_MATCH;
+        }
+        boolean nearby = candidate - start < WINDOW_LENGTH;
+        if (nearby && previousCandidateNearby) {
+          return searchFixedWindows(text, start, end);
+        }
+        previousCandidateNearby = nearby;
+        start = candidate;
+        int width = nearby ? WINDOW_LENGTH : 1;
+        nextProbe = start + Math.min(width, end - start);
+      }
+      int limit = start + Math.min(WINDOW_LENGTH, nextProbe - start);
+      long match = search(text, start, limit, end);
+      if (match >= 0) {
+        return match;
+      }
+      start = limit;
+    }
+    return NO_MATCH;
+  }
+
+  /** Candidate starts advance monotonically, including on a switch to windowed search. */
   private long searchCandidates(String text, int start) {
+    int end = text.length();
     int spanStart = start;
     int candidates = 0;
     for (int position = start; ; ) {
@@ -166,41 +226,12 @@ final class LiteralAlternation {
       position = candidate + 1;
       if (++candidates == DENSE_CANDIDATES) {
         if (candidate - spanStart < DENSE_CANDIDATE_SPAN) {
-          return searchGrowingWindows(text, position, PROBE_LENGTH);
+          return searchGrowingWindows(text, position, end, PROBE_LENGTH);
         }
         candidates = 0;
         spanStart = candidate;
       }
     }
-  }
-
-  /** Searches an opaque String region without inspecting text beyond its bounds. */
-  long find(StringRegionInputScanner text, int from) {
-    if (from != 0) {
-      return FALLBACK;
-    }
-    int length = text.length();
-    for (int start = 0; start < length; ) {
-      int limit = start + Math.min(WINDOW_LENGTH, length - start);
-      int bestStart = limit;
-      int bestEnd = -1;
-      for (String literal : literals) {
-        int end = bestStart + Math.min(literal.length() - 1, length - bestStart);
-        int candidate = text.indexOf(literal, start, end);
-        if (candidate >= 0 && candidate < bestStart) {
-          bestStart = candidate;
-          bestEnd = candidate + literal.length();
-          if (candidate == start) {
-            break;
-          }
-        }
-      }
-      if (bestEnd >= 0) {
-        return ((long) bestStart << 32) | bestEnd;
-      }
-      start = limit;
-    }
-    return NO_MATCH;
   }
 
   /**
@@ -332,35 +363,37 @@ final class LiteralAlternation {
     return bestEnd < 0 ? NO_MATCH : ((long) bestStart << 32) | bestEnd;
   }
 
-  private long searchGrowingWindows(String text, int start, int windowLength) {
-    int length = text.length();
-    while (start < length) {
-      int remaining = length - start;
+  private long searchGrowingWindows(String text, int start, int end, int windowLength) {
+    while (start < end) {
+      int remaining = end - start;
       int width = Math.min(windowLength, remaining);
       // Combine a small final remainder with this window, avoiding another range search.
-      int limit = remaining - width <= PROBE_LENGTH * 4 ? length : start + width;
-      long match = search(text, start, limit);
+      int limit = remaining - width <= PROBE_LENGTH * 4 ? end : start + width;
+      long match = search(text, start, limit, end);
       if (match >= 0) {
         return match;
       }
       start = limit;
       // Candidate-start ranges do not overlap. search() includes the literal-length overlap
       // needed for crossing matches; long arithmetic keeps growth safe at String's size limit.
-      windowLength = (int) Math.min(2L * windowLength, length - start);
+      windowLength = (int) Math.min(2L * windowLength, end - start);
     }
     return NO_MATCH;
   }
 
-  /** Search literal starts in [from, limit), including literals crossing the upper boundary. */
-  private long search(String text, int from, int limit) {
+  /** Searches literal starts in [from, limit), allowing matches to end at or before {@code end}. */
+  private long search(String text, int from, int limit, int end) {
     int bestStart = limit;
     int bestEnd = -1;
     int length = text.length();
     for (String literal : literals) {
-      int end = bestStart + Math.min(literal.length() - 1, length - bestStart);
-      int idx = end == length ? text.indexOf(literal, from) : text.indexOf(literal, from, end);
+      int searchEnd = bestStart + Math.min(literal.length() - 1, end - bestStart);
+      int idx =
+          searchEnd == length
+              ? text.indexOf(literal, from)
+              : text.indexOf(literal, from, searchEnd);
       if (WorkCounterConfig.ENABLED) {
-        WorkCounter.record(idx >= 0 ? idx - from + literal.length() : end - from);
+        WorkCounter.record(idx >= 0 ? idx - from + literal.length() : searchEnd - from);
       }
       if (idx >= 0 && idx < bestStart) {
         bestStart = idx;

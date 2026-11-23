@@ -26,7 +26,7 @@ usage() {
 Usage: $0 [--suite SUITE] [--max-duration DURATION] [--keep-going COUNT] [TEST...]
 
 Options:
-  --suite                        oss-fuzz (default), broad, strict, property, robustness, all
+  --suite                        oss-fuzz (default), broad, acceptance, strict, property, robustness, all
   --max-duration, --max_duration  Jazzer max duration per test (default: 30m)
   --keep-going, --keep_going      Number of distinct findings before stopping (default: 10)
   -h, --help                      Show this help

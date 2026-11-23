@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-KINDS = {'broad', 'strict', 'property', 'robustness'}
+KINDS = {'acceptance', 'broad', 'strict', 'property', 'robustness'}
 
 
 def read_targets(root=ROOT):
@@ -32,8 +32,8 @@ def read_targets(root=ROOT):
         classes.add(name)
         if target['kind'] not in KINDS or type(target['oss_fuzz']) is not bool:
             raise ValueError(f'invalid target policy: {name}')
-        if target['oss_fuzz'] and target['kind'] == 'broad':
-            raise ValueError(f'broad differential target cannot enroll: {name}')
+        if target['oss_fuzz'] and target['kind'] in {'acceptance', 'broad'}:
+            raise ValueError(f'exploratory differential target cannot enroll: {name}')
         source = root / 'src/test/java' / (name.replace('.', '/') + '.java')
         if not source.is_file():
             raise ValueError(f'missing target source: {name}')

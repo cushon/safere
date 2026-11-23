@@ -81,7 +81,14 @@ class EntryPointWorkParityTest {
           new Scenario("é[ab]+c", ""),
           new Scenario("é[ab]+c", "éabc"),
           new Scenario("(x?)*Q", ""),
-          new Scenario("[a-z]+foo$", ""));
+          new Scenario("[a-z]+foo$", ""),
+          // FindPlan shapes: a wide leading expansion whose literal search subsumes the reject
+          // prefilter, on a single long line, and a start literal that precedes the reject.
+          new Scenario(".*error: \\w+", ""),
+          new Scenario(".*error: \\w+", "error: disk"),
+          new Scenario("[^\\n]*error: \\w+", "error: -"),
+          new Scenario("status=3\\d\\d took=(\\d+)ms", ""),
+          new Scenario("status=3\\d\\d took=(\\d+)ms", "status=302 took=5ms"));
 
   /** Entry points that stop at the first match, compared with one {@link Matcher#find()}. */
   private static final Map<String, BiConsumer<Pattern, String>> FIRST_MATCH =

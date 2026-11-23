@@ -80,6 +80,14 @@ record EnginePathContract(
               EnumSet.of(ResultAuthority.CANDIDATE_START, ResultAuthority.NO_MATCH),
               EnumSet.of(SemanticGuard.GROUP_ZERO_EQUIVALENT)),
           new EnginePathContract(
+              EnginePath.START_REGISTER,
+              EnginePathRole.GUARDED_OPTIMIZATION,
+              EnumSet.of(ResultAuthority.NO_MATCH, ResultAuthority.GROUP_ZERO),
+              EnumSet.of(
+                  SemanticGuard.NO_USER_CAPTURES,
+                  SemanticGuard.GROUP_ZERO_EQUIVALENT,
+                  SemanticGuard.BOUNDED_STATE)),
+          new EnginePathContract(
               EnginePath.BIT_STATE,
               EnginePathRole.GUARDED_OPTIMIZATION,
               EnumSet.of(

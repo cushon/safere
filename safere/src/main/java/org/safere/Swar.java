@@ -11,28 +11,7 @@ final class Swar {
   static final long BYTE_ONES = 0x0101_0101_0101_0101L;
   static final long BYTE_HIGH_BITS = 0x8080_8080_8080_8080L;
 
-  static final long SHORT_ONES = 0x0001_0001_0001_0001L;
-  static final long SHORT_HIGH_BITS = 0x8000_8000_8000_8000L;
-
   private Swar() {}
-
-  /** Returns whether the ranges can be matched one UTF-16 code unit at a time. */
-  static boolean supportsBmpCodeUnitRanges(int[] ranges, int maximumRanges) {
-    if (ranges.length < 2 || ranges.length > maximumRanges * 2 || (ranges.length & 1) != 0) {
-      return false;
-    }
-    for (int i = 0; i < ranges.length; i += 2) {
-      int low = ranges[i];
-      int high = ranges[i + 1];
-      if (low < 0
-          || high > Character.MAX_VALUE
-          || low > high
-          || (low <= Character.MAX_SURROGATE && high >= Character.MIN_SURROGATE)) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   /** Returns whether the ranges can be matched by an ASCII byte kernel. */
   static boolean supportsAsciiRanges(int[] ranges, int maximumRanges) {
@@ -52,12 +31,5 @@ final class Swar {
     long atLeastLow = ((values | BYTE_HIGH_BITS) - repeatedLow) & BYTE_HIGH_BITS;
     long atMostHigh = ((repeatedHigh | BYTE_HIGH_BITS) - values) & BYTE_HIGH_BITS;
     return ascii & atLeastLow & atMostHigh;
-  }
-
-  /** Computes a borrow-free 2-byte UTF-16 SWAR range mask for {@code [low, high]}. */
-  static long exactShortRangeMask(long word, long repeatedLow, long repeatedHigh) {
-    long atLeastLow = ((word | SHORT_HIGH_BITS) - repeatedLow) & SHORT_HIGH_BITS;
-    long atMostHigh = ((repeatedHigh | SHORT_HIGH_BITS) - word) & SHORT_HIGH_BITS;
-    return atLeastLow & atMostHigh;
   }
 }
