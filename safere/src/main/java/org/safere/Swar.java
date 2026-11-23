@@ -13,24 +13,6 @@ final class Swar {
 
   private Swar() {}
 
-  /** Returns whether the ranges can be matched one UTF-16 code unit at a time. */
-  static boolean supportsBmpCodeUnitRanges(int[] ranges, int maximumRanges) {
-    if (ranges.length < 2 || ranges.length > maximumRanges * 2 || (ranges.length & 1) != 0) {
-      return false;
-    }
-    for (int i = 0; i < ranges.length; i += 2) {
-      int low = ranges[i];
-      int high = ranges[i + 1];
-      if (low < 0
-          || high > Character.MAX_VALUE
-          || low > high
-          || (low <= Character.MAX_SURROGATE && high >= Character.MIN_SURROGATE)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   /** Returns whether the ranges can be matched by an ASCII byte kernel. */
   static boolean supportsAsciiRanges(int[] ranges, int maximumRanges) {
     if (ranges.length < 2 || ranges.length > maximumRanges * 2 || (ranges.length & 1) != 0) {
