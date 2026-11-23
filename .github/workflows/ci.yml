@@ -176,6 +176,7 @@ jobs:
           name: test-diagnostics-${{ github.job }}
           path: |
             **/target/surefire-reports/**
+            **/target/surefire-reports-*/**
             **/hs_err_pid*.log
             **/replay_pid*.log
           if-no-files-found: warn
@@ -314,6 +315,7 @@ jobs:
           name: test-diagnostics-${{ github.job }}-${{ matrix.java }}
           path: |
             **/target/surefire-reports/**
+            **/target/surefire-reports-*/**
             **/hs_err_pid*.log
             **/replay_pid*.log
           if-no-files-found: warn
@@ -361,6 +363,7 @@ jobs:
           name: test-diagnostics-${{ github.job }}
           path: |
             **/target/surefire-reports/**
+            **/target/surefire-reports-*/**
             **/hs_err_pid*.log
             **/replay_pid*.log
           if-no-files-found: warn
