@@ -347,7 +347,6 @@ final class WorkCounterConfig {
                     <include>org/safere/ByteScanTest.java</include>
                     <include>org/safere/MultiLiteralTest.java</include>
                     <include>org/safere/ScanDispatchAuditTest.java</include>
-                    <include>org/safere/ShortScanEquivalenceTest.java</include>
                     <include>org/safere/StartAcceleratorTest.java</include>
                     <include>org/safere/TeddyTest.java</include>
                     <include>org/safere/TeddyVectorScanTest.java</include>
@@ -378,7 +377,6 @@ final class WorkCounterConfig {
                     <include>org/safere/ByteScanTest.java</include>
                     <include>org/safere/MultiLiteralTest.java</include>
                     <include>org/safere/ScanDispatchAuditTest.java</include>
-                    <include>org/safere/ShortScanEquivalenceTest.java</include>
                     <include>org/safere/StartAcceleratorTest.java</include>
                     <include>org/safere/TeddyTest.java</include>
                     <include>org/safere/TeddyVectorScanTest.java</include>

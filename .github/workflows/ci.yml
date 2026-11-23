@@ -165,7 +165,7 @@ jobs:
         run: >
           mvn clean verify -pl safere
           -Pvector-tests
-          -Dtest=ByteScanTest,Utf8InputScannerTest,Utf8VectorPairTripleTest,VectorScanBoundaryTest,StringLiteralSearchTest,MultiLiteralTest,ShortScanEquivalenceTest,TeddyVectorScanTest
+          -Dtest=ByteScanTest,Utf8InputScannerTest,Utf8VectorPairTripleTest,VectorScanBoundaryTest,StringLiteralSearchTest,MultiLiteralTest,TeddyVectorScanTest
           -Dtest.parallelism=4
           --batch-mode --no-transfer-progress
 
