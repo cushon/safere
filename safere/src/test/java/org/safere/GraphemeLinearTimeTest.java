@@ -8,15 +8,96 @@ package org.safere;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.IntSupplier;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** Linear-time regression tests for grapheme cluster matching. */
 @DisabledForCrosscheck("java.util.regex is not the SafeRE linear-time engine")
 @Tag("work-counter")
 class GraphemeLinearTimeTest {
+  @ParameterizedTest
+  @ValueSource(strings = {"🇦🇧", "👩\u0300\u200D👩", "\u0915\u094D\u0915"})
+  void firstContextualClusterWorkIsIndependentOfTheUnreadSuffix(String cluster) {
+    Pattern pattern = Pattern.compile("\\X");
+    for (boolean region : new boolean[] {false, true}) {
+      String prefix = region ? "x" : "";
+      String small = prefix + cluster + "a".repeat(32);
+      String large = prefix + cluster + "a".repeat(131_072);
+      for (boolean utf8 : new boolean[] {false, true}) {
+        long smallWork = firstClusterWork(pattern, small, prefix.length(), cluster, utf8);
+        long largeWork = firstClusterWork(pattern, large, prefix.length(), cluster, utf8);
+        assertThat(smallWork).isPositive();
+        assertThat(largeWork)
+            .as("first %s cluster, region=%s, UTF-8=%s", cluster, region, utf8)
+            .isLessThanOrEqualTo(smallWork * 2);
+      }
+    }
+  }
+
+  private static long firstClusterWork(
+      Pattern pattern, String text, int start, String cluster, boolean utf8) {
+    if (utf8) {
+      byte[] bytes = text.getBytes(UTF_8);
+      Utf8Matcher matcher = pattern.matcher(Utf8Input.validated(bytes));
+      if (start != 0) {
+        matcher.region(start, bytes.length);
+      }
+      return firstClusterWork(
+          matcher::lookingAt, matcher::end, start + cluster.getBytes(UTF_8).length);
+    }
+    Matcher matcher = pattern.matcher(text);
+    if (start != 0) {
+      matcher.region(start, text.length());
+    }
+    return firstClusterWork(matcher::lookingAt, matcher::end, start + cluster.length());
+  }
+
+  private static long firstClusterWork(
+      BooleanSupplier lookingAt, IntSupplier end, int expectedEnd) {
+    return WorkCounter.countForTesting(() -> {
+      assertThat(lookingAt.getAsBoolean()).isTrue();
+      assertThat(end.getAsInt()).isEqualTo(expectedEnd);
+    });
+  }
+
+  @Test
+  void contextRemainsCorrectAsFindCrossesLongRunsAndOpaqueRegionEdges() {
+    Pattern pattern = Pattern.compile("\\X");
+    String flag = "🇦🇧";
+    String emoji = "👩" + "\u0300".repeat(129) + "\u200D👩";
+    String conjunct = "\u0915" + "\u093C".repeat(129) + "\u094D\u0915";
+    List<String> clusters = new ArrayList<>(Collections.nCopies(65, flag));
+    clusters.addAll(List.of(emoji, conjunct, "z"));
+    String region = String.join("", clusters);
+    String text = "🇦" + region + "🇦";
+    byte[] bytes = text.getBytes(UTF_8);
+    Matcher utf16 = pattern.matcher(text).region(2, 2 + region.length());
+    Utf8Matcher utf8 = pattern.matcher(Utf8Input.validated(bytes)).region(4, bytes.length - 4);
+    int end16 = 2;
+    int end8 = 4;
+    for (String cluster : clusters) {
+      assertThat(utf16.find()).isTrue();
+      assertThat(utf8.find()).isTrue();
+      assertThat(utf16.start()).isEqualTo(end16);
+      assertThat(utf8.start()).isEqualTo(end8);
+      end16 += cluster.length();
+      end8 += cluster.getBytes(UTF_8).length;
+      assertThat(utf16.end()).isEqualTo(end16);
+      assertThat(utf8.end()).isEqualTo(end8);
+    }
+    assertThat(utf16.find()).isFalse();
+    assertThat(utf8.find()).isFalse();
+  }
+
   @Test
   @DisplayName("repeated find() over grapheme clusters reuses per-input context")
   void repeatedFindOverGraphemeClustersReusesPerInputContext() {

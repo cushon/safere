@@ -92,6 +92,12 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          # Rotate the shared cache when the Spotless seed changes.
+          cache-dependency-path: &maven-cache-inputs |
+            **/pom.xml
+            **/.mvn/wrapper/maven-wrapper.properties
+            **/.mvn/extensions.xml
+            .github/scripts/seed-spotless-cache.sh
 
       - name: Resolve Maven dependencies and plugins
         # Save one shared cache before the Ubuntu jobs fan out. Without this dependency,
@@ -108,14 +114,8 @@ jobs:
           mvn -f safere-vector-benchmarks/pom.xml dependency:resolve-plugins
           --batch-mode --no-transfer-progress
 
-      - name: Seed Google Java Format
-        # Spotless resolves the formatter when it runs, so go-offline misses it.
-        run: |
-          mvn -N help:evaluate -Dexpression=google-java-format.version \
-            -Doutput="$RUNNER_TEMP/google-java-format-version" --batch-mode --no-transfer-progress
-          VERSION=$(cat "$RUNNER_TEMP/google-java-format-version")
-          mvn -N dependency:get -Dartifact="com.google.googlejavaformat:google-java-format:$VERSION" \
-            --batch-mode --no-transfer-progress
+      - name: Seed Spotless formatter dependencies
+        run: bash .github/scripts/seed-spotless-cache.sh
 
       - name: Seed Surefire test provider
         # Surefire selects surefire-junit-platform when tests run; go-offline misses it.
@@ -142,6 +142,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Check Java formatting
         run: mvn spotless:check --batch-mode --no-transfer-progress
@@ -165,7 +166,7 @@ jobs:
         run: >
           mvn clean verify -pl safere
           -Pvector-tests
-          -Dtest=ByteScanTest,Utf8InputScannerTest,Utf8VectorPairTripleTest,VectorSpeciesSimulationTest,StringLiteralSearchTest,MultiLiteralTest
+          -Dtest=ByteScanTest,Utf8InputScannerTest,Utf8VectorPairTripleTest,VectorScanBoundaryTest,StringLiteralSearchTest,MultiLiteralTest,TeddyVectorScanTest
           -Dtest.parallelism=4
           --batch-mode --no-transfer-progress
 
@@ -176,6 +177,7 @@ jobs:
           name: test-diagnostics-${{ github.job }}
           path: |
             **/target/surefire-reports/**
+            **/target/surefire-reports-*/**
             **/hs_err_pid*.log
             **/replay_pid*.log
           if-no-files-found: warn
@@ -194,6 +196,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Compile production and runtime-test artifacts
         run: |
@@ -256,6 +259,7 @@ jobs:
           distribution: 'temurin'
           check-latest: ${{ endsWith(matrix.java, '-ea') }}
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Download runtime-test artifacts
         uses: actions/download-artifact@v8.0.2
@@ -274,6 +278,8 @@ jobs:
         run: >
           mvn jacoco:prepare-agent surefire:test
           surefire:test@string-vector-reflective
+          surefire:test@vector-width-64
+          surefire:test@vector-width-128
           -pl safere
           -Pvector-tests
           -Dtest.parallelism=4
@@ -313,6 +319,7 @@ jobs:
           name: test-diagnostics-${{ github.job }}-${{ matrix.java }}
           path: |
             **/target/surefire-reports/**
+            **/target/surefire-reports-*/**
             **/hs_err_pid*.log
             **/replay_pid*.log
           if-no-files-found: warn
@@ -331,6 +338,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Build SafeRE for fuzz tests
         run: >
@@ -360,6 +368,7 @@ jobs:
           name: test-diagnostics-${{ github.job }}
           path: |
             **/target/surefire-reports/**
+            **/target/surefire-reports-*/**
             **/hs_err_pid*.log
             **/replay_pid*.log
           if-no-files-found: warn
@@ -397,6 +406,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Smoke test Java benchmarks
         run: |
@@ -455,6 +465,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Check Vector source formatting
         run: |
@@ -511,6 +522,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Materialize shared benchmark inputs
         run: ./materialize-benchmark-inputs.sh
@@ -562,6 +574,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Set up Go
         uses: actions/setup-go@v7.0.0
@@ -603,6 +616,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Set up Rust
         # Use the upstream v1 tag with an explicit toolchain version. Synthetic version
@@ -636,6 +650,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6.1.0
@@ -704,6 +719,7 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          cache-dependency-path: *maven-cache-inputs
           server-id: central-portal
           mvn-server-repository-origins: |
             central-portal:https://central.sonatype.com

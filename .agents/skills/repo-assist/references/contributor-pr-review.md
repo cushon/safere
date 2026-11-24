@@ -4,7 +4,7 @@ Read this reference in full before discovering, triaging, reviewing, repairing, 
 or reporting contributor PRs. Shared trust, locking, publication, and run orchestration rules
 remain in the parent `SKILL.md`. Use the `REPO_ASSIST_SKILL_DIR` resolved there for every helper
 command. This workflow uses isolated contributor review worktrees; authored-PR feedback uses
-the separate original-worktree workflow in [authored-pr-feedback.md](authored-pr-feedback.md).
+the separate authored update workflow in [authored-pr-feedback.md](authored-pr-feedback.md).
 
 Contents:
 
@@ -88,8 +88,8 @@ do not read more content.
 
 Repository-owner PRs remain excluded from contributor review, its summary, and its `prs` state.
 They may supply trusted dependency context or issue coverage. When authored by the authenticated
-user, they are eligible for the separate feedback assessment and original-worktree repair workflow;
-use `authoredPrFeedback` state and that category's report section.
+user, they are eligible for the separate authored PR update workflow.
+Use `authoredPrFeedback` state and that category's report section.
 
 Review every remaining trusted open non-draft PR regardless of its direct base branch. Use the
 discovered `headRefName` and `baseRefName` relationships, confirmed with GitHub's `stackEntry`

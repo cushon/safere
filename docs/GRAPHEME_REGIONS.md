@@ -121,11 +121,11 @@ state, and Indic-conjunct linker state. Opaque context starts at the region;
 transparent context may include the full input. Segmentation must account for
 that distinction when it caches state.
 
-Compute boundaries in a linear pass or cache enough state that each input
-position is classified a bounded number of times. Never scan an unbounded
-prefix for each boundary query. The consuming grapheme instruction and explicit
-boundary assertion must use the same context model without treating one as a
-synthetic expansion of the other.
+Each rule family extends its cached prefix as far as the queried position,
+finishing the scalar if the position falls inside one. Earlier positions
+remain available in constant time. The matcher keeps that progress when
+searches use the same input and grapheme bounds. The consuming grapheme
+instruction and explicit boundary assertion use the same context model.
 
 ## Verification
 

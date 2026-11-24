@@ -28,7 +28,7 @@ field in the state schema. Include:
    Link directly to the standalone copy/paste review and the full review/evidence. The checkpoint
    helper inserts these links. Do not embed the long author review or repeat benchmark tables.
 5. `## Your PRs With Review Feedback`: a compact table of current actionable feedback and newly
-   useful approvals. Summarize verified authored PR pushes, including merge-only updates. Explain
+   useful approvals. Summarize the verified update for each affected authored PR. Explain
    disagreements, draft holds, blocked updates, and unpublished repairs. Group routine approvals
    when clearer. Preserve reviewer-owned Done cells and link the complete per-request record.
 6. `## Issue Activity`: only new or meaningfully changed issues, changed decisions and uncovered
@@ -48,7 +48,7 @@ publication before posting, but label that prerequisite clearly in the briefing.
 Use current-run links so the briefing is self-contained for decisions while evidence is one click
 away. Full records can be detailed, but omit duplicated narratives and boilerplate fields that do
 not apply. Exact revisions, source/worktree paths, command logs, benchmark tables, review findings,
-original-worktree blockers and historical feedback belong here.
+worktree choice and historical feedback belong here.
 
 - `reports/<runId>/pr-N.md`: complete contributor assessment and fenced author review.
 - `reports/<runId>/authored-feedback.md`: complete per-request decisions and repairs, including

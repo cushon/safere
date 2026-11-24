@@ -22,6 +22,8 @@
     <workCounter.enabled>false</workCounter.enabled>
     <test.groups></test.groups>
     <test.excludedGroups>work-counter</test.excludedGroups>
+    <skipTests>false</skipTests>
+    <test.skipNarrowVectorWidths>${skipTests}</test.skipNarrowVectorWidths>
     <error-prone.extra-checks>-Xep:UnnecessarilyFullyQualified:ERROR</error-prone.extra-checks>
     <error-prone.library-checks>-Xep:SystemOut:ERROR -Xep:SystemExitOutsideMain:ERROR</error-prone.library-checks>
   </properties>
@@ -351,6 +353,68 @@ final class WorkCounterConfig {
                   </reportsDirectory>
                 </configuration>
               </execution>
+              <execution>
+                <!-- Test narrow SIMD widths with HotSpot -XX:MaxVectorSize instead of taking a
+                     non-constant VectorSpecies parameter inside hot scan loops. -->
+                <id>vector-width-64</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <skipTests>${test.skipNarrowVectorWidths}</skipTests>
+                  <argLine>
+                    @{argLine} -XX:MaxVectorSize=8
+                    --add-modules=jdk.incubator.vector
+                    -Dorg.safere.experimental.vectorScanProvider=vector
+                    -Dorg.safere.testing.expectedVectorBitSize=64
+                  </argLine>
+                  <includes>
+                    <include>org/safere/ByteScanTest.java</include>
+                    <include>org/safere/MultiLiteralTest.java</include>
+                    <include>org/safere/ScanDispatchAuditTest.java</include>
+                    <include>org/safere/StartAcceleratorTest.java</include>
+                    <include>org/safere/TeddyTest.java</include>
+                    <include>org/safere/TeddyVectorScanTest.java</include>
+                    <include>org/safere/Utf8InputScannerTest.java</include>
+                    <include>org/safere/Utf8VectorPairTripleTest.java</include>
+                    <include>org/safere/VectorScanBoundaryTest.java</include>
+                  </includes>
+                  <reportsDirectory>
+                    ${project.build.directory}/surefire-reports-vector-64
+                  </reportsDirectory>
+                </configuration>
+              </execution>
+              <execution>
+                <id>vector-width-128</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>test</goal>
+                </goals>
+                <configuration>
+                  <skipTests>${test.skipNarrowVectorWidths}</skipTests>
+                  <argLine>
+                    @{argLine} -XX:MaxVectorSize=16
+                    --add-modules=jdk.incubator.vector
+                    -Dorg.safere.experimental.vectorScanProvider=vector
+                    -Dorg.safere.testing.expectedVectorBitSize=128
+                  </argLine>
+                  <includes>
+                    <include>org/safere/ByteScanTest.java</include>
+                    <include>org/safere/MultiLiteralTest.java</include>
+                    <include>org/safere/ScanDispatchAuditTest.java</include>
+                    <include>org/safere/StartAcceleratorTest.java</include>
+                    <include>org/safere/TeddyTest.java</include>
+                    <include>org/safere/TeddyVectorScanTest.java</include>
+                    <include>org/safere/Utf8InputScannerTest.java</include>
+                    <include>org/safere/Utf8VectorPairTripleTest.java</include>
+                    <include>org/safere/VectorScanBoundaryTest.java</include>
+                  </includes>
+                  <reportsDirectory>
+                    ${project.build.directory}/surefire-reports-vector-128
+                  </reportsDirectory>
+                </configuration>
+              </execution>
             </executions>
           </plugin>
         </plugins>
@@ -360,6 +424,7 @@ final class WorkCounterConfig {
       <id>work-counters</id>
       <properties>
         <workCounter.enabled>true</workCounter.enabled>
+        <test.skipNarrowVectorWidths>true</test.skipNarrowVectorWidths>
         <test.groups>work-counter</test.groups>
         <test.excludedGroups></test.excludedGroups>
       </properties>

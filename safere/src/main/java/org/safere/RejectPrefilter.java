@@ -31,6 +31,14 @@ sealed interface RejectPrefilter
    */
   boolean canReject(String text, InputScanner scanner, int searchFrom, EnginePathOptions options);
 
+  /**
+   * Checks the input before the first split delimiter. Searches for alternatives use bounded
+   * windows so an absent alternative cannot force a search of the entire unread tail.
+   */
+  default boolean canRejectBeforeSplitStream(String text, EnginePathOptions options) {
+    return canReject(text, null, 0, options);
+  }
+
   /** Returns the strategy that rejected the input, or {@code null} if it cannot be rejected. */
   default MatchStrategy rejectionStrategy(
       String text, InputScanner scanner, int searchFrom, EnginePathOptions options) {
@@ -344,6 +352,15 @@ sealed interface RejectPrefilter
       return false;
     }
 
+    @Override
+    public boolean canRejectBeforeSplitStream(String text, EnginePathOptions options) {
+      if (smallChars == null) {
+        return canReject(text, null, 0, options);
+      }
+      return options.charClassMatchFastPaths()
+          && StringInputScanner.indexOfSmallSet(text, smallChars, 0) < 0;
+    }
+
     /**
      * Chars the first {@code find()} searches for every member before searching the rest of the
      * input one member at a time, so a member near the start is found without first scanning the
@@ -438,6 +455,9 @@ sealed interface RejectPrefilter
       String[] literals, byte[][] utf8Literals, int[][] failures, int[][] shifts)
       implements RejectPrefilter {
 
+    private static final int SPLIT_INITIAL_SEARCH_WINDOW = 64;
+    private static final int SPLIT_MAX_SEARCH_WINDOW = 8192;
+
     static DisjointLiterals create(String[] literals) {
       if (literals == null || literals.length == 0) {
         return null;
@@ -479,6 +499,35 @@ sealed interface RejectPrefilter
         }
       }
       return false;
+    }
+
+    @Override
+    public boolean canRejectBeforeSplitStream(String text, EnginePathOptions options) {
+      if (!options.literalFastPaths()) {
+        return false;
+      }
+      int length = text.length();
+      if (length <= SPLIT_INITIAL_SEARCH_WINDOW) {
+        return canReject(text, null, 0, options);
+      }
+      int window = SPLIT_INITIAL_SEARCH_WINDOW;
+      for (int start = 0; start < length; ) {
+        int end = start + Math.min(window, length - start);
+        for (String literal : literals) {
+          // Include literals that start in this window and end in the next.
+          int limit = end + Math.min(literal.length() - 1, length - end);
+          int index = text.indexOf(literal, start, limit);
+          if (WorkCounterConfig.ENABLED) {
+            WorkCounter.record(index >= 0 ? index - start + literal.length() : limit - start);
+          }
+          if (index >= 0) {
+            return false;
+          }
+        }
+        start = end;
+        window = Math.min(window * 2, SPLIT_MAX_SEARCH_WINDOW);
+      }
+      return true;
     }
 
     @Override
@@ -680,6 +729,16 @@ sealed interface RejectPrefilter
 
   @SuppressWarnings("ArrayRecordComponent")
   record Composite(RejectPrefilter[] filters) implements RejectPrefilter {
+    @Override
+    public boolean canRejectBeforeSplitStream(String text, EnginePathOptions options) {
+      for (RejectPrefilter filter : filters) {
+        if (filter.canRejectBeforeSplitStream(text, options)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     @Override
     public boolean canReject(
         String text, InputScanner scanner, int searchFrom, EnginePathOptions options) {

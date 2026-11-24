@@ -240,6 +240,12 @@ class RejectPrefilterTest {
     assertThat(prefilter.canReject("I like grape juice", null, 0, options)).isTrue();
     assertThat(prefilter.canReject("I like grape juice", null, 1, options)).isFalse();
 
+    assertThat(prefilter.canRejectBeforeSplitStream("x".repeat(4096), options)).isTrue();
+    assertThat(
+            prefilter.canRejectBeforeSplitStream(
+                "x".repeat(63) + "banana" + "x".repeat(4096), options))
+        .isFalse();
+
     // UTF-8 input
     assertThat(prefilter.canReject(null, utf8Scanner("I like orange juice"), 0, options)).isFalse();
     assertThat(prefilter.canReject(null, utf8Scanner("I like apple pie"), 0, options)).isFalse();

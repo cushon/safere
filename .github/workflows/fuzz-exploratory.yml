@@ -18,6 +18,12 @@ jobs:
         with:
           java-version-file: .sdkmanrc
           cache: maven
+          # Keep these Maven cache inputs in sync with ci.yml.
+          cache-dependency-path: |
+            **/pom.xml
+            **/.mvn/wrapper/maven-wrapper.properties
+            **/.mvn/extensions.xml
+            .github/scripts/seed-spotless-cache.sh
       - name: Broad differential discovery
         run: safere-fuzz/scripts/run-fuzz-test.sh --suite broad --max-duration 2m --keep-going 3
       - name: Preserve findings and run provenance

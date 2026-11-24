@@ -27,6 +27,13 @@ final class GraphemeSupport {
   private static final int[][] INCB_CONSONANT = graphemeTable("InCB_Consonant");
   private static final int[][] INCB_EXTEND = graphemeTable("InCB_Extend");
 
+  /** Initializes the shared segmentation tables for a grapheme-capable compiled program. */
+  static void prepareTables() {
+    // Invoking this static method completes class initialization before compilation returns.
+    // A nested table holder would also need an explicit initialization call here.
+    // Per-input segmentation context remains owned by the matching operation.
+  }
+
   private static final int VISIT_KEY_VARIANT_BITS = 5;
   private static final int LOW_SURROGATE_PAIR_VISIBLE = 1;
   private static final int EXTENDED_PICTOGRAPHIC_VISIBLE = 1 << 1;
@@ -38,17 +45,32 @@ final class GraphemeSupport {
    * Per-input grapheme segmentation context.
    *
    * <p>UAX #29 boundary checks are finite-state, but some rules need state from earlier code
-   * points. Keep that state here so engines can answer boundary questions in O(1) while scanning.
+   * points. Each rule family extends its own prefix as needed, decoding each scalar at most once
+   * for that family. Keep the computed values for constant-time queries of earlier positions and
+   * for searches that reuse this context.
    */
   static class Context {
     private static final Context EMPTY = new Context(null);
+    private static final int PAGE_SHIFT = 8;
+    private static final int PAGE_SIZE = 1 << PAGE_SHIFT;
+    private static final int PAGE_MASK = PAGE_SIZE - 1;
+    private static final int INITIAL_PAGE_SIZE = 8;
 
     private final InputScanner text;
-    private int[] regionalIndicatorStartsBefore;
-    private int[] regionalIndicatorRunStartBefore;
-    private int[] extendedPictographicStartBefore;
-    private int[] indicConjunctSequenceStartBefore;
-    private int[] indicConjunctLinkerStartBefore;
+    private int regionalIndicatorEnd;
+    private int extendedPictographicEnd;
+    private int indicConjunctEnd;
+    // Keep the state at each cursor close at hand for sequential queries.
+    private int regionalIndicatorRunStart;
+    private int regionalIndicatorRunLength;
+    private int extendedPictographicStart;
+    private int indicConjunctSequenceStart;
+    private boolean indicConjunctLinkerSeen;
+    private int[][] regionalIndicatorStartsBefore;
+    private int[][] regionalIndicatorRunStartBefore;
+    private int[][] extendedPictographicStartBefore;
+    private int[][] indicConjunctSequenceStartBefore;
+    private int[][] indicConjunctLinkerStartBefore;
 
     private Context(InputScanner text) {
       this.text = text;
@@ -88,15 +110,26 @@ final class GraphemeSupport {
       if (text == null) {
         return true;
       }
-      int start = Math.max(0, Math.min(regionStart, length()));
+      int start = Math.max(0, regionStart);
       if (pos <= start || pos > length()) {
         return true;
       }
-      ensureRegionalIndicatorRunData();
-      int runStart = regionalIndicatorRunStartBefore[pos];
-      int countStart = Math.max(start, runStart);
-      int regionalIndicatorsBefore =
-          regionalIndicatorStartsBefore[pos] - regionalIndicatorStartsBefore[countStart];
+      if (pos > regionalIndicatorEnd) {
+        extendRegionalIndicatorRunData(pos);
+      }
+      int runStart;
+      int regionalIndicatorsBefore;
+      if (pos == regionalIndicatorEnd) {
+        runStart = regionalIndicatorRunStart;
+        regionalIndicatorsBefore = regionalIndicatorRunLength;
+      } else {
+        runStart = valueBefore(regionalIndicatorRunStartBefore, pos);
+        regionalIndicatorsBefore = valueBefore(regionalIndicatorStartsBefore, pos);
+      }
+      if (start > runStart) {
+        // The count is zero just before the run begins.
+        regionalIndicatorsBefore -= valueBefore(regionalIndicatorStartsBefore, start);
+      }
       return (regionalIndicatorsBefore & 1) == 0;
     }
 
@@ -104,52 +137,60 @@ final class GraphemeSupport {
       if (text == null) {
         return false;
       }
-      int start = Math.max(0, Math.min(regionStart, length()));
+      int start = Math.max(0, regionStart);
       if (pos <= start || pos > length()) {
         return false;
       }
-      ensureExtendedPictographicData();
-      int pictographicStart = extendedPictographicStartBefore[pos];
-      if (pictographicStart < start) {
-        return false;
+      if (pos > extendedPictographicEnd) {
+        extendExtendedPictographicData(pos);
       }
-      return true;
+      int pictographicStart =
+          pos == extendedPictographicEnd
+              ? extendedPictographicStart
+              : valueBefore(extendedPictographicStartBefore, pos);
+      return pictographicStart > start;
     }
 
     boolean hasIndicConjunctLinkerBefore(int pos, int regionStart) {
       if (text == null) {
         return false;
       }
-      int start = Math.max(0, Math.min(regionStart, length()));
+      int start = Math.max(0, regionStart);
       if (pos <= start || pos > length()) {
         return false;
       }
-      ensureIndicConjunctData();
-      return indicConjunctLinkerStartBefore[pos] >= start;
+      if (pos > indicConjunctEnd) {
+        extendIndicConjunctData(pos);
+      }
+      if (pos == indicConjunctEnd) {
+        return indicConjunctLinkerSeen && indicConjunctSequenceStart > start;
+      }
+      return valueBefore(indicConjunctLinkerStartBefore, pos) > start;
     }
 
     boolean hasIndicConjunctSequenceBefore(int pos, int regionStart) {
       if (text == null) {
         return false;
       }
-      int start = Math.max(0, Math.min(regionStart, length()));
+      int start = Math.max(0, regionStart);
       if (pos <= start || pos > length()) {
         return false;
       }
-      ensureIndicConjunctData();
-      return indicConjunctSequenceStartBefore[pos] >= start;
+      if (pos > indicConjunctEnd) {
+        extendIndicConjunctData(pos);
+      }
+      int sequenceStart =
+          pos == indicConjunctEnd
+              ? indicConjunctSequenceStart
+              : valueBefore(indicConjunctSequenceStartBefore, pos);
+      return sequenceStart > start;
     }
 
-    private void ensureRegionalIndicatorRunData() {
-      if (regionalIndicatorStartsBefore != null) {
-        return;
-      }
-      regionalIndicatorStartsBefore = new int[length() + 1];
-      regionalIndicatorRunStartBefore = new int[length() + 1];
-      int runStart = 0;
-      int runLength = 0;
-      int pos = 0;
-      while (pos < length()) {
+    private void extendRegionalIndicatorRunData(int requestedPos) {
+      int pos = regionalIndicatorEnd;
+      int runStart = regionalIndicatorRunStart;
+      int runLength = regionalIndicatorRunLength;
+      while (pos < requestedPos) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
@@ -161,30 +202,27 @@ final class GraphemeSupport {
             runStart = pos;
           }
           runLength++;
-          for (int i = pos + 1; i <= next; i++) {
-            regionalIndicatorStartsBefore[i] = runLength;
-            regionalIndicatorRunStartBefore[i] = runStart;
-          }
+          regionalIndicatorStartsBefore =
+              storeBefore(regionalIndicatorStartsBefore, pos, next, runLength);
+          regionalIndicatorRunStartBefore =
+              storeBefore(regionalIndicatorRunStartBefore, pos, next, runStart);
         } else {
+          runStart = 0;
           runLength = 0;
         }
         pos = next;
       }
+      regionalIndicatorEnd = pos;
+      regionalIndicatorRunStart = runStart;
+      regionalIndicatorRunLength = runLength;
     }
 
-    private void ensureIndicConjunctData() {
-      if (indicConjunctLinkerStartBefore != null) {
-        return;
-      }
-      indicConjunctSequenceStartBefore = new int[length() + 1];
-      indicConjunctLinkerStartBefore = new int[length() + 1];
-      Arrays.fill(indicConjunctSequenceStartBefore, -1);
-      Arrays.fill(indicConjunctLinkerStartBefore, -1);
-
-      int sequenceStart = -1;
-      boolean linkerSeen = false;
-      int pos = 0;
-      while (pos < length()) {
+    private void extendIndicConjunctData(int requestedPos) {
+      int pos = indicConjunctEnd;
+      // Encode starts as position + 1 so an absent value needs no storage.
+      int sequenceStart = indicConjunctSequenceStart;
+      boolean linkerSeen = indicConjunctLinkerSeen;
+      while (pos < requestedPos) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
@@ -192,36 +230,33 @@ final class GraphemeSupport {
         int cp = InputScanner.codePoint(decoded);
         int next = InputScanner.position(decoded);
         if (isIndicConjunctConsonant(cp)) {
-          sequenceStart = pos;
+          sequenceStart = pos + 1;
           linkerSeen = false;
-        } else if (isIndicConjunctLinker(cp)) {
-          if (sequenceStart >= 0) {
+        } else if (sequenceStart != 0) {
+          if (isIndicConjunctLinker(cp)) {
             linkerSeen = true;
+          } else if (!isIndicConjunctExtend(cp)) {
+            sequenceStart = 0;
+            linkerSeen = false;
           }
-        } else if (!isIndicConjunctExtend(cp)) {
-          sequenceStart = -1;
-          linkerSeen = false;
         }
-        int activeSequenceStart = sequenceStart;
-        int linkerStart = linkerSeen ? sequenceStart : -1;
-        for (int i = pos + 1; i <= next; i++) {
-          indicConjunctSequenceStartBefore[i] = activeSequenceStart;
-          indicConjunctLinkerStartBefore[i] = linkerStart;
+        indicConjunctSequenceStartBefore =
+            storeBefore(indicConjunctSequenceStartBefore, pos, next, sequenceStart);
+        if (linkerSeen) {
+          indicConjunctLinkerStartBefore =
+              storeBefore(indicConjunctLinkerStartBefore, pos, next, sequenceStart);
         }
         pos = next;
       }
+      indicConjunctEnd = pos;
+      indicConjunctSequenceStart = sequenceStart;
+      indicConjunctLinkerSeen = linkerSeen;
     }
 
-    private void ensureExtendedPictographicData() {
-      if (extendedPictographicStartBefore != null) {
-        return;
-      }
-      extendedPictographicStartBefore = new int[length() + 1];
-      Arrays.fill(extendedPictographicStartBefore, -1);
-
-      int visiblePictographicStart = -1;
-      int pos = 0;
-      while (pos < length()) {
+    private void extendExtendedPictographicData(int requestedPos) {
+      int pos = extendedPictographicEnd;
+      int visiblePictographicStart = extendedPictographicStart;
+      while (pos < requestedPos) {
         if (WorkCounterConfig.ENABLED) {
           WorkCounter.record();
         }
@@ -229,17 +264,68 @@ final class GraphemeSupport {
         int cp = InputScanner.codePoint(decoded);
         int next = InputScanner.position(decoded);
         if (containsCodePoint(EXTENDED_PICTOGRAPHIC, cp)) {
-          visiblePictographicStart = pos;
-        } else if (!containsCodePoint(GCB_EXTEND, cp)) {
+          visiblePictographicStart = pos + 1;
+        } else if (visiblePictographicStart != 0 && !containsCodePoint(GCB_EXTEND, cp)) {
           // GB11 requires Extended_Pictographic Extend* before the ZWJ. GB9/GB9a
           // keep ZWJ and SpacingMark in the cluster, but they interrupt this prefix.
-          visiblePictographicStart = -1;
+          visiblePictographicStart = 0;
         }
-        for (int i = pos + 1; i <= next; i++) {
-          extendedPictographicStartBefore[i] = visiblePictographicStart;
-        }
+        extendedPictographicStartBefore =
+            storeBefore(extendedPictographicStartBefore, pos, next, visiblePictographicStart);
         pos = next;
       }
+      extendedPictographicEnd = pos;
+      extendedPictographicStart = visiblePictographicStart;
+    }
+
+    private static int valueBefore(int[][] pages, int pos) {
+      if (pages == null || pos == 0) {
+        return 0;
+      }
+      int index = pos - 1;
+      int pageIndex = index >>> PAGE_SHIFT;
+      if (pageIndex >= pages.length) {
+        return 0;
+      }
+      int[] page = pages[pageIndex];
+      int offset = index & PAGE_MASK;
+      return page != null && offset < page.length ? page[offset] : 0;
+    }
+
+    /**
+     * Records the value before each position in (from, to], including positions inside a scalar.
+     * Position zero has no preceding context, so slot zero holds the value before position one.
+     */
+    private static int[][] storeBefore(int[][] pages, int from, int to, int value) {
+      if (value == 0) {
+        return pages;
+      }
+      while (from < to) {
+        int pageIndex = from >>> PAGE_SHIFT;
+        if (pages == null) {
+          pages = new int[pageIndex + 1][];
+        } else if (pageIndex >= pages.length) {
+          pages = Arrays.copyOf(pages, Math.max(pageIndex + 1, pages.length * 2));
+        }
+        int offset = from & PAGE_MASK;
+        int count = Math.min(to - from, PAGE_SIZE - offset);
+        int required = offset + count;
+        int[] page = pages[pageIndex];
+        if (page == null) {
+          int size = pageIndex == 0 ? Math.max(INITIAL_PAGE_SIZE, required) : PAGE_SIZE;
+          page = new int[size];
+          pages[pageIndex] = page;
+        } else if (required > page.length) {
+          int size = Math.min(PAGE_SIZE, Math.max(required, page.length * 2));
+          page = Arrays.copyOf(page, size);
+          pages[pageIndex] = page;
+        }
+        for (int i = offset; i < required; i++) {
+          page[i] = value;
+        }
+        from += count;
+      }
+      return pages;
     }
   }
 

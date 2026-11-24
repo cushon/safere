@@ -5244,21 +5244,9 @@ public final class Matcher implements MatchResult {
       }
       return buffer.size / 2;
     }
-    // The first search reuses this end-anchored probe instead of repeating it.
-    int firstEndAnchoredStart = END_ANCHORED_START_UNKNOWN;
-    if (!parentPattern.prog().anchorStart()) {
-      // As in replaceImpl, try the end-anchored search before the whole-input reject prefilter.
-      int endAnchoredStart = parentPattern.endAnchoredSearchStart(activeScanner(), 0, true, null);
-      if (endAnchoredStart == -1) {
-        return 0;
-      }
-      firstEndAnchoredStart = endAnchoredStart;
-      RejectPrefilter rejectPrefilter = parentPattern.findPlan().stringReject();
-      if (endAnchoredStart < 0 && rejectPrefilter != null && text != null) {
-        if (rejectPrefilter.canReject(text, null, 0, enginePathOptions())) {
-          return 0;
-        }
-      }
+    int firstEndAnchoredStart = probeFirstSplitDelimiter(false);
+    if (firstEndAnchoredStart == -1) {
+      return 0;
     }
     int last = 0;
     int searchFrom = 0;
@@ -5286,18 +5274,130 @@ public final class Matcher implements MatchResult {
 
       buffer.add(start, end);
       last = end;
-      if (start == end) {
-        searchFrom = end + 1;
-      } else if (parentPattern.hasInternalGraphemeClusterBoundary()
-          && end < textLen
-          && endedAfterCrLf(end)) {
-        searchFrom = end + 1;
-      } else {
-        searchFrom = end;
-      }
+      searchFrom = nextSplitSearchPosition(start, end);
     }
     startBackoff = AdaptiveBackoff.NEUTRAL;
     return buffer.size / 2;
+  }
+
+  private int probeFirstSplitDelimiter(boolean incremental) {
+    if (parentPattern.prog().anchorStart()) {
+      return END_ANCHORED_START_UNKNOWN;
+    }
+    // As in replaceImpl, try the end-anchored search before the reject prefilter.
+    int start = parentPattern.endAnchoredSearchStart(activeScanner(), 0, true, null);
+    RejectPrefilter filter = parentPattern.findPlan().stringReject();
+    if (start < -1 && filter != null && text != null) {
+      boolean rejected =
+          incremental
+              ? filter.canRejectBeforeSplitStream(text, enginePathOptions())
+              : filter.canReject(text, null, 0, enginePathOptions());
+      if (rejected) {
+        return -1;
+      }
+    }
+    return start;
+  }
+
+  private int nextSplitSearchPosition(int start, int end) {
+    if (start == end
+        || (parentPattern.hasInternalGraphemeClusterBoundary()
+            && end < text.length()
+            && endedAfterCrLf(end))) {
+      return end + 1;
+    }
+    return end;
+  }
+
+  static final int SPLIT_STREAM_CHARACTERISTICS = Spliterator.ORDERED | Spliterator.NONNULL;
+
+  Spliterator<String> splitSpliterator() {
+    return new SplitSpliterator();
+  }
+
+  private final class SplitSpliterator implements Spliterator<String> {
+    private final boolean usesPreviousMatch = parentPattern.prog().hasPreviousMatchEnd();
+    private int searchPosition;
+    private int previousDelimiterEnd;
+    private int emptyTokens;
+    private int nextTokenStart;
+    private int nextTokenEnd = -1;
+    private boolean exhausted;
+
+    @Override
+    public boolean tryAdvance(Consumer<? super String> action) {
+      requireNonNull(action);
+      if (nextTokenEnd < 0 && (exhausted || !prepareNextToken())) {
+        return false;
+      }
+      if (emptyTokens > 0) {
+        emptyTokens--;
+        action.accept("");
+      } else {
+        String token = text.substring(nextTokenStart, nextTokenEnd);
+        nextTokenEnd = -1;
+        action.accept(token);
+      }
+      return true;
+    }
+
+    private boolean prepareNextToken() {
+      while (true) {
+        long delimiter = nextDelimiter();
+        if (delimiter == -1L) {
+          exhausted = true;
+          // With no delimiter, the input is one token, even if it is empty.
+          if (previousDelimiterEnd == 0 || previousDelimiterEnd < text.length()) {
+            nextTokenStart = previousDelimiterEnd;
+            nextTokenEnd = text.length();
+            return true;
+          }
+          return false;
+        }
+        int start = unpackStart(delimiter);
+        int end = unpackEnd(delimiter);
+        if (!usesPreviousMatch) {
+          searchPosition = nextSplitSearchPosition(start, end);
+        }
+        if (end == 0) {
+          // A zero-width delimiter at the start advances the search without emitting a token.
+          continue;
+        }
+        int tokenStart = previousDelimiterEnd;
+        previousDelimiterEnd = end;
+        if (start > tokenStart) {
+          nextTokenStart = tokenStart;
+          nextTokenEnd = start;
+          return true;
+        }
+        // Emit this run only if a later nonempty token proves it is not trailing.
+        emptyTokens++;
+      }
+    }
+
+    private long nextDelimiter() {
+      if (usesPreviousMatch) {
+        return find() ? packPositions(groups[0], groups[1]) : -1L;
+      }
+      int probe = searchPosition == 0 ? probeFirstSplitDelimiter(true) : END_ANCHORED_START_UNKNOWN;
+      return probe == -1 ? -1L : findNextMatchPacked(searchPosition, probe);
+    }
+
+    @Override
+    public Spliterator<String> trySplit() {
+      // Splitting this cursor would require reading tokens ahead of demand.
+      return null;
+    }
+
+    @Override
+    public long estimateSize() {
+      return Long.MAX_VALUE;
+    }
+
+    @Override
+    public int characteristics() {
+      return SPLIT_STREAM_CHARACTERISTICS;
+    }
   }
 
   /** Marks that {@link #findNextMatchPacked} has not yet probed from the input end. */

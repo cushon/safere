@@ -12,8 +12,8 @@ Prepare a short maintainer briefing with linked review records and evidence:
 - which open non-draft contributor PRs need attention;
 - new issues and comments/updates on any issue since the last successful run, including closed
   issues, with PR coverage including drafts;
-- update the authenticated user's open PR branches from current `main` as needed, including
-  drafts, and repair agreed feedback in their original worktrees before pushing verified updates;
+- update the authenticated user's open PR branches, including drafts, by integrating current
+  `main` as needed and fixing agreed review feedback in one verified update per PR;
 - whether each PR's idea makes sense and matches its implementation;
 - how each stacked PR contributes to the stack's shared objective and affects adjacent layers;
 - P2+ code-review findings fixed locally with `$review-fix-loop` within the cycle limit, or
@@ -113,9 +113,10 @@ requires all three:
    include only meaningful changes or maintainer actions in the main briefing.
 2. Read [references/authored-pr-feedback.md](references/authored-pr-feedback.md). Discover all open
    PRs by the authenticated user, including drafts, and collect `authored-feedback`. Before
-   contributor reviews, bring authored PR branches up to current `main` as needed, repair agreed
-   feedback in the original worktree resolved by `authored-worktree`, and push verified updates.
-   Report disagreements, blocked updates, and any fixes that remain local.
+   contributor reviews, integrate current `main` as needed and fix agreed feedback in one
+   worktree per PR. Prefer the verified original worktree. Use an isolated worktree at the
+   verified published head when the original is unavailable. Verify and push the combined
+   update once per PR. Report disagreements, blockers, and unpublished repairs.
 3. Read [references/contributor-pr-review.md](references/contributor-pr-review.md) **in full before
    discovering, triaging, reviewing, repairing, benchmarking, or reporting contributor PRs**. Follow
    its discovery, whole-stack context, delta triage, bounded review/fix loop, benchmark reproduction,
@@ -200,10 +201,11 @@ references/contributor-pr-review.md. Use this skill's deterministic helpers for 
 trust checks, and content pulls; preserve the fail-closed trust boundary.
 
 Collect and assess issue activity since the last successful run across all states, with addressing
-PR coverage including drafts. For all open PRs by the authenticated user, including drafts, merge
-current main when needed, assess any review feedback, and commit agreed repairs in their verified
-original worktrees. Push verified updates to the existing authored PR branches. Report
-disagreements, blocked updates, and unpublished work. Then process every eligible contributor PR
+PR coverage including drafts. For each open PR by the authenticated user, including drafts, assess
+the feedback and prepare one update that merges current main when needed and fixes agreed feedback.
+Prefer the verified original worktree. Use an isolated worktree at the verified published head
+when the original is unavailable. Verify the final commit and push it to the existing PR branch.
+Report disagreements, blocked updates, and unpublished work. Then process every eligible contributor PR
 in stack dependency order and increasing PR number among independent PRs. Keep contributor
 changes local and follow the reference's repair, verification, benchmark, and merge-ordering rules.
 

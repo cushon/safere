@@ -34,6 +34,7 @@ public final class Utf8InputFuzzer {
     RepresentationChecks.assertKeywordAlternationMatchesString(data);
     RepresentationChecks.assertFixedOffsetAccelerationMatchesString(data);
     assertMultiOffsetLiteralOccurrencesMatchString(data);
+    assertMultiOffsetWordBoundaryMatchesJdk(data);
     assertFinalLineTerminatorEndAnchorsMatchJdk(data);
     assertPositionDependentStartAccelerationMatchesJdk(data);
     assertLeadingExpansionMatchesJdk(data);
@@ -271,7 +272,30 @@ public final class Utf8InputFuzzer {
     // accelerator's code-point retreat instead of comparing an index against itself.
     String prefix =
         data.pickValue(List.of("", "é", "軖", "😀", "é😀")).repeat(data.consumeInt(0, 3));
-    String input = prefix + "b" + body + literal;
+    assertMultiOffsetFindsMatchJdk(regex, prefix + "b" + body + literal);
+  }
+
+  private static void assertMultiOffsetWordBoundaryMatchesJdk(FuzzedDataProvider data) {
+    String flags = data.pickValue(List.of("(?U)", ""));
+    String boundary = data.pickValue(List.of("\\b", "\\B"));
+    int width = data.consumeInt(3, 7);
+    String end = data.pickValue(List.of("\\W", ""));
+    String previous = data.pickValue(List.of("é", "ü", "中", "𐐀", "😀", "-"));
+    String regex = flags + boundary + "a{1," + width + "}b" + end;
+
+    // The early literal hit can fail verification. The later hit can then clamp the candidate
+    // inside the preceding code point. Padding keeps the accelerated path in reach.
+    String input =
+        data.pickValue(List.of("", "..", "😀-"))
+            + "abz"
+            + previous
+            + "a".repeat(data.consumeInt(1, width))
+            + "b "
+            + "z".repeat(data.consumeInt(11, 40));
+    assertMultiOffsetFindsMatchJdk(regex, input);
+  }
+
+  private static void assertMultiOffsetFindsMatchJdk(String regex, String input) {
     Pattern pattern = Pattern.compile(regex);
     org.safere.Matcher stringMatcher = pattern.matcher(input);
     byte[] bytes = input.getBytes(StandardCharsets.UTF_8);

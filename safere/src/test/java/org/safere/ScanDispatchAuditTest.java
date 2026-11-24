@@ -335,7 +335,11 @@ class ScanDispatchAuditTest {
     assertThat(captureScan(() -> teddy.findCandidate(scanner, teddyFromWide)))
         .containsExactly(
             consulted(ScanKind.TEDDY, teddyMin),
-            new ScanEvent(ScanKind.TEDDY, ScanDirection.FORWARD, teddyMin, ScanPath.VECTOR));
+            new ScanEvent(
+                ScanKind.TEDDY,
+                ScanDirection.FORWARD,
+                teddyMin,
+                TeddyVectorScan.isSupported() ? ScanPath.VECTOR : ScanPath.SCALAR));
 
     // 7. MULTI_LITERAL
     MultiLiteralInfo multiLiteralInfo = MultiLiteralInfo.create(LITERALS);

@@ -10,7 +10,6 @@ package org.safere;
 import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.lang.invoke.MutableCallSite;
 import java.lang.ref.SoftReference;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +21,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.regex.PatternSyntaxException;
@@ -59,14 +57,12 @@ public final class Pattern implements Serializable {
   // Avoid another DFA setup for tiny unproved candidates; longer ones benefit from its scan.
   private static final int MIN_DFA_END_VERIFICATION_UNITS = 64;
   private static final AtomicLong NEXT_PATTERN_ID = new AtomicLong(1);
-  private static final MethodType DIAGNOSTICS_TYPE =
-      MethodType.methodType(SafeReMatchDiagnostics.class);
-  private static final MutableCallSite DIAGNOSTICS_SITE = new MutableCallSite(DIAGNOSTICS_TYPE);
+  // Start with the actual target: a type-only site builds a throwing method-handle adapter
+  // during cold initialization, even though the target is replaced before it can be invoked.
+  private static final MutableCallSite DIAGNOSTICS_SITE =
+      new MutableCallSite(
+          MethodHandles.constant(SafeReMatchDiagnostics.class, SafeReMatchDiagnostics.NONE));
   private static final MethodHandle DIAGNOSTICS_INVOKER = DIAGNOSTICS_SITE.dynamicInvoker();
-
-  static {
-    setDiagnosticsTarget(SafeReMatchDiagnostics.NONE);
-  }
 
   /**
    * Enables Unix lines mode. In this mode, only {@code '\n'} is recognized as a line terminator.
@@ -559,6 +555,12 @@ public final class Pattern implements Serializable {
         compiled.hasGraphemeSemantics() && startsWithGraphemeClusterBoundary(metadataAst);
     boolean hasInternalGcb =
         compiled.hasGraphemeSemantics() && hasInternalExplicitGraphemeBoundary(re);
+    if (compiled.hasGraphemeSemantics()) {
+      // Ordinary search and capture recovery reach these tables for grapheme programs in both
+      // representations. Keep that initialization out of first execution, even when the other
+      // character classes are ASCII-only. Eliminated grapheme operands need no preparation.
+      GraphemeSupport.prepareTables();
+    }
     // The constructor eagerly prepares the applicable engine analysis and setup.
     return new Pattern(
         regex,
@@ -1398,8 +1400,9 @@ public final class Pattern implements Serializable {
 
   /**
    * Creates a stream of strings split from the given input sequence around matches of this pattern.
-   * The stream contains the same strings that {@link #split(CharSequence)} would return, produced
-   * lazily.
+   * The stream produces the same strings as {@link #split(CharSequence)} and searches for
+   * delimiters as needed. It uses {@link String} inputs directly and copies other character
+   * sequences when it first accesses the input.
    *
    * @param input the character sequence to be split
    * @return a sequential stream of strings computed by splitting the input around matches of this
@@ -1407,8 +1410,8 @@ public final class Pattern implements Serializable {
    */
   public Stream<String> splitAsStream(CharSequence input) {
     return StreamSupport.stream(
-        () -> Arrays.spliterator(split(input, 0)),
-        Spliterator.ORDERED | Spliterator.NONNULL,
+        () -> matcher(charSequenceToString(input)).splitSpliterator(),
+        Matcher.SPLIT_STREAM_CHARACTERISTICS,
         false);
   }
 
